@@ -54,7 +54,7 @@ function Sidebar({ open, onClose, setPage }) {
       title: 'Help & info',
       items: [
         { icon: '?', label: 'How it works',   action: () => { setPage('home'); onClose(); } },
-        { icon: '✉', label: 'Contact support', action: () => { window.location.href = 'mailto:support@snapframe.app'; onClose(); } },
+        { icon: '✉', label: 'Contact support', action: () => { window.location.href = 'mailto:support@thumbframe.app'; onClose(); } },
         { icon: '★', label: 'Examples',        action: () => { setPage('examples'); onClose(); } },
         { icon: '$', label: 'Pricing',          action: () => { setPage('pricing'); onClose(); } },
       ],
@@ -99,7 +99,7 @@ function Sidebar({ open, onClose, setPage }) {
             <div style={{ width: 24, height: 24, borderRadius: 6, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ fontSize: 12, color: '#fff', fontWeight: '800' }}>S</span>
             </div>
-            <span style={{ fontSize: 15, fontWeight: '700', color: C.text }}>SnapFrame</span>
+            <span style={{ fontSize: 15, fontWeight: '700', color: C.text }}>ThumbFrame</span>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 18, padding: '2px 6px', borderRadius: 4 }}>×</button>
         </div>
@@ -192,7 +192,7 @@ function Nav({ page, setPage, user, onLogout }) {
             <div style={{ width: 22, height: 22, borderRadius: 5, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ fontSize: 11, color: '#fff', fontWeight: '800' }}>S</span>
             </div>
-            <span style={{ fontSize: 15, fontWeight: '700', color: C.text, letterSpacing: '-0.2px' }}>SnapFrame</span>
+            <span style={{ fontSize: 15, fontWeight: '700', color: C.text, letterSpacing: '-0.2px' }}>ThumbFrame</span>
           </div>
 
           {/* Nav links */}
@@ -251,11 +251,11 @@ function Nav({ page, setPage, user, onLogout }) {
 // ── Home ───────────────────────────────────────────────────────────────────────
 function Home({ setPage }) {
   const struggles = [
-    { icon: '💸', title: "Canva charges you just to remove a background", desc: "Background removal is a basic feature. Canva locks it behind a $15/month subscription. SnapFrame does it free." },
-    { icon: '🤯', title: "Photoshop is built for professionals, not creators", desc: "You spend 20 minutes Googling how to do something that should take 20 seconds. SnapFrame is built around how creators actually work." },
-    { icon: '😴', title: "Everyone's using the same templates", desc: "Canva's thumbnail templates are used by thousands of channels. Your thumbnail looks like everyone else's. SnapFrame gives you tools to build your own style." },
-    { icon: '📱', title: "No way to see how it looks on mobile", desc: "70% of YouTube views are on mobile. Most editors don't show you what your thumbnail looks like at 150×84px. SnapFrame has a live mobile preview built in." },
-    { icon: '⏰', title: "Hours spent on thumbnails that don't get clicks", desc: "You agonize over a thumbnail for an hour, post it, and it gets ignored. SnapFrame shows you the safe zones, the mobile view, and helps you design for clicks — not just looks." },
+    { icon: '💸', title: "Canva charges you just to remove a background", desc: "Background removal is a basic feature. Canva locks it behind a $15/month subscription. ThumbFrame does it free." },
+    { icon: '🤯', title: "Photoshop is built for professionals, not creators", desc: "You spend 20 minutes Googling how to do something that should take 20 seconds. ThumbFrame is built around how creators actually work." },
+    { icon: '😴', title: "Everyone's using the same templates", desc: "Canva's thumbnail templates are used by thousands of channels. Your thumbnail looks like everyone else's. ThumbFrame gives you tools to build your own style." },
+    { icon: '📱', title: "No way to see how it looks on mobile", desc: "70% of YouTube views are on mobile. Most editors don't show you what your thumbnail looks like at 150×84px. ThumbFrame has a live mobile preview built in." },
+    { icon: '⏰', title: "Hours spent on thumbnails that don't get clicks", desc: "You agonize over a thumbnail for an hour, post it, and it gets ignored. ThumbFrame shows you the safe zones, the mobile view, and helps you design for clicks — not just looks." },
   ];
 
   const examples = [
@@ -285,7 +285,7 @@ function Home({ setPage }) {
             </h1>
 
             <p style={{ fontSize: 16, color: C.muted, lineHeight: 1.7, marginBottom: 12, maxWidth: 440 }}>
-              We built SnapFrame because we were tired of paying for features that should be free, using tools that weren't made for YouTube, and spending hours on thumbnails that didn't perform.
+              We built ThumbFrame because we were tired of paying for features that should be free, using tools that weren't made for YouTube, and spending hours on thumbnails that didn't perform.
             </p>
             <p style={{ fontSize: 15, color: C.text2, lineHeight: 1.7, marginBottom: 32, maxWidth: 440, fontStyle: 'italic' }}>
               "This is the thumbnail editor we wish existed when we started."
@@ -503,7 +503,7 @@ function Home({ setPage }) {
         </div>
 
         <div style={{ marginTop: 40, padding: '28px 32px', borderRadius: 10, background: C.bg2, border: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 18, fontWeight: '700', color: C.text, marginBottom: 8 }}>SnapFrame fixes all of this.</div>
+          <div style={{ fontSize: 18, fontWeight: '700', color: C.text, marginBottom: 8 }}>ThumbFrame fixes all of this.</div>
           <div style={{ fontSize: 14, color: C.muted, lineHeight: 1.7, marginBottom: 20 }}>
             Built specifically for YouTube creators. Every feature was added because a real creator asked for it.
             No bloat. No learning curve. No subscription wall for basic features.
@@ -520,7 +520,7 @@ function Home({ setPage }) {
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 32, flexWrap: 'wrap', gap: 12 }}>
             <div>
               <div style={{ fontSize: 12, fontWeight: '700', color: C.accent, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 8 }}>Examples</div>
-              <h2 style={{ fontSize: 'clamp(24px, 3vw, 36px)', fontWeight: '800', letterSpacing: '-0.5px', color: C.text }}>Made with SnapFrame</h2>
+              <h2 style={{ fontSize: 'clamp(24px, 3vw, 36px)', fontWeight: '800', letterSpacing: '-0.5px', color: C.text }}>Made with ThumbFrame</h2>
             </div>
             <button onClick={() => setPage('examples')} style={{ padding: '8px 18px', borderRadius: 6, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text2, cursor: 'pointer', fontSize: 13, fontWeight: '500' }}>
               See all examples →
@@ -559,7 +559,7 @@ function Home({ setPage }) {
           {[
             { icon:'📱', title:'Mobile stamp test',       desc:"See your thumbnail at exactly 150×84px — how most people actually see it on their phone before deciding to click.", free:true },
             { icon:'⬜', title:'YouTube safe zones',       desc:'Overlay showing exactly where YouTube\'s UI covers your thumbnail. Timestamp, watch-later, progress bar. Design around them.', free:true },
-            { icon:'✂️', title:'Background remover',       desc:'Remove backgrounds with one click. AI-powered, handles hair and complex edges. Free on SnapFrame.', free:true },
+            { icon:'✂️', title:'Background remover',       desc:'Remove backgrounds with one click. AI-powered, handles hair and complex edges. Free on ThumbFrame.', free:true },
             { icon:'🎨', title:'Non-destructive editing',  desc:'Every effect, filter, and adjustment is editable forever. Change your mind on anything, any time.', free:true },
             { icon:'⚡', title:'AI thumbnail generation', desc:'Describe your thumbnail in plain English. Get a starting point in seconds. Tweak from there.', free:false },
             { icon:'↓',  title:'Full res export',          desc:'Download at 1280×720 — the exact spec YouTube recommends. PNG, JPG, or PNG with transparent background.', free:true },
@@ -580,12 +580,12 @@ function Home({ setPage }) {
           <div style={{ textAlign: 'center', marginBottom: 40 }}>
             <div style={{ fontSize: 12, fontWeight: '700', color: C.accent, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 10 }}>Comparison</div>
             <h2 style={{ fontSize: 'clamp(24px, 3vw, 34px)', fontWeight: '800', letterSpacing: '-0.5px', marginBottom: 10, color: C.text }}>Why not just use Canva?</h2>
-            <p style={{ fontSize: 15, color: C.muted }}>Canva is a great general design tool. SnapFrame is built only for thumbnails.</p>
+            <p style={{ fontSize: 15, color: C.muted }}>Canva is a great general design tool. ThumbFrame is built only for thumbnails.</p>
           </div>
           <div style={{ borderRadius: 10, border: `1px solid ${C.border}`, overflow: 'hidden', background: C.panel }}>
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', background: C.bg3, borderBottom: `1px solid ${C.border}` }}>
               <div style={{ padding: '12px 20px', fontSize: 11, color: C.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Feature</div>
-              <div style={{ padding: '12px 20px', fontSize: 11, color: C.accent, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px', textAlign: 'center' }}>SnapFrame</div>
+              <div style={{ padding: '12px 20px', fontSize: 11, color: C.accent, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px', textAlign: 'center' }}>ThumbFrame</div>
               <div style={{ padding: '12px 20px', fontSize: 11, color: C.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px', textAlign: 'center' }}>Canva</div>
             </div>
             {[
@@ -624,7 +624,7 @@ function Home({ setPage }) {
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => setPage('editor')} style={{ padding: '13px 28px', borderRadius: 8, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 15, fontWeight: '700', boxShadow: `0 4px 20px ${C.accent}44` }}>
-              Open SnapFrame free →
+              Open ThumbFrame free →
             </button>
             <button onClick={() => setPage('signup')} style={{ padding: '13px 28px', borderRadius: 8, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text2, cursor: 'pointer', fontSize: 15, fontWeight: '500' }}>
               Create account
@@ -641,7 +641,7 @@ function Home({ setPage }) {
             <div style={{ width: 20, height: 20, borderRadius: 5, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ fontSize: 10, color: '#fff', fontWeight: '800' }}>S</span>
             </div>
-            <span style={{ fontSize: 14, fontWeight: '700', color: C.text }}>SnapFrame</span>
+            <span style={{ fontSize: 14, fontWeight: '700', color: C.text }}>ThumbFrame</span>
             <span style={{ fontSize: 13, color: C.muted, marginLeft: 4 }}>— Built for YouTubers who care about their craft.</span>
           </div>
           <div style={{ display: 'flex', gap: 16 }}>
@@ -771,7 +771,7 @@ function Examples({ setPage }) {
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '60px 24px' }}>
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div style={{ fontSize: 12, fontWeight: '700', color: C.accent, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 10 }}>Examples</div>
-          <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: '800', letterSpacing: '-1px', marginBottom: 12, color: C.text }}>Made with SnapFrame</h1>
+          <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: '800', letterSpacing: '-1px', marginBottom: 12, color: C.text }}>Made with ThumbFrame</h1>
           <p style={{ fontSize: 15, color: C.muted }}>Click any example to open it in the editor and customize it.</p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
@@ -848,7 +848,7 @@ function AuthPage({ mode, setPage, onAuth }) {
           <div style={{ width: 28, height: 28, borderRadius: 7, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: 13, color: '#fff', fontWeight: '800' }}>S</span>
           </div>
-          <span style={{ fontSize: 17, fontWeight: '700', color: C.text }}>SnapFrame</span>
+          <span style={{ fontSize: 17, fontWeight: '700', color: C.text }}>ThumbFrame</span>
         </div>
 
         <h1 style={{ fontSize: 28, fontWeight: '800', letterSpacing: '-0.5px', marginBottom: 6, color: C.text }}>

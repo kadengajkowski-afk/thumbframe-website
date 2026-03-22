@@ -642,7 +642,7 @@ export default function Editor({onExit, user, token, apiUrl}){
   useEffect(()=>{zoomRef.current=zoom;},[zoom]);
 
   useEffect(()=>{
-    try{const s=localStorage.getItem('snapframe_designs');if(s)setSavedDesigns(JSON.parse(s));}catch(e){}
+    try{const s=localStorage.getItem('thumbframe_designs');if(s)setSavedDesigns(JSON.parse(s));}catch(e){}
     const b=makeBg(p);
     setLayers([b]);
     historyRef.current=[[b]];
@@ -1516,7 +1516,7 @@ export default function Editor({onExit, user, token, apiUrl}){
       const thumbnail = canvas ? canvas.toDataURL('image/jpeg', 0.5) : null;
       const design={id:Date.now(),name:name||'Untitled',created:new Date().toLocaleDateString(),platform,layers:JSON.parse(JSON.stringify(layers)),brightness,contrast,saturation,hue,thumbnail};
       const updated=[design,...savedDesigns.filter(d=>d.name!==name)].slice(0,20);
-      setSavedDesigns(updated);localStorage.setItem('snapframe_designs',JSON.stringify(updated));
+      setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));
       // Also save to backend if logged in
       if(token && apiUrl){
         fetch(`${apiUrl}/designs/save`,{
@@ -1530,7 +1530,7 @@ export default function Editor({onExit, user, token, apiUrl}){
   }
   function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||110);setSaturation(d.saturation||110);setHue(d.hue||0);setSelectedId(null);setShowFileTab(false);}
   function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setSelectedId(null);setShowFileTab(false);}
-  function deleteDesign(id){const updated=savedDesigns.filter(d=>d.id!==id);setSavedDesigns(updated);localStorage.setItem('snapframe_designs',JSON.stringify(updated));}
+  function deleteDesign(id){const updated=savedDesigns.filter(d=>d.id!==id);setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));}
 
   async function analyzeCTR(){
     setCtrLoading(true);
@@ -2718,7 +2718,7 @@ export default function Editor({onExit, user, token, apiUrl}){
       <div style={{display:'flex',alignItems:'center',height:46,padding:'0 12px',background:T.panel,borderBottom:`1px solid ${T.border}`,gap:6,flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
           {onExit&&<button onClick={onExit} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11}}>← Back</button>}
-          <div style={{fontSize:14,fontWeight:'700',color:T.accent,letterSpacing:'-0.3px'}}>SnapFrame</div>
+          <div style={{fontSize:14,fontWeight:'700',color:T.accent,letterSpacing:'-0.3px'}}>ThumbFrame</div>
           <button onClick={()=>setShowFileTab(true)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'500',display:'flex',alignItems:'center',gap:5}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>📁 File</button>
         </div>
         <button onClick={()=>{setCmdOpen(true);setTimeout(()=>cmdInputRef.current?.focus(),50);}} style={{flex:1,maxWidth:340,display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,color:T.muted,cursor:'pointer',fontSize:12,textAlign:'left'}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
