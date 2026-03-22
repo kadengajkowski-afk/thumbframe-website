@@ -697,7 +697,7 @@ function HowItWorks({ setPage }) {
 }
 
 // ── Pricing ────────────────────────────────────────────────────────────────────
-function Pricing({ setPage }) {
+function Pricing({ setPage, onCheckout }) {
   return (
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', paddingTop: 80 }}>
       <div style={{ maxWidth: 800, margin: '0 auto', padding: '60px 24px' }}>
@@ -733,7 +733,7 @@ function Pricing({ setPage }) {
               <span style={{ fontSize: 14, color: C.muted }}>/month</span>
             </div>
             <div style={{ fontSize: 13, color: C.muted, marginBottom: 24 }}>cancel anytime</div>
-            <button onClick={() => setPage('editor')} style={{ width: '100%', padding: '11px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: '700', marginBottom: 24, boxShadow: `0 4px 16px ${C.accent}44` }}>
+            <button onClick={onCheckout} style={{ width: '100%', padding: '11px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: '700', marginBottom: 24, boxShadow: `0 4px 16px ${C.accent}44` }}>
               Get Pro
             </button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1000,6 +1000,21 @@ export default function App() {
       .catch(() => { setToken(null); localStorage.removeItem('sf_token'); });
   }, [token]);
 
+  async function handleCheckout(){
+    try{
+      const res = await fetch(`${API}/checkout`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({plan:'pro', email:user?.email||''}),
+      });
+      const data = await res.json();
+      if(data.url) window.location.href = data.url;
+      else alert('Checkout failed — please try again');
+    }catch(e){
+      alert('Could not connect to server');
+    }
+  }
+
   function handleAuth(data) {
     setToken(data.token);
     setUser(data.user);
@@ -1020,7 +1035,7 @@ export default function App() {
       <Nav page={page} setPage={setPage} user={user} onLogout={handleLogout} />
       {page === 'home'       && <Home         setPage={setPage} />}
       {page === 'howitworks' && <HowItWorks   setPage={setPage} />}
-      {page === 'pricing'    && <Pricing      setPage={setPage} />}
+      {page === 'pricing'    && <Pricing      setPage={setPage} onCheckout={handleCheckout}/>}
       {page === 'examples'   && <Examples     setPage={setPage} />}
       {page === 'login'      && <AuthPage     mode="login"  setPage={setPage} onAuth={handleAuth} />}
       {page === 'signup'     && <AuthPage     mode="signup" setPage={setPage} onAuth={handleAuth} />}

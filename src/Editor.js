@@ -2660,7 +2660,11 @@ export default function Editor({onExit, user, token, apiUrl}){
                 <div style={{color:T.muted}}>
                   Upgrade to Pro for full {p.width}×{p.height}px export.
                 </div>
-                <button onClick={()=>alert('Upgrade to Pro!')}
+                <button onClick={()=>fetch('https://thumbframe-api-production.up.railway.app/checkout',{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({plan:'pro'}),
+}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;})}
                   style={{...css.addBtn,marginTop:8,background:T.warning,
                     color:'#000',fontSize:11,fontWeight:'700'}}>
                   Upgrade to Pro — $15/mo
@@ -2807,7 +2811,11 @@ export default function Editor({onExit, user, token, apiUrl}){
             <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{display:'none'}}/>
           </label>
           <button onClick={()=>setShowDownload(true)} style={{padding:'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)'}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓ Download</button>
-          <button onClick={()=>alert('Upgrade to Pro for HD export, AI generation and more!')}
+          <button onClick={()=>fetch('https://thumbframe-api-production.up.railway.app/checkout',{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({plan:'pro'}),
+}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;})}
             style={{
               padding:'7px 14px',borderRadius:7,
               border:'none',
