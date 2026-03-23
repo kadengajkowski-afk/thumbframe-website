@@ -64,50 +64,61 @@
     }
   }
 
-  /* Editor Mobile UX: The "Smart" Layout */
   @media (max-width: 768px) {
+    /* The "App" Container */
     .mobile-editor-container {
+      background: #000;
+      height: 100vh;
       display: flex;
       flex-direction: column;
-      height: 100vh;
-      height: -webkit-fill-available;
+      overflow: hidden;
     }
+
+    /* The Canvas Viewport - Centers the thumbnail perfectly */
     .canvas-viewport {
       flex: 1;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #000;
-      overflow: hidden;
-      position: relative;
+      perspective: 1000px;
     }
-    .mobile-bottom-sheet {
-      background: #161616;
-      border-top: 1px solid #2a2a2a;
-      padding-bottom: var(--safe-bottom);
-      max-height: 40vh;
-      overflow-y: auto;
+
+    /* The Bottom Dock - Glassmorphism style */
+    .mobile-bottom-dock {
+      background: rgba(22, 22, 22, 0.95);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px 20px 0 0;
+      padding-bottom: env(safe-area-inset-bottom);
+      z-index: 1000;
     }
-    .mobile-toolbar-scroll {
+
+    /* Horizontal Tool Ribbon */
+    .tool-ribbon {
       display: flex;
       overflow-x: auto;
-      padding: 10px;
-      gap: 8px;
-      border-bottom: 1px solid #2a2a2a;
-      -webkit-overflow-scrolling: touch;
+      padding: 12px;
+      gap: 12px;
+      scrollbar-width: none;
     }
-    .mobile-tool-btn {
+    .tool-ribbon::-webkit-scrollbar { display: none; }
+
+    .tool-pill {
       flex: 0 0 auto;
-      height: 44px;
-      padding: 0 15px;
-      border-radius: 8px;
-      background: #2a2a2a;
-      color: white;
-      display: flex;
-      align-items: center;
-      font-size: 14px;
-      border: none;
+      background: #262626;
+      border: 1px solid #333;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
     }
+    .tool-pill.active { background: #fff; color: #000; border-color: #fff; }
+
+    /* Floating Action Buttons */
+    .fab-undo { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.5); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: white; border: 1px solid rgba(255,255,255,0.1); }
   }
     </style>
   </head>
