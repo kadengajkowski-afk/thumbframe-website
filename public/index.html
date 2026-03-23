@@ -25,55 +25,6 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>ThumbFrame — Viral Thumbnail Editor</title>
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-T7ZLMB1Q65"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-T7ZLMB1Q65');
-    </script>
-    <style>
-  /* 1. Global Reset */
-  body { margin: 0; padding: 0; overflow-x: hidden; background: #f5f0e8; }
-
-  /* 2. Fix the Landing Page Header */
-  @media (max-width: 768px) {
-    /* Hide the overlapping horizontal links */
-    .desktop-nav-links { display: none !important; }
-
-    nav { height: 60px !important; padding-top: env(safe-area-inset-top) !important; }
-
-    .hero-grid {
-      grid-template-columns: 1fr !important;
-      padding-top: 40px !important;
-      text-align: center;
-    }
-  }
-
-  /* 3. Fix the Editor (The "Invisible Photo" Bug) */
-  @media (max-width: 768px) {
-    .editor-main-layout { flex-direction: column !important; height: 100vh !important; }
-
-    /* Force canvas to the top */
-    .canvas-area {
-      order: -1 !important;
-      flex: 1 !important;
-      background: #000 !important;
-      min-height: 50vh !important;
-      display: flex !important;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* Make the tools scrollable at the bottom */
-    .sidebar-left, .sidebar-right {
-      height: 40vh !important;
-      width: 100vw !important;
-      overflow-y: auto !important;
-      background: #161616 !important;
-    }
-  }
-    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

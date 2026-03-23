@@ -195,8 +195,8 @@ function Nav({ page, setPage, user, onLogout }) {
             <span style={{ fontSize: 15, fontWeight: '700', color: C.text, letterSpacing: '-0.2px' }}>ThumbFrame</span>
           </div>
 
-          {/* Nav links - Hidden on mobile via CSS class */}
-          <div className="desktop-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 8 }}>
+          {/* Nav links */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 8 }}>
             {[['How it works', 'howitworks'], ['Examples', 'examples'], ['Pricing', 'pricing']].map(([label, key]) => (
               <button key={key} onClick={() => setPage(key)} style={{
                 padding: '5px 12px', borderRadius: 6, border: 'none',
@@ -272,8 +272,8 @@ function Home({ setPage }) {
 
       {/* ── Hero ── */}
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '110px 24px 70px' }}>
-        <div className="hero-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 60, alignItems: 'center' }}>
-          <div className="hero-text-container">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 60, alignItems: 'center' }}>
+          <div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 12px', borderRadius: 20, border: `1px solid ${C.border2}`, background: C.bg2, marginBottom: 24, fontSize: 12, color: C.muted, fontWeight: '500' }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: C.success }} />
               Free to use — no account needed
@@ -284,7 +284,7 @@ function Home({ setPage }) {
               <span style={{ color: C.accent }}>Get more clicks.</span>
             </h1>
 
-            <p className="hero-paragraph" style={{ fontSize: 16, color: C.muted, lineHeight: 1.7, marginBottom: 12, maxWidth: 440 }}>
+            <p style={{ fontSize: 16, color: C.muted, lineHeight: 1.7, marginBottom: 12, maxWidth: 440 }}>
               We built ThumbFrame because we were tired of paying for features that should be free, using tools that weren't made for YouTube, and spending hours on thumbnails that didn't perform.
             </p>
             <p style={{ fontSize: 15, color: C.text2, lineHeight: 1.7, marginBottom: 32, maxWidth: 440, fontStyle: 'italic' }}>
@@ -313,7 +313,7 @@ function Home({ setPage }) {
           </div>
 
           {/* Editor preview */}
-          <div className="hero-preview-container" style={{ borderRadius:12, overflow:'hidden', border:`1px solid ${C.border}`, boxShadow:'0 32px 80px rgba(0,0,0,0.18)', background:'#0f0f0f', position:'relative' }}>
+          <div style={{ borderRadius:12, overflow:'hidden', border:`1px solid ${C.border}`, boxShadow:'0 32px 80px rgba(0,0,0,0.18)', background:'#0f0f0f', position:'relative' }}>
 
   {/* Browser bar */}
   <div style={{ padding:'9px 14px', borderBottom:'1px solid #1f1f1f', display:'flex', alignItems:'center', gap:6, background:'#161616' }}>
