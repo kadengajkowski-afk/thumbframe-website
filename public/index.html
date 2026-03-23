@@ -38,96 +38,32 @@
     </script>
     <style>
   :root { --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); }
-  body { margin: 0; background: #0f0f0f; font-family: sans-serif; overflow-x: hidden; }
 
-  /* Landing Page Fixes */
-  @media (max-width: 768px) {
-    /* Hide everything that isn't essential */
-    .desktop-only, .desktop-nav-links {
-      display: none !important;
-    }
-
-    nav {
-      justify-content: space-between !important;
-      padding: 10px 15px !important;
-      height: 60px !important;
-    }
-
-    .hero-grid { grid-template-columns: 1fr !important; text-align: center; padding: 20px !important; }
-
-    /* Fix the hero text size */
-    h1 {
-      font-size: 32px !important;
-      line-height: 1.1 !important;
-    }
-
-    /* Make the 'Start for free' button full width on phone */
-    .hero-text-container button {
-      width: 100% !important;
-      margin-bottom: 10px;
-    }
+  /* Prevent ANY scrolling on the whole site for mobile */
+  html, body {
+    margin: 0; padding: 0;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    background: #000;
+    position: fixed; /* Hard-lock the background */
   }
 
+  /* Force the Landing Page Header to stay clean */
   @media (max-width: 768px) {
-    /* The "App" Container */
-    .mobile-editor-container {
-      background: #000;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
+    .desktop-nav-links, .desktop-only { display: none !important; }
+    nav { height: 60px !important; padding: var(--safe-top) 15px 0 !important; }
+    .hero-grid { grid-template-columns: 1fr !important; padding: 20px !important; text-align: center; }
+  }
 
-    /* The Canvas Viewport - Centers the thumbnail perfectly */
-    .canvas-viewport {
-      flex: 1;
-      background: #111;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      margin-top: -20px;
-    }
-
-    /* Face analysis overlays */
-    .face-marker { position: absolute; border: 2px solid #00ff00; background: rgba(0,255,0,0.1); border-radius: 4px; pointer-events: none; z-index: 10000; }
-    .face-score-badge { background: #00ff00; color: #000; font-weight: bold; font-size: 10px; padding: 2px 4px; border-radius: 2px; margin-top: -18px; }
-
-    /* The Bottom Dock - Glassmorphism style */
-    .mobile-bottom-dock {
-      background: rgba(22, 22, 22, 0.95);
-      backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 20px 20px 0 0;
-      padding-bottom: env(safe-area-inset-bottom);
-      z-index: 1000;
-    }
-
-    /* Horizontal Tool Ribbon */
-    .tool-ribbon {
-      display: flex;
-      overflow-x: auto;
-      padding: 12px;
-      gap: 12px;
-      scrollbar-width: none;
-    }
-    .tool-ribbon::-webkit-scrollbar { display: none; }
-
-    .tool-pill {
-      flex: 0 0 auto;
-      background: #262626;
-      border: 1px solid #333;
-      color: #fff;
-      padding: 8px 16px;
-      border-radius: 99px;
-      font-size: 13px;
-      font-weight: 600;
-      transition: all 0.2s;
-    }
-    .tool-pill.active { background: #fff; color: #000; border-color: #fff; }
-
-    /* Floating Action Buttons */
-    .fab-undo { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.5); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: white; border: 1px solid rgba(255,255,255,0.1); }
+  /* The Editor Viewport - Absolute Center */
+  .mobile-canvas-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #111;
+    touch-action: none;
+    padding-bottom: 250px; /* Space for the bottom tools */
   }
     </style>
   </head>
