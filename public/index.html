@@ -33,44 +33,59 @@
       gtag('config', 'G-T7ZLMB1Q65');
     </script>
     <style>
-  /* 1. Global Reset */
-  body { margin: 0; padding: 0; overflow-x: hidden; background: #f5f0e8; }
+  :root { --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); }
+  body { margin: 0; background: #0f0f0f; font-family: sans-serif; overflow-x: hidden; }
 
-  /* 2. Fix the Landing Page Header */
+  /* Landing Page Fixes */
   @media (max-width: 768px) {
-    /* Hide the overlapping horizontal links */
-    .desktop-nav-links { display: none !important; }
-
-    nav { height: 60px !important; padding-top: env(safe-area-inset-top) !important; }
-
-    .hero-grid {
-      grid-template-columns: 1fr !important;
-      padding-top: 40px !important;
-      text-align: center;
-    }
+    nav { height: auto !important; padding: calc(var(--safe-top) + 10px) 15px 10px !important; }
+    .desktop-only { display: none !important; }
+    .hero-grid { grid-template-columns: 1fr !important; text-align: center; padding: 20px !important; }
   }
 
-  /* 3. Fix the Editor (The "Invisible Photo" Bug) */
+  /* Editor Mobile UX: The "Smart" Layout */
   @media (max-width: 768px) {
-    .editor-main-layout { flex-direction: column !important; height: 100vh !important; }
-
-    /* Force canvas to the top */
-    .canvas-area {
-      order: -1 !important;
-      flex: 1 !important;
-      background: #000 !important;
-      min-height: 50vh !important;
-      display: flex !important;
+    .mobile-editor-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: -webkit-fill-available;
+    }
+    .canvas-viewport {
+      flex: 1;
+      display: flex;
       align-items: center;
       justify-content: center;
+      background: #000;
+      overflow: hidden;
+      position: relative;
     }
-
-    /* Make the tools scrollable at the bottom */
-    .sidebar-left, .sidebar-right {
-      height: 40vh !important;
-      width: 100vw !important;
-      overflow-y: auto !important;
-      background: #161616 !important;
+    .mobile-bottom-sheet {
+      background: #161616;
+      border-top: 1px solid #2a2a2a;
+      padding-bottom: var(--safe-bottom);
+      max-height: 40vh;
+      overflow-y: auto;
+    }
+    .mobile-toolbar-scroll {
+      display: flex;
+      overflow-x: auto;
+      padding: 10px;
+      gap: 8px;
+      border-bottom: 1px solid #2a2a2a;
+      -webkit-overflow-scrolling: touch;
+    }
+    .mobile-tool-btn {
+      flex: 0 0 auto;
+      height: 44px;
+      padding: 0 15px;
+      border-radius: 8px;
+      background: #2a2a2a;
+      color: white;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      border: none;
     }
   }
     </style>
