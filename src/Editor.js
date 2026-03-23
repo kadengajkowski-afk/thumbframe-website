@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, memo } from 'react';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 
+const API = 'https://thumbframe-api-production.up.railway.app';
+
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
   tiktok:    { label:'TikTok',    width:1080, height:1920, preview:{ w:152, h:270 } },
@@ -2457,7 +2459,7 @@ export default function Editor({onExit, user, token, apiUrl}){
     color:   {width:'100%',height:36,borderRadius:6,border:`1px solid ${T.border}`,cursor:'pointer',background:'none'},
     pill:    (a)=>({padding:'3px 10px',borderRadius:4,border:`1px solid ${a?T.accent:T.border}`,background:a?T.accent:'transparent',color:a?'#fff':T.text,fontSize:11,cursor:'pointer',fontWeight:a?'600':'400'}),
     iconBtn: (a)=>({padding:'5px 9px',borderRadius:6,border:`1px solid ${a?T.accent:T.border}`,background:a?T.accent:'transparent',color:a?'#fff':T.text,cursor:'pointer',fontSize:12,fontWeight:a?'600':'400'}),
-    toolBtn: (a)=>({padding:'7px 10px',borderRadius:6,border:'none',background:a?`${T.accent}18`:'transparent',color:a?T.accent:T.muted,fontSize:12,cursor:'pointer',textAlign:'left',width:window.innerWidth<768?'auto':'100%',flexShrink:window.innerWidth<768?0:1,whiteSpace:'nowrap',fontWeight:a?'600':'400',display:'flex',alignItems:'center',gap:8,marginBottom:1}),
+    toolBtn: (a)=>({padding:'7px 10px',borderRadius:6,border:'none',background:a?`${T.accent}18`:'transparent',color:a?T.accent:T.muted,fontSize:12,cursor:'pointer',textAlign:'left',width:'100%',fontWeight:a?'600':'400',display:'flex',alignItems:'center',gap:8,marginBottom:1}),
     addBtn:  {padding:10,borderRadius:7,background:T.accent,color:'#fff',border:'none',fontSize:12,cursor:'pointer',fontWeight:'600',width:'100%',marginTop:12},
     section: {padding:10,background:T.input,borderRadius:7,border:`1px solid ${T.border}`,marginTop:8},
     row:     {display:'flex',gap:6,alignItems:'center'},
@@ -2974,10 +2976,10 @@ export default function Editor({onExit, user, token, apiUrl}){
         </div>
       </div>
 
-      <div className="editor-main-layout" style={{display:'flex',flex:1,overflow:window.innerWidth<768?'auto':'hidden',flexDirection:window.innerWidth<768?'column':'row'}}>
+      <div className="editor-main-layout" style={{display:'flex',flex:1,overflow:'hidden',flexDirection:'row'}}>
 
         {/* Left sidebar */}
-        <div className="sidebar-left" style={{width:window.innerWidth<768?'100%':150,height:'auto',background:T.sidebar,borderRight:window.innerWidth<768?'none':`1px solid ${T.border}`,borderBottom:window.innerWidth<768?`1px solid ${T.border}`:'none',padding:'8px 6px',display:'flex',flexDirection:window.innerWidth<768?'row':'column',overflowX:window.innerWidth<768?'auto':'visible',overflowY:window.innerWidth<768?'hidden':'auto',flexShrink:0,gap:2,zIndex:10}}>
+        <div className="sidebar-left" style={{width:150,height:'100%',background:T.sidebar,borderRight:`1px solid ${T.border}`,padding:'8px 6px',display:'flex',flexDirection:'column',overflowX:'visible',overflowY:'auto',flexShrink:0,gap:2,zIndex:10}}>
           {(()=>{
             let lastGroup = null;
             return tools.map((t,i)=>{
@@ -3383,7 +3385,7 @@ export default function Editor({onExit, user, token, apiUrl}){
         <div
           className="sidebar-right"
           onPointerDown={e=>e.stopPropagation()}
-          style={{width:272,background:T.sidebar,borderLeft:`1px solid ${T.border}`,display:window.innerWidth<768?'none':'flex',flexDirection:'column',flexShrink:0}}
+          style={{width:272,background:T.sidebar,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',flexShrink:0}}
         >
           <div style={{flex:1,padding:'10px 12px',overflowY:'auto'}}>
 
