@@ -3001,7 +3001,21 @@ export default function Editor({onExit, user, token, apiUrl}){
                   if(activeTool==='brush') return;
                   setSelectedId(null);
                 }}
-                style={{width:p.preview.w,height:p.preview.h,position:'relative',overflow:'hidden',borderRadius:4,boxShadow:'0 8px 40px rgba(0,0,0,0.8)',flexShrink:0,cursor:activeTool==='brush'?'crosshair':
+                onTouchStart={(e) => {
+                  const t = e.touches[0];
+                  const el = canvasRef.current;
+                  const rect = el.getBoundingClientRect();
+                  const x = (t.clientX - rect.left) / zoom;
+                  const y = (t.clientY - rect.top) / zoom;
+                  setSelectedId(null);
+                }}
+                onTouchMove={(e) => {
+                  if (e.cancelable) e.preventDefault();
+                }}
+                onTouchEnd={(e) => {
+                  if (e.cancelable) e.preventDefault();
+                }}
+                style={{width:p.preview.w,height:p.preview.h,position:'relative',touchAction:'none',overflow:'hidden',borderRadius:4,boxShadow:'0 8px 40px rgba(0,0,0,0.8)',flexShrink:0,cursor:activeTool==='brush'?'crosshair':
                        activeTool==='rimlight'?(rimPickingColor?'crosshair':'crosshair'):
                        'default'}}>
 
