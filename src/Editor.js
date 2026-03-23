@@ -529,6 +529,8 @@ export default function Editor({onExit, user, token, apiUrl}){
   const [zoom,setZoom]                     = useState(1.5);
   const fileInputRef = useRef(null);
   const [activeMobileTab, setActiveMobileTab] = useState('edit');
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   // Auto-scale hook for mobile
   useEffect(() => {
     const handleResize = () => {
@@ -1960,6 +1962,18 @@ export default function Editor({onExit, user, token, apiUrl}){
   }
   function onLayerDragEnd(){setLayerDragId(null);setLayerDragOver(null);}
 
+  async function handleFaceScore(){
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch(`${API}/api/analyze-face`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({}) });
+      const data = await res.json();
+      setAnalysis(data);
+    } catch(e) {
+      console.error('Face analysis failed', e);
+    }
+    setIsAnalyzing(false);
+  }
+
   async function exportCanvas(format='png', transparent=false){
     // ✅ Free = 640×360 preview res, Pro = full resolution
     const isPro   = user?.plan==='pro' || token==='test-key-123';
@@ -2519,11 +2533,21 @@ export default function Editor({onExit, user, token, apiUrl}){
       </div>
       {/* Canvas Viewport */}
       <div className="canvas-viewport" onPointerDown={e=>{if(e.target===e.currentTarget)setSelectedId(null);}}>
-        <div ref={canvasRef} style={{transform:`scale(${zoom})`,transformOrigin:'center center',touchAction:'none',position:'relative',width:p.preview.w,height:p.preview.h,overflow:'hidden',borderRadius:4,boxShadow:'0 8px 40px rgba(0,0,0,0.8)'}}>
+        <div ref={canvasRef} style={{transform:`scale(${zoom})`,transformOrigin:'center center',touchAction:'none',position:'relative',width:p.preview.w,height:p.preview.h,background:'#000',overflow:'hidden',boxShadow:'0 0 20px rgba(0,0,0,0.5)'}}>
           {layers.map(obj=>{
             if(obj.hidden) return null;
             return renderLayerElement(obj);
           })}
+          {/* YouTube Timestamp Overlay (Visual Only) */}
+          <div style={{position:'absolute',bottom:12,right:12,background:'rgba(0,0,0,0.8)',color:'#fff',padding:'2px 4px',borderRadius:4,fontSize:24,fontWeight:'bold',zIndex:9999,pointerEvents:'none'}}>
+            10:00
+          </div>
+          {/* Face Analysis Markers */}
+          {analysis?.faces?.map((face,i)=>(
+            <div key={i} className="face-marker" style={{left:face.x,top:face.y,width:face.w,height:face.h}}>
+              <div className="face-score-badge">{face.score}</div>
+            </div>
+          ))}
         </div>
       </div>
       {/* Smart Bottom Dock */}
@@ -2566,7 +2590,7 @@ export default function Editor({onExit, user, token, apiUrl}){
             if(activeMobileTab==='analyze') return(
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <button onClick={()=>setActiveTool('ctr')} style={mobileActionStyle}>📈 CTR Score</button>
-                <button onClick={()=>setActiveTool('face')} style={mobileActionStyle}>👤 Face Score</button>
+                <button onClick={handleFaceScore} style={mobileActionStyle}>{isAnalyzing?'Analyzing…':'👤 Face Score'}</button>
                 <button onClick={()=>setActiveTool('heatmap')} style={mobileActionStyle}>🌡️ Heatmap</button>
               </div>
             );
@@ -2589,6 +2613,9 @@ export default function Editor({onExit, user, token, apiUrl}){
                     onChange={e=>updateLayerSilent(selectedId,{opacity:parseInt(e.target.value)})}
                     onPointerUp={e=>updateLayer(selectedId,{opacity:parseInt(e.target.value)})}/>
                 </div>
+                {selectedLayer?.type==='image' && (
+                  <button onClick={()=>updateLayer(selectedId,{x:0,y:0,width:PLATFORMS[platform].preview.w,height:'auto'})} style={{...mobileActionStyle,marginBottom:8}}>🖼️ Fill Frame</button>
+                )}
                 <button onClick={()=>deleteLayer(selectedId)} style={{...mobileActionStyle,background:'#7f1d1d'}}>🗑️ Delete Layer</button>
               </div>
             );
