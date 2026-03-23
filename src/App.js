@@ -190,13 +190,13 @@ function Nav({ page, setPage, user, onLogout }) {
           {/* Logo */}
           <div onClick={() => setPage('home')} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', flexShrink: 0 }}>
             <div style={{ width: 22, height: 22, borderRadius: 5, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 11, color: '#fff', fontWeight: '800' }}>S</span>
+              <span style={{ fontSize: 11, color: '#fff', fontWeight: '800' }}>T</span>
             </div>
             <span style={{ fontSize: 15, fontWeight: '700', color: C.text, letterSpacing: '-0.2px' }}>ThumbFrame</span>
           </div>
 
           {/* Nav links - Hidden on mobile via CSS class */}
-          <div className="desktop-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 8 }}>
+          <div className="desktop-nav-links" style={{ display: window.innerWidth < 768 ? 'none' : 'flex', alignItems: 'center', gap: 2, marginLeft: 8 }}>
             {[['How it works', 'howitworks'], ['Examples', 'examples'], ['Pricing', 'pricing']].map(([label, key]) => (
               <button key={key} onClick={() => setPage(key)} style={{
                 padding: '5px 12px', borderRadius: 6, border: 'none',

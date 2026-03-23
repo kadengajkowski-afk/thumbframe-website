@@ -2859,10 +2859,10 @@ export default function Editor({onExit, user, token, apiUrl}){
         </div>
       </div>
 
-      <div className="editor-main-layout" style={{display:'flex',flex:1,overflow:'hidden',flexDirection:window.innerWidth<768?'column':'row'}}>
+      <div className="editor-main-layout" style={{display:'flex',flex:1,overflow:window.innerWidth<768?'auto':'hidden',flexDirection:window.innerWidth<768?'column':'row'}}>
 
         {/* Left sidebar */}
-        <div className="sidebar-left" style={{width:150,background:T.sidebar,borderRight:`1px solid ${T.border}`,padding:'8px 6px',display:window.innerWidth<768&&!mobileToolsOpen?'none':'flex',flexDirection:'column',overflowY:'auto',flexShrink:0,position:window.innerWidth<768?'fixed':'relative',zIndex:window.innerWidth<768?1000:'auto',height:window.innerWidth<768?'100%':'auto',width:window.innerWidth<768?'100%':150}}>
+        <div className="sidebar-left" style={{width:window.innerWidth<768?'100%':150,height:'auto',background:T.sidebar,borderRight:`1px solid ${T.border}`,padding:'8px 6px',display:window.innerWidth<768?'flex':'flex',flexDirection:window.innerWidth<768?'row':'column',overflowX:window.innerWidth<768?'auto':'visible',overflowY:window.innerWidth<768?'hidden':'auto',flexShrink:0}}>
           {(()=>{
             let lastGroup = null;
             return tools.map((t,i)=>{
@@ -2905,7 +2905,7 @@ export default function Editor({onExit, user, token, apiUrl}){
         </div>
 
         {/* Canvas */}
-        <div className="canvas-area" style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:darkMode?'#080808':'#d0d0d0',overflow:'hidden',position:'relative',order:-1,minHeight:window.innerWidth<768?'40vh':'auto',width:window.innerWidth<768?'100%':'auto'}}>
+        <div className="canvas-area" style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:darkMode?'#080808':'#d0d0d0',overflow:'auto',position:'relative',order:-1,minHeight:window.innerWidth<768?'60vh':'auto',width:window.innerWidth<768?'100%':'auto'}}>
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
             <div style={{transform:`scale(${zoom})`,transformOrigin:'center center',imageRendering:'high-quality'}}>
               <div ref={canvasRef}
