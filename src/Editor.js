@@ -2509,16 +2509,16 @@ export default function Editor({onExit, user, token, apiUrl}){
   });
 
   if(window.innerWidth < 768) return(
-    <div className="mobile-editor-container" style={{background:T.bg,color:T.text,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
+    <div className="mobile-editor-container" style={{fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
       <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
-      {/* 1. Top Bar */}
-      <div style={{height:44,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 10px',borderBottom:`1px solid ${T.border}`,background:T.panel}}>
-        <button onClick={()=>onExit&&onExit()} style={{color:T.text,background:'none',border:'none',fontSize:18,cursor:'pointer'}}>←</button>
-        <div style={{color:T.text,fontWeight:'bold',fontSize:14}}>{designName}</div>
-        <button onClick={()=>exportCanvas('png',false)} style={{background:T.accent,color:'#fff',border:'none',borderRadius:6,padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}>Download</button>
+      {/* Floating Header */}
+      <div style={{padding:'10px 15px',display:'flex',justifyContent:'space-between',alignItems:'center',position:'absolute',top:0,left:0,right:0,zIndex:10}}>
+        <button onClick={()=>onExit&&onExit()} className="fab-undo" style={{cursor:'pointer'}}>✕</button>
+        <div style={{color:'#fff',fontSize:14,fontWeight:'500',textShadow:'0 1px 4px rgba(0,0,0,0.8)'}}>{designName}</div>
+        <button onClick={()=>exportCanvas('png',false)} style={{background:'#fff',color:'#000',border:'none',padding:'6px 15px',borderRadius:20,fontWeight:'bold',cursor:'pointer'}}>Export</button>
       </div>
-      {/* 2. Canvas Viewport */}
-      <div className="canvas-viewport">
+      {/* Canvas Viewport */}
+      <div className="canvas-viewport" onPointerDown={e=>{if(e.target===e.currentTarget)setSelectedId(null);}}>
         <div ref={canvasRef} style={{transform:`scale(${zoom})`,transformOrigin:'center center',touchAction:'none',position:'relative',width:p.preview.w,height:p.preview.h,overflow:'hidden',borderRadius:4,boxShadow:'0 8px 40px rgba(0,0,0,0.8)'}}>
           {layers.map(obj=>{
             if(obj.hidden) return null;
@@ -2526,62 +2526,83 @@ export default function Editor({onExit, user, token, apiUrl}){
           })}
         </div>
       </div>
-      {/* 3. Bottom Sheet */}
-      <div className="mobile-bottom-sheet" style={{background:T.panel}}>
-        {/* Feature Tabs */}
-        <div className="mobile-toolbar-scroll" style={{borderBottom:`1px solid ${T.border}`}}>
-          <button className="mobile-tool-btn" style={{cursor:'pointer'}} onClick={()=>fileInputRef.current&&fileInputRef.current.click()}>➕ Add Photo</button>
-          <button className="mobile-tool-btn" style={{background:activeMobileTab==='text'?T.accent:'#2a2a2a',cursor:'pointer'}} onClick={()=>setActiveMobileTab('text')}>📝 Text</button>
-          <button className="mobile-tool-btn" style={{background:activeMobileTab==='ai'?T.accent:'#2a2a2a',cursor:'pointer'}} onClick={()=>setActiveMobileTab('ai')}>✨ AI Tools</button>
-          <button className="mobile-tool-btn" style={{background:activeMobileTab==='analyze'?T.accent:'#2a2a2a',cursor:'pointer'}} onClick={()=>setActiveMobileTab('analyze')}>📈 Analyze</button>
-          <button className="mobile-tool-btn" style={{background:activeMobileTab==='layers'?T.accent:'#2a2a2a',cursor:'pointer'}} onClick={()=>setActiveMobileTab('layers')}>🗂️ Layers</button>
+      {/* Smart Bottom Dock */}
+      <div className="mobile-bottom-dock">
+        {/* Tool Ribbon */}
+        <div className="tool-ribbon">
+          <button className={`tool-pill${activeMobileTab==='templates'&&!selectedId?' active':''}`} onClick={()=>setActiveMobileTab('templates')}>✨ Templates</button>
+          <button className="tool-pill" onClick={()=>fileInputRef.current&&fileInputRef.current.click()}>🖼️ Add Photo</button>
+          <button className={`tool-pill${activeMobileTab==='text'?' active':''}`} onClick={()=>{setActiveMobileTab('text');setActiveTool('text');}}>📝 Text</button>
+          <button className={`tool-pill${activeMobileTab==='ai'?' active':''}`} onClick={()=>setActiveMobileTab('ai')}>🤖 AI Tools</button>
+          <button className={`tool-pill${activeMobileTab==='analyze'?' active':''}`} onClick={()=>setActiveMobileTab('analyze')}>📈 Score</button>
+          <button className={`tool-pill${activeMobileTab==='layers'?' active':''}`} onClick={()=>setActiveMobileTab('layers')}>🗂️ Layers</button>
         </div>
-        {/* Dynamic Control Panel */}
-        <div style={{padding:'15px 20px',minHeight:120}}>
+        {/* Contextual Panel */}
+        <div style={{padding:'0 20px 20px',minHeight:160,color:'#fff'}}>
           {(()=>{
             const mobileActionStyle={background:'#2a2a2a',color:'#fff',border:'none',borderRadius:8,padding:'10px 8px',cursor:'pointer',fontSize:13,fontWeight:'600'};
+            if(selectedLayer?.type==='text'&&activeMobileTab!=='ai'&&activeMobileTab!=='analyze'&&activeMobileTab!=='layers') return(
+              <div>
+                <input type="text" value={selectedLayer.text||''}
+                  onChange={e=>updateLayerSilent(selectedId,{text:e.target.value})}
+                  onBlur={e=>updateLayer(selectedId,{text:e.target.value})}
+                  style={{width:'100%',background:'#222',border:'none',color:'#fff',padding:12,borderRadius:8,marginBottom:15,boxSizing:'border-box',fontSize:15}}/>
+                <div style={{display:'flex',gap:10,overflowX:'auto'}}>
+                  {['Impact','Arial Black','Roboto','Georgia'].map(f=>(
+                    <button key={f} onClick={()=>updateLayer(selectedId,{fontFamily:f})}
+                      style={{background:selectedLayer.fontFamily===f?'#fff':'#333',color:selectedLayer.fontFamily===f?'#000':'#fff',padding:'5px 12px',borderRadius:5,border:'none',cursor:'pointer',flexShrink:0}}>{f}</button>
+                  ))}
+                </div>
+              </div>
+            );
             if(activeMobileTab==='ai') return(
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-                <button onClick={()=>setActiveTool('removebg')} style={mobileActionStyle}>✨ Remove BG</button>
-                <button onClick={()=>setActiveTool('rimlight')} style={mobileActionStyle}>☀️ Rim Light</button>
-                <button onClick={()=>setActiveTool('heal')} style={mobileActionStyle}>🪄 AI Remove</button>
-                <button onClick={()=>setActiveTool('aigenerate')} style={mobileActionStyle}>🎨 AI Fill</button>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <button onClick={()=>setActiveTool('removebg')} style={mobileActionStyle}>✨ Remove Background</button>
+                <button onClick={()=>setActiveTool('rimlight')} style={mobileActionStyle}>☀️ Auto Rim Light</button>
+                <button onClick={()=>setActiveTool('aigenerate')} style={mobileActionStyle}>🎨 Generative Fill</button>
+                <button onClick={()=>setActiveTool('heal')} style={mobileActionStyle}>🩹 Object Removal</button>
               </div>
             );
             if(activeMobileTab==='analyze') return(
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <button onClick={()=>setActiveTool('ctr')} style={mobileActionStyle}>📈 CTR Score</button>
                 <button onClick={()=>setActiveTool('face')} style={mobileActionStyle}>👤 Face Score</button>
                 <button onClick={()=>setActiveTool('heatmap')} style={mobileActionStyle}>🌡️ Heatmap</button>
               </div>
             );
             if(activeMobileTab==='layers') return(
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              <div style={{display:'flex',flexDirection:'column',gap:8,maxHeight:130,overflowY:'auto'}}>
                 {[...layers].reverse().map(l=>(
-                  <div key={l.id} onClick={()=>setSelectedId(l.id)} style={{padding:10,background:selectedId===l.id?T.accent:T.bg,borderRadius:8,color:'#fff',display:'flex',justifyContent:'space-between',cursor:'pointer'}}>
-                    <span style={{fontSize:13}}>{l.type.toUpperCase()}: {l.text||'Image'}</span>
+                  <div key={l.id} onClick={()=>setSelectedId(l.id)} style={{padding:'8px 12px',background:selectedId===l.id?T.accent:'#2a2a2a',borderRadius:8,color:'#fff',display:'flex',justifyContent:'space-between',cursor:'pointer',fontSize:13}}>
+                    <span>{l.type.toUpperCase()}: {l.text||'Image'}</span>
                     <span onClick={e=>{e.stopPropagation();deleteLayer(l.id);}}>🗑️</span>
                   </div>
                 ))}
               </div>
             );
             if(selectedId) return(
-              <div style={{color:T.text}}>
-                <div style={{marginBottom:15,fontSize:12,opacity:0.6}}>EDITING: {selectedLayer?.type?.toUpperCase()}</div>
-                <div style={{display:'flex',gap:20,alignItems:'center',marginBottom:10}}>
-                  <span style={{fontSize:13,minWidth:60}}>Opacity</span>
+              <div>
+                <div style={{marginBottom:10,fontSize:11,opacity:0.5,textTransform:'uppercase',letterSpacing:1}}>Editing {selectedLayer?.type}</div>
+                <div style={{display:'flex',gap:12,alignItems:'center',marginBottom:12}}>
+                  <span style={{fontSize:13,minWidth:56,opacity:0.7}}>Opacity</span>
                   <input type="range" style={{flex:1}} min="0" max="100" value={selectedLayer?.opacity||100}
                     onChange={e=>updateLayerSilent(selectedId,{opacity:parseInt(e.target.value)})}
                     onPointerUp={e=>updateLayer(selectedId,{opacity:parseInt(e.target.value)})}/>
                 </div>
-                <button onClick={()=>deleteLayer(selectedId)} style={{...mobileActionStyle,background:T.danger,marginTop:8}}>🗑️ Delete</button>
+                <button onClick={()=>deleteLayer(selectedId)} style={{...mobileActionStyle,background:'#7f1d1d'}}>🗑️ Delete Layer</button>
               </div>
             );
-            return <div style={{color:T.muted,textAlign:'center',fontSize:13,paddingTop:20}}>Tap an element to edit</div>;
+            return(
+              <div style={{display:'flex',gap:10,overflowX:'auto',paddingTop:4}}>
+                {VIRAL_TEMPLATES.slice(0,4).map((t,i)=>(
+                  <div key={i} onClick={()=>loadTemplate(t)} style={{flex:'0 0 100px',height:60,background:t.preview?.bg||'#333',borderRadius:8,cursor:'pointer',overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#fff',fontFamily:'Impact,sans-serif',fontWeight:'900',textShadow:'1px 1px 0 #000'}}>{t.name||'Template'}</div>
+                ))}
+              </div>
+            );
           })()}
         </div>
       </div>
-      {/* Download modal (shared) */}
+      {/* Download modal */}
       {showDownload&&(
         <div style={{position:'fixed',inset:0,zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)'}} onClick={e=>{if(e.target===e.currentTarget)setShowDownload(false);}}>
           <div style={{background:T.panel,borderRadius:12,padding:24,width:280,border:`1px solid ${T.border}`}}>
