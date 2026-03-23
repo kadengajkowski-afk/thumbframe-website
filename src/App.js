@@ -196,7 +196,7 @@ function Nav({ page, setPage, user, onLogout }) {
           </div>
 
           {/* Nav links - Hidden on mobile via CSS class */}
-          <div className="desktop-nav-links" style={{ display: window.innerWidth < 768 ? 'none' : 'flex', alignItems: 'center', gap: 2, marginLeft: 8 }}>
+          <div className="desktop-nav-links desktop-only" style={{ display: window.innerWidth < 768 ? 'none' : 'flex', alignItems: 'center', gap: 2, marginLeft: 8 }}>
             {[['How it works', 'howitworks'], ['Examples', 'examples'], ['Pricing', 'pricing']].map(([label, key]) => (
               <button key={key} onClick={() => setPage(key)} style={{
                 padding: '5px 12px', borderRadius: 6, border: 'none',
