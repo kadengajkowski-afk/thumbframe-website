@@ -2508,6 +2508,7 @@ export default function Editor({onExit, user, token, apiUrl}){
 
   if(window.innerWidth < 768) return(
     <div className="mobile-editor-container" style={{background:T.bg,color:T.text,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
+      <input type="file" id="mobile-upload" hidden accept="image/*" onChange={handleImageUpload} />
       {/* 1. Top Bar */}
       <div style={{height:44,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 10px',borderBottom:`1px solid ${T.border}`,background:T.panel}}>
         <button onClick={()=>onExit&&onExit()} style={{color:T.text,background:'none',border:'none',fontSize:18,cursor:'pointer'}}>←</button>
@@ -2526,11 +2527,14 @@ export default function Editor({onExit, user, token, apiUrl}){
       {/* 3. Bottom Sheet */}
       <div className="mobile-bottom-sheet">
         <div className="mobile-toolbar-scroll">
-          {['select','text','shapes','brush','effects'].map(tool=>(
+          <button className="mobile-tool-btn" style={{cursor:'pointer'}} onClick={()=>document.getElementById('mobile-upload').click()}>
+            ➕ Upload
+          </button>
+          {['Templates','Text','AI Tools','Layers','Analysis'].map(tool=>(
             <button key={tool} className="mobile-tool-btn"
-              style={{background:activeTool===tool?T.accent:'#2a2a2a',cursor:'pointer'}}
-              onClick={()=>setActiveTool(tool)}>
-              {tool.charAt(0).toUpperCase()+tool.slice(1)}
+              style={{background:activeTool===tool.toLowerCase()?T.accent:'#2a2a2a',cursor:'pointer'}}
+              onClick={()=>setActiveTool(tool.toLowerCase())}>
+              {tool}
             </button>
           ))}
         </div>
