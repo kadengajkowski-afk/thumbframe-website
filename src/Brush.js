@@ -11,6 +11,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   const stabPos        = useRef(null); // stabilized position lags behind mouse
   const cloneSource    = useRef(null);
   const isPainting     = useRef(false);
+  const hasStroked     = useRef(false);
   const isReady        = useRef(false);
   const historyRef     = useRef([]);
   const loadedSrc      = useRef(null);
@@ -33,6 +34,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   useEffect(() => {
     if (!layer?.src || !active) return;
+    hasStroked.current = false;
     if (loadedSrc.current === layer.src) return;
     // ✅ Don't reload if we just flushed — canvas already has correct pixels
     if (loadedSrc.current && layer.src !== loadedSrc.current) {
@@ -77,11 +79,13 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     if (!canvas || !isReady.current) return;
     const snap = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
     historyRef.current = [...historyRef.current.slice(-19), snap];
+    hasStroked.current = true;
   }
 
   function flush() {
     const canvas = canvasRef.current;
     if (!canvas || !isReady.current) return;
+    if (!hasStroked.current) return;
     const tmp = document.createElement('canvas');
     tmp.width  = layer.width;
     tmp.height = layer.height;
