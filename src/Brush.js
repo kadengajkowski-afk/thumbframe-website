@@ -54,17 +54,28 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     const ctx = canvas.getContext('2d',{willReadFrequently:true});
     const img = new Image();
     img.onload = () => {
-      const z = zoom || 1;
       canvas.width  = layer.width;
       canvas.height = layer.height;
+      // ✅ Don't draw image — canvas is transparent paint overlay only
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
-      isReady.current    = true;
-      loadedSrc.current  = layer.src;
+      // If layer has existing paintSrc load that instead
+      if(layer.paintSrc){
+        const paintImg = new Image();
+        paintImg.onload = ()=>{
+          ctx.drawImage(paintImg, 0, 0, canvas.width, canvas.height);
+          historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+          isReady.current    = true;
+          loadedSrc.current  = layer.src;
+        };
+        paintImg.src = layer.paintSrc;
+      } else {
+        historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+        isReady.current    = true;
+        loadedSrc.current  = layer.src;
+      }
     };
     img.src = layer.src;
-  }, [layer?.src, layer?.width, layer?.height, active, zoom]);
+  }, [layer?.src, layer?.width, layer?.height, layer?.paintSrc, active, zoom]);
 
   function getPos(e) {
     const canvas = canvasRef.current;
@@ -88,13 +99,12 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   function flush() {
     const canvas = canvasRef.current;
     if (!canvas || !isReady.current) return;
-    // ✅ NEVER flush unless user actually painted something
     if (!hasStroked.current) return;
-    // ✅ Use PNG not JPEG to prevent compression blur
     const dataUrl = canvas.toDataURL('image/png');
     loadedSrc.current = dataUrl;
     setTimeout(()=>{
-      onUpdate({ src: dataUrl });
+      // ✅ Save to paintSrc not src — original image never touched
+      onUpdate({ paintSrc: dataUrl });
     }, 50);
   }
 

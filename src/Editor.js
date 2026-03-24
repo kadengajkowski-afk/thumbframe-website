@@ -760,7 +760,15 @@ export default function Editor({onExit, user, token, apiUrl}){
     setSelectedId(id);
   }
 
-  function updateLayer(id,updates){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,...updates}:l);pushHistoryDebounced(nl);return nl;});}
+  function updateLayer(id,updates){
+    // ✅ Round coordinates to prevent sub-pixel interpolation blur
+    const safeUpdates = {...updates};
+    if(safeUpdates.x !== undefined) safeUpdates.x = Math.round(safeUpdates.x);
+    if(safeUpdates.y !== undefined) safeUpdates.y = Math.round(safeUpdates.y);
+    if(safeUpdates.width !== undefined) safeUpdates.width = Math.round(safeUpdates.width);
+    if(safeUpdates.height !== undefined) safeUpdates.height = Math.round(safeUpdates.height);
+    setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,...safeUpdates}:l);pushHistoryDebounced(nl);return nl;});
+  }
   function updateLayerSilent(id,updates){setLayers(prev=>prev.map(l=>l.id===id?{...l,...updates}:l));}
   function updateLayerEffect(id,key,value){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l);pushHistory(nl);return nl;});}
   function updateLayerEffectSilent(id,key,value){setLayers(prev=>prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l));}
@@ -2039,8 +2047,20 @@ export default function Editor({onExit, user, token, apiUrl}){
               }
               ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
               ctx.drawImage(img,x-cl,y-ct,w,h);
-              ctx.restore();
-              resolve();
+              // ✅ Draw paint overlay on top of image
+              if(obj.paintSrc){
+                const paintImg = new Image();
+                paintImg.onload = ()=>{
+                  ctx.drawImage(paintImg,x,y,w,h);
+                  ctx.restore();
+                  resolve();
+                };
+                paintImg.onerror = ()=>{ ctx.restore(); resolve(); };
+                paintImg.src = obj.paintSrc;
+              } else {
+                ctx.restore();
+                resolve();
+              }
             }
           };
           img.onerror=()=>resolve();
@@ -2383,6 +2403,21 @@ export default function Editor({onExit, user, token, apiUrl}){
             transform:`scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`,
             filter:`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${obj.imgBlur||0}px)`,
           }}/>
+          {obj.paintSrc&&(
+            <img
+              src={obj.paintSrc}
+              alt=""
+              style={{
+                position:'absolute',
+                top:-(obj.cropTop||0),
+                left:-(obj.cropLeft||0),
+                width:obj.width,
+                height:obj.height,
+                pointerEvents:'none',
+                imageRendering:'pixelated',
+              }}
+            />
+          )}
           {isSelected&&renderResizeHandles(obj)}
           {isSelected&&renderCropHandles(obj)}
           <DelBtn/>
@@ -3069,19 +3104,22 @@ export default function Editor({onExit, user, token, apiUrl}){
                       paintColor={brushColorState}
                       paintAlpha={brushColorAlpha}
                       onUpdate={(updates)=>{
-                        if(!updates?.src) return;
+                        if(!updates?.paintSrc && !updates?.src) return;
                         if(selectedLayer?.type==='background'){
-                          updateLayer(selectedId,{bgColor:'transparent',bgGradient:null,src:updates.src,type:'image',
-                            x:0,y:0,width:p.preview.w,height:p.preview.h,
-                            cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
-                            imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0
-                          });
+                          // Background still needs full merge
+                          if(updates.src){
+                            updateLayer(selectedId,{bgColor:'transparent',bgGradient:null,
+                              src:updates.src,type:'image',
+                              x:0,y:0,width:p.preview.w,height:p.preview.h,
+                              cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+                              imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0
+                            });
+                          }
                         } else {
-                          // ✅ Store original src separately so we never lose quality
-                          // Only update src — nothing else
-                          updateLayerSilent(selectedId,{src:updates.src});
-                          // Commit to history after brush stroke
-                          updateLayer(selectedId,{src:updates.src});
+                          // ✅ Non-destructive — only update paintSrc overlay
+                          if(updates.paintSrc){
+                            updateLayer(selectedId,{paintSrc:updates.paintSrc});
+                          }
                         }
                       }}
                     />
