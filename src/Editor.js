@@ -3032,7 +3032,10 @@ export default function Editor({onExit, user, token, apiUrl}){
                 </div>
 
                 {/* Interactive layer */}
-                <div style={{position:'absolute',inset:0,zIndex:1}}>
+                <div style={{
+                  position:'absolute',inset:0,zIndex:1,
+                  pointerEvents: activeTool==='brush' ? 'none' : 'auto',
+                }}>
                   {layers.map(obj=>renderLayerElement(obj))}
                 </div>
 
