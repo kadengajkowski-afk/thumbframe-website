@@ -730,6 +730,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }
 
   function onMouseDown(e) {
+    console.log('BRUSH MOUSEDOWN', e.clientX, e.clientY, 
+      'isReady:', isReady.current, 'active:', active);
     e.preventDefault(); e.stopPropagation();
     if (!isReady.current||!active) return;
     if (brushType==='clone'&&e.altKey) { cloneSource.current=getPos(e); return; }
