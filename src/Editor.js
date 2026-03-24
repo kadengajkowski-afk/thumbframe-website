@@ -2389,7 +2389,7 @@ export default function Editor({onExit, user, token, apiUrl}){
             position:'absolute',left:obj.x,top:obj.y,zIndex,
             opacity:opacityVal,cursor,...selStyle,...blendStyle,
             overflow:'hidden',width:cropW,height:cropH,...effectsStyle,
-            pointerEvents:activeTool==='brush'&&obj.id===selectedId?'none':'auto',
+            pointerEvents:'auto',
             WebkitMaskImage: hasMask?`url(${obj.mask.data})`:'none',
             WebkitMaskSize: hasMask?`${cropW}px ${cropH}px`:'none',
             WebkitMaskRepeat:'no-repeat',
@@ -2399,7 +2399,7 @@ export default function Editor({onExit, user, token, apiUrl}){
           }}>
           <img src={obj.src} alt="" style={{
             width:obj.width,height:obj.height,display:'block',
-            pointerEvents:'none',
+            pointerEvents:activeTool==='brush'?'none':'auto',
             marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),
             transform:`scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`,
             filter:`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${obj.imgBlur||0}px)`,

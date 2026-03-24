@@ -75,14 +75,17 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       }
     };
     img.src = layer.src;
-  }, [layer?.src, layer?.width, layer?.height, layer?.paintSrc, active, zoom]);
+  }, [layer?.src, layer?.width, layer?.height, layer?.paintSrc, active]);
 
   function getPos(e) {
     const canvas = canvasRef.current;
-    const rect   = canvas.getBoundingClientRect();
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / rect.width;
+    const relY = (e.clientY - rect.top)  / rect.height;
     return {
-      x: (e.clientX - rect.left) * (canvas.width  / rect.width),
-      y: (e.clientY - rect.top)  * (canvas.height / rect.height),
+      x: relX * canvas.width,
+      y: relY * canvas.height,
       clientX: e.clientX,
       clientY: e.clientY,
     };
@@ -820,7 +823,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   if (!active||!layer?.src) return null;
 
   return (
-    <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%' }}>
+    <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none' }}>
       <div ref={cursorRef} style={{ display:'none', position:'absolute', pointerEvents:'none', zIndex:99999 }}/>
       <canvas
         ref={canvasRef}
@@ -830,10 +833,12 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
         onMouseLeave={onMouseLeave}
         style={{
           position:'absolute', top:0, left:0,
-          width: layer.width+'px',
-          height: layer.height+'px',
+          width:'100%',
+          height:'100%',
           cursor:'none', display:'block',
+          pointerEvents:'auto',
           userSelect:'none', WebkitUserSelect:'none',
+          zIndex:100,
         }}
       />
     </div>
