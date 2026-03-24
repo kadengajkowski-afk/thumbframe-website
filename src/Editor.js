@@ -637,7 +637,7 @@ export default function Editor({onExit, user, token, apiUrl}){
   const canvasFilter    = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
   const canDrag         = activeTool==='move' || activeTool==='select' || activeTool==='shapes' || activeTool==='stickers';
   // ✅ When brush active on image — that image is ONLY shown in brush overlay, nowhere else
-  const brushingImageId = activeTool==='brush'&&(selectedLayer?.type==='image'||selectedLayer?.type==='background') ? selectedId : null;
+  const brushingImageId = null;
 
   useEffect(()=>{zoomRef.current=zoom;},[zoom]);
 
