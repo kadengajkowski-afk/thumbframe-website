@@ -2383,8 +2383,10 @@ export default function Editor({onExit, user, token, apiUrl}){
       const cropW=obj.width-(obj.cropLeft||0)-(obj.cropRight||0);
       const cropH=obj.height-(obj.cropTop||0)-(obj.cropBottom||0);
       const hasMask=obj.mask?.enabled&&obj.mask?.data;
+      const isBrushing=activeTool==='brush'&&selectedId===obj.id;
       return(
-        <div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)}
+        <div key={obj.id}
+          onMouseDown={e=>{ if(activeTool!=='brush') onLayerMouseDown(e,obj.id); }}
           style={{
             position:'absolute',left:obj.x,top:obj.y,zIndex,
             opacity:opacityVal,cursor,...selStyle,...blendStyle,
@@ -2397,25 +2399,40 @@ export default function Editor({onExit, user, token, apiUrl}){
             maskSize: hasMask?`${cropW}px ${cropH}px`:'none',
             maskRepeat:'no-repeat',
           }}>
-          <img src={obj.src} alt="" style={{
+          {/* Base image */}
+          <img src={obj.src} alt="base" style={{
             width:obj.width,height:obj.height,display:'block',
-            pointerEvents:activeTool==='brush'?'none':'auto',
+            pointerEvents:'none',
             marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),
             transform:`scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`,
             filter:`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${obj.imgBlur||0}px)`,
           }}/>
-          {obj.paintSrc&&(
-            <img
-              src={obj.paintSrc}
-              alt=""
-              style={{
-                position:'absolute',
-                top:-(obj.cropTop||0),
-                left:-(obj.cropLeft||0),
-                width:obj.width,
-                height:obj.height,
-                pointerEvents:'none',
-                imageRendering:'pixelated',
+          {/* Saved paint overlay — hide while actively brushing so live canvas shows through */}
+          {obj.paintSrc&&!isBrushing&&(
+            <img alt="paint" src={obj.paintSrc} style={{
+              position:'absolute',
+              top:-(obj.cropTop||0),left:-(obj.cropLeft||0),
+              width:obj.width,height:obj.height,
+              pointerEvents:'none',imageRendering:'pixelated',
+            }}/>
+          )}
+          {/* Live brush canvas — only in mobile view (desktop uses separate BrushOverlay) */}
+          {isBrushing&&window.innerWidth<768&&(
+            <BrushOverlay
+              ref={brushOverlayRef}
+              layer={{...obj,src:obj.src,width:obj.width,height:obj.height}}
+              active={true}
+              zoom={zoom}
+              brushType={brushTypeState}
+              brushSize={brushSizeState}
+              brushStrength={brushStrengthState}
+              brushEdge={brushEdgeState}
+              brushFlow={brushFlowState}
+              brushStabilizer={brushStabilizerState}
+              paintColor={brushColorState}
+              paintAlpha={brushColorAlpha}
+              onUpdate={updates=>{
+                if(updates?.paintSrc) updateLayer(obj.id,{paintSrc:updates.paintSrc});
               }}
             />
           )}

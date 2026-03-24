@@ -36,56 +36,39 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }));
 
   useEffect(() => {
-    if (!layer?.src || !active) return;
-    hasStroked.current = false;
-    if (loadedSrc.current === layer.src) return;
-    // ✅ Don't reload if we just flushed — canvas already has correct pixels
-    if (loadedSrc.current && layer.src !== loadedSrc.current) {
-      // Only reload if src changed externally (not from our own flush)
-      const isSameCanvas = layer.src.length === loadedSrc.current.length;
-      if(isSameCanvas) {
-        loadedSrc.current = layer.src;
-        return;
-      }
-    }
-    isReady.current = false;
+    if (!active) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d',{willReadFrequently:true});
-    const img = new Image();
-    img.onload = () => {
-      canvas.width  = layer.width;
-      canvas.height = layer.height;
-      // ✅ Don't draw image — canvas is transparent paint overlay only
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      // If layer has existing paintSrc load that instead
-      if(layer.paintSrc){
-        const paintImg = new Image();
-        paintImg.onload = ()=>{
-          ctx.drawImage(paintImg, 0, 0, canvas.width, canvas.height);
-          historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
-          isReady.current    = true;
-          loadedSrc.current  = layer.src;
-        };
-        paintImg.src = layer.paintSrc;
-      } else {
+
+    canvas.width  = layer.width;
+    canvas.height = layer.height;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (layer.paintSrc) {
+      const paintImg = new Image();
+      paintImg.onload = () => {
+        ctx.drawImage(paintImg, 0, 0, canvas.width, canvas.height);
         historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
-        isReady.current    = true;
-        loadedSrc.current  = layer.src;
-      }
-    };
-    img.src = layer.src;
-  }, [layer?.src, layer?.width, layer?.height, layer?.paintSrc, active]);
+        isReady.current = true;
+      };
+      paintImg.src = layer.paintSrc;
+    } else {
+      historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+      isReady.current = true;
+    }
+  }, [layer?.paintSrc, layer?.width, layer?.height, active]);
 
   function getPos(e) {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const relX = (e.clientX - rect.left) / rect.width;
-    const relY = (e.clientY - rect.top)  / rect.height;
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
     return {
-      x: relX * canvas.width,
-      y: relY * canvas.height,
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top)  * scaleY,
       clientX: e.clientX,
       clientY: e.clientY,
     };
@@ -823,8 +806,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   if (!active||!layer?.src) return null;
 
   return (
-    <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none' }}>
-      <div ref={cursorRef} style={{ display:'none', position:'absolute', pointerEvents:'none', zIndex:99999 }}/>
+    <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%' }}>
       <canvas
         ref={canvasRef}
         onMouseDown={onMouseDown}
@@ -832,13 +814,15 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseLeave}
         style={{
-          position:'absolute', top:0, left:0,
+          position:'absolute',
+          top:0,
+          left:0,
           width:'100%',
           height:'100%',
-          cursor:'none', display:'block',
+          cursor:'crosshair',
+          display:'block',
           pointerEvents:'auto',
-          userSelect:'none', WebkitUserSelect:'none',
-          zIndex:100,
+          zIndex:9999,
         }}
       />
     </div>
