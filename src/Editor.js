@@ -3069,7 +3069,7 @@ export default function Editor({onExit, user, token, apiUrl}){
                       paintColor={brushColorState}
                       paintAlpha={brushColorAlpha}
                       onUpdate={(updates)=>{
-                        console.log('onUpdate called from brush', updates?.src?.length, new Error().stack);
+                        if(!updates?.src) return;
                         if(selectedLayer?.type==='background'){
                           updateLayer(selectedId,{bgColor:'transparent',bgGradient:null,src:updates.src,type:'image',
                             x:0,y:0,width:p.preview.w,height:p.preview.h,
@@ -3077,7 +3077,11 @@ export default function Editor({onExit, user, token, apiUrl}){
                             imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0
                           });
                         } else {
-                          updateLayer(selectedId,updates);
+                          // ✅ Store original src separately so we never lose quality
+                          // Only update src — nothing else
+                          updateLayerSilent(selectedId,{src:updates.src});
+                          // Commit to history after brush stroke
+                          updateLayer(selectedId,{src:updates.src});
                         }
                       }}
                     />

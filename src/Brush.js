@@ -25,7 +25,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       const canvas = canvasRef.current;
       if (!canvas) return;
       historyRef.current.pop();
-      canvas.getContext('2d').putImageData(
+      canvas.getContext('2d',{willReadFrequently:true}).putImageData(
         historyRef.current[historyRef.current.length - 1], 0, 0
       );
       // Force flush on undo even without hasStroked
@@ -51,7 +51,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     isReady.current = false;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d',{willReadFrequently:true});
     const img = new Image();
     img.onload = () => {
       const z = zoom || 1;
@@ -80,7 +80,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   function saveSnap() {
     const canvas = canvasRef.current;
     if (!canvas || !isReady.current) return;
-    const snap = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    const snap = canvas.getContext('2d',{willReadFrequently:true}).getImageData(0, 0, canvas.width, canvas.height);
     historyRef.current = [...historyRef.current.slice(-19), snap];
     hasStroked.current = true;
   }
@@ -681,7 +681,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function paintStroke(pos) {
     if (!isReady.current||!canvasRef.current) return;
-    const ctx      = canvasRef.current.getContext('2d');
+    const ctx      = canvasRef.current.getContext('2d',{willReadFrequently:true});
     const pressure = getPressure(pos);
     const stabbed  = getStabilizedPos(pos);
     const r        = Math.round(brushSize*(zoom||1));
@@ -749,7 +749,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       lastTime.current = Date.now();
       stabPos.current = null;
       if (isReady.current && canvasRef.current) {
-        const ctx = canvasRef.current.getContext('2d');
+        const ctx = canvasRef.current.getContext('2d',{willReadFrequently:true});
         applyHealStamp(ctx, pos.x, pos.y, 1.0);
       }
       return;
@@ -771,7 +771,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
         const moved = Math.sqrt(dx*dx+dy*dy);
         if (moved >= Math.max(brushSize*(zoom||1)*0.8, 20)) {
           if (isReady.current && canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d');
+            const ctx = canvasRef.current.getContext('2d',{willReadFrequently:true});
             applyHealStamp(ctx, pos.x, pos.y, getPressure(pos));
           }
           lastPos.current = pos;
@@ -796,7 +796,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       // This prevents lag since PatchMatch only runs once per click
       if (brushType === 'heal' && isReady.current && canvasRef.current) {
         const canvas = canvasRef.current;
-        const ctx    = canvas.getContext('2d');
+        const ctx    = canvas.getContext('2d',{willReadFrequently:true});
         if (lastHealPos.current) {
           applyHealStamp(ctx, lastHealPos.current.x, lastHealPos.current.y, 1.0);
         }
