@@ -85,7 +85,11 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   function flush() {
     const canvas = canvasRef.current;
     if (!canvas || !isReady.current) return;
-    if (!hasStroked.current) return;
+    if (!hasStroked.current) {
+      console.log('flush blocked - no strokes');
+      return;
+    }
+    console.log('flush firing - has strokes');
     const tmp = document.createElement('canvas');
     tmp.width  = layer.width;
     tmp.height = layer.height;

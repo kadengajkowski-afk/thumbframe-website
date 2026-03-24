@@ -3069,6 +3069,7 @@ export default function Editor({onExit, user, token, apiUrl}){
                       paintColor={brushColorState}
                       paintAlpha={brushColorAlpha}
                       onUpdate={(updates)=>{
+                        console.log('onUpdate called from brush', updates?.src?.length, new Error().stack);
                         if(selectedLayer?.type==='background'){
                           updateLayer(selectedId,{bgColor:'transparent',bgGradient:null,src:updates.src,type:'image',
                             x:0,y:0,width:p.preview.w,height:p.preview.h,
