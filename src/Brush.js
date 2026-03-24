@@ -827,6 +827,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
           height: layer.height+'px',
           cursor:'none', display:'block',
           userSelect:'none', WebkitUserSelect:'none',
+          pointerEvents:'auto',
           opacity: 0.99,
         }}
       />

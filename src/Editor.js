@@ -3006,7 +3006,7 @@ export default function Editor({onExit, user, token, apiUrl}){
                        'default'}}>
 
                 {/* Filtered visual layer */}
-                <div style={{position:'absolute',inset:0,filter:canvasFilter,zIndex:0,pointerEvents:'none'}}>
+                <div style={{position:'absolute',inset:0,filter:canvasFilter,zIndex:0,pointerEvents: activeTool==='brush' ? 'none' : 'auto'}}>
                   {layers.map(obj=>{
                     if(obj.hidden)return null;
                     if(obj.id===brushingImageId)return null;
@@ -3049,6 +3049,7 @@ export default function Editor({onExit, user, token, apiUrl}){
                     height:selectedLayer.type==='background' ? p.preview.h  : selectedLayer.height-(selectedLayer.cropTop||0)-(selectedLayer.cropBottom||0),
                     zIndex:9999,
                     overflow:'hidden',
+                    pointerEvents:'auto',
                     transformOrigin:'top left',
                   }}>
                     <BrushOverlay
