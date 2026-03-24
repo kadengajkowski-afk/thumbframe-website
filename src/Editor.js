@@ -3046,6 +3046,7 @@ export default function Editor({onExit, user, token, apiUrl}){
                     height:selectedLayer.type==='background' ? p.preview.h  : selectedLayer.height-(selectedLayer.cropTop||0)-(selectedLayer.cropBottom||0),
                     zIndex:9999,
                     overflow:'hidden',
+                    transformOrigin:'top left',
                   }}>
                     <BrushOverlay
                       ref={brushOverlayRef}
