@@ -1,0 +1,1 @@
+Deployment reset trigger: force clean Railway rebuild.
