@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, memo } from 'react';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 
-const API_BASE = 'https://thumbframe-api-production.up.railway.app';
+const API_BASE = process.env.NODE_ENV === 'development'
+  ? 'http://localhost:5000'
+  : 'https://thumbframe-api-production.up.railway.app';
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },

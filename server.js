@@ -3,7 +3,7 @@ const path = require('path');
 const cors = require('cors');
 const app = express();
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 app.use(cors({
   origin: ['https://www.thumbframe.com', 'https://thumbframe-api-production.up.railway.app', 'http://localhost:3000'],

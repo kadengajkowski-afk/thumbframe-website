@@ -814,7 +814,7 @@ function AuthPage({ mode, setPage, onAuth }) {
     if (!email || !password) { setError('Email and password required'); return; }
     setLoading(true); setError('');
     try {
-      const r = await fetch(`https://thumbframe-api-production.up.railway.app/auth/${isSignup ? 'signup' : 'login'}`, {
+      const r = await fetch(`${API_BASE}/auth/${isSignup ? 'signup' : 'login'}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, name }),
@@ -921,17 +921,17 @@ function AuthPage({ mode, setPage, onAuth }) {
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
-function Dashboard({ setPage, token, apiUrl }) {
+function Dashboard({ setPage, token }) {
   const [designs, setDesigns] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
-    fetch(`${apiUrl}/designs`, { headers: { authorization: `Bearer ${token}` } })
+    fetch(`${API_BASE}/designs`, { headers: { authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => { setDesigns(data.designs || []); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [token, apiUrl]);
+  }, [token]);
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', paddingTop: 80 }}>
@@ -985,7 +985,9 @@ function Dashboard({ setPage, token, apiUrl }) {
 }
 
 // ── App ────────────────────────────────────────────────────────────────────────
-const API = 'https://thumbframe-api-production.up.railway.app';
+const API_BASE = process.env.NODE_ENV === 'development'
+  ? 'http://localhost:5000'
+  : 'https://thumbframe-api-production.up.railway.app';
 
 export default function App() {
   const [page,  setPage]  = useState('home');
@@ -994,7 +996,7 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return;
-    fetch(`${API}/auth/me`, { headers: { authorization: `Bearer ${token}` } })
+    fetch(`${API_BASE}/auth/me`, { headers: { authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(u => setUser(u))
       .catch(() => { setToken(null); localStorage.removeItem('sf_token'); });
@@ -1002,7 +1004,7 @@ export default function App() {
 
   async function handleCheckout(){
     try{
-      const res = await fetch(`${API}/checkout`,{
+      const res = await fetch(`${API_BASE}/checkout`,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({plan:'pro', email:user?.email||''}),
@@ -1028,7 +1030,7 @@ export default function App() {
     setPage('home');
   }
 
-  if (page === 'editor') return <Editor onExit={() => setPage('home')} user={user} token={token} apiUrl={API} />;
+  if (page === 'editor') return <Editor onExit={() => setPage('home')} user={user} token={token} />;
 
   return (
     <div>
@@ -1039,7 +1041,7 @@ export default function App() {
       {page === 'examples'   && <Examples     setPage={setPage} />}
       {page === 'login'      && <AuthPage     mode="login"  setPage={setPage} onAuth={handleAuth} />}
       {page === 'signup'     && <AuthPage     mode="signup" setPage={setPage} onAuth={handleAuth} />}
-      {page === 'dashboard'  && <Dashboard    setPage={setPage} token={token} apiUrl={API} />}
+      {page === 'dashboard'  && <Dashboard    setPage={setPage} token={token} />}
     </div>
   );
 }
