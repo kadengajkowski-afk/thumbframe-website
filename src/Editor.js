@@ -2794,13 +2794,13 @@ export default function Editor({onExit, user, token, brandKit}){
           <div style={{fontSize:14,fontWeight:'700',color:T.accent,letterSpacing:'-0.3px'}}>ThumbFrame</div>
           <button onClick={()=>setShowFileTab(true)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'500',display:'flex',alignItems:'center',gap:5}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>📁 File</button>
         </div>
-        <button onClick={()=>{setCmdOpen(true);setTimeout(()=>cmdInputRef.current?.focus(),50);}} style={{flex:1,maxWidth:340,display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,color:T.muted,cursor:'pointer',fontSize:12,textAlign:'left'}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+        {!isMobile&&<button onClick={()=>{setCmdOpen(true);setTimeout(()=>cmdInputRef.current?.focus(),50);}} style={{flex:1,maxWidth:340,display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,color:T.muted,cursor:'pointer',fontSize:12,textAlign:'left'}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
           <span style={{fontFamily:'monospace',fontSize:13,color:T.accent}}>⌘</span>
           <span style={{flex:1}}>Command palette...</span>
           {cmdLog&&<span style={{fontSize:10,color:T.success,fontWeight:'600',flexShrink:0}}>✓ {cmdLog}</span>}
           <span style={{fontSize:10,background:T.bg,padding:'1px 6px',borderRadius:4,border:`1px solid ${T.border}`,color:T.muted,flexShrink:0}}>Ctrl+K</span>
-        </button>
-        <button
+        </button>}
+        {!isMobile&&<button
           onClick={()=>{setShowAiBar(true);setTimeout(()=>aiCmdInputRef.current?.focus(),50);}}
           style={{
             display:'flex',alignItems:'center',gap:6,
@@ -2822,7 +2822,7 @@ export default function Editor({onExit, user, token, brandKit}){
             borderRadius:4,border:`1px solid ${T.border}`,color:T.muted}}>
             Ctrl+I
           </span>
-        </button>
+        </button>}
         <div style={{display:'flex',gap:3,alignItems:'center',flexShrink:0,marginLeft:'auto'}}>
           <button onClick={undo} disabled={historyIndex<=0} style={{...css.iconBtn(false),opacity:historyIndex<=0?0.3:1}}>↩</button>
           <button onClick={redo} disabled={historyIndex>=history.length-1} style={{...css.iconBtn(false),opacity:historyIndex>=history.length-1?0.3:1}}>↪</button>
@@ -2845,43 +2845,13 @@ export default function Editor({onExit, user, token, brandKit}){
             ⧉ Duplicate
           </button>
           <div style={{width:1,height:20,background:T.border,margin:'0 2px'}}/>
-          <div style={{display:'flex',gap:1,alignItems:'center',background:T.input,borderRadius:6,padding:'2px 5px',border:`1px solid ${T.border}`}}>
-            <button onClick={()=>setZoom(z=>Math.max(0.25,+(z-0.1).toFixed(1)))} style={{padding:'2px 6px',borderRadius:4,border:'none',background:'transparent',color:T.text,cursor:'pointer',fontSize:13}}>−</button>
-            <input
-              type="number"
-              value={Math.round(zoom*100)}
-              onChange={e=>{
-                const v=Number(e.target.value);
-                if(!isNaN(v)&&v>=10&&v<=1600) setZoom(v/100);
-              }}
-              style={{
-                width:46,textAlign:'center',
-                background:'transparent',border:'none',
-                outline:'none',fontSize:11,color:T.text,
-                fontFamily:'inherit',cursor:'text',
-              }}
-              onPointerDown={e=>e.stopPropagation()}
-              min={10} max={1600}
-            />
-            <span style={{fontSize:11,color:T.muted}}>%</span>
-            <button onClick={()=>setZoom(z=>Math.min(16,+(z+0.1).toFixed(1)))} style={{padding:'2px 6px',borderRadius:4,border:'none',background:'transparent',color:T.text,cursor:'pointer',fontSize:13}}>+</button>
-            <button onClick={()=>setZoom(1.5)} style={{padding:'2px 5px',borderRadius:4,border:'none',background:'transparent',color:T.muted,cursor:'pointer',fontSize:10}}>fit</button>
-          </div>
-          <button onClick={()=>setShowGrid(g=>!g)} style={css.iconBtn(showGrid)} title="Grid">⊞</button>
-          <button onClick={()=>setShowRuler(r=>!r)} style={css.iconBtn(showRuler)} title="Ruler">⊢</button>
-          <button onClick={()=>setSnapToGrid(s=>!s)} style={css.iconBtn(snapToGrid)} title="Snap">⊡</button>
-          <button onClick={()=>setLockAspect(l=>!l)} style={css.iconBtn(lockAspect)} title="Lock aspect">⊠</button>
-          <button onClick={()=>setShowSafeZones(s=>!s)} style={{...css.iconBtn(showSafeZones),fontSize:10,padding:'5px 8px',whiteSpace:'nowrap'}} title="Safe zones">⬜ Zones</button>
-          <button onClick={()=>setShowStampTest(s=>!s)} style={{...css.iconBtn(showStampTest),fontSize:10,padding:'5px 8px',whiteSpace:'nowrap'}} title="Mobile preview">📱 Mobile</button>
-          <button onClick={()=>setDarkMode(!darkMode)} style={css.iconBtn(false)}>{darkMode?'○':'●'}</button>
-          <div style={{width:1,height:20,background:T.border,margin:'0 2px'}}/>
           <label style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'500',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
             ↑ Upload
             <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{display:'none'}}/>
           </label>
           <button onClick={()=>setShowDownload(true)} style={{padding:'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)'}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓ Download</button>
-          <button onClick={()=>setShowBrandKitSetup(true)} style={{padding:'7px 14px',borderRadius:7,border:`1px solid ${T.border}`,background:T.panel,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'600',display:'flex',alignItems:'center',gap:5}}>🎨 Brand Kit</button>
-          <button onClick={()=>fetch(`${API_BASE}/checkout`,{
+          {!isMobile&&<button onClick={()=>setShowBrandKitSetup(true)} style={{padding:'7px 14px',borderRadius:7,border:`1px solid ${T.border}`,background:T.panel,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'600',display:'flex',alignItems:'center',gap:5}}>🎨 Brand Kit</button>}
+          {!isMobile&&<button onClick={()=>fetch(`${API_BASE}/checkout`,{
   method:'POST',
   headers:{'Content-Type':'application/json'},
   body:JSON.stringify({plan:'pro'}),
@@ -2895,7 +2865,7 @@ export default function Editor({onExit, user, token, brandKit}){
               display:'flex',alignItems:'center',gap:5,
             }}>
             ⚡ Pro — $15/mo
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -3626,7 +3596,7 @@ export default function Editor({onExit, user, token, brandKit}){
               <div>
                 <span style={css.label}>Layer effects</span>
                 {!selectedLayer||selectedLayer.type==='background'?(
-                  <div style={{...css.section,marginTop:0,fontSize:12,color:T.muted,textAlign:'center',padding:20}}><div style={{fontSize:24,marginBottom:8}}>✦</div>Click any layer to apply effects</div>
+                  <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Click any layer to apply effects</div>
                 ):(
                   <>
                     <div style={{...css.section,marginTop:0,fontSize:11,color:T.success,fontWeight:'600'}}>✦ Non-destructive — editable anytime</div>
@@ -4451,7 +4421,10 @@ export default function Editor({onExit, user, token, brandKit}){
                     }
                     updateLayer(selectedId,{src:data.image});
                     btn.textContent='Done!';btn.style.background=T.success;
-                    setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';btn.style.background=T.accent;},2000);
+                    setTimeout(()=>{
+                      btn.textContent=orig;btn.disabled=false;
+                      btn.style.opacity='1';btn.style.background=T.accent;
+                    },2000);
                   }catch(e){
                     alert('Failed — make sure your API server is running on port 5000');
                     btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';
@@ -4589,6 +4562,41 @@ export default function Editor({onExit, user, token, brandKit}){
 
         </div>
       </div>
+
+      {/* Mobile bottom toolbar */}
+      {isMobile&&(
+        <div style={{
+          position:'fixed',bottom:0,left:0,right:0,
+          background:T.panel,borderTop:`1px solid ${T.border}`,
+          display:'flex',justifyContent:'space-around',alignItems:'center',
+          padding:'8px 4px',zIndex:99,
+          boxShadow:'0 -2px 10px rgba(0,0,0,0.2)'
+        }}>
+          {[
+            {key:'select',icon:'↖',label:'Select'},
+            {key:'move',icon:'✋',label:'Move'},
+            {key:'text',icon:'T',label:'Text'},
+            {key:'brush',icon:'🖌',label:'Brush'},
+            {key:'upload',icon:'↑',label:'Upload'},
+            {key:'background',icon:'▣',label:'BG'},
+            {key:'effects',icon:'✦',label:'FX'},
+            {key:'zoom',icon:'⊕',label:'Zoom'},
+          ].map(t=>(
+            <button key={t.key} onClick={()=>setActiveTool(t.key)}
+              style={{
+                flex:1,display:'flex',flexDirection:'column',
+                alignItems:'center',gap:2,padding:'6px 4px',
+                borderRadius:6,border:'none',
+                background:activeTool===t.key?`${T.accent}22`:'transparent',
+                color:activeTool===t.key?T.accent:T.muted,
+                cursor:'pointer',fontSize:9,fontWeight:'600'
+              }}>
+              <span style={{fontSize:16}}>{t.icon}</span>
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {showBrandKitSetup && <BrandKitSetupModal 
         T={T}
