@@ -2902,7 +2902,7 @@ export default function Editor({onExit, user, token, brandKit}){
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
 
         {/* Left sidebar */}
-        <div style={{width:150,background:T.sidebar,borderRight:`1px solid ${T.border}`,padding:'8px 6px',display:'flex',flexDirection:'column',overflowY:'auto',flexShrink:0}}>
+        {!isMobile&&<div style={{width:150,background:T.sidebar,borderRight:`1px solid ${T.border}`,padding:'8px 6px',display:'flex',flexDirection:'column',overflowY:'auto',flexShrink:0}}>
           {(()=>{
             let lastGroup = null;
             return tools.map((t,i)=>{
@@ -2942,7 +2942,7 @@ export default function Editor({onExit, user, token, brandKit}){
               <span style={{fontSize:'9px',color:T.muted}}>{val.width}×{val.height}</span>
             </button>
           ))}
-        </div>
+        </div>}
 
         {/* Canvas */}
         <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:darkMode?'#080808':'#d0d0d0',overflow:'hidden',position:'relative'}}>
@@ -3232,7 +3232,14 @@ export default function Editor({onExit, user, token, brandKit}){
         {/* ✅ Right sidebar — stopPropagation on pointer events so sliders never leak to canvas */}
         <div
           onPointerDown={e=>e.stopPropagation()}
-          style={{width:272,background:T.sidebar,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',flexShrink:0}}
+          style={isMobile?{
+            position:'fixed',bottom:0,left:0,right:0,
+            maxHeight:'45vh',background:T.sidebar,
+            borderTop:`1px solid ${T.border}`,
+            display:'flex',flexDirection:'column',
+            zIndex:100,borderRadius:'12px 12px 0 0',
+            boxShadow:'0 -4px 20px rgba(0,0,0,0.3)'
+          }:{width:272,background:T.sidebar,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',flexShrink:0}}
         >
           <div style={{flex:1,padding:'10px 12px',overflowY:'auto'}}>
 
@@ -3669,71 +3676,9 @@ export default function Editor({onExit, user, token, brandKit}){
                     </div>
                     <span style={css.label}>Layer mask</span>
                     <div style={css.section}>
-                      {!selectedLayer?.mask?.enabled?(
-                        <div>
-                          <div style={{fontSize:11,color:T.muted,marginBottom:8,lineHeight:1.6}}>
-                            A mask hides parts of a layer non-destructively. Paint black to hide, white to reveal.
-                          </div>
-                          <button onClick={()=>addMaskToLayer(selectedId)}
-                            style={{...css.addBtn,marginTop:0,background:T.accent}}>
-                            + Add mask
-                          </button>
-                        </div>
-                      ):(
-                        <div>
-                          <div style={{...css.row,marginBottom:8}}>
-                            <div style={{width:36,height:36,borderRadius:5,border:`2px solid ${T.accent}`,
-                              background:`url(${selectedLayer.mask.data}) center/cover`,flexShrink:0}}/>
-                            <div style={{flex:1,fontSize:11,color:T.text,lineHeight:1.5}}>
-                              Mask active<br/>
-                              <span style={{color:T.muted,fontSize:10}}>
-                                {selectedLayer.mask.inverted?'Inverted':'Normal'}
-                              </span>
-                            </div>
-                          </div>
-                          <div style={{display:'flex',gap:5,flexDirection:'column'}}>
-                            <button onClick={()=>updateLayer(selectedId,{
-                              mask:{...selectedLayer.mask,inverted:!selectedLayer.mask.inverted}
-                            })} style={{...css.addBtn,marginTop:0,background:T.input,
-                              color:T.text,border:`1px solid ${T.border}`,fontSize:11}}>
-                              ⊞ {selectedLayer.mask.inverted?'Uninvert':'Invert'} mask
-                            </button>
-                            <button onClick={()=>{
-                              const tmp=document.createElement('canvas');
-                              tmp.width=selectedLayer.mask.width||selectedLayer.width;
-                              tmp.height=selectedLayer.mask.height||selectedLayer.height;
-                              const ctx=tmp.getContext('2d');
-                              ctx.fillStyle='#ffffff';
-                              ctx.fillRect(0,0,tmp.width,tmp.height);
-                              updateLayer(selectedId,{mask:{...selectedLayer.mask,data:tmp.toDataURL()}});
-                            }} style={{...css.addBtn,marginTop:0,background:T.input,
-                              color:T.text,border:`1px solid ${T.border}`,fontSize:11}}>
-                              ◻ Clear mask (show all)
-                            </button>
-                            <button onClick={()=>{
-                              const tmp=document.createElement('canvas');
-                              tmp.width=selectedLayer.mask.width||selectedLayer.width;
-                              tmp.height=selectedLayer.mask.height||selectedLayer.height;
-                              const ctx=tmp.getContext('2d');
-                              ctx.fillStyle='#000000';
-                              ctx.fillRect(0,0,tmp.width,tmp.height);
-                              updateLayer(selectedId,{mask:{...selectedLayer.mask,data:tmp.toDataURL()}});
-                            }} style={{...css.addBtn,marginTop:0,background:T.input,
-                              color:T.text,border:`1px solid ${T.border}`,fontSize:11}}>
-                              ◼ Fill mask (hide all)
-                            </button>
-                            <button onClick={()=>applyMaskToLayer(selectedId)}
-                              style={{...css.addBtn,marginTop:0,background:T.warning,
-                                color:'#000',border:'none',fontSize:11}}>
-                              ✓ Apply mask permanently
-                            </button>
-                            <button onClick={()=>removeMaskFromLayer(selectedId)}
-                              style={{...css.addBtn,marginTop:0,background:T.danger,fontSize:11}}>
-                              × Remove mask
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                      <div style={{fontSize:11,color:T.muted,textAlign:'center',padding:'12px 0',lineHeight:1.6}}>
+                        🚧 Coming soon
+                      </div>
                     </div>
                     <button onClick={()=>updateLayer(selectedId,{effects:defaultEffects()})} style={{...css.addBtn,background:'transparent',color:T.muted,border:`1px solid ${T.border}`,marginTop:10}}>Reset all effects</button>
                   </>
