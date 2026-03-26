@@ -1,11 +1,6 @@
 import { useEffect, useRef, useState, memo } from 'react';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
-import BrandKitSetupModal from './BrandKitModal';
-
-const API_BASE = process.env.NODE_ENV === 'development'
-  ? 'http://localhost:5000'
-  : 'https://thumbframe-api-production.up.railway.app';
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
@@ -509,9 +504,7 @@ function Slider({min,max,step,value,onChange,onCommit,style}){
   );
 }
 
-export default function Editor({onExit, user, token, brandKit}){
-  console.log("BRAND KIT LOADED", brandKit);
-  
+export default function Editor({onExit, user, token, apiUrl}){
   const canvasRef       = useRef(null);
   const brushOverlayRef = useRef(null);
   const cmdInputRef     = useRef(null);
@@ -521,17 +514,10 @@ export default function Editor({onExit, user, token, brandKit}){
   const resizingRef     = useRef(null);
   const dragOffsetRef   = useRef({x:0,y:0});
   const resizeStartRef  = useRef(null);
-  const zoomRef         = useRef(1.5);
+  const zoomRef         = useRef(1);
   const layersRef       = useRef([]);
   const mountedRef = useRef(true);
   useEffect(()=>{ mountedRef.current=true; return()=>{ mountedRef.current=false; }; },[]);
-
-  const [brandKitColors, setBrandKitColors] = useState({
-    primary: brandKit?.primary_color || '#6C63FF',
-    secondary: brandKit?.secondary_color || '#FFD700',
-  });
-  const [brandKitFace, setBrandKitFace] = useState(brandKit?.face_image_url || null);
-  const [showBrandKitSetup, setShowBrandKitSetup] = useState(false);
 
   const [platform,setPlatform]             = useState('youtube');
   const [activeTool,setActiveTool]         = useState('select');
@@ -539,8 +525,8 @@ export default function Editor({onExit, user, token, brandKit}){
   const [darkMode,setDarkMode]             = useState(true);
   const [layers,setLayersRaw]              = useState([]);
   const [selectedId,setSelectedId]         = useState(null);
-  const [zoom,setZoom]                     = useState(1.5);
-  const [offset,setOffset]                 = useState({x:0,y:0});
+  const [zoom,setZoom]                     = useState(1);
+  const [panOffset,setPanOffset]           = useState({x:0,y:0});
   const [showGrid,setShowGrid]             = useState(false);
   const [showRuler,setShowRuler]           = useState(false);
   const [showSafeZones,setShowSafeZones]   = useState(false);
@@ -577,8 +563,8 @@ export default function Editor({onExit, user, token, brandKit}){
   const [strokeWidth,setStrokeWidth]       = useState(3);
   const [fillColor,setFillColor]           = useState('#FF4500');
   const [brightness,setBrightness]         = useState(100);
-  const [contrast,setContrast]             = useState(110);
-  const [saturation,setSaturation]         = useState(110);
+  const [contrast,setContrast]             = useState(100);
+  const [saturation,setSaturation]         = useState(100);
   const [hue,setHue]                       = useState(0);
   const [rgbR,setRgbR]                     = useState(108);
   const [rgbG,setRgbG]                     = useState(99);
@@ -625,18 +611,10 @@ export default function Editor({onExit, user, token, brandKit}){
   const [aiCmdLog,setAiCmdLog]     = useState('');
   const [showAiBar,setShowAiBar]   = useState(false);
   const aiCmdInputRef              = useRef(null);
-  const [maskingLayerId,setMaskingLayerId] = useState(null);
+  const [maskingLayerId,setMaskingLayerId] = useState(null); // eslint-disable-line no-unused-vars
+  const [maskPaintColor,setMaskPaintColor] = useState('#000000'); // eslint-disable-line no-unused-vars
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
-  const [blurStrength,setBlurStrength]                 = useState(10);
-  const [isMobile,setIsMobile]                         = useState(false);
-
-  useEffect(()=>{
-    const check=()=>setIsMobile(window.innerWidth<768);
-    check();
-    window.addEventListener('resize',check);
-    return()=>window.removeEventListener('resize',check);
-  },[]);
 
   function setLayers(val){
     if(typeof val==='function'){
@@ -661,7 +639,24 @@ export default function Editor({onExit, user, token, brandKit}){
   const canvasFilter    = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
   const canDrag         = activeTool==='move' || activeTool==='select' || activeTool==='shapes' || activeTool==='stickers';
   // ✅ When brush active on image — that image is ONLY shown in brush overlay, nowhere else
-  const brushingImageId = activeTool==='brush'&&(selectedLayer?.type==='image'||selectedLayer?.type==='background') ? selectedId : null;
+  const brushingImageId = activeTool==='brush'&&(selectedLayer?.type==='image'||selectedLayer?.type==='background')&&!selectedLayer?.isRimLight ? selectedId : null;
+
+  // Auto-select first real image when brush tool is active but selected layer is rimlight or nothing
+  useEffect(()=>{
+    if(activeTool==='brush'){
+      if(!selectedLayer || selectedLayer.isRimLight){
+        const realImage = layers.find(l=>l.type==='image'&&!l.isRimLight&&!l.hidden);
+        if(realImage) setSelectedId(realImage.id);
+      }
+    }
+  },[activeTool]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [isMobile,setIsMobile] = useState(()=>window.innerWidth<768);
+  useEffect(()=>{
+    const check=()=>setIsMobile(window.innerWidth<768);
+    window.addEventListener('resize',check);
+    return()=>window.removeEventListener('resize',check);
+  },[]);
 
   useEffect(()=>{zoomRef.current=zoom;},[zoom]);
 
@@ -732,7 +727,7 @@ export default function Editor({onExit, user, token, brandKit}){
       if(!typing&&(e.key==='Delete'||e.key==='Backspace')){if(selectedId)deleteLayer(selectedId);}
       if((e.ctrlKey||e.metaKey)&&(e.key==='+'||e.key==='=')){e.preventDefault();setZoom(z=>Math.min(16,+(z+0.1).toFixed(1)));}
       if((e.ctrlKey||e.metaKey)&&e.key==='-'){e.preventDefault();setZoom(z=>Math.max(0.25,+(z-0.1).toFixed(1)));}
-      if((e.ctrlKey||e.metaKey)&&e.key==='0'){e.preventDefault();setZoom(1.5);}
+      if((e.ctrlKey||e.metaKey)&&e.key==='0'){e.preventDefault();setZoom(1);}
       if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();setCmdOpen(o=>!o);setTimeout(()=>cmdInputRef.current?.focus(),50);}
       if((e.ctrlKey||e.metaKey)&&e.key==='i'){
         e.preventDefault();
@@ -805,7 +800,7 @@ export default function Editor({onExit, user, token, brandKit}){
   function duplicateLayer(id){const layer=layers.find(l=>l.id===id);if(!layer||layer.type==='background')return;duplicateLayerFromObj(layer);}
   function updateBg(updates){const bgL=layers.find(l=>l.type==='background');if(bgL)updateLayer(bgL.id,updates);}
   function getLayerSrc(layer){
-    if(layer.type==='image')return layer.src;
+    if(layer.type==='image')return layer.paintSrc || layer.src;
     if(layer.type==='background'){
       const tmp=document.createElement('canvas');
       tmp.width=p.preview.w;tmp.height=p.preview.h;
@@ -902,7 +897,7 @@ export default function Editor({onExit, user, token, brandKit}){
         })),
       };
 
-      const res = await fetch(`${API_BASE}/ai-command`,{
+      const res = await fetch('https://thumbframe-api-production.up.railway.app/ai-command',{
         method:  'POST',
         headers: {'Content-Type':'application/json'},
         body:    JSON.stringify({ command:cmd, canvasState }),
@@ -1092,7 +1087,7 @@ export default function Editor({onExit, user, token, brandKit}){
             resolve();
           };
           img.onerror=()=>resolve();
-          img.src=obj.src;
+          img.src=obj.paintSrc||obj.src;
         });
       }
 
@@ -1385,7 +1380,7 @@ export default function Editor({onExit, user, token, brandKit}){
               resolve();
             };
             img.onerror=()=>resolve();
-            img.src=obj.src;
+            img.src=obj.paintSrc||obj.src;
           });
         }
 
@@ -1535,24 +1530,68 @@ export default function Editor({onExit, user, token, brandKit}){
 
   function saveDesign(name){
     try{
-      // Generate thumbnail from canvas
-      const canvas = canvasRef.current;
-      const thumbnail = canvas ? canvas.toDataURL('image/jpeg', 0.5) : null;
-      const design={id:Date.now(),name:name||'Untitled',created:new Date().toLocaleDateString(),platform,layers:JSON.parse(JSON.stringify(layers)),brightness,contrast,saturation,hue,thumbnail};
-      const updated=[design,...savedDesigns.filter(d=>d.name!==name)].slice(0,20);
-      setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));
-      // Also save to backend if logged in
-      if(token){
-        fetch(`${API_BASE}/designs/save`,{
-          method:'POST',
-          headers:{'Content-Type':'application/json','authorization':`Bearer ${token}`},
-          body:JSON.stringify({name:name||'Untitled',platform,layers:JSON.parse(JSON.stringify(layers)),brightness,contrast,saturation,hue,thumbnail}),
-        }).catch(()=>{});
+      // Generate thumbnail by rendering layers to a temp canvas
+      let thumbnail = null;
+      try {
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = 320;
+        tmpCanvas.height = Math.round(320 * p.preview.h / p.preview.w);
+        const tctx = tmpCanvas.getContext('2d');
+        const sx = tmpCanvas.width / p.preview.w;
+        const sy = tmpCanvas.height / p.preview.h;
+        // Draw background
+        const bgLayer = layers.find(l=>l.type==='background');
+        if(bgLayer){
+          if(bgLayer.bgGradient){
+            const g=tctx.createLinearGradient(0,0,0,tmpCanvas.height);
+            g.addColorStop(0,bgLayer.bgGradient[0]);
+            g.addColorStop(1,bgLayer.bgGradient[1]);
+            tctx.fillStyle=g;
+          } else {
+            tctx.fillStyle=bgLayer.bgColor||'#6C63FF';
+          }
+          tctx.fillRect(0,0,tmpCanvas.width,tmpCanvas.height);
+        }
+        // Draw image layers
+        const imagePromises = layers.filter(l=>l.type==='image'&&!l.hidden).map(obj=>
+          new Promise(resolve=>{
+            const img=new Image();
+            img.onload=()=>{
+              tctx.drawImage(img, obj.x*sx, obj.y*sy, obj.width*sx, obj.height*sy);
+              resolve();
+            };
+            img.onerror=()=>resolve();
+            img.src=obj.paintSrc||obj.src;
+          })
+        );
+        Promise.all(imagePromises).then(()=>{
+          thumbnail = tmpCanvas.toDataURL('image/jpeg', 0.6);
+          finishSave(thumbnail);
+        });
+      } catch(e) {
+        finishSave(null);
       }
-      setCmdLog(`Saved: ${name}`);
-    }catch(e){}
+
+      function finishSave(thumb){
+        const design={id:Date.now(),name:name||'Untitled',created:new Date().toLocaleDateString(),platform,layers:JSON.parse(JSON.stringify(layers)),brightness,contrast,saturation,hue,thumbnail:thumb};
+        const updated=[design,...savedDesigns.filter(d=>d.name!==name)].slice(0,20);
+        setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));
+        // Also save to backend if logged in
+        if(token && apiUrl){
+          fetch(`${apiUrl}/designs/save`,{
+            method:'POST',
+            headers:{'Content-Type':'application/json','authorization':`Bearer ${token}`},
+            body:JSON.stringify({name:name||'Untitled',platform,layers:JSON.parse(JSON.stringify(layers)),brightness,contrast,saturation,hue,thumbnail:thumb}),
+          }).catch(()=>{});
+        }
+        setCmdLog(`✓ Saved: ${name||'Untitled'}`);
+      }
+    }catch(e){
+      console.error('Save failed:', e);
+      setCmdLog('Save failed');
+    }
   }
-  function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||110);setSaturation(d.saturation||110);setHue(d.hue||0);setSelectedId(null);setShowFileTab(false);}
+  function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
   function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setSelectedId(null);setShowFileTab(false);}
   function deleteDesign(id){const updated=savedDesigns.filter(d=>d.id!==id);setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));}
 
@@ -1594,7 +1633,7 @@ export default function Editor({onExit, user, token, brandKit}){
               resolve();
             };
             img.onerror=()=>resolve();
-            img.src=obj.src;
+            img.src=obj.paintSrc||obj.src;
           });
         }
       }
@@ -1723,51 +1762,6 @@ export default function Editor({onExit, user, token, brandKit}){
     setCtrLoading(false);
   }
 
-  // ✅ Handle wheel zoom with Ctrl+Scroll
-  function handleWheel(e){
-    if(e.ctrlKey || e.metaKey){
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setZoom(z => Math.max(0.25, Math.min(16, +(z + delta).toFixed(1))));
-    }
-  }
-
-  // ✅ Apply blur brush with destination-out composite
-  function applyBlurBrush(x, y){
-    if(!selectedLayer || (selectedLayer.type !== 'image' && selectedLayer.type !== 'background')) return;
-    
-    const brushSize = (brushSizeState / 100) * Math.min(p.preview.w, p.preview.h) * 0.5;
-    const strength = blurStrength;
-    
-    // Get layer source
-    const layerSrc = getLayerSrc(selectedLayer);
-    if(!layerSrc) return;
-    
-    const tmp = document.createElement('canvas');
-    tmp.width = p.preview.w;
-    tmp.height = p.preview.h;
-    const ctx = tmp.getContext('2d');
-    
-    // Load existing image
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0, tmp.width, tmp.height);
-      
-      // Apply blur effect using destination-out for mask
-      ctx.globalCompositeOperation = 'destination-out';
-      const gradient = ctx.createRadialGradient(x, y, 0, x, y, brushSize);
-      gradient.addColorStop(0, `rgba(0,0,0,${strength / 100})`);
-      gradient.addColorStop(0.7, `rgba(0,0,0,${strength / 200})`);
-      gradient.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, tmp.width, tmp.height);
-      
-      const newSrc = tmp.toDataURL('image/png');
-      updateLayerSilent(selectedLayer.id, { src: newSrc });
-    };
-    img.src = layerSrc;
-  }
-
   function applyRimLight(x, y){
     const hex     = rimLightColor.replace('#','');
     const lr      = parseInt(hex.slice(0,2),16);
@@ -1834,7 +1828,7 @@ export default function Editor({onExit, user, token, brandKit}){
     }
   }
 
-  function addMaskToLayer(id){
+  function addMaskToLayer(id){ // eslint-disable-line no-unused-vars
     const layer=layers.find(l=>l.id===id);
     if(!layer||layer.type==='background') return;
     // Create a white mask canvas (white = show, black = hide)
@@ -1856,12 +1850,12 @@ export default function Editor({onExit, user, token, brandKit}){
     setCmdLog('Mask added — paint black to hide, white to reveal');
   }
 
-  function removeMaskFromLayer(id){
+  function removeMaskFromLayer(id){ // eslint-disable-line no-unused-vars
     updateLayer(id,{mask:{enabled:false,inverted:false,data:null}});
     if(maskingLayerId===id) setMaskingLayerId(null);
   }
 
-  function applyMaskToLayer(id){
+  function applyMaskToLayer(id){ // eslint-disable-line no-unused-vars
     const layer=layers.find(l=>l.id===id);
     if(!layer?.mask?.enabled||!layer.mask.data) return;
     // Flatten mask into image permanently
@@ -1956,7 +1950,7 @@ export default function Editor({onExit, user, token, brandKit}){
     else if(cmd.startsWith('font ')){setFontFamily(raw.slice(5));log=`Font: ${raw.slice(5)}`;}
     else if(cmd.startsWith('size ')){const s=parseInt(cmd.slice(5));if(!isNaN(s)){setFontSize(s);log=`Size: ${s}px`;}}
     else if(cmd.startsWith('opacity ')){const o=parseInt(cmd.slice(8));if(!isNaN(o)&&selectedId){updateLayer(selectedId,{opacity:o});log=`Opacity: ${o}%`;}}
-    else if(cmd.startsWith('zoom ')){const z=parseInt(cmd.slice(5));if(!isNaN(z)){setZoom(z/100);log=`Zoom: ${z}%`;}}
+    else if(cmd.startsWith('zoom ')){const z=parseInt(cmd.slice(5));if(!isNaN(z)){setZoom(z/100);if(z<=100)setPanOffset({x:0,y:0});log=`Zoom: ${z}%`;}}
     else if(['circle','rect','roundrect','triangle','star','arrow','diamond','hexagon','heart','cross','line'].includes(cmd)){addShape(cmd);log=`Added ${cmd}`;}
     else log='Unknown — type "help"';
     setCmdLog(log);
@@ -2006,6 +2000,8 @@ export default function Editor({onExit, user, token, brandKit}){
     canvas.width  = exportW;
     canvas.height = exportH;
     const ctx     = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     const scaleX  = exportW / p.preview.w;
     const scaleY  = exportH / p.preview.h;
 
@@ -2113,7 +2109,7 @@ export default function Editor({onExit, user, token, brandKit}){
             }
           };
           img.onerror=()=>resolve();
-          img.src=obj.src;
+          img.src=obj.paintSrc||obj.src;
         });
       }
 
@@ -2400,13 +2396,12 @@ export default function Editor({onExit, user, token, brandKit}){
 
   function renderLayerElement(obj){
     if(obj.hidden)return null;
-    if(obj.id===brushingImageId)return null;
     const isSelected=selectedId===obj.id;
     const zIndex=layers.indexOf(obj)+1;
     const opacityVal=(obj.opacity??100)/100;
-    const selStyle=isSelected?{outline:`1.5px solid ${T.accent}`,outlineOffset:2}:{};
+    const selStyle=isSelected&&obj.type!=='image'?{outline:`1.5px solid ${T.accent}`,outlineOffset:2}:{};
     const flipStyle={transform:`rotate(${obj.rotation||0}deg) scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`};
-    const blendStyle={mixBlendMode:obj.blendMode||'normal'};
+    const blendStyle={mixBlendMode:obj.blendMode||'normal',userSelect:'none',WebkitUserSelect:'none'};
     const cursor=getLayerCursor(obj);
     const effectsStyle=getEffectsStyle(obj.effects);
     const DelBtn=()=>isSelected&&obj.type!=='background'?(<div onClick={e=>{e.stopPropagation();deleteLayer(obj.id);}} style={{position:'absolute',top:-10,right:-10,width:20,height:20,background:T.danger,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,color:'#fff',cursor:'pointer',zIndex:999,fontWeight:'bold',userSelect:'none'}}>×</div>):null;
@@ -2445,9 +2440,9 @@ export default function Editor({onExit, user, token, brandKit}){
             maskSize: hasMask?`${cropW}px ${cropH}px`:'none',
             maskRepeat:'no-repeat',
           }}>
-          <img src={obj.src} alt="" style={{
+          <img src={obj.src} alt="" draggable={false} style={{
             width:obj.width,height:obj.height,display:'block',
-            pointerEvents:'none',
+            pointerEvents:'none',userSelect:'none',WebkitUserSelect:'none',
             marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),
             transform:`scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`,
             filter:`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${obj.imgBlur||0}px)`,
@@ -2485,6 +2480,7 @@ export default function Editor({onExit, user, token, brandKit}){
     {key:'select',    label:'Select',       icon:'↖',  group:'Tools'},
     {key:'move',      label:'Move',         icon:'✋',  group:'Tools'},
     {key:'crop',      label:'Crop',         icon:'⊡',  group:'Tools'},
+    {key:'zoom',      label:'Zoom',         icon:'🔍', group:'Tools'},
     null,
     {key:'text',      label:'Text',         icon:'T',   group:'Create'},
     {key:'shapes',    label:'Shapes',       icon:'○',   group:'Create'},
@@ -2496,7 +2492,6 @@ export default function Editor({onExit, user, token, brandKit}){
     null,
     {key:'background',label:'Background',   icon:'▨',   group:'Design'},
     {key:'effects',   label:'Effects',      icon:'✦',   group:'Design'},
-    {key:'adjust',    label:'Adjustments',  icon:'◎',   group:'Design'},
     null,
     {key:'templates', label:'Templates',    icon:'⊞',   group:'Analyze'},
     {key:'ctr',       label:'CTR Score',    icon:'◈',   group:'Analyze'},
@@ -2729,7 +2724,7 @@ export default function Editor({onExit, user, token, brandKit}){
                 <div style={{color:T.muted}}>
                   Upgrade to Pro for full {p.width}×{p.height}px export.
                 </div>
-                <button onClick={()=>fetch(`${API_BASE}/checkout`,{
+                <button onClick={()=>fetch('https://thumbframe-api-production.up.railway.app/checkout',{
   method:'POST',
   headers:{'Content-Type':'application/json'},
   body:JSON.stringify({plan:'pro'}),
@@ -2788,11 +2783,11 @@ export default function Editor({onExit, user, token, brandKit}){
       )}
 
       {/* Top bar */}
-      <div style={{display:'flex',alignItems:'center',height:46,padding:'0 12px',background:T.panel,borderBottom:`1px solid ${T.border}`,gap:6,flexShrink:0}}>
+      <div style={{display:'flex',alignItems:'center',height:isMobile?40:46,padding:isMobile?'0 8px':'0 12px',background:T.panel,borderBottom:`1px solid ${T.border}`,gap:isMobile?4:6,flexShrink:0,overflowX:isMobile?'auto':'visible'}}>
         <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-          {onExit&&<button onClick={onExit} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11}}>← Back</button>}
-          <div style={{fontSize:14,fontWeight:'700',color:T.accent,letterSpacing:'-0.3px'}}>ThumbFrame</div>
-          <button onClick={()=>setShowFileTab(true)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'500',display:'flex',alignItems:'center',gap:5}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>📁 File</button>
+          {onExit&&<button onClick={onExit} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11}}>←</button>}
+          <div style={{fontSize:isMobile?12:14,fontWeight:'700',color:T.accent,letterSpacing:'-0.3px'}}>ThumbFrame</div>
+          {!isMobile&&<button onClick={()=>setShowFileTab(true)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'500',display:'flex',alignItems:'center',gap:5}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>📁 File</button>}
         </div>
         {!isMobile&&<button onClick={()=>{setCmdOpen(true);setTimeout(()=>cmdInputRef.current?.focus(),50);}} style={{flex:1,maxWidth:340,display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,color:T.muted,cursor:'pointer',fontSize:12,textAlign:'left'}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
           <span style={{fontFamily:'monospace',fontSize:13,color:T.accent}}>⌘</span>
@@ -2845,13 +2840,44 @@ export default function Editor({onExit, user, token, brandKit}){
             ⧉ Duplicate
           </button>
           <div style={{width:1,height:20,background:T.border,margin:'0 2px'}}/>
-          <label style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'500',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
-            ↑ Upload
+          <div style={{display:'flex',gap:1,alignItems:'center',background:T.input,borderRadius:6,padding:'2px 5px',border:`1px solid ${T.border}`}}>
+            <button onClick={()=>setZoom(z=>Math.max(0.25,+(z-0.1).toFixed(1)))} style={{padding:'2px 6px',borderRadius:4,border:'none',background:'transparent',color:T.text,cursor:'pointer',fontSize:13}}>−</button>
+            <input
+              type="number"
+              value={Math.round(zoom*100)}
+              onChange={e=>{
+                const v=Number(e.target.value);
+                if(!isNaN(v)&&v>=10&&v<=1600) setZoom(v/100);
+              }}
+              style={{
+                width:46,textAlign:'center',
+                background:'transparent',border:'none',
+                outline:'none',fontSize:11,color:T.text,
+                fontFamily:'inherit',cursor:'text',
+              }}
+              onPointerDown={e=>e.stopPropagation()}
+              min={10} max={1600}
+            />
+            <span style={{fontSize:11,color:T.muted}}>%</span>
+            <button onClick={()=>setZoom(z=>Math.min(16,+(z+0.1).toFixed(1)))} style={{padding:'2px 6px',borderRadius:4,border:'none',background:'transparent',color:T.text,cursor:'pointer',fontSize:13}}>+</button>
+            <button onClick={()=>setZoom(1)} style={{padding:'2px 5px',borderRadius:4,border:'none',background:'transparent',color:T.muted,cursor:'pointer',fontSize:10}}>fit</button>
+          </div>
+          {!isMobile&&<>
+          <button onClick={()=>setShowGrid(g=>!g)} style={css.iconBtn(showGrid)} title="Grid">⊞</button>
+          <button onClick={()=>setShowRuler(r=>!r)} style={css.iconBtn(showRuler)} title="Ruler">⊢</button>
+          <button onClick={()=>setSnapToGrid(s=>!s)} style={css.iconBtn(snapToGrid)} title="Snap">⊡</button>
+          <button onClick={()=>setLockAspect(l=>!l)} style={css.iconBtn(lockAspect)} title="Lock aspect">⊠</button>
+          <button onClick={()=>setShowSafeZones(s=>!s)} style={{...css.iconBtn(showSafeZones),fontSize:10,padding:'5px 8px',whiteSpace:'nowrap'}} title="Safe zones">⬜ Zones</button>
+          <button onClick={()=>setShowStampTest(s=>!s)} style={{...css.iconBtn(showStampTest),fontSize:10,padding:'5px 8px',whiteSpace:'nowrap'}} title="Mobile preview">📱 Mobile</button>
+          <button onClick={()=>setDarkMode(!darkMode)} style={css.iconBtn(false)}>{darkMode?'○':'●'}</button>
+          <div style={{width:1,height:20,background:T.border,margin:'0 2px'}}/>
+          </>}
+          <label style={{padding:isMobile?'5px 10px':'6px 14px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'500',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+            ↑ {isMobile?'':'Upload'}
             <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{display:'none'}}/>
           </label>
-          <button onClick={()=>setShowDownload(true)} style={{padding:'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)'}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓ Download</button>
-          {!isMobile&&<button onClick={()=>setShowBrandKitSetup(true)} style={{padding:'7px 14px',borderRadius:7,border:`1px solid ${T.border}`,background:T.panel,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'600',display:'flex',alignItems:'center',gap:5}}>🎨 Brand Kit</button>}
-          {!isMobile&&<button onClick={()=>fetch(`${API_BASE}/checkout`,{
+          <button onClick={()=>setShowDownload(true)} style={{padding:isMobile?'5px 10px':'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)',flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓{isMobile?'':' Download'}</button>
+          <button onClick={()=>fetch('https://thumbframe-api-production.up.railway.app/checkout',{
   method:'POST',
   headers:{'Content-Type':'application/json'},
   body:JSON.stringify({plan:'pro'}),
@@ -2865,13 +2891,13 @@ export default function Editor({onExit, user, token, brandKit}){
               display:'flex',alignItems:'center',gap:5,
             }}>
             ⚡ Pro — $15/mo
-          </button>}
+          </button>
         </div>
       </div>
 
-      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
+      <div style={{display:'flex',flex:1,overflow:'hidden',flexDirection:isMobile?'column':'row'}}>
 
-        {/* Left sidebar */}
+        {/* Left sidebar — hidden on mobile */}
         {!isMobile&&<div style={{width:150,background:T.sidebar,borderRight:`1px solid ${T.border}`,padding:'8px 6px',display:'flex',flexDirection:'column',overflowY:'auto',flexShrink:0}}>
           {(()=>{
             let lastGroup = null;
@@ -2915,11 +2941,23 @@ export default function Editor({onExit, user, token, brandKit}){
         </div>}
 
         {/* Canvas */}
-        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:darkMode?'#080808':'#d0d0d0',overflow:'hidden',position:'relative'}}>
+        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:darkMode?'#080808':'#d0d0d0',overflow:'hidden',position:'relative',minHeight:isMobile?200:undefined}}
+          onClick={(e)=>{
+            // Click on canvas background (not on a layer) deselects
+            if(e.target===e.currentTarget) setSelectedId(null);
+          }}
+          onWheel={(e)=>{
+            if(activeTool==='zoom'||e.ctrlKey||e.metaKey){
+              e.preventDefault();
+              const delta=e.deltaY>0?-0.15:0.15;
+              const newZoom=Math.max(0.25,Math.min(8,Math.round((zoom+delta)*100)/100));
+              if(newZoom<=1)setPanOffset({x:0,y:0});
+              setZoom(newZoom);
+            }
+          }}>
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
-            <div style={{transform:`scale(${zoom})`,transformOrigin:'center center',imageRendering:'high-quality'}}>
+            <div style={{transform:`scale(${zoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,transformOrigin:'center center',imageRendering:zoom>1?'pixelated':'high-quality'}}>
               <div ref={canvasRef}
-                onWheel={handleWheel}
                 onMouseMove={(e)=>{
                   if(activeTool==='rimlight'){
                     const rect=canvasRef.current.getBoundingClientRect();
@@ -3007,7 +3045,7 @@ export default function Editor({onExit, user, token, brandKit}){
                             drawNext(index+1);
                           };
                           img.onerror=()=>drawNext(index+1);
-                          img.src=obj.src;
+                          img.src=obj.paintSrc||obj.src;
                         } else {
                           drawNext(index+1);
                         }
@@ -3040,17 +3078,48 @@ export default function Editor({onExit, user, token, brandKit}){
                   if(activeTool==='rimlight') return;
                   if(justSelectedRef.current){justSelectedRef.current=false;return;}
                   if(activeTool==='brush') return;
+                  if(activeTool==='zoom'){
+                    e.stopPropagation();
+                    const rect=canvasRef.current.getBoundingClientRect();
+                    // Click position in canvas coordinates (accounting for current zoom+pan)
+                    const clickX=(e.clientX-rect.left)/zoom - panOffset.x;
+                    const clickY=(e.clientY-rect.top)/zoom - panOffset.y;
+                    const centerX=p.preview.w/2;
+                    const centerY=p.preview.h/2;
+                    if(e.shiftKey||e.altKey){
+                      const newZoom=Math.max(0.25,Math.round((zoom-0.5)*10)/10);
+                      if(newZoom<=1){setPanOffset({x:0,y:0});}
+                      else{
+                        // Keep clicked point centered while zooming out
+                        const scale=newZoom/zoom;
+                        setPanOffset(prev=>({
+                          x:(centerX-clickX)*(1-scale)+prev.x*scale,
+                          y:(centerY-clickY)*(1-scale)+prev.y*scale,
+                        }));
+                      }
+                      setZoom(newZoom);
+                    } else {
+                      const newZoom=Math.min(8,Math.round((zoom+0.5)*10)/10);
+                      // Pan so the clicked point moves to center of viewport
+                      setPanOffset({
+                        x:centerX-clickX,
+                        y:centerY-clickY,
+                      });
+                      setZoom(newZoom);
+                    }
+                    return;
+                  }
                   setSelectedId(null);
                 }}
                 style={{width:p.preview.w,height:p.preview.h,position:'relative',overflow:'hidden',borderRadius:4,boxShadow:'0 8px 40px rgba(0,0,0,0.8)',flexShrink:0,cursor:activeTool==='brush'?'crosshair':
                        activeTool==='rimlight'?(rimPickingColor?'crosshair':'crosshair'):
+                       activeTool==='zoom'?'zoom-in':
                        'default'}}>
 
                 {/* Filtered visual layer */}
                 <div style={{position:'absolute',inset:0,filter:canvasFilter,zIndex:0,pointerEvents:'none'}}>
                   {layers.map(obj=>{
                     if(obj.hidden)return null;
-                    if(obj.id===brushingImageId)return null;
                     const opacityVal=(obj.opacity??100)/100;
                     const blendStyle={mixBlendMode:obj.blendMode||'normal'};
                     const flipStyle={transform:`scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`};
@@ -3073,12 +3142,37 @@ export default function Editor({onExit, user, token, brandKit}){
                 </div>
 
                 {/* Interactive layer */}
-                <div style={{position:'absolute',inset:0,zIndex:1}}>
+                <div style={{position:'absolute',inset:0,zIndex:1,
+                  pointerEvents: (activeTool==='brush'||activeTool==='zoom') ? 'none' : 'auto',
+                }}>
                   {layers.map(obj=>renderLayerElement(obj))}
                 </div>
 
+                {/* ✅ Paint overlay — shows brush strokes when brush tool is not active */}
+                {layers.map(obj=>{
+                  if(obj.hidden||!obj.paintSrc||obj.type==='background')return null;
+                  if(obj.id===brushingImageId)return null; // brush canvas handles this
+                  const cropW=obj.width-(obj.cropLeft||0)-(obj.cropRight||0);
+                  const cropH=obj.height-(obj.cropTop||0)-(obj.cropBottom||0);
+                  return(
+                    <div key={`paint-${obj.id}`} style={{
+                      position:'absolute',left:obj.x,top:obj.y,
+                      width:cropW,height:cropH,
+                      zIndex:layers.indexOf(obj)+2,
+                      overflow:'hidden',pointerEvents:'none',
+                    }}>
+                      <img src={obj.paintSrc} alt="" style={{
+                        position:'absolute',top:0,left:0,
+                        width:obj.width,height:obj.height,
+                        display:'block',
+                        marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),
+                      }}/>
+                    </div>
+                  );
+                })}
+
                 {/* ✅ Brush overlay — no CSS width/height, no filter, canvas sizes itself */}
-                {brushingImageId&&selectedLayer&&(
+                {brushingImageId&&selectedLayer&&!maskingLayerId&&(
                   <div style={{
                     position:'absolute',
                     left:  selectedLayer.type==='background' ? 0 : selectedLayer.x,
@@ -3087,6 +3181,7 @@ export default function Editor({onExit, user, token, brandKit}){
                     height:selectedLayer.type==='background' ? p.preview.h  : selectedLayer.height-(selectedLayer.cropTop||0)-(selectedLayer.cropBottom||0),
                     zIndex:9999,
                     overflow:'hidden',
+                    pointerEvents:'auto',
                   }}>
                     <BrushOverlay
                       ref={brushOverlayRef}
@@ -3110,18 +3205,20 @@ export default function Editor({onExit, user, token, brandKit}){
                       paintAlpha={brushColorAlpha}
                       onUpdate={(updates)=>{
                         if(selectedLayer?.type==='background'){
-                          updateLayer(selectedId,{bgColor:'transparent',bgGradient:null,src:updates.src,type:'image',
+                          updateLayer(selectedId,{bgColor:'transparent',bgGradient:null,paintSrc:updates.src,src:updates.src,type:'image',
                             x:0,y:0,width:p.preview.w,height:p.preview.h,
                             cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
                             imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0
                           });
                         } else {
-                          updateLayer(selectedId,updates);
+                          updateLayer(selectedId,{paintSrc:updates.src});
                         }
                       }}
                     />
                   </div>
                 )}
+
+
 
                 {activeTool==='rimlight'&&selectedLayer?.type==='image'&&(
                   <div style={{
@@ -3203,13 +3300,16 @@ export default function Editor({onExit, user, token, brandKit}){
         <div
           onPointerDown={e=>e.stopPropagation()}
           style={isMobile?{
-            position:'fixed',bottom:0,left:0,right:0,
-            maxHeight:'45vh',background:T.sidebar,
-            borderTop:`1px solid ${T.border}`,
-            display:'flex',flexDirection:'column',
-            zIndex:100,borderRadius:'12px 12px 0 0',
-            boxShadow:'0 -4px 20px rgba(0,0,0,0.3)'
-          }:{width:272,background:T.sidebar,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',flexShrink:0}}
+            position:'absolute',bottom:0,left:0,right:0,
+            maxHeight:'45vh',
+            background:T.sidebar,borderTop:`1px solid ${T.border}`,
+            display:'flex',flexDirection:'column',zIndex:100,
+            borderRadius:'12px 12px 0 0',
+            boxShadow:'0 -4px 20px rgba(0,0,0,0.3)',
+          }:{
+            width:272,background:T.sidebar,borderLeft:`1px solid ${T.border}`,
+            display:'flex',flexDirection:'column',flexShrink:0,
+          }}
         >
           <div style={{flex:1,padding:'10px 12px',overflowY:'auto'}}>
 
@@ -3280,7 +3380,43 @@ export default function Editor({onExit, user, token, brandKit}){
                         style={{width:'100%'}}/>
                     </>)}
                     {selectedLayer?.type==='image'&&(<>
-                      <span style={{...css.label,marginTop:8}}>Brightness — {selectedLayer.imgBrightness||100}%</span>
+                      <span style={{...css.label,marginTop:8}}>Scale</span>
+                      <div style={{display:'flex',gap:4,marginBottom:6}}>
+                        {[25,50,75,100].map(pct=>{
+                          const curPct=Math.round((selectedLayer.width/(selectedLayer.originalWidth||selectedLayer.width))*100)||100;
+                          return(
+                            <button key={pct} onClick={()=>{
+                              const ow=selectedLayer.originalWidth||selectedLayer.width;
+                              const oh=selectedLayer.originalHeight||selectedLayer.height;
+                              const nw=Math.round(ow*pct/100);
+                              const nh=Math.round(oh*pct/100);
+                              updateLayer(selectedId,{width:nw,height:nh});
+                            }} style={{flex:1,padding:'5px 2px',borderRadius:5,border:`1px solid ${curPct===pct?T.accent:T.border}`,background:curPct===pct?`${T.accent}18`:T.input,color:curPct===pct?T.accent:T.text,fontSize:10,cursor:'pointer',fontWeight:curPct===pct?'700':'400'}}>{pct}%</button>
+                          );
+                        })}
+                      </div>
+                      <div style={{display:'flex',gap:4,marginBottom:6}}>
+                        <button onClick={()=>{
+                          const aspect=selectedLayer.width/selectedLayer.height;
+                          const cW=p.preview.w,cH=p.preview.h;
+                          let nw,nh;
+                          if(aspect>cW/cH){nw=cW;nh=Math.round(cW/aspect);}
+                          else{nh=cH;nw=Math.round(cH*aspect);}
+                          updateLayer(selectedId,{width:nw,height:nh,x:Math.round((cW-nw)/2),y:Math.round((cH-nh)/2)});
+                        }} style={{flex:1,padding:'6px',borderRadius:5,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:10,cursor:'pointer'}}>Fit canvas</button>
+                        <button onClick={()=>{
+                          const aspect=selectedLayer.width/selectedLayer.height;
+                          const cW=p.preview.w,cH=p.preview.h;
+                          let nw,nh;
+                          if(aspect>cW/cH){nh=cH;nw=Math.round(cH*aspect);}
+                          else{nw=cW;nh=Math.round(cW/aspect);}
+                          updateLayer(selectedId,{width:nw,height:nh,x:Math.round((cW-nw)/2),y:Math.round((cH-nh)/2)});
+                        }} style={{flex:1,padding:'6px',borderRadius:5,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:10,cursor:'pointer'}}>Fill canvas</button>
+                        <button onClick={()=>{
+                          updateLayer(selectedId,{x:Math.round((p.preview.w-selectedLayer.width)/2),y:Math.round((p.preview.h-selectedLayer.height)/2)});
+                        }} style={{flex:1,padding:'6px',borderRadius:5,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:10,cursor:'pointer'}}>Center</button>
+                      </div>
+                      <span style={{...css.label}}>Brightness — {selectedLayer.imgBrightness||100}%</span>
                       <Slider min={50} max={200} value={selectedLayer.imgBrightness||100}
                         onChange={v=>updateLayerSilent(selectedId,{imgBrightness:v})}
                         onCommit={v=>updateLayer(selectedId,{imgBrightness:v})}
@@ -3393,16 +3529,61 @@ export default function Editor({onExit, user, token, brandKit}){
               </div>
             )}
 
+            {activeTool==='zoom'&&(
+              <div>
+                <span style={css.label}>Zoom tool</span>
+                <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted,lineHeight:1.8}}>
+                  <strong style={{color:T.text}}>Click</strong> to zoom in on a spot<br/>
+                  <strong style={{color:T.text}}>Shift+Click</strong> to zoom out<br/>
+                </div>
+
+                <span style={css.label}>Zoom — {Math.round(zoom*100)}%</span>
+                <div style={css.row}>
+                  <button onClick={()=>{const z=Math.max(0.25,Math.round((zoom-0.25)*100)/100);setZoom(z);if(z<=1)setPanOffset({x:0,y:0});}} style={{padding:'4px 10px',borderRadius:5,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:13,fontWeight:'700'}}>−</button>
+                  <div style={{flex:1,height:4,background:T.border,borderRadius:2,position:'relative',margin:'0 4px'}}>
+                    <div style={{position:'absolute',left:`${Math.min(100,((zoom-0.25)/7.75)*100)}%`,top:-4,width:12,height:12,borderRadius:'50%',background:T.accent,border:'2px solid #fff',transform:'translateX(-50%)'}}/>
+                  </div>
+                  <button onClick={()=>{setZoom(Math.min(8,Math.round((zoom+0.25)*100)/100));}} style={{padding:'4px 10px',borderRadius:5,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:13,fontWeight:'700'}}>+</button>
+                </div>
+
+                <span style={css.label}>Quick zoom</span>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:4}}>
+                  {[25,50,100,150,200,400].map(pct=>(
+                    <button key={pct} onClick={()=>{setZoom(pct/100);if(pct<=100)setPanOffset({x:0,y:0});}}
+                      style={{padding:'6px 2px',borderRadius:5,border:`1px solid ${Math.round(zoom*100)===pct?T.accent:T.border}`,background:Math.round(zoom*100)===pct?`${T.accent}18`:T.input,color:Math.round(zoom*100)===pct?T.accent:T.text,fontSize:10,cursor:'pointer',fontWeight:Math.round(zoom*100)===pct?'700':'400'}}>{pct}%</button>
+                  ))}
+                </div>
+
+                <button onClick={()=>{setZoom(1);setPanOffset({x:0,y:0});}}
+                  style={{...css.addBtn,marginTop:12,background:'transparent',color:T.muted,border:`1px solid ${T.border}`}}>
+                  Reset view
+                </button>
+
+                <span style={css.label}>Navigate</span>
+                <div style={{...css.section,display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:3}}>
+                  <div/>
+                  <button onClick={()=>setPanOffset(p=>({...p,y:p.y+30}))} style={{padding:6,borderRadius:4,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:11}}>↑</button>
+                  <div/>
+                  <button onClick={()=>setPanOffset(p=>({...p,x:p.x+30}))} style={{padding:6,borderRadius:4,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:11}}>←</button>
+                  <button onClick={()=>setPanOffset({x:0,y:0})} style={{padding:6,borderRadius:4,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:9}}>⊙</button>
+                  <button onClick={()=>setPanOffset(p=>({...p,x:p.x-30}))} style={{padding:6,borderRadius:4,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:11}}>→</button>
+                  <div/>
+                  <button onClick={()=>setPanOffset(p=>({...p,y:p.y-30}))} style={{padding:6,borderRadius:4,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:11}}>↓</button>
+                  <div/>
+                </div>
+              </div>
+            )}
+
             {activeTool==='brush'&&(
               <div>
                 <span style={css.label}>Brush tools</span>
-                {!selectedLayer||(selectedLayer.type!=='image'&&selectedLayer.type!=='background')?(
+                {!selectedLayer||(selectedLayer.type!=='image'&&selectedLayer.type!=='background')||selectedLayer.isRimLight?(
                   <div style={{...css.section,marginTop:0,fontSize:12,color:T.muted,textAlign:'center',padding:20}}><div style={{fontSize:24,marginBottom:8}}>⌀</div>Click an image on the canvas first</div>
                 ):(
                   <div style={{...css.section,marginTop:0,fontSize:11,color:T.success,fontWeight:'600'}}>✓ Image selected — paint on the canvas</div>
                 )}
                 <BrushTool
-                  layer={(selectedLayer?.type==='image'||selectedLayer?.type==='background')?selectedLayer:null}
+                  layer={(selectedLayer?.type==='image'||selectedLayer?.type==='background')&&!selectedLayer?.isRimLight?selectedLayer:null}
                   theme={T}
                   brushOverlayRef={brushOverlayRef}
                   brushType={brushTypeState}
@@ -3425,6 +3606,15 @@ export default function Editor({onExit, user, token, brandKit}){
                   onPaintAlphaChange={setBrushColorAlpha}
                   onUpdate={(updates)=>{if(selectedId)updateLayer(selectedId,updates);}}
                 />
+                {/* Mask — coming soon */}
+                {selectedLayer?.type==='image'&&(
+                  <div style={{marginTop:10}}>
+                    <span style={css.label}>Layer mask</span>
+                    <div style={{...css.section,textAlign:'center',padding:12,fontSize:10,color:T.muted}}>
+                      Coming soon — paint to hide/reveal parts of an image
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -3596,7 +3786,7 @@ export default function Editor({onExit, user, token, brandKit}){
               <div>
                 <span style={css.label}>Layer effects</span>
                 {!selectedLayer||selectedLayer.type==='background'?(
-                  <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Click any layer to apply effects</div>
+                  <div style={{...css.section,marginTop:0,fontSize:12,color:T.muted,textAlign:'center',padding:20}}><div style={{fontSize:24,marginBottom:8}}>✦</div>Click any layer to apply effects</div>
                 ):(
                   <>
                     <div style={{...css.section,marginTop:0,fontSize:11,color:T.success,fontWeight:'600'}}>✦ Non-destructive — editable anytime</div>
@@ -3645,9 +3835,9 @@ export default function Editor({onExit, user, token, brandKit}){
                       </>}
                     </div>
                     <span style={css.label}>Layer mask</span>
-                    <div style={css.section}>
-                      <div style={{fontSize:11,color:T.muted,textAlign:'center',padding:'12px 0',lineHeight:1.6}}>
-                        🚧 Coming soon
+                    <div style={{...css.section,textAlign:'center',padding:16}}>
+                      <div style={{fontSize:11,color:T.muted,lineHeight:1.6}}>
+                        Layer masks are coming soon. Paint black to hide, white to reveal — like Photoshop.
                       </div>
                     </div>
                     <button onClick={()=>updateLayer(selectedId,{effects:defaultEffects()})} style={{...css.addBtn,background:'transparent',color:T.muted,border:`1px solid ${T.border}`,marginTop:10}}>Reset all effects</button>
@@ -3708,7 +3898,7 @@ export default function Editor({onExit, user, token, brandKit}){
                   <button onClick={()=>updateLayer(selectedId,{imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0})} style={{...css.addBtn,background:'transparent',color:T.muted,border:`1px solid ${T.border}`,marginTop:6}}>Reset image</button>
                 </>)}
                 {selectedLayer&&selectedLayer.type!=='background'&&(<><div style={css.divider}/><span style={css.label}>Layer opacity — {selectedLayer.opacity??100}%</span><Slider min={0} max={100} value={selectedLayer.opacity??100} onChange={v=>updateLayerSilent(selectedId,{opacity:v})} onCommit={v=>updateLayer(selectedId,{opacity:v})} style={{width:'100%'}}/></>)}
-                <button onClick={()=>{setBrightness(100);setContrast(110);setSaturation(110);setHue(0);}} style={{...css.addBtn,background:'transparent',color:T.muted,border:`1px solid ${T.border}`}}>Reset canvas</button>
+                <button onClick={()=>{setBrightness(100);setContrast(100);setSaturation(100);setHue(0);}} style={{...css.addBtn,background:'transparent',color:T.muted,border:`1px solid ${T.border}`}}>Reset canvas</button>
               </div>
             )}
 
@@ -3999,16 +4189,27 @@ export default function Editor({onExit, user, token, brandKit}){
                               display:'flex',alignItems:'center',justifyContent:'center',
                               position:'relative',overflow:'hidden',
                             }}>
+                              {variant.layers.filter(l=>l.type==='image'&&!l.hidden).map((img,idx)=>(
+                                <img key={idx} src={img.paintSrc||img.src} alt="" style={{
+                                  position:'absolute',
+                                  left:img.x*(56/p.preview.h)||0,
+                                  top:img.y*(56/p.preview.h)||0,
+                                  height:img.height*(56/p.preview.h)||56,
+                                  width:'auto',
+                                  pointerEvents:'none',
+                                  userSelect:'none',
+                                }}/>
+                              ))}
                               {vText&&(
                                 <span style={{
-                                  fontSize:16,fontWeight:vText.fontWeight||700,
+                                  fontSize:14,fontWeight:vText.fontWeight||700,
                                   color:vText.textColor||'#fff',
                                   fontFamily:vText.fontFamily||'Impact',
                                   textShadow:vText.shadowEnabled?'2px 2px 0 #000':'none',
                                   WebkitTextStroke:vText.strokeWidth>0
                                     ?`${Math.min(vText.strokeWidth,2)}px ${vText.strokeColor}`:'none',
                                   letterSpacing:1,padding:'0 8px',
-                                  textAlign:'center',
+                                  textAlign:'center',position:'relative',zIndex:1,
                                 }}>
                                   {vText.text?.slice(0,20)}
                                 </span>
@@ -4403,36 +4604,44 @@ export default function Editor({onExit, user, token, brandKit}){
               btn.disabled=true;
               btn.style.opacity='0.6';
               try{
-                const response=await fetch(selectedLayer.src);
-                const blob=await response.blob();
-                const reader=new FileReader();
-                reader.onload=async()=>{
-                  try{
-                    const res=await fetch(`${API_BASE}/remove-bg`,{
-                      method:'POST',
-                      headers:{'Content-Type':'application/json'},
-                      body:JSON.stringify({imageUrl:reader.result}),
-                    });
-                    const data=await res.json();
-                    if(data.error){
-                      alert('Error: '+data.error);
-                      btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';
-                      return;
-                    }
-                    updateLayer(selectedId,{src:data.image});
-                    btn.textContent='Done!';btn.style.background=T.success;
-                    setTimeout(()=>{
-                      btn.textContent=orig;btn.disabled=false;
-                      btn.style.opacity='1';btn.style.background=T.accent;
-                    },2000);
-                  }catch(e){
-                    alert('Failed — make sure your API server is running on port 5000');
-                    btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';
-                  }
+                let base64Src = selectedLayer.src;
+                // If it's a blob URL, convert to base64 first
+                if(!base64Src.startsWith('data:')){
+                  const response=await fetch(selectedLayer.src);
+                  const blob=await response.blob();
+                  base64Src = await new Promise((resolve,reject)=>{
+                    const reader=new FileReader();
+                    reader.onload=()=>resolve(reader.result);
+                    reader.onerror=()=>reject(new Error('Failed to read'));
+                    reader.readAsDataURL(blob);
+                  });
+                }
+                const res=await fetch('https://thumbframe-api-production.up.railway.app/remove-bg',{
+                  method:'POST',
+                  headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({imageUrl:base64Src}),
+                });
+                const data=await res.json();
+                if(data.error){
+                  alert('Error: '+data.error);
+                  btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';
+                  return;
+                }
+                const nImg=new Image();
+                nImg.onload=()=>{
+                  updateLayer(selectedId,{src:data.image,paintSrc:null});
+                  btn.textContent='Done!';btn.style.background=T.success;
+                  setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';btn.style.background=T.accent;},2000);
                 };
-                reader.readAsDataURL(blob);
+                nImg.onerror=()=>{
+                  updateLayer(selectedId,{src:data.image,paintSrc:null});
+                  btn.textContent='Done!';btn.style.background=T.success;
+                  setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';btn.style.background=T.accent;},2000);
+                };
+                nImg.src=data.image;
               }catch(e){
-                alert('Failed to read image');
+                console.error('RemoveBG error:', e);
+                alert('Failed to remove background. Check your connection and try again.');
                 btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';
               }
             }}
@@ -4470,7 +4679,7 @@ export default function Editor({onExit, user, token, brandKit}){
           if(!prompt.trim()){alert('Enter a prompt first');return;}
           btn.textContent='Generating...';btn.disabled=true;btn.style.opacity='0.6';
           try{
-            const res=await fetch(`${API_BASE}/ai-generate`,{
+            const res=await fetch('https://thumbframe-api-production.up.railway.app/ai-generate',{
               method:'POST',
               headers:{'Content-Type':'application/json'},
               body:JSON.stringify({prompt}),
@@ -4566,48 +4775,36 @@ export default function Editor({onExit, user, token, brandKit}){
       {/* Mobile bottom toolbar */}
       {isMobile&&(
         <div style={{
-          position:'fixed',bottom:0,left:0,right:0,
+          display:'flex',gap:2,padding:'6px 8px',
           background:T.panel,borderTop:`1px solid ${T.border}`,
-          display:'flex',justifyContent:'space-around',alignItems:'center',
-          padding:'8px 4px',zIndex:99,
-          boxShadow:'0 -2px 10px rgba(0,0,0,0.2)'
+          overflowX:'auto',flexShrink:0,
+          WebkitOverflowScrolling:'touch',
         }}>
           {[
             {key:'select',icon:'↖',label:'Select'},
             {key:'move',icon:'✋',label:'Move'},
             {key:'text',icon:'T',label:'Text'},
-            {key:'brush',icon:'🖌',label:'Brush'},
+            {key:'brush',icon:'⌀',label:'Brush'},
             {key:'upload',icon:'↑',label:'Upload'},
-            {key:'background',icon:'▣',label:'BG'},
+            {key:'background',icon:'▨',label:'BG'},
             {key:'effects',icon:'✦',label:'FX'},
-            {key:'zoom',icon:'⊕',label:'Zoom'},
+            {key:'zoom',icon:'🔍',label:'Zoom'},
           ].map(t=>(
             <button key={t.key} onClick={()=>setActiveTool(t.key)}
               style={{
-                flex:1,display:'flex',flexDirection:'column',
-                alignItems:'center',gap:2,padding:'6px 4px',
-                borderRadius:6,border:'none',
+                padding:'8px 12px',borderRadius:6,border:'none',
                 background:activeTool===t.key?`${T.accent}22`:'transparent',
                 color:activeTool===t.key?T.accent:T.muted,
-                cursor:'pointer',fontSize:9,fontWeight:'600'
+                fontSize:9,cursor:'pointer',fontWeight:activeTool===t.key?'700':'400',
+                display:'flex',flexDirection:'column',alignItems:'center',gap:2,
+                flexShrink:0,minWidth:44,
               }}>
               <span style={{fontSize:16}}>{t.icon}</span>
-              <span>{t.label}</span>
+              {t.label}
             </button>
           ))}
         </div>
       )}
-
-      {showBrandKitSetup && <BrandKitSetupModal 
-        T={T}
-        token={token}
-        brandKitColors={brandKitColors}
-        setBrandKitColors={setBrandKitColors}
-        brandKitFace={brandKitFace}
-        setBrandKitFace={setBrandKitFace}
-        setShowBrandKitSetup={setShowBrandKitSetup}
-        setCmdLog={setCmdLog}
-      />}
     </div>
   );
 }

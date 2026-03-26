@@ -2,7 +2,7 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 
 // ─── Brush Overlay ─────────────────────────────────────────────────────────────
 export const BrushOverlay = forwardRef(function BrushOverlay(
-  { layer, onUpdate, brushType, brushSize, brushStrength, brushEdge, brushFlow, brushStabilizer, active, zoom, paintColor, paintAlpha },
+  { layer, onUpdate, brushType, brushSize, brushStrength, brushEdge, brushFlow, brushStabilizer, active, zoom, paintColor, paintAlpha, isMask },
   ref
 ) {
   const canvasRef      = useRef(null);
@@ -11,12 +11,18 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   const stabPos        = useRef(null); // stabilized position lags behind mouse
   const cloneSource    = useRef(null);
   const isPainting     = useRef(false);
+  const hasStroked     = useRef(false);
   const isReady        = useRef(false);
   const historyRef     = useRef([]);
   const loadedSrc      = useRef(null);
   const lastPressure   = useRef(1);
   const lastTime       = useRef(Date.now());
   const lastHealPos    = useRef(null);
+  const hasPainted     = useRef(false);
+  const canvasScale    = useRef(1);
+  const originalImg    = useRef(null);
+
+  const lastZoom       = useRef(null);
 
   useImperativeHandle(ref, () => ({
     undo() {
@@ -33,24 +39,41 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   useEffect(() => {
     if (!layer?.src || !active) return;
-    if (loadedSrc.current === layer.src) return;
+    const zoomChanged = lastZoom.current !== null && lastZoom.current !== zoom;
+    if (loadedSrc.current === layer.src && !zoomChanged) return;
+    // If zoom changed but user was painting, save current state first
+    hasStroked.current = false;
+    hasPainted.current = false;
     isReady.current = false;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    img.onload = () => {
+    // Use the original image if available, otherwise load from src
+    const loadImg = (img) => {
       const z = zoom || 1;
       const dpr = window.devicePixelRatio || 1;
-      canvas.width  = Math.round(layer.width  * z * dpr);
-      canvas.height = Math.round(layer.height * z * dpr);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+      const pixelScale = z * dpr;
+      canvas.width  = Math.round(layer.width * pixelScale);
+      canvas.height = Math.round(layer.height * pixelScale);
+      canvasScale.current = dpr;
+      const ctx2 = canvas.getContext('2d');
+      ctx2.imageSmoothingEnabled = true;
+      ctx2.imageSmoothingQuality = 'high';
+      ctx2.clearRect(0, 0, canvas.width, canvas.height);
+      ctx2.drawImage(img, 0, 0, canvas.width, canvas.height);
+      originalImg.current = img;
+      historyRef.current = [ctx2.getImageData(0, 0, canvas.width, canvas.height)];
       isReady.current    = true;
       loadedSrc.current  = layer.src;
+      lastZoom.current   = zoom;
     };
-    img.src = layer.src;
+    if (originalImg.current && originalImg.current.complete && loadedSrc.current === layer.src) {
+      // Zoom changed but same image — reuse cached original
+      loadImg(originalImg.current);
+    } else {
+      const img = new Image();
+      img.onload = () => loadImg(img);
+      img.src = layer.src;
+    }
   }, [layer?.src, layer?.width, layer?.height, active, zoom]);
 
   function getPos(e) {
@@ -69,18 +92,25 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     if (!canvas || !isReady.current) return;
     const snap = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
     historyRef.current = [...historyRef.current.slice(-19), snap];
+    hasStroked.current = true;
   }
 
   function flush() {
     const canvas = canvasRef.current;
     if (!canvas || !isReady.current) return;
+    if (!hasStroked.current) return;
+    // Store the painted canvas pixels as ImageData — don't re-encode as PNG
+    // This avoids quality loss from re-encoding
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    // Convert to data URL only for the layer state (needed for export)
     const tmp = document.createElement('canvas');
-    tmp.width  = layer.width;
-    tmp.height = layer.height;
-    tmp.getContext('2d').drawImage(canvas, 0, 0, layer.width, layer.height);
+    tmp.width = canvas.width;
+    tmp.height = canvas.height;
+    tmp.getContext('2d').putImageData(imageData, 0, 0);
     const dataUrl = tmp.toDataURL('image/png');
     loadedSrc.current = dataUrl;
-    onUpdate({ src: dataUrl });
+    setTimeout(() => { onUpdate({ src: dataUrl }); }, 50);
   }
 
   function getPressure(pos) {
@@ -153,8 +183,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applyBlurStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const dpr = window.devicePixelRatio || 1;
-    const r  = Math.round(brushSize * dpr);
+    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
     // ✅ PHASE 2: Flow separates how much paint per stamp from total opacity
     const s  = (brushStrength/100) * (brushFlow/100) * pressure;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
@@ -180,8 +209,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applySmearStamp(ctx, x, y, fromX, fromY, pressure) {
     const canvas = canvasRef.current;
-    const dpr = window.devicePixelRatio || 1;
-    const r  = Math.round(brushSize * dpr);
+    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.5;
     const dx = x-fromX, dy = y-fromY;
     if (Math.abs(dx)<0.5&&Math.abs(dy)<0.5) return;
@@ -207,8 +235,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applySharpenStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const dpr = window.devicePixelRatio || 1;
-    const r  = Math.round(brushSize * dpr);
+    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.12;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -233,8 +260,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }
 
   function applyAirbrushStamp(ctx, x, y, pressure) {
-    const dpr = window.devicePixelRatio || 1;
-    const r       = Math.round(brushSize * dpr);
+    const r       = Math.round(brushSize*(zoom||1)*canvasScale.current);
     const flow    = brushFlow/100;
     const alpha   = (brushStrength/100)*flow*pressure*0.12;
     const density = Math.round(r*1.2);
@@ -258,8 +284,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }
 
   function applyEraserStamp(ctx, x, y, pressure) {
-    const dpr = window.devicePixelRatio || 1;
-    const r     = Math.round(brushSize * dpr);
+    const r     = Math.round(brushSize*(zoom||1)*canvasScale.current);
     const alpha = (brushStrength/100)*(brushFlow/100)*pressure;
     ctx.save();
     ctx.globalCompositeOperation='destination-out';
@@ -278,8 +303,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applyCloneStamp(ctx, x, y, pressure) {
     if (!cloneSource.current) return;
-    const dpr = window.devicePixelRatio || 1;
-    const r=Math.round(brushSize * dpr), cs=cloneSource.current;
+    const r=Math.round(brushSize*(zoom||1)*canvasScale.current), cs=cloneSource.current;
     ctx.save();
     ctx.globalAlpha=(brushStrength/100)*(brushFlow/100)*pressure;
     ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.clip();
@@ -288,8 +312,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }
 
   function applyPaintStamp(ctx, x, y, pressure, color, alpha) {
-    const dpr = window.devicePixelRatio || 1;
-    const r     = Math.round(brushSize * dpr);
+    const r     = Math.round(brushSize*(zoom||1)*canvasScale.current);
     const a     = ((alpha||100)/100) * (brushStrength/100) * (brushFlow/100) * pressure;
     const hex   = (color||'#ff0000').replace('#','');
     const cr    = parseInt(hex.slice(0,2),16);
@@ -366,8 +389,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Dodge — brighten pixels
   function applyDodgeStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const dpr = window.devicePixelRatio || 1;
-    const r  = Math.round(brushSize * dpr);
+    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.4;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -391,8 +413,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Burn — darken pixels
   function applyBurnStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const dpr = window.devicePixelRatio || 1;
-    const r  = Math.round(brushSize * dpr);
+    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.4;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -413,8 +434,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Healing brush — samples surrounding texture
   function applyHealStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const dpr = window.devicePixelRatio || 1;
-    const r      = Math.round(brushSize * dpr);
+    const z      = zoom || 1;
+    const r      = Math.round(brushSize * z);
     const s      = Math.min(1, (brushStrength/100) * (brushFlow/100) * pressure * 1.8);
     const clamp  = v => Math.min(255, Math.max(0, Math.round(v)));
     const PATCH  = Math.max(2, Math.round(r * 0.2));
@@ -618,8 +639,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Wet mix — picks up color from canvas and mixes like paint
   function applyWetMixStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const dpr = window.devicePixelRatio || 1;
-    const r  = Math.round(brushSize * dpr);
+    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.6;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -679,8 +699,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     const ctx      = canvasRef.current.getContext('2d');
     const pressure = getPressure(pos);
     const stabbed  = getStabilizedPos(pos);
-    const dpr      = window.devicePixelRatio || 1;
-    const r        = Math.round(brushSize * dpr);
+    const r        = Math.round(brushSize*(zoom||1)*canvasScale.current);
     const spacing  = Math.max(1, r*(brushEdge==='hard'?0.2:0.12));
 
     if (lastPos.current) {
@@ -697,10 +716,10 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     if (!visible) { cursor.style.display='none'; return; }
     const canvas = canvasRef.current;
     const rect   = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const r      = Math.round(brushSize * dpr);
-    const localX = (clientX - rect.left) / (zoom || 1);
-    const localY = (clientY - rect.top)  / (zoom || 1);
+    const z      = zoom || 1;
+    const r      = brushSize;
+    const localX = (clientX - rect.left) / z;
+    const localY = (clientY - rect.top)  / z;
     cursor.style.display      = 'block';
     cursor.style.left         = (localX - r) + 'px';
     cursor.style.top          = (localY - r) + 'px';
@@ -728,6 +747,12 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     e.preventDefault(); e.stopPropagation();
     if (!isReady.current||!active) return;
     if (brushType==='clone'&&e.altKey) { cloneSource.current=getPos(e); return; }
+    // Show canvas on first paint (was hidden to keep sharp <img> visible)
+    // For mask painting, canvas stays invisible — CSS mask handles the visual
+    if (!hasPainted.current && !isMask) {
+      hasPainted.current = true;
+      if (canvasRef.current) canvasRef.current.style.opacity = '0.99';
+    }
     saveSnap();
     isPainting.current   = true;
     lastPressure.current = 1;
@@ -765,8 +790,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
         const dx = pos.x - lastPos.current.x;
         const dy = pos.y - lastPos.current.y;
         const moved = Math.sqrt(dx*dx+dy*dy);
-        const dpr = window.devicePixelRatio || 1;
-        if (moved >= Math.max(brushSize * dpr * 0.8, 20)) {
+        if (moved >= Math.max(brushSize*(zoom||1)*0.8, 20)) {
           if (isReady.current && canvasRef.current) {
             const ctx = canvasRef.current.getContext('2d');
             applyHealStamp(ctx, pos.x, pos.y, getPressure(pos));
@@ -811,15 +835,21 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       <div ref={cursorRef} style={{ display:'none', position:'absolute', pointerEvents:'none', zIndex:99999 }}/>
       <canvas
         ref={canvasRef}
-        onMouseDown={onMouseDown}
+        onMouseDown={(e) => {
+          // Show canvas on first interaction (not for mask — mask stays invisible)
+          if (!isMask && canvasRef.current) canvasRef.current.style.opacity = '1';
+          onMouseDown(e);
+        }}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseLeave}
         style={{
           position:'absolute', top:0, left:0,
-          width:layer.width+'px', height:layer.height+'px',
+          width: '100%', height: '100%',
           cursor:'none', display:'block',
           userSelect:'none', WebkitUserSelect:'none',
+          pointerEvents:'auto',
+          opacity: 0,
         }}
       />
     </div>
