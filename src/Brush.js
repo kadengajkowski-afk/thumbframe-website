@@ -41,8 +41,9 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     const img = new Image();
     img.onload = () => {
       const z = zoom || 1;
-      canvas.width  = Math.round(layer.width  * z);
-      canvas.height = Math.round(layer.height * z);
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width  = Math.round(layer.width  * z * dpr);
+      canvas.height = Math.round(layer.height * z * dpr);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
@@ -152,7 +153,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applyBlurStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1));
+    const dpr = window.devicePixelRatio || 1;
+    const r  = Math.round(brushSize * dpr);
     // ✅ PHASE 2: Flow separates how much paint per stamp from total opacity
     const s  = (brushStrength/100) * (brushFlow/100) * pressure;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
@@ -178,7 +180,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applySmearStamp(ctx, x, y, fromX, fromY, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1));
+    const dpr = window.devicePixelRatio || 1;
+    const r  = Math.round(brushSize * dpr);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.5;
     const dx = x-fromX, dy = y-fromY;
     if (Math.abs(dx)<0.5&&Math.abs(dy)<0.5) return;
@@ -204,7 +207,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applySharpenStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1));
+    const dpr = window.devicePixelRatio || 1;
+    const r  = Math.round(brushSize * dpr);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.12;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -229,7 +233,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }
 
   function applyAirbrushStamp(ctx, x, y, pressure) {
-    const r       = Math.round(brushSize*(zoom||1));
+    const dpr = window.devicePixelRatio || 1;
+    const r       = Math.round(brushSize * dpr);
     const flow    = brushFlow/100;
     const alpha   = (brushStrength/100)*flow*pressure*0.12;
     const density = Math.round(r*1.2);
@@ -253,7 +258,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }
 
   function applyEraserStamp(ctx, x, y, pressure) {
-    const r     = Math.round(brushSize*(zoom||1));
+    const dpr = window.devicePixelRatio || 1;
+    const r     = Math.round(brushSize * dpr);
     const alpha = (brushStrength/100)*(brushFlow/100)*pressure;
     ctx.save();
     ctx.globalCompositeOperation='destination-out';
@@ -272,7 +278,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applyCloneStamp(ctx, x, y, pressure) {
     if (!cloneSource.current) return;
-    const r=Math.round(brushSize*(zoom||1)), cs=cloneSource.current;
+    const dpr = window.devicePixelRatio || 1;
+    const r=Math.round(brushSize * dpr), cs=cloneSource.current;
     ctx.save();
     ctx.globalAlpha=(brushStrength/100)*(brushFlow/100)*pressure;
     ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.clip();
@@ -281,7 +288,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }
 
   function applyPaintStamp(ctx, x, y, pressure, color, alpha) {
-    const r     = Math.round(brushSize*(zoom||1));
+    const dpr = window.devicePixelRatio || 1;
+    const r     = Math.round(brushSize * dpr);
     const a     = ((alpha||100)/100) * (brushStrength/100) * (brushFlow/100) * pressure;
     const hex   = (color||'#ff0000').replace('#','');
     const cr    = parseInt(hex.slice(0,2),16);
@@ -358,7 +366,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Dodge — brighten pixels
   function applyDodgeStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1));
+    const dpr = window.devicePixelRatio || 1;
+    const r  = Math.round(brushSize * dpr);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.4;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -382,7 +391,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Burn — darken pixels
   function applyBurnStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1));
+    const dpr = window.devicePixelRatio || 1;
+    const r  = Math.round(brushSize * dpr);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.4;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -403,8 +413,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Healing brush — samples surrounding texture
   function applyHealStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const z      = zoom || 1;
-    const r      = Math.round(brushSize * z);
+    const dpr = window.devicePixelRatio || 1;
+    const r      = Math.round(brushSize * dpr);
     const s      = Math.min(1, (brushStrength/100) * (brushFlow/100) * pressure * 1.8);
     const clamp  = v => Math.min(255, Math.max(0, Math.round(v)));
     const PATCH  = Math.max(2, Math.round(r * 0.2));
@@ -608,7 +618,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Wet mix — picks up color from canvas and mixes like paint
   function applyWetMixStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1));
+    const dpr = window.devicePixelRatio || 1;
+    const r  = Math.round(brushSize * dpr);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.6;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -668,7 +679,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     const ctx      = canvasRef.current.getContext('2d');
     const pressure = getPressure(pos);
     const stabbed  = getStabilizedPos(pos);
-    const r        = Math.round(brushSize*(zoom||1));
+    const dpr      = window.devicePixelRatio || 1;
+    const r        = Math.round(brushSize * dpr);
     const spacing  = Math.max(1, r*(brushEdge==='hard'?0.2:0.12));
 
     if (lastPos.current) {
@@ -685,10 +697,10 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     if (!visible) { cursor.style.display='none'; return; }
     const canvas = canvasRef.current;
     const rect   = canvas.getBoundingClientRect();
-    const z      = zoom || 1;
-    const r      = brushSize;
-    const localX = (clientX - rect.left) / z;
-    const localY = (clientY - rect.top)  / z;
+    const dpr = window.devicePixelRatio || 1;
+    const r      = Math.round(brushSize * dpr);
+    const localX = (clientX - rect.left) / (zoom || 1);
+    const localY = (clientY - rect.top)  / (zoom || 1);
     cursor.style.display      = 'block';
     cursor.style.left         = (localX - r) + 'px';
     cursor.style.top          = (localY - r) + 'px';
@@ -753,7 +765,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
         const dx = pos.x - lastPos.current.x;
         const dy = pos.y - lastPos.current.y;
         const moved = Math.sqrt(dx*dx+dy*dy);
-        if (moved >= Math.max(brushSize*(zoom||1)*0.8, 20)) {
+        const dpr = window.devicePixelRatio || 1;
+        if (moved >= Math.max(brushSize * dpr * 0.8, 20)) {
           if (isReady.current && canvasRef.current) {
             const ctx = canvasRef.current.getContext('2d');
             applyHealStamp(ctx, pos.x, pos.y, getPressure(pos));
