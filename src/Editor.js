@@ -629,6 +629,14 @@ export default function Editor({onExit, user, token, brandKit}){
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
   const [blurStrength,setBlurStrength]                 = useState(10);
+  const [isMobile,setIsMobile]                         = useState(false);
+
+  useEffect(()=>{
+    const check=()=>setIsMobile(window.innerWidth<768);
+    check();
+    window.addEventListener('resize',check);
+    return()=>window.removeEventListener('resize',check);
+  },[]);
 
   function setLayers(val){
     if(typeof val==='function'){
