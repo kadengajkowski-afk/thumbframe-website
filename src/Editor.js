@@ -540,6 +540,7 @@ export default function Editor({onExit, user, token, brandKit}){
   const [layers,setLayersRaw]              = useState([]);
   const [selectedId,setSelectedId]         = useState(null);
   const [zoom,setZoom]                     = useState(1.5);
+  const [offset,setOffset]                 = useState({x:0,y:0});
   const [showGrid,setShowGrid]             = useState(false);
   const [showRuler,setShowRuler]           = useState(false);
   const [showSafeZones,setShowSafeZones]   = useState(false);
@@ -627,6 +628,7 @@ export default function Editor({onExit, user, token, brandKit}){
   const [maskingLayerId,setMaskingLayerId] = useState(null);
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
+  const [blurStrength,setBlurStrength]                 = useState(10);
 
   function setLayers(val){
     if(typeof val==='function'){
@@ -1711,6 +1713,51 @@ export default function Editor({onExit, user, token, brandKit}){
       setCtrScore(0);
     }
     setCtrLoading(false);
+  }
+
+  // ✅ Handle wheel zoom with Ctrl+Scroll
+  function handleWheel(e){
+    if(e.ctrlKey || e.metaKey){
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoom(z => Math.max(0.25, Math.min(16, +(z + delta).toFixed(1))));
+    }
+  }
+
+  // ✅ Apply blur brush with destination-out composite
+  function applyBlurBrush(x, y){
+    if(!selectedLayer || (selectedLayer.type !== 'image' && selectedLayer.type !== 'background')) return;
+    
+    const brushSize = (brushSizeState / 100) * Math.min(p.preview.w, p.preview.h) * 0.5;
+    const strength = blurStrength;
+    
+    // Get layer source
+    const layerSrc = getLayerSrc(selectedLayer);
+    if(!layerSrc) return;
+    
+    const tmp = document.createElement('canvas');
+    tmp.width = p.preview.w;
+    tmp.height = p.preview.h;
+    const ctx = tmp.getContext('2d');
+    
+    // Load existing image
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, tmp.width, tmp.height);
+      
+      // Apply blur effect using destination-out for mask
+      ctx.globalCompositeOperation = 'destination-out';
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, brushSize);
+      gradient.addColorStop(0, `rgba(0,0,0,${strength / 100})`);
+      gradient.addColorStop(0.7, `rgba(0,0,0,${strength / 200})`);
+      gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+      
+      const newSrc = tmp.toDataURL('image/png');
+      updateLayerSilent(selectedLayer.id, { src: newSrc });
+    };
+    img.src = layerSrc;
   }
 
   function applyRimLight(x, y){
@@ -2894,6 +2941,7 @@ export default function Editor({onExit, user, token, brandKit}){
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
             <div style={{transform:`scale(${zoom})`,transformOrigin:'center center',imageRendering:'high-quality'}}>
               <div ref={canvasRef}
+                onWheel={handleWheel}
                 onMouseMove={(e)=>{
                   if(activeTool==='rimlight'){
                     const rect=canvasRef.current.getBoundingClientRect();
