@@ -517,7 +517,11 @@ export default function Editor({onExit, user, token, apiUrl}){
   const zoomRef         = useRef(1);
   const layersRef       = useRef([]);
   const mountedRef = useRef(true);
-  useEffect(()=>{ mountedRef.current=true; return()=>{ mountedRef.current=false; }; },[]);
+  // Performance: Mouse tracking refs to avoid re-renders
+  const mouseRef        = useRef({x:0,y:0});
+  const lastRimLightRef = useRef(0);
+  const rafIdRef        = useRef(null);
+  useEffect(()=>{ mountedRef.current=true; return()=>{ mountedRef.current=false; if(rafIdRef.current)cancelAnimationFrame(rafIdRef.current); }; },[]);
 
   const [platform,setPlatform]             = useState('youtube');
   const [activeTool,setActiveTool]         = useState('select');
@@ -1762,6 +1766,14 @@ export default function Editor({onExit, user, token, apiUrl}){
     setCtrLoading(false);
   }
 
+  // Performance: Throttled rimlight to max 60fps
+  const applyRimLightThrottled = (x, y) => {
+    const now = Date.now();
+    if (now - lastRimLightRef.current < 16) return; // 60fps limit
+    lastRimLightRef.current = now;
+    applyRimLight(x, y);
+  };
+
   function applyRimLight(x, y){
     if(!selectedLayer || selectedLayer.type !== 'image') return;
 
@@ -2972,7 +2984,8 @@ export default function Editor({onExit, user, token, apiUrl}){
                     if(rimPaintingRef.current){
                       const x=(e.clientX-rect.left)/zoom;
                       const y=(e.clientY-rect.top)/zoom;
-                      applyRimLight(x,y);
+                      mouseRef.current={x,y};
+                      applyRimLightThrottled(x,y);
                     }
                     return;
                   }
