@@ -1063,9 +1063,9 @@ export default function BrushTool({
           height: Math.min(brushSize*1.4,58),
           borderRadius:'50%',
           background: brushEdge==='soft'
-            ? `radial-gradient(circle, rgba(108,99,255,${brushStrength/100}) 0%, rgba(108,99,255,${brushStrength/300}) 50%, rgba(108,99,255,0) 100%)`
-            : `rgba(108,99,255,${brushStrength/100})`,
-          border:'1.5px solid rgba(108,99,255,0.6)',
+            ? `radial-gradient(circle, rgba(249,115,22,${brushStrength/100}) 0%, rgba(249,115,22,${brushStrength/300}) 50%, rgba(249,115,22,0) 100%)`
+            : `rgba(249,115,22,${brushStrength/100})`,
+          border:'1.5px solid rgba(249,115,22,0.6)',
           transition:'all 0.1s',
           opacity: flow/100,
         }}/>

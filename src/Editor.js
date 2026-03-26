@@ -25,7 +25,7 @@ const FONT_WEIGHTS = [
 ];
 
 const GRADIENTS = [
-  ['#6C63FF','#1a1a2e'],['#FF416C','#FF4B2B'],['#0F6E56','#9FE1CB'],
+  ['#f97316','#1a1a2e'],['#FF416C','#FF4B2B'],['#0F6E56','#9FE1CB'],
   ['#185FA5','#00BFFF'],['#FFD700','#FF6347'],['#FF1493','#FF8C00'],
   ['#00FA9A','#006400'],['#9400D3','#4B0082'],['#2a2a2a','#888780'],
   ['#851c1c','#FAC775'],['#00C9FF','#92FE9D'],['#FC466B','#3F5EFB'],
@@ -84,7 +84,7 @@ const VIRAL_TEMPLATES = [
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
         strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
         shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:2, lineHeight:1.2, textAlign:'center', x:60, y:170 },
       { type:'shape', shape:'star', fillColor:'#FFD700',
         strokeColor:'#FF6B00', width:60, height:60, x:20, y:60 },
@@ -105,13 +105,13 @@ const VIRAL_TEMPLATES = [
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
         strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
         shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:6, lineHeight:1.2, textAlign:'left', x:70, y:110 },
       { type:'text', text:'ABOUT THIS', fontSize:32, fontFamily:'Arial',
         fontWeight:400, fontItalic:false, textColor:'#888888',
         strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
         shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'left', x:70, y:160 },
     ],
   },
@@ -135,7 +135,7 @@ const VIRAL_TEMPLATES = [
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
         strokeColor:'#000000', strokeWidth:3, shadowEnabled:true,
         shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'center', x:120, y:190 },
     ],
   },
@@ -159,7 +159,7 @@ const VIRAL_TEMPLATES = [
         fontFamily:'Arial Black', fontWeight:700, fontItalic:false,
         textColor:'#88ddff', strokeColor:'#000000', strokeWidth:1,
         shadowEnabled:true, shadowColor:'#000000', shadowBlur:10,
-        shadowX:2, shadowY:2, glowEnabled:false, glowColor:'#6C63FF',
+        shadowX:2, shadowY:2, glowEnabled:false, glowColor:'#f97316',
         arcEnabled:false, arcRadius:120, letterSpacing:1, lineHeight:1.2,
         textAlign:'center', x:60, y:180 },
     ],
@@ -176,7 +176,7 @@ const VIRAL_TEMPLATES = [
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
         strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
         shadowColor:'#000000', shadowBlur:20, shadowX:4, shadowY:4,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'center', x:100, y:60 },
       { type:'text', text:'WHAT?!', fontSize:88, fontFamily:'Impact',
         fontWeight:900, fontItalic:false, textColor:'#FFD700',
@@ -202,7 +202,7 @@ const VIRAL_TEMPLATES = [
         fontWeight:700, fontItalic:false, textColor:'#88bbdd',
         strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
         shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'center', x:120, y:60 },
       { type:'text', text:'$1,000,000', fontSize:76, fontFamily:'Arial Black',
         fontWeight:900, fontItalic:false, textColor:'#00C853',
@@ -214,7 +214,7 @@ const VIRAL_TEMPLATES = [
         fontWeight:700, fontItalic:false, textColor:'#ffffff',
         strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
         shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'center', x:130, y:180 },
     ],
   },
@@ -232,13 +232,13 @@ const VIRAL_TEMPLATES = [
         fontWeight:400, fontItalic:true, textColor:'#FFD700',
         strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
         shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:2, lineHeight:1.2, textAlign:'left', x:60, y:80 },
       { type:'text', text:'STORY', fontSize:80, fontFamily:'Impact',
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
         strokeColor:'#FF6B00', strokeWidth:2, shadowEnabled:true,
         shadowColor:'#000000', shadowBlur:15, shadowX:3, shadowY:3,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'left', x:60, y:130 },
     ],
   },
@@ -262,7 +262,7 @@ const VIRAL_TEMPLATES = [
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
         strokeColor:'#FF0000', strokeWidth:4, shadowEnabled:true,
         shadowColor:'#000000', shadowBlur:20, shadowX:4, shadowY:4,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:6, lineHeight:1.2, textAlign:'center', x:80, y:170 },
     ],
   },
@@ -280,7 +280,7 @@ const VIRAL_TEMPLATES = [
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
         strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
         shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:6, lineHeight:1.2, textAlign:'center', x:140, y:60 },
       { type:'text', text:'DO THIS', fontSize:80, fontFamily:'Impact',
         fontWeight:900, fontItalic:false, textColor:'#FFD700',
@@ -292,7 +292,7 @@ const VIRAL_TEMPLATES = [
         fontFamily:'Arial', fontWeight:400, fontItalic:true,
         textColor:'#aaaaff', strokeColor:'#000000', strokeWidth:0,
         shadowEnabled:false, shadowColor:'#000000', shadowBlur:0,
-        shadowX:0, shadowY:0, glowEnabled:false, glowColor:'#6C63FF',
+        shadowX:0, shadowY:0, glowEnabled:false, glowColor:'#f97316',
         arcEnabled:false, arcRadius:120, letterSpacing:1, lineHeight:1.2,
         textAlign:'center', x:160, y:240 },
     ],
@@ -310,13 +310,13 @@ const VIRAL_TEMPLATES = [
         fontWeight:300, fontItalic:false, textColor:'#1a1612',
         strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
         shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:16, lineHeight:1.2, textAlign:'left', x:60, y:60 },
       { type:'text', text:'& effective', fontSize:32, fontFamily:'Georgia',
         fontWeight:400, fontItalic:true, textColor:'#c45c2e',
         strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
         shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
-        glowEnabled:false, glowColor:'#6C63FF', arcEnabled:false, arcRadius:120,
+        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:2, lineHeight:1.2, textAlign:'left', x:60, y:145 },
     ],
   },
@@ -332,7 +332,7 @@ const STICKER_CATEGORIES = {
     { label:'Explosion', svg:'<svg viewBox="0 0 24 24" fill="#FF6347"><path d="M12 2l2 4 4-2-2 4 4 2-4 2 2 4-4-2-2 4-2-4-4 2 2-4-4-2 4-2-2-4 4 2 2-4z"/></svg>' },
   ],
   'Business': [
-    { label:'Rocket',  svg:'<svg viewBox="0 0 24 24" fill="#6C63FF"><path d="M12 2c0 0 4 4 4 10l-4 2-4-2c0-6 4-10 4-10z"/><path d="M8 16l-2 4 4-2M16 16l2 4-4-2" fill="#FF6347"/></svg>' },
+    { label:'Rocket',  svg:'<svg viewBox="0 0 24 24" fill="#f97316"><path d="M12 2c0 0 4 4 4 10l-4 2-4-2c0-6 4-10 4-10z"/><path d="M8 16l-2 4 4-2M16 16l2 4-4-2" fill="#FF6347"/></svg>' },
     { label:'Target',  svg:'<svg viewBox="0 0 24 24" fill="none" stroke="#FF4444" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="#FF4444"/></svg>' },
     { label:'Money',   svg:'<svg viewBox="0 0 24 24" fill="#00C853"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3" fill="#fff"/></svg>' },
     { label:'Trophy',  svg:'<svg viewBox="0 0 24 24"><path d="M8 21h8m-4-4v4M12 17c-4 0-7-3-7-7V4h14v6c0 4-3 7-7 7z" fill="#FFD700"/></svg>' },
@@ -405,7 +405,7 @@ function defaultEffects(){
   return{
     layerBlur:0,brightness:100,contrast:100,saturation:100,
     shadow:{enabled:false,x:4,y:4,blur:12,color:'#000000',opacity:60},
-    glow:{enabled:false,color:'#6C63FF',blur:20},
+    glow:{enabled:false,color:'#f97316',blur:20},
     outline:{enabled:false,color:'#ffffff',width:2},
     mask:{enabled:false,inverted:false,data:null},
   };
@@ -465,11 +465,11 @@ function renderShapeSVG(shape,fillColor,strokeColor,width,height){
 let idCounter=1;
 function newId(){return idCounter++;}
 function getLayerIcon(obj){if(obj.type==='background')return'▣';if(obj.type==='text')return'T';if(obj.type==='shape')return'○';if(obj.type==='svg')return'◆';if(obj.type==='image')return'▤';return'▪';}
-function getLayerColor(obj){if(obj.type==='background')return obj.bgColor||'#6C63FF';if(obj.type==='text')return obj.textColor||'#fff';if(obj.type==='shape')return obj.fillColor||'#FF4500';return'#555';}
+function getLayerColor(obj){if(obj.type==='background')return obj.bgColor||'#f97316';if(obj.type==='text')return obj.textColor||'#fff';if(obj.type==='shape')return obj.fillColor||'#FF4500';return'#555';}
 function getLayerName(obj){if(obj.type==='background')return'Background';if(obj.type==='text')return obj.text?.slice(0,18)||'Text';if(obj.type==='shape')return(obj.shape?.charAt(0).toUpperCase()+obj.shape?.slice(1))||'Shape';if(obj.type==='svg')return obj.label||'Element';if(obj.type==='image')return'Image';return'Layer';}
 
 function ArcText({obj}){
-  const ts=(()=>{const p=[];if(obj.shadowEnabled)p.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)p.push(`0 0 20px ${obj.glowColor||'#6C63FF'}`);return p.length?p.join(','):'none';})();
+  const ts=(()=>{const p=[];if(obj.shadowEnabled)p.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)p.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return p.length?p.join(','):'none';})();
   const base={fontFamily:obj.fontFamily,fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`};
   if(!obj.arcEnabled||!obj.text)return<span style={base}>{obj.text}</span>;
   const radius=obj.arcRadius||120,chars=obj.text.split(''),step=(obj.fontSize||48)/radius*1.1,start=-(chars.length-1)*step/2;
@@ -533,7 +533,7 @@ export default function Editor({onExit, user, token, apiUrl}){
   const [showStampTest,setShowStampTest]   = useState(false);
   const [snapToGrid,setSnapToGrid]         = useState(false);
   const [lockAspect,setLockAspect]         = useState(false);
-  const [recentColors,setRecentColors]     = useState(['#ffffff','#000000','#FF4500','#6C63FF','#FFD700','#00C853']);
+  const [recentColors,setRecentColors]     = useState(['#ffffff','#000000','#FF4500','#f97316','#FFD700','#00C853']);
   const [savedPalette,setSavedPalette]     = useState([]);
   const [clipboard,setClipboard]           = useState(null);
   const [showFileTab,setShowFileTab]       = useState(false);
@@ -555,7 +555,7 @@ export default function Editor({onExit, user, token, apiUrl}){
   const [shadowX,setShadowX]               = useState(2);
   const [shadowY,setShadowY]               = useState(2);
   const [glowEnabled,setGlowEnabled]       = useState(false);
-  const [glowColor,setGlowColor]           = useState('#6C63FF');
+  const [glowColor,setGlowColor]           = useState('#f97316');
   const [arcEnabled,setArcEnabled]         = useState(false);
   const [arcRadius,setArcRadius]           = useState(120);
   const [textColor,setTextColor]           = useState('#ffffff');
@@ -630,7 +630,7 @@ export default function Editor({onExit, user, token, apiUrl}){
     bg:darkMode?'#0f0f0f':'#f2f2f2',panel:darkMode?'#1a1a1a':'#ffffff',
     sidebar:darkMode?'#161616':'#fafafa',input:darkMode?'#242424':'#ffffff',
     border:darkMode?'#2a2a2a':'#e8e8e8',text:darkMode?'#e8e8e8':'#1a1a1a',
-    muted:darkMode?'#5a5a5a':'#9a9a9a',accent:'#6C63FF',
+    muted:darkMode?'#5a5a5a':'#9a9a9a',accent:'#f97316',
     danger:'#ef4444',success:'#22c55e',warning:'#f59e0b',
   };
 
@@ -806,7 +806,7 @@ export default function Editor({onExit, user, token, apiUrl}){
       tmp.width=p.preview.w;tmp.height=p.preview.h;
       const ctx=tmp.getContext('2d');
       if(layer.bgGradient){const g=ctx.createLinearGradient(0,0,0,tmp.height);g.addColorStop(0,layer.bgGradient[0]);g.addColorStop(1,layer.bgGradient[1]);ctx.fillStyle=g;}
-      else{ctx.fillStyle=layer.bgColor||'#6C63FF';}
+      else{ctx.fillStyle=layer.bgColor||'#f97316';}
       ctx.fillRect(0,0,tmp.width,tmp.height);
       return tmp.toDataURL('image/png');
     }
@@ -983,7 +983,7 @@ export default function Editor({onExit, user, token, apiUrl}){
               shadowX:      action.shadowX       || 3,
               shadowY:      action.shadowY       || 3,
               glowEnabled:  action.glowEnabled   || false,
-              glowColor:    action.glowColor     || '#6C63FF',
+              glowColor:    action.glowColor     || '#f97316',
               arcEnabled:   false,
               arcRadius:    120,
               letterSpacing:action.letterSpacing || 2,
@@ -1333,7 +1333,7 @@ export default function Editor({onExit, user, token, apiUrl}){
             g.addColorStop(0,obj.bgGradient[0]);
             g.addColorStop(1,obj.bgGradient[1]);
             ctx.fillStyle=g;
-          } else ctx.fillStyle=obj.bgColor||'#6C63FF';
+          } else ctx.fillStyle=obj.bgColor||'#f97316';
           ctx.fillRect(0,0,canvas.width,canvas.height);
         }
 
@@ -1430,7 +1430,7 @@ export default function Editor({onExit, user, token, apiUrl}){
     const variantA = layers.map(l=>{
       if(l.type==='background') return{
         ...l,id:newId(),
-        bgColor:bg?.bgGradient?null:shiftColor(bg?.bgColor||'#6C63FF',-20),
+        bgColor:bg?.bgGradient?null:shiftColor(bg?.bgColor||'#f97316',-20),
         bgGradient:bg?.bgGradient?[
           shiftColor(bg.bgGradient[0],-20),
           shiftColor(bg.bgGradient[1],-20),
@@ -1486,7 +1486,7 @@ export default function Editor({onExit, user, token, apiUrl}){
         ...l,id:newId(),
         textColor: l.textColor==='#000000'?'#ffffff':l.textColor,
         glowEnabled:true,
-        glowColor:l.textColor||'#6C63FF',
+        glowColor:l.textColor||'#f97316',
         shadowEnabled:true,
         shadowBlur:30,
       };
@@ -1548,7 +1548,7 @@ export default function Editor({onExit, user, token, apiUrl}){
             g.addColorStop(1,bgLayer.bgGradient[1]);
             tctx.fillStyle=g;
           } else {
-            tctx.fillStyle=bgLayer.bgColor||'#6C63FF';
+            tctx.fillStyle=bgLayer.bgColor||'#f97316';
           }
           tctx.fillRect(0,0,tmpCanvas.width,tmpCanvas.height);
         }
@@ -1763,69 +1763,56 @@ export default function Editor({onExit, user, token, apiUrl}){
   }
 
   function applyRimLight(x, y){
+    if(!selectedLayer || selectedLayer.type !== 'image') return;
+
     const hex     = rimLightColor.replace('#','');
     const lr      = parseInt(hex.slice(0,2),16);
     const lg      = parseInt(hex.slice(2,4),16);
     const lb      = parseInt(hex.slice(4,6),16);
-    const lightR  = Math.round((rimLightSize/100)*Math.max(p.preview.w,p.preview.h)*0.7);
+    const lightR  = Math.round((rimLightSize/100)*Math.max(selectedLayer.width,selectedLayer.height)*0.7);
     const intensity = rimLightIntensity/100;
     const softness  = rimLightSoftness/100;
 
-    // Find existing rim light layer or create one
-    const existingRim = layers.find(l=>l.isRimLight);
+    const baseImg = new Image();
+    baseImg.onload = () => {
+      const tmp = document.createElement('canvas');
+      tmp.width  = baseImg.naturalWidth;
+      tmp.height = baseImg.naturalHeight;
+      const ctx  = tmp.getContext('2d');
 
-    // Get existing canvas data if rim layer exists
-    let existingSrc = null;
-    if(existingRim) existingSrc = existingRim.src;
+      // Draw base image (selectedLayer.src)
+      ctx.drawImage(baseImg, 0, 0, tmp.width, tmp.height);
 
-    const tmp = document.createElement('canvas');
-    tmp.width  = p.preview.w;
-    tmp.height = p.preview.h;
-    const ctx  = tmp.getContext('2d');
-
-    // ✅ Draw existing rim light data first so strokes accumulate
-    if(existingSrc){
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img,0,0,tmp.width,tmp.height);
-        drawGradient();
-      };
-      img.src = existingSrc;
-    } else {
-      drawGradient();
-    }
-
-    function drawGradient(){
-      const gradient = ctx.createRadialGradient(x,y,0,x,y,lightR);
-      gradient.addColorStop(0,            `rgba(${lr},${lg},${lb},${intensity*0.6})`);
-      gradient.addColorStop(softness*0.5, `rgba(${lr},${lg},${lb},${intensity*0.3})`);
-      gradient.addColorStop(1,            `rgba(${lr},${lg},${lb},0)`);
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0,0,tmp.width,tmp.height);
-      const src = tmp.toDataURL('image/png');
-
-      if(existingRim){
-        // ✅ Update existing layer silently — no new layer, no history spam
-        updateLayerSilent(existingRim.id,{src});
-      } else {
-        // ✅ Create ONE rim light layer
-        const id=newId();
-        const layer={
-          id,type:'image',src,
-          x:0,y:0,width:p.preview.w,height:p.preview.h,
-          opacity:Math.round(rimLightIntensity),
-          hidden:false,locked:false,
-          blendMode:rimLightBlend||'screen',
-          flipH:false,flipV:false,
-          cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
-          imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
-          effects:defaultEffects(),
-          isRimLight:true,
+      // Draw paintSrc on top if it exists
+      if(selectedLayer.paintSrc){
+        const paintImg = new Image();
+        paintImg.onload = () => {
+          ctx.drawImage(paintImg, 0, 0, tmp.width, tmp.height);
+          applyGradient();
         };
-        setLayers(prev=>{const nl=[...prev,layer];pushHistory(nl);return nl;});
-        setSelectedId(id);
+        paintImg.src = selectedLayer.paintSrc;
+      } else {
+        applyGradient();
       }
-    }
+
+      function applyGradient(){
+        const scaleX = tmp.width / selectedLayer.width;
+        const scaleY = tmp.height / selectedLayer.height;
+        const scaledX = x * scaleX;
+        const scaledY = y * scaleY;
+        const scaledR = lightR * Math.max(scaleX, scaleY);
+
+        const gradient = ctx.createRadialGradient(scaledX, scaledY, 0, scaledX, scaledY, scaledR);
+        gradient.addColorStop(0,            `rgba(${lr},${lg},${lb},${intensity*0.6})`);
+        gradient.addColorStop(softness*0.5, `rgba(${lr},${lg},${lb},${intensity*0.3})`);
+        gradient.addColorStop(1,            `rgba(${lr},${lg},${lb},0)`);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, tmp.width, tmp.height);
+
+        updateLayer(selectedLayer.id, { src: tmp.toDataURL('image/png'), paintSrc: null });
+      }
+    };
+    baseImg.src = selectedLayer.src;
   }
 
   function addMaskToLayer(id){ // eslint-disable-line no-unused-vars
@@ -1894,7 +1881,7 @@ export default function Editor({onExit, user, token, apiUrl}){
     setTextInput(t.text);setFontSize(t.fontSize);setFontFamily(t.fontFamily);setFontWeight(t.fontWeight||700);
     setTextColor(t.textColor);setStrokeColor(t.strokeColor);setStrokeWidth(t.strokeWidth);setShadowEnabled(t.shadowEnabled);
     setLetterSpacing(t.letterSpacing||0);setLineHeight(t.lineHeight||1.2);setTextAlign(t.textAlign||'left');
-    addLayer({type:'text',text:t.text,fontSize:t.fontSize,fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,fontItalic:false,textColor:t.textColor,strokeColor:t.strokeColor,strokeWidth:t.strokeWidth,shadowEnabled:t.shadowEnabled,shadowColor:'#000000',shadowBlur:14,shadowX:2,shadowY:2,glowEnabled:false,glowColor:'#6C63FF',arcEnabled:false,arcRadius:120,letterSpacing:t.letterSpacing||0,lineHeight:t.lineHeight||1.2,textAlign:t.textAlign||'left'});
+    addLayer({type:'text',text:t.text,fontSize:t.fontSize,fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,fontItalic:false,textColor:t.textColor,strokeColor:t.strokeColor,strokeWidth:t.strokeWidth,shadowEnabled:t.shadowEnabled,shadowColor:'#000000',shadowBlur:14,shadowX:2,shadowY:2,glowEnabled:false,glowColor:'#f97316',arcEnabled:false,arcRadius:120,letterSpacing:t.letterSpacing||0,lineHeight:t.lineHeight||1.2,textAlign:t.textAlign||'left'});
   }
   function addText(){addRecentColor(textColor);addLayer({type:'text',text:textInput||'MY THUMBNAIL',fontSize,fontFamily,fontWeight,fontItalic,textColor,strokeColor,strokeWidth,shadowEnabled,shadowColor,shadowBlur,shadowX,shadowY,glowEnabled,glowColor,arcEnabled,arcRadius,letterSpacing,lineHeight,textAlign});}
   function addShape(type){addRecentColor(fillColor);addLayer({type:'shape',shape:type,fillColor,strokeColor,width:100,height:100});}
@@ -1905,9 +1892,9 @@ export default function Editor({onExit, user, token, apiUrl}){
       const url=URL.createObjectURL(file);
       const img=new Image();
       img.onload=()=>{
-        const cW=p.preview.w,cH=p.preview.h,ia=img.width/img.height,ca=cW/cH;
+        const cW=p.preview.w,cH=p.preview.h,ia=img.naturalWidth/img.naturalHeight,ca=cW/cH;
         let w,h;if(ia>ca){h=cH;w=h*ia;}else{w=cW;h=w/ia;}
-        addLayer({type:'image',src:url,width:Math.round(w),height:Math.round(h),x:Math.round((cW-w)/2),y:Math.round((cH-h)/2),cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0});
+        addLayer({type:'image',src:url,width:Math.round(w),height:Math.round(h),originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,x:Math.round((cW-w)/2),y:Math.round((cH-h)/2),cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0});
       };
       img.src=url;
     });
@@ -2024,7 +2011,7 @@ export default function Editor({onExit, user, token, apiUrl}){
           g.addColorStop(1,obj.bgGradient[1]);
           ctx.fillStyle=g;
         } else {
-          ctx.fillStyle=obj.bgColor||'#6C63FF';
+          ctx.fillStyle=obj.bgColor||'#f97316';
         }
         ctx.fillRect(0,0,canvas.width,canvas.height);
       }
@@ -2173,10 +2160,10 @@ export default function Editor({onExit, user, token, apiUrl}){
 
     const handleStyle={
       position:'absolute',background:'rgba(255,255,255,0.95)',
-      border:'2px solid #6C63FF',cursor:'pointer',zIndex:1001,
+      border:'2px solid #f97316',cursor:'pointer',zIndex:1001,
     };
     const lineStyle={
-      position:'absolute',background:'rgba(108,99,255,0.6)',
+      position:'absolute',background:'rgba(249,115,22,0.6)',
       pointerEvents:'none',
     };
 
@@ -2254,7 +2241,7 @@ export default function Editor({onExit, user, token, apiUrl}){
         <div style={{position:'absolute',
           top:obj.cropTop||0,left:obj.cropLeft||0,
           width:cropW,height:cropH,
-          border:'2px solid #6C63FF',boxSizing:'border-box'}}/>
+          border:'2px solid #f97316',boxSizing:'border-box'}}/>
         {/* Rule of thirds */}
         <div style={{...lineStyle,top:(obj.cropTop||0)+cropH/3,
           left:obj.cropLeft||0,width:cropW,height:1}}/>
@@ -2418,7 +2405,7 @@ export default function Editor({onExit, user, token, apiUrl}){
       </div>
     );
     if(obj.type==='text'){
-      const ts=(()=>{const pts=[];if(obj.shadowEnabled)pts.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)pts.push(`0 0 20px ${obj.glowColor||'#6C63FF'}`);return pts.length?pts.join(','):'none';})();
+      const ts=(()=>{const pts=[];if(obj.shadowEnabled)pts.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)pts.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return pts.length?pts.join(','):'none';})();
       return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,userSelect:'none',...selStyle,...blendStyle,...flipStyle,...effectsStyle}}><span style={{fontFamily:obj.fontFamily,fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`,lineHeight:obj.lineHeight||1.2,display:'block'}}>{obj.arcEnabled?<ArcText obj={obj}/>:obj.text}</span>{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
     }
     if(obj.type==='shape')return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,...selStyle,...blendStyle,...flipStyle,...effectsStyle}}>{renderShapeSVG(obj.shape,obj.fillColor,obj.strokeColor,obj.width,obj.height)}{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
@@ -2453,7 +2440,7 @@ export default function Editor({onExit, user, token, apiUrl}){
           {obj.mask?.enabled&&(
             <div style={{
               position:'absolute',bottom:-18,left:0,fontSize:9,
-              background:'rgba(108,99,255,0.9)',color:'#fff',
+              background:'rgba(249,115,22,0.9)',color:'#fff',
               padding:'2px 6px',borderRadius:3,pointerEvents:'none',
               whiteSpace:'nowrap',
             }}>⊡ Mask active</div>
@@ -3133,7 +3120,7 @@ export default function Editor({onExit, user, token, apiUrl}){
                         </>}
                       </div>
                     );
-                    if(obj.type==='text'){const ts=(()=>{const pts=[];if(obj.shadowEnabled)pts.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)pts.push(`0 0 20px ${obj.glowColor||'#6C63FF'}`);return pts.length?pts.join(','):'none';})();return<div key={`f-${obj.id}`} style={{position:'absolute',left:obj.x,top:obj.y,opacity:opacityVal,...blendStyle,...flipStyle,...effectsStyle,fontFamily:obj.fontFamily,fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`}}>{obj.text}</div>;}
+                    if(obj.type==='text'){const ts=(()=>{const pts=[];if(obj.shadowEnabled)pts.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)pts.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return pts.length?pts.join(','):'none';})();return<div key={`f-${obj.id}`} style={{position:'absolute',left:obj.x,top:obj.y,opacity:opacityVal,...blendStyle,...flipStyle,...effectsStyle,fontFamily:obj.fontFamily,fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`}}>{obj.text}</div>;}
                     if(obj.type==='image')return<div key={`f-${obj.id}`} style={{position:'absolute',left:obj.x,top:obj.y,opacity:opacityVal,...blendStyle,overflow:'hidden',width:obj.width-(obj.cropLeft||0)-(obj.cropRight||0),height:obj.height-(obj.cropTop||0)-(obj.cropBottom||0),...effectsStyle}}><img src={obj.src} alt="" style={{width:obj.width,height:obj.height,display:'block',transform:`scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`,filter:`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${obj.imgBlur||0}px)`,marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),imageRendering:'high-quality',WebkitFontSmoothing:'antialiased'}}/></div>;
                     if(obj.type==='shape')return<div key={`f-${obj.id}`} style={{position:'absolute',left:obj.x,top:obj.y,opacity:opacityVal,...blendStyle,...flipStyle,...effectsStyle}}>{renderShapeSVG(obj.shape,obj.fillColor,obj.strokeColor,obj.width,obj.height)}</div>;
                     if(obj.type==='svg')return<div key={`f-${obj.id}`} style={{position:'absolute',left:obj.x,top:obj.y,opacity:opacityVal,...blendStyle,...flipStyle,...effectsStyle,width:obj.width,height:obj.height}}><div style={{width:'100%',height:'100%'}} dangerouslySetInnerHTML={{__html:obj.svg}}/></div>;
@@ -3273,14 +3260,14 @@ export default function Editor({onExit, user, token, apiUrl}){
             <div style={{position:'absolute',bottom:16,right:16,zIndex:200}}>
               <div style={{background:'#111',borderRadius:10,padding:12,border:'1px solid rgba(255,255,255,0.1)',boxShadow:'0 8px 40px rgba(0,0,0,0.8)'}}>
                 <div style={{fontSize:9,color:'rgba(255,255,255,0.4)',marginBottom:8,fontWeight:'700',letterSpacing:'0.8px',textTransform:'uppercase',textAlign:'center'}}>📱 Mobile · 150×84px</div>
-                <div style={{position:'relative',width:150,height:84,borderRadius:4,overflow:'hidden',border:'1px solid rgba(255,255,255,0.12)',background:bg?.bgGradient?`linear-gradient(180deg,${bg.bgGradient[0]},${bg.bgGradient[1]})`:bg?.bgColor||'#6C63FF'}}>
+                <div style={{position:'relative',width:150,height:84,borderRadius:4,overflow:'hidden',border:'1px solid rgba(255,255,255,0.12)',background:bg?.bgGradient?`linear-gradient(180deg,${bg.bgGradient[0]},${bg.bgGradient[1]})`:bg?.bgColor||'#f97316'}}>
                   {layers.map(obj=><StampLayer key={obj.id} obj={obj} scale={150/p.preview.w}/>)}
                   <div style={{position:'absolute',bottom:3,right:3,padding:'1px 3px',borderRadius:2,background:'rgba(0,0,0,0.85)',fontSize:6,color:'#fff',fontFamily:'monospace',fontWeight:'700'}}>0:00</div>
                 </div>
                 <div style={{height:1,background:'rgba(255,255,255,0.06)',margin:'10px 0'}}/>
                 <div style={{background:'#0f0f0f',borderRadius:6,padding:'8px',display:'flex',gap:8,alignItems:'flex-start',width:260}}>
-                  <div style={{position:'relative',width:120,height:68,borderRadius:3,overflow:'hidden',flexShrink:0,background:bg?.bgColor||'#6C63FF'}}>
-                    <div style={{position:'absolute',inset:0,background:bg?.bgGradient?`linear-gradient(180deg,${bg.bgGradient[0]},${bg.bgGradient[1]})`:bg?.bgColor||'#6C63FF'}}/>
+                  <div style={{position:'relative',width:120,height:68,borderRadius:3,overflow:'hidden',flexShrink:0,background:bg?.bgColor||'#f97316'}}>
+                    <div style={{position:'absolute',inset:0,background:bg?.bgGradient?`linear-gradient(180deg,${bg.bgGradient[0]},${bg.bgGradient[1]})`:bg?.bgColor||'#f97316'}}/>
                     {layers.map(obj=><StampLayer key={obj.id} obj={obj} scale={120/p.preview.w}/>)}
                     <div style={{position:'absolute',bottom:2,right:2,padding:'1px 3px',borderRadius:2,background:'rgba(0,0,0,0.85)',fontSize:5,color:'#fff',fontFamily:'monospace',fontWeight:'700'}}>0:00</div>
                   </div>
@@ -3822,7 +3809,7 @@ export default function Editor({onExit, user, token, apiUrl}){
                     <div style={css.section}>
                       <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>updateLayerEffectNested(selectedId,'glow','enabled',!(selectedLayer.effects?.glow?.enabled))} style={css.iconBtn(selectedLayer.effects?.glow?.enabled)}>{selectedLayer.effects?.glow?.enabled?'On':'Off'}</button></div>
                       {selectedLayer.effects?.glow?.enabled&&<>
-                        <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:40}}>Color</span><input type="color" value={selectedLayer.effects.glow.color||'#6C63FF'} onChange={e=>updateLayerEffectNested(selectedId,'glow','color',e.target.value)} style={{...css.color,height:28}}/></div>
+                        <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:40}}>Color</span><input type="color" value={selectedLayer.effects.glow.color||'#f97316'} onChange={e=>updateLayerEffectNested(selectedId,'glow','color',e.target.value)} style={{...css.color,height:28}}/></div>
                         <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:40}}>Blur</span><Slider min={0} max={60} value={selectedLayer.effects.glow.blur||20} onChange={v=>updateLayerEffectNestedSilent(selectedId,'glow','blur',v)} onCommit={v=>updateLayerEffectNested(selectedId,'glow','blur',v)} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:24,textAlign:'right'}}>{selectedLayer.effects.glow.blur||20}</span></div>
                       </>}
                     </div>
@@ -3870,7 +3857,7 @@ export default function Editor({onExit, user, token, apiUrl}){
               <div>
                 <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Click the background on the canvas to select it.</div>
                 <span style={css.label}>Solid color</span>
-                <input type="color" value={bg?.bgColor||'#6C63FF'} onChange={e=>{updateBg({bgColor:e.target.value,bgGradient:null});addRecentColor(e.target.value);}} style={css.color}/>
+                <input type="color" value={bg?.bgColor||'#f97316'} onChange={e=>{updateBg({bgColor:e.target.value,bgGradient:null});addRecentColor(e.target.value);}} style={css.color}/>
                 <span style={css.label}>RGB mixer</span>
                 <div style={css.section}>
                   {[['R',rgbR,setRgbR,'#f87171'],['G',rgbG,setRgbG,'#4ade80'],['B',rgbB,setRgbB,'#60a5fa']].map(([l,v,sv,c])=>(<div key={l} style={{...css.row,marginBottom:6}}><span style={{fontSize:11,color:c,fontWeight:'700',width:12}}>{l}</span><Slider min={0} max={255} value={v} onChange={sv} style={{flex:1}}/><span style={{fontSize:10,color:T.text,width:26,textAlign:'right'}}>{Math.round(v)}</span></div>))}
