@@ -993,6 +993,7 @@ export default function App() {
   const [page,  setPage]  = useState('home');
   const [user,  setUser]  = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('sf_token') || null);
+  const [brandKit, setBrandKit] = useState(null);
 
   useEffect(() => {
     if (!token) return;
@@ -1000,6 +1001,11 @@ export default function App() {
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(u => setUser(u))
       .catch(() => { setToken(null); localStorage.removeItem('sf_token'); });
+    
+    fetch(`${API_BASE}/brand-kit`, { headers: { authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setBrandKit(data.brandKit))
+      .catch(() => console.log('No brand kit yet'));
   }, [token]);
 
   async function handleCheckout(){
@@ -1030,7 +1036,7 @@ export default function App() {
     setPage('home');
   }
 
-  if (page === 'editor') return <Editor onExit={() => setPage('home')} user={user} token={token} />;
+  if (page === 'editor') return <Editor onExit={() => setPage('home')} user={user} token={token} brandKit={brandKit} />;
 
   return (
     <div>

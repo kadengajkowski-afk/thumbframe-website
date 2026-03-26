@@ -291,6 +291,80 @@ app.get('/auth/me', authMiddleware,(req,res)=>{
   res.json({email:user.email,name:user.name,plan:user.plan||'free'});
 });
 
+// ── Brand Kit ──────────────────────────────────────────────────────────────
+app.get('/brand-kit', authMiddleware, async(req,res)=>{
+  try{
+    const {data,error}=await supabase
+      .from('brand_kits')
+      .select('*')
+      .eq('user_id',req.user.email)
+      .single();
+    
+    if(error&&error.code!=='PGRST116') throw error;
+    res.json({brandKit:data||null});
+  }catch(err){
+    console.error('Brand kit fetch error:',err);
+    res.status(500).json({error:'Failed to fetch brand kit'});
+  }
+});
+
+app.post('/brand-kit', authMiddleware, async(req,res)=>{
+  try{
+    const {primaryColor,secondaryColor,faceImageUrl}=req.body;
+    
+    if(!primaryColor||!secondaryColor){
+      return res.status(400).json({error:'Primary and secondary colors required'});
+    }
+
+    const {data,error}=await supabase
+      .from('brand_kits')
+      .upsert({
+        user_id:req.user.email,
+        primary_color:primaryColor,
+        secondary_color:secondaryColor,
+        face_image_url:faceImageUrl||null,
+        updated_at:new Date().toISOString(),
+      },{onConflict:'user_id'})
+      .select()
+      .single();
+
+    if(error) throw error;
+    res.json({brandKit:data});
+  }catch(err){
+    console.error('Brand kit save error:',err);
+    res.status(500).json({error:'Failed to save brand kit'});
+  }
+});
+
+app.post('/brand-kit/upload-face', authMiddleware, async(req,res)=>{
+  try{
+    const {imageData}=req.body;
+    if(!imageData) return res.status(400).json({error:'No image data'});
+
+    const base64Data=imageData.replace(/^data:image\/\w+;base64,/,'');
+    const buffer=Buffer.from(base64Data,'base64');
+    const fileName=`${req.user.email}-${Date.now()}.png`;
+
+    const {data,error}=await supabase.storage
+      .from('brand_assets')
+      .upload(fileName,buffer,{
+        contentType:'image/png',
+        upsert:true,
+      });
+
+    if(error) throw error;
+
+    const {data:{publicUrl}}=supabase.storage
+      .from('brand_assets')
+      .getPublicUrl(fileName);
+
+    res.json({url:publicUrl});
+  }catch(err){
+    console.error('Face upload error:',err);
+    res.status(500).json({error:'Upload failed'});
+  }
+});
+
 // ── Password reset ─────────────────────────────────────────────────────────────
 const resetTokens = {};
 

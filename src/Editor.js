@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, memo } from 'react';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
+import BrandKitSetupModal from './BrandKitModal';
 
 const API_BASE = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -508,7 +509,7 @@ function Slider({min,max,step,value,onChange,onCommit,style}){
   );
 }
 
-export default function Editor({onExit, user, token}){
+export default function Editor({onExit, user, token, brandKit}){
   const canvasRef       = useRef(null);
   const brushOverlayRef = useRef(null);
   const cmdInputRef     = useRef(null);
@@ -522,6 +523,13 @@ export default function Editor({onExit, user, token}){
   const layersRef       = useRef([]);
   const mountedRef = useRef(true);
   useEffect(()=>{ mountedRef.current=true; return()=>{ mountedRef.current=false; }; },[]);
+
+  const [brandKitColors, setBrandKitColors] = useState({
+    primary: brandKit?.primary_color || '#6C63FF',
+    secondary: brandKit?.secondary_color || '#FFD700',
+  });
+  const [brandKitFace, setBrandKitFace] = useState(brandKit?.face_image_url || null);
+  const [showBrandKitSetup, setShowBrandKitSetup] = useState(false);
 
   const [platform,setPlatform]             = useState('youtube');
   const [activeTool,setActiveTool]         = useState('select');
@@ -2815,6 +2823,7 @@ export default function Editor({onExit, user, token}){
             <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{display:'none'}}/>
           </label>
           <button onClick={()=>setShowDownload(true)} style={{padding:'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)'}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓ Download</button>
+          <button onClick={()=>setShowBrandKitSetup(true)} style={{padding:'7px 14px',borderRadius:7,border:`1px solid ${T.border}`,background:T.panel,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'600',display:'flex',alignItems:'center',gap:5}}>🎨 Brand Kit</button>
           <button onClick={()=>fetch(`${API_BASE}/checkout`,{
   method:'POST',
   headers:{'Content-Type':'application/json'},
@@ -4577,6 +4586,17 @@ export default function Editor({onExit, user, token}){
 
         </div>
       </div>
+
+      {showBrandKitSetup && <BrandKitSetupModal 
+        T={T}
+        token={token}
+        brandKitColors={brandKitColors}
+        setBrandKitColors={setBrandKitColors}
+        brandKitFace={brandKitFace}
+        setBrandKitFace={setBrandKitFace}
+        setShowBrandKitSetup={setShowBrandKitSetup}
+        setCmdLog={setCmdLog}
+      />}
     </div>
   );
 }
