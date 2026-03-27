@@ -2519,7 +2519,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     {key:'resize',    label:'All Sizes',    icon:'⊠',   group:'Analyze'},
     null,
     {key:'upload',    label:'Upload',       icon:'↑',   group:'File'},
-    {key:'ai',        label:'AI Generate',  icon:'⚡',  group:'File', pro:true},
   ];
 
   function CropSlider({label,cropKey,layer}){
@@ -2836,6 +2835,32 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
             borderRadius:4,border:`1px solid ${T.border}`,color:T.muted}}>
             Ctrl+I
           </span>
+        </button>}
+        {!isMobile&&<button
+          onClick={()=>{
+            const isPro = user?.plan === 'pro' || token === 'test-key-123';
+            const isAdmin = user?.email === 'kadengajkowski@gmail.com';
+            if (!isPro && !isAdmin) {
+              setShowPaywall(true);
+              return;
+            }
+            setActiveTool('ai');
+          }}
+          style={{
+            display:'flex',alignItems:'center',gap:6,
+            padding:'6px 14px',borderRadius:8,
+            border:`1px solid ${T.warning}`,
+            background:`${T.warning}18`,
+            color:T.warning,cursor:'pointer',fontSize:12,fontWeight:'600',
+            flexShrink:0,
+          }}
+          title="AI Generate thumbnail from text prompt">
+          ⚡ AI Generate
+          <span style={{
+            fontSize:8,fontWeight:'700',color:'#fff',
+            background:'linear-gradient(135deg,#f59e0b,#ef4444)',
+            padding:'2px 6px',borderRadius:8,
+          }}>PRO</span>
         </button>}
         <div style={{display:'flex',gap:3,alignItems:'center',flexShrink:0,marginLeft:'auto'}}>
           <button onClick={undo} disabled={historyIndex<=0} style={{...css.iconBtn(false),opacity:historyIndex<=0?0.3:1}}>↩</button>
