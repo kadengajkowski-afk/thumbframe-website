@@ -100,27 +100,46 @@ app.get('/proxy-image', async(req,res)=>{
   }
 });
 
-app.post('/ai-generate', async(req,res)=>{
-  try{
-    const { prompt } = req.body;
-    if(!prompt) return res.status(400).json({error:'No prompt'});
-    console.log('DALL-E 3 generating:',prompt);
-    const response = await openai.images.generate({
-      model:   'dall-e-3',
-      prompt:  `YouTube thumbnail background: ${prompt}. Dramatic lighting, high contrast, vivid colors, cinematic, no text, no watermarks, no logos.`,
-      n:       1,
-      size:    '1792x1024',
-      quality: 'standard',
-      style:   'vivid',
-    });
-    const imageUrl = response.data[0].url;
-    const imgRes   = await fetch(imageUrl);
-    const buffer   = Buffer.from(await imgRes.arrayBuffer());
-    console.log('DALL-E success, size:',buffer.length);
-    res.json({ image:`data:image/png;base64,${buffer.toString('base64')}` });
-  }catch(err){
-    console.error('DALL-E error:',err.message);
-    res.status(500).json({error:`Generation failed: ${err.message}`});
+app.post('/ai-generate', async (req, res) => {
+  try {
+    const { prompt, user_id } = req.body;
+    if (!prompt) return res.status(400).json({ error: 'No prompt' });
+
+    let finalPrompt = prompt;
+    let faceUrl = null;
+
+    if (user_id) {
+      const { data: kit } = await supabase
+        .from('brand_kits')
+        .select('*')
+        .eq('user_id', user_id)
+        .single();
+
+      if (kit) {
+        finalPrompt = `${prompt}. Cinematic YouTube thumbnail, 8k resolution. Deeply integrate these hex colors into the background lighting, shadows, and accents: Primary ${kit.primary_color}, Secondary ${kit.secondary_color}.`;
+        faceUrl = kit.face_image_url;
+      }
+    }
+
+    console.log('Generating via Replicate...', { finalPrompt, faceUrl });
+
+    const model = faceUrl 
+      ? "zsxkib/flux-pulid:8aaaaa6f6717d23d91cf331b2ec91079d8ef92c73eb2eb45a05b331002af2aeb" 
+      : "black-forest-labs/flux-schnell";
+
+    const input = { prompt: finalPrompt, aspect_ratio: "16:9", output_format: "png" };
+    if (faceUrl) input.main_face_image = faceUrl; 
+
+    const output = await replicate.run(model, { input });
+    const imageUrl = Array.isArray(output) ? output[0] : output;
+
+    const imgRes = await fetch(imageUrl);
+    const buffer = Buffer.from(await imgRes.arrayBuffer());
+    
+    res.json({ image: `data:image/png;base64,${buffer.toString('base64')}` });
+  } catch (err) {
+    console.error('Replicate error:', err);
+    res.status(500).json({ error: `Generation failed: ${err.message}` });
   }
 });
 

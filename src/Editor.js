@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, memo } from 'react';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
+import BrandKitSetupModal from './BrandKitModal';
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
@@ -504,7 +505,7 @@ function Slider({min,max,step,value,onChange,onCommit,style}){
   );
 }
 
-export default function Editor({onExit, user, token, apiUrl}){
+export default function Editor({onExit, user, token, apiUrl, brandKit}){
   const canvasRef       = useRef(null);
   const brushOverlayRef = useRef(null);
   const cmdInputRef     = useRef(null);
@@ -619,6 +620,10 @@ export default function Editor({onExit, user, token, apiUrl}){
   const [maskPaintColor,setMaskPaintColor] = useState('#000000'); // eslint-disable-line no-unused-vars
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
+
+  const [showBrandKitSetup,setShowBrandKitSetup]       = useState(false);
+  const [brandKitColors,setBrandKitColors]             = useState({primary:'#c45c2e',secondary:'#f97316'});
+  const [brandKitFace,setBrandKitFace]                 = useState(null);
 
   function setLayers(val){
     if(typeof val==='function'){
@@ -2491,6 +2496,7 @@ export default function Editor({onExit, user, token, apiUrl}){
     null,
     {key:'background',label:'Background',   icon:'▨',   group:'Design'},
     {key:'effects',   label:'Effects',      icon:'✦',   group:'Design'},
+    {key:'brandkit',  label:'Brand Kit',    icon:'◐',   group:'Design'},
     null,
     {key:'templates', label:'Templates',    icon:'⊞',   group:'Analyze'},
     {key:'ctr',       label:'CTR Score',    icon:'◈',   group:'Analyze'},
@@ -3887,6 +3893,47 @@ export default function Editor({onExit, user, token, apiUrl}){
               </div>
             )}
 
+            {activeTool==='brandkit'&&(
+              <div>
+                <div style={{...css.section,marginTop:0}}>
+                  <div style={{fontSize:13,fontWeight:'700',color:T.text,marginBottom:6}}>◐ Your Brand Kit</div>
+                  <div style={{fontSize:11,color:T.muted,lineHeight:1.6,marginBottom:12}}>
+                    Save your brand colors and face image. They'll be auto-injected into AI-generated thumbnails.
+                  </div>
+                  {user ? (
+                    <button onClick={()=>setShowBrandKitSetup(true)} style={{...css.addBtn,marginTop:0}}>
+                      {brandKit ? '✓ Edit Brand Kit' : '+ Setup Brand Kit'}
+                    </button>
+                  ) : (
+                    <div style={{fontSize:11,color:T.warning,padding:12,background:'rgba(245,158,11,0.1)',borderRadius:6,border:`1px solid rgba(245,158,11,0.3)`,textAlign:'center'}}>
+                      Log in to save your Brand Kit
+                    </div>
+                  )}
+                </div>
+                {brandKit && (
+                  <div style={{...css.section}}>
+                    <div style={{fontSize:11,fontWeight:'600',color:T.text,marginBottom:8}}>Current Brand Kit</div>
+                    <div style={{display:'flex',gap:8,marginBottom:8}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:9,color:T.muted,marginBottom:3}}>Primary</div>
+                        <div style={{width:'100%',height:32,borderRadius:6,background:brandKit.primary_color,border:`1px solid ${T.border}`}}/>
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:9,color:T.muted,marginBottom:3}}>Secondary</div>
+                        <div style={{width:'100%',height:32,borderRadius:6,background:brandKit.secondary_color,border:`1px solid ${T.border}`}}/>
+                      </div>
+                    </div>
+                    {brandKit.face_image_url && (
+                      <div>
+                        <div style={{fontSize:9,color:T.muted,marginBottom:3}}>Face Image</div>
+                        <img src={brandKit.face_image_url} alt="Face" style={{width:80,height:80,borderRadius:8,objectFit:'cover',border:`1px solid ${T.border}`}}/>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTool==='adjust'&&(
               <div>
                 <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Canvas-wide adjustments affect everything.</div>
@@ -4682,7 +4729,7 @@ export default function Editor({onExit, user, token, apiUrl}){
             const res=await fetch('https://thumbframe-api-production.up.railway.app/ai-generate',{
               method:'POST',
               headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({prompt}),
+              body:JSON.stringify({prompt, user_id: user?.email}),
             });
             const data=await res.json();
             if(data.error){
@@ -4804,6 +4851,18 @@ export default function Editor({onExit, user, token, apiUrl}){
             </button>
           ))}
         </div>
+      )}
+      {showBrandKitSetup && (
+        <BrandKitSetupModal
+          T={T}
+          token={token}
+          brandKitColors={brandKitColors}
+          setBrandKitColors={setBrandKitColors}
+          brandKitFace={brandKitFace}
+          setBrandKitFace={setBrandKitFace}
+          setShowBrandKitSetup={setShowBrandKitSetup}
+          setCmdLog={setCmdLog}
+        />
       )}
     </div>
   );
