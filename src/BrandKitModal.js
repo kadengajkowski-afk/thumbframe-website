@@ -1,10 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import supabase from './supabaseClient';
 
-const API_BASE = process.env.NODE_ENV === 'development'
-  ? 'http://localhost:5000'
-  : 'https://thumbframe-api-production.up.railway.app';
-
 export default function BrandKitSetupModal({ 
   T, 
   token, 
@@ -31,6 +27,7 @@ export default function BrandKitSetupModal({
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [primary, secondary, brandKitFace]);
 
   async function handleFaceUpload(e) {
@@ -44,7 +41,7 @@ export default function BrandKitSetupModal({
       const fileName = `${user?.email || 'user'}_${Date.now()}.${fileExt}`;
       const filePath = `faces/${fileName}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('brand-assets')
         .upload(filePath, file, {
           cacheControl: '3600',
