@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import supabase from './supabaseClient';
 
 const API_BASE = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -7,6 +8,7 @@ const API_BASE = process.env.NODE_ENV === 'development'
 export default function BrandKitSetupModal({ 
   T, 
   token, 
+  user,
   brandKitColors, 
   setBrandKitColors, 
   brandKitFace, 
@@ -17,48 +19,113 @@ export default function BrandKitSetupModal({
   const [primary, setPrimary] = useState(brandKitColors.primary);
   const [secondary, setSecondary] = useState(brandKitColors.secondary);
   const [uploading, setUploading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
+  const autoSaveTimerRef = useRef(null);
+
+  // Auto-save with 2-second debounce
+  useEffect(() => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveBrandKit();
+    }, 2000);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [primary, secondary, brandKitFace]);
 
   async function handleFaceUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
     setUploading(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/brand-kit/upload-face`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'authorization': `Bearer ${token}` },
-          body: JSON.stringify({ imageData: reader.result }),
+    try {
+      // Upload directly to Supabase storage 'brand-assets' bucket
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user?.email || 'user'}_${Date.now()}.${fileExt}`;
+      const filePath = `faces/${fileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('brand-assets')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
         });
-        const data = await res.json();
-        setBrandKitFace(data.url);
-        setUploading(false);
-      } catch (e) {
-        alert('Upload failed');
-        setUploading(false);
-      }
-    };
-    reader.readAsDataURL(file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('brand-assets')
+        .getPublicUrl(filePath);
+
+      setBrandKitFace(publicUrl);
+      setUploading(false);
+    } catch (e) {
+      console.error('Upload failed:', e);
+      alert('Upload failed: ' + e.message);
+      setUploading(false);
+    }
+  }
+
+  async function autoSaveBrandKit() {
+    if (!user?.email) return;
+    
+    setSaveStatus('saving');
+    try {
+      const { error } = await supabase
+        .from('brand_kits')
+        .upsert({
+          user_email: user.email,
+          primary_color: primary,
+          secondary_color: secondary,
+          face_image_url: brandKitFace,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_email'
+        });
+
+      if (error) throw error;
+
+      setBrandKitColors({ primary, secondary });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (e) {
+      console.error('Auto-save failed:', e);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    }
   }
 
   async function saveBrandKit() {
+    if (!user?.email) {
+      alert('Please log in to save your Brand Kit');
+      return;
+    }
+
+    setSaveStatus('saving');
     try {
-      const res = await fetch(`${API_BASE}/brand-kit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'authorization': `Bearer ${token}` },
-        body: JSON.stringify({
-          primaryColor: primary,
-          secondaryColor: secondary,
-          faceImageUrl: brandKitFace,
-        }),
-      });
-      await res.json();
+      const { error } = await supabase
+        .from('brand_kits')
+        .upsert({
+          user_email: user.email,
+          primary_color: primary,
+          secondary_color: secondary,
+          face_image_url: brandKitFace,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_email'
+        });
+
+      if (error) throw error;
+
       setBrandKitColors({ primary, secondary });
+      setSaveStatus('saved');
       setShowBrandKitSetup(false);
       setCmdLog('✓ Brand Kit saved');
     } catch (e) {
-      alert('Save failed');
+      console.error('Save failed:', e);
+      setSaveStatus('error');
+      alert('Save failed: ' + e.message);
     }
   }
 
@@ -95,9 +162,17 @@ export default function BrandKitSetupModal({
           )}
         </div>
 
+        {/* Save Status Indicator */}
+        <div style={{marginBottom:12,textAlign:'center',fontSize:11,color:saveStatus==='saved'?T.success:saveStatus==='saving'?T.warning:saveStatus==='error'?T.danger:T.muted,fontWeight:'600'}}>
+          {saveStatus === 'saving' && '💾 Saving...'}
+          {saveStatus === 'saved' && '✓ Changes Saved'}
+          {saveStatus === 'error' && '⚠ Save Failed'}
+          {saveStatus === 'idle' && 'Auto-save enabled'}
+        </div>
+
         <div style={{display:'flex',gap:8}}>
           <button onClick={()=>setShowBrandKitSetup(false)} style={{flex:1,padding:10,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.text,cursor:'pointer',fontSize:13,fontWeight:'600'}}>Cancel</button>
-          <button onClick={saveBrandKit} style={{flex:1,padding:10,borderRadius:7,border:'none',background:T.accent,color:'#fff',cursor:'pointer',fontSize:13,fontWeight:'700'}}>Save Brand Kit</button>
+          <button onClick={saveBrandKit} disabled={saveStatus==='saving'} style={{flex:1,padding:10,borderRadius:7,border:'none',background:T.accent,color:'#fff',cursor:saveStatus==='saving'?'not-allowed':'pointer',fontSize:13,fontWeight:'700',opacity:saveStatus==='saving'?0.6:1}}>Save Changes</button>
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, memo } from 'react';
+import supabase from './supabaseClient';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 import BrandKitSetupModal from './BrandKitModal';
@@ -638,6 +639,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
 
   const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
 
+  // Auto-save state
+  const [autoSaveStatus,setAutoSaveStatus]             = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
+  const [showToast,setShowToast]                       = useState(false);
+  const [toastMessage,setToastMessage]                 = useState('');
+  const [toastType,setToastType]                       = useState('info'); // 'info' | 'success' | 'error'
+  const autoSaveTimerRef                               = useRef(null);
+
   function setLayers(val){
     if(typeof val==='function'){
       setLayersRaw(prev=>{const next=val(prev);layersRef.current=next;return next;});
@@ -690,8 +698,21 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     historyIndexRef.current=0;
     setHistory([[b]]);
     setHistoryIndex(0);
+    // Hydrate canvas from Supabase on mount
+    hydrateFromSupabase();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
+
+  // Auto-save with 3-second debounce on layers changes
+  useEffect(() => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveToSupabase();
+    }, 3000);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [layers, platform, brightness, contrast, saturation, hue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ✅ Window drag handlers — ONLY fire when draggingRef or resizingRef is set
   // This means sidebar sliders are completely unaffected
@@ -1616,6 +1637,97 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
   function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setSelectedId(null);setShowFileTab(false);}
   function deleteDesign(id){const updated=savedDesigns.filter(d=>d.id!==id);setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));}
+
+  // Auto-save to Supabase
+  async function autoSaveToSupabase() {
+    if (!user?.email) return;
+    
+    setAutoSaveStatus('saving');
+    try {
+      const canvasState = {
+        platform,
+        layers: JSON.parse(JSON.stringify(layers)),
+        brightness,
+        contrast,
+        saturation,
+        hue,
+        zoom,
+        panOffset
+      };
+
+      const { error } = await supabase
+        .from('thumbnails')
+        .upsert({
+          user_email: user.email,
+          canvas_data: canvasState,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_email'
+        });
+
+      if (error) throw error;
+
+      setAutoSaveStatus('saved');
+      setTimeout(() => setAutoSaveStatus('idle'), 2000);
+    } catch (e) {
+      console.error('Auto-save failed:', e);
+      setAutoSaveStatus('error');
+      showToastNotification('Auto-save failed. Your work is still saved locally.', 'error');
+      setTimeout(() => setAutoSaveStatus('idle'), 3000);
+    }
+  }
+
+  // Hydrate canvas from Supabase on mount
+  async function hydrateFromSupabase() {
+    if (!user?.email) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('thumbnails')
+        .select('canvas_data')
+        .eq('user_email', user.email)
+        .single();
+
+      if (error) {
+        if (error.code !== 'PGRST116') { // Not a "no rows" error
+          console.error('Hydration error:', error);
+        }
+        return;
+      }
+
+      if (data?.canvas_data) {
+        const state = data.canvas_data;
+        if (state.layers && state.layers.length > 0) {
+          setLayers(state.layers);
+          if (state.platform) setPlatform(state.platform);
+          if (state.brightness) setBrightness(state.brightness);
+          if (state.contrast) setContrast(state.contrast);
+          if (state.saturation) setSaturation(state.saturation);
+          if (state.hue) setHue(state.hue);
+          if (state.zoom) setZoom(state.zoom);
+          if (state.panOffset) setPanOffset(state.panOffset);
+          
+          // Update history
+          historyRef.current = [state.layers];
+          historyIndexRef.current = 0;
+          setHistory([state.layers]);
+          setHistoryIndex(0);
+          
+          showToastNotification('Canvas restored from auto-save', 'success');
+        }
+      }
+    } catch (e) {
+      console.error('Hydration failed:', e);
+    }
+  }
+
+  // Toast notification helper
+  function showToastNotification(message, type = 'info') {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 4000);
+  }
 
   async function analyzeCTR(){
     setCtrLoading(true);
@@ -2894,6 +3006,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
               display:'flex',alignItems:'center',gap:5}}>
             💾 Save
           </button>
+          {/* Auto-save status indicator */}
+          {user?.email && (
+            <div style={{fontSize:10,color:autoSaveStatus==='saved'?T.success:autoSaveStatus==='saving'?T.warning:autoSaveStatus==='error'?T.danger:T.muted,fontWeight:'600',display:'flex',alignItems:'center',gap:4,padding:'0 8px'}}>
+              {autoSaveStatus === 'saving' && '💾 Saving...'}
+              {autoSaveStatus === 'saved' && '✓ Saved'}
+              {autoSaveStatus === 'error' && '⚠ Error'}
+              {autoSaveStatus === 'idle' && '☁ Auto-save'}
+            </div>
+          )}
           <button onClick={()=>selectedId&&duplicateLayer(selectedId)}
             disabled={!selectedId||selectedLayer?.type==='background'}
             style={{padding:'6px 14px',borderRadius:7,
@@ -4990,6 +5111,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
         <BrandKitSetupModal
           T={T}
           token={token}
+          user={user}
           brandKitColors={brandKitColors}
           setBrandKitColors={setBrandKitColors}
           brandKitFace={brandKitFace}
@@ -5074,6 +5196,21 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
               Got it!
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {showToast && (
+        <div style={{position:'fixed',bottom:24,right:24,zIndex:1003,minWidth:300,maxWidth:400,background:T.panel,borderRadius:12,border:`2px solid ${toastType==='success'?T.success:toastType==='error'?T.danger:T.accent}`,padding:'16px 20px',boxShadow:'0 8px 32px rgba(0,0,0,0.4)',display:'flex',alignItems:'center',gap:12,animation:'slideIn 0.3s ease-out'}}>
+          <div style={{fontSize:24}}>
+            {toastType === 'success' && '✓'}
+            {toastType === 'error' && '⚠'}
+            {toastType === 'info' && 'ℹ'}
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,color:T.text,fontWeight:'600',lineHeight:1.4}}>{toastMessage}</div>
+          </div>
+          <button onClick={()=>setShowToast(false)} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'transparent',color:T.muted,cursor:'pointer',fontSize:16,fontWeight:'700'}}>×</button>
         </div>
       )}
     </div>
