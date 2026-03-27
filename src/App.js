@@ -1,13 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import supabase from './supabaseClient';
 import Editor from './Editor';
 import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
-
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL,
-  process.env.REACT_APP_SUPABASE_ANON_KEY
-);
 
 console.log("--- SYSTEM BOOT V2.1 ---");
 
@@ -1054,18 +1049,44 @@ export default function App() {
 
   useEffect(() => {
     // Get initial Supabase session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
-        setUser({ email: session.user.email, name: session.user.user_metadata?.name });
+        // Fetch profile data to get plan, is_pro, is_admin
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('plan, is_pro, is_admin')
+          .eq('email', session.user.email)
+          .single();
+        
+        setUser({ 
+          email: session.user.email, 
+          name: session.user.user_metadata?.name,
+          plan: profile?.plan || profile?.is_pro ? 'pro' : 'free',
+          is_pro: profile?.is_pro,
+          is_admin: profile?.is_admin
+        });
       }
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       if (session?.user) {
-        setUser({ email: session.user.email, name: session.user.user_metadata?.name });
+        // Fetch profile data to get plan, is_pro, is_admin
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('plan, is_pro, is_admin')
+          .eq('email', session.user.email)
+          .single();
+        
+        setUser({ 
+          email: session.user.email, 
+          name: session.user.user_metadata?.name,
+          plan: profile?.plan || profile?.is_pro ? 'pro' : 'free',
+          is_pro: profile?.is_pro,
+          is_admin: profile?.is_admin
+        });
       } else {
         setUser(null);
       }

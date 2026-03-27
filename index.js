@@ -109,18 +109,22 @@ app.post('/ai-generate', async (req, res) => {
     if (user_id) {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('is_pro')
+        .select('is_pro, is_admin')
         .eq('email', user_id)
         .single();
 
-      if (profileError || !profile || !profile.is_pro) {
-        console.log(`[AI-GENERATE] ❌ Access denied for ${user_id} - not Pro tier`);
+      // ✅ Admin skeleton key - owner bypasses Pro check
+      const isAdmin = profile?.is_admin === true;
+      const isPro = profile?.is_pro === true;
+
+      if (profileError || !profile || (!isPro && !isAdmin)) {
+        console.log(`[AI-GENERATE] ❌ Access denied for ${user_id} - isPro: ${isPro}, isAdmin: ${isAdmin}`);
         return res.status(403).json({ 
           error: 'Upgrade to Pro', 
           message: 'AI generation is a Pro feature. Upgrade to unlock unlimited AI-powered thumbnails.' 
         });
       }
-      console.log(`[AI-GENERATE] ✅ Pro user verified: ${user_id}`);
+      console.log(`[AI-GENERATE] ✅ Access granted for ${user_id} - isPro: ${isPro}, isAdmin: ${isAdmin}`);
     }
 
     let finalPrompt = prompt;
