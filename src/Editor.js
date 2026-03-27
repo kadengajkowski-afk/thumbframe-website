@@ -703,7 +703,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
       try {
         await hydrateFromSupabase();
       } catch (e) {
-        console.warn('[hydrate/useEffect] load failed, using blank canvas:', e);
+        console.error('[hydrate/useEffect] load failed, using blank canvas:', e);
         const freshBg = makeBg(p);
         setLayers([freshBg]);
         historyRef.current = [[freshBg]];
@@ -1713,7 +1713,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
         .maybeSingle();
 
       if (error) {
-        console.warn('[hydrate] fetch failed, using blank canvas:', error?.message, error?.code, error?.details, error?.hint);
+        console.error('[hydrate] fetch failed, using blank canvas:', error?.message, error?.code, error?.details, error?.hint);
         initializeFreshCanvas();
         return;
       }
@@ -1748,11 +1748,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           initializeFreshCanvas();
         }
       } catch (hydrateErr) {
-        console.warn('[hydrate] corrupt save payload, using blank canvas:', hydrateErr);
+        console.error('[hydrate] corrupt save payload, using blank canvas:', hydrateErr);
         initializeFreshCanvas();
       }
     } catch (e) {
-      console.warn('[hydrate] failed, using blank canvas:', e);
+      console.error('[hydrate] failed, using blank canvas:', e);
       initializeFreshCanvas();
     }
   }

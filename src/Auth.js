@@ -15,6 +15,11 @@ export async function signIn({ email, password, setLoading, onSuccess }) {
       onSuccess(data);
     }
 
+    // Direct hard redirect to skip waiting for any editor hydration fetches.
+    if (!error && data?.session) {
+      window.location.href = '/editor';
+    }
+
     return { data, error };
   } catch (error) {
     console.error('Auth sign-in exception:', error);

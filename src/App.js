@@ -3,6 +3,7 @@ import supabase from './supabaseClient';
 import Editor from './Editor';
 import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
+import { signIn } from './Auth';
 
 console.log("--- SYSTEM BOOT V2.1 ---");
 
@@ -858,10 +859,7 @@ function AuthPage({ mode, setPage, onAuth }) {
           setPage('editor');
         }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { data, error } = await signIn({ email, password, setLoading });
         if (error) {
           if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('too many')) {
             setError('Too many attempts. Please wait a moment and try again.');
@@ -879,9 +877,7 @@ function AuthPage({ mode, setPage, onAuth }) {
           }
         } else if (data?.user) {
           console.log('Login successful, result:', data);
-          setTimeout(() => {
-            setPage('editor');
-          }, 0);
+          setPage('editor');
         } else {
           setError('Login failed. Please try again.');
         }
