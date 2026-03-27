@@ -310,13 +310,13 @@ function Home({ setPage }) {
               }}>
                 Sign up to get started →
               </button>
-              <button onClick={() => setPage('signup')} style={{
+              <button onClick={() => setPage('editor')} style={{
                 padding: '12px 24px', borderRadius: 8,
                 border: `1px solid ${C.border2}`,
                 background: 'transparent', color: C.text2,
                 cursor: 'pointer', fontSize: 15, fontWeight: '500',
               }}>
-                Quick sign up
+                Open Editor
               </button>
             </div>
             <p style={{ fontSize: 12, color: C.muted }}>No watermark. No credit card.</p>
@@ -518,8 +518,8 @@ function Home({ setPage }) {
             Built specifically for YouTube creators. Every feature was added because a real creator asked for it.
             No bloat. No learning curve. No subscription wall for basic features.
           </div>
-          <button onClick={() => setPage('signup')} style={{ padding: '11px 24px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: '700' }}>
-            Sign up to get started →
+          <button onClick={() => setPage('editor')} style={{ padding: '11px 24px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: '700' }}>
+            Open Editor →
           </button>
         </div>
       </div>
@@ -630,14 +630,14 @@ function Home({ setPage }) {
             Ready to make thumbnails that actually get clicked?
           </h2>
           <p style={{ fontSize: 15, color: C.muted, marginBottom: 32, maxWidth: 400, margin: '0 auto 32px' }}>
-            Sign up free and start creating thumbnails that get clicks.
+            Open the editor and start creating thumbnails that get clicks.
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={() => setPage('signup')} style={{ padding: '13px 28px', borderRadius: 8, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 15, fontWeight: '700', boxShadow: `0 4px 20px ${C.accent}44` }}>
-              Sign up to get started →
+            <button onClick={() => setPage('editor')} style={{ padding: '13px 28px', borderRadius: 8, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 15, fontWeight: '700', boxShadow: `0 4px 20px ${C.accent}44` }}>
+              Open Editor →
             </button>
-            <button onClick={() => setPage('signup')} style={{ padding: '13px 28px', borderRadius: 8, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text2, cursor: 'pointer', fontSize: 15, fontWeight: '500' }}>
-              Quick sign up
+            <button onClick={() => setPage('editor')} style={{ padding: '13px 28px', borderRadius: 8, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text2, cursor: 'pointer', fontSize: 15, fontWeight: '500' }}>
+              Open Editor
             </button>
           </div>
           <p style={{ fontSize: 12, color: C.muted, marginTop: 14 }}>No credit card. No watermark. No catch.</p>

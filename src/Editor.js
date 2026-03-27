@@ -2008,8 +2008,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   async function exportCanvas(format='png', transparent=false){
     // ✅ Free = 640×360 preview res, Pro = full resolution
     const isPro   = user?.plan==='pro' || token==='test-key-123';
-    const exportW = isPro ? p.width  : Math.round(p.width  * 0.5);
-    const exportH = isPro ? p.height : Math.round(p.height * 0.5);
+    const isAdmin = user?.email === 'kadengajkowski@gmail.com';
+    const hasProAccess = isPro || isAdmin;
+    const exportW = hasProAccess ? p.width  : Math.round(p.width  * 0.5);
+    const exportH = hasProAccess ? p.height : Math.round(p.height * 0.5);
     const canvas  = document.createElement('canvas');
     canvas.width  = exportW;
     canvas.height = exportH;
@@ -2630,7 +2632,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           }}>
             <div style={{padding:'12px 20px',borderBottom:`1px solid ${T.border}`,
               display:'flex',alignItems:'center',gap:10}}>
-              <span style={{fontSize:18}}>⚡</span>
+              <span style={{fontSize:14}}>⚡</span>
               <div style={{flex:1}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
                   <input
@@ -2730,7 +2732,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
             <div style={{fontSize:12,color:T.muted,marginBottom:8}}>
               {p.label} · {p.width}×{p.height}px
             </div>
-            {!(user?.plan==='pro')&&(
+            {!((user?.plan==='pro' || token==='test-key-123') || user?.email === 'kadengajkowski@gmail.com')&&(
               <div style={{...css.section,marginTop:0,marginBottom:12,
                 border:`1px solid ${T.warning}`,fontSize:11,lineHeight:1.6}}>
                 <div style={{color:T.warning,fontWeight:'700',marginBottom:4}}>
