@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import supabase from './supabaseClient';
 
 export default function BrandKitSetupModal({
@@ -16,19 +16,6 @@ export default function BrandKitSetupModal({
 	const [secondary, setSecondary] = useState(brandKitColors.secondary);
 	const [uploading, setUploading] = useState(false);
 	const [saveStatus, setSaveStatus] = useState('idle');
-	const autoSaveTimerRef = useRef(null);
-
-	// Auto-save with 2-second debounce
-	useEffect(() => {
-		if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-		autoSaveTimerRef.current = setTimeout(() => {
-			autoSaveBrandKit();
-		}, 2000);
-		return () => {
-			if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [primary, secondary, brandKitFace]);
 
 	async function handleFaceUpload(e) {
 		const file = e.target.files[0];
@@ -62,35 +49,6 @@ export default function BrandKitSetupModal({
 		}
 	}
 
-	async function autoSaveBrandKit() {
-		if (!user?.email) return;
-
-		setSaveStatus('saving');
-		try {
-			const { error } = await supabase
-				.from('brand_kits')
-				.upsert({
-					user_email: user.email,
-					primary_color: primary,
-					secondary_color: secondary,
-					face_image_url: brandKitFace,
-					updated_at: new Date().toISOString()
-				}, {
-					onConflict: 'user_email'
-				});
-
-			if (error) throw error;
-
-			setBrandKitColors({ primary, secondary });
-			setSaveStatus('saved');
-			setTimeout(() => setSaveStatus('idle'), 2000);
-		} catch (err) {
-			console.error('Auto-save failed:', err);
-			setSaveStatus('error');
-			setTimeout(() => setSaveStatus('idle'), 3000);
-		}
-	}
-
 	async function saveBrandKit() {
 		if (!user?.email) {
 			alert('Please log in to save your Brand Kit');
@@ -115,12 +73,12 @@ export default function BrandKitSetupModal({
 
 			setBrandKitColors({ primary, secondary });
 			setSaveStatus('saved');
-			setShowBrandKitSetup(false);
 			setCmdLog('✓ Brand Kit saved');
+			setTimeout(() => setSaveStatus('idle'), 2000);
 		} catch (err) {
 			console.error('Save failed:', err);
 			setSaveStatus('error');
-			alert('Save failed: ' + err.message);
+			setTimeout(() => setSaveStatus('idle'), 3000);
 		}
 	}
 
@@ -161,12 +119,12 @@ export default function BrandKitSetupModal({
 					{saveStatus === 'saving' && '💾 Saving...'}
 					{saveStatus === 'saved' && '✓ Changes Saved'}
 					{saveStatus === 'error' && '⚠ Save Failed'}
-					{saveStatus === 'idle' && 'Auto-save enabled'}
+					{saveStatus === 'idle' && 'Click Save Brand Kit to store changes'}
 				</div>
 
 				<div style={{display:'flex',gap:8}}>
 					<button onClick={()=>setShowBrandKitSetup(false)} style={{flex:1,padding:10,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.text,cursor:'pointer',fontSize:13,fontWeight:'600'}}>Cancel</button>
-					<button onClick={saveBrandKit} disabled={saveStatus==='saving'} style={{flex:1,padding:10,borderRadius:7,border:'none',background:T.accent,color:'#fff',cursor:saveStatus==='saving'?'not-allowed':'pointer',fontSize:13,fontWeight:'700',opacity:saveStatus==='saving'?0.6:1}}>Save Changes</button>
+					<button onClick={saveBrandKit} disabled={saveStatus==='saving'} style={{flex:1,padding:10,borderRadius:7,border:'none',background:T.accent,color:'#fff',cursor:saveStatus==='saving'?'not-allowed':'pointer',fontSize:13,fontWeight:'700',opacity:saveStatus==='saving'?0.6:1}}>Save Brand Kit</button>
 				</div>
 			</div>
 		</div>

@@ -637,6 +637,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
 
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
+  const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.email==='kadengajkowski@gmail.com'));
 
   const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
   const [showToast,setShowToast]                       = useState(false);
@@ -684,6 +685,37 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     window.addEventListener('resize',check);
     return()=>window.removeEventListener('resize',check);
   },[]);
+
+  useEffect(()=>{
+    let cancelled=false;
+
+    async function loadProStatus(){
+      const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
+      if(token==='test-key-123' || isAdmin){
+        if(!cancelled)setIsProUser(true);
+        return;
+      }
+      if(!user?.email){
+        if(!cancelled)setIsProUser(false);
+        return;
+      }
+
+      try{
+        const { data, error } = await supabase.from('profiles').select('is_pro').eq('email', user.email).single();
+        if(cancelled)return;
+        if(error){
+          setIsProUser(false);
+          return;
+        }
+        setIsProUser(!!data?.is_pro);
+      }catch(e){
+        if(!cancelled)setIsProUser(false);
+      }
+    }
+
+    loadProStatus();
+    return()=>{cancelled=true;};
+  },[user?.email,user?.is_admin,token]);
 
   useEffect(()=>{zoomRef.current=zoom;},[zoom]);
 
@@ -1620,8 +1652,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   }
 
   const saveCanvasToSupabase = useCallback(async ()=>{
-    if(!user?.id)return;
-    const canvasJson={
+    if(!user?.email)return;
+    const canvasState={
       platform,
       layers:JSON.parse(JSON.stringify(layers)),
       brightness,
@@ -1630,25 +1662,23 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
       hue,
     };
     try{
-      const { error } = await supabase
-        .from('thumbnails')
-        .upsert({ user_id:user.id, json_data:canvasJson },{ onConflict:'user_id' });
+      const { error } = await supabase.from('thumbnails').upsert({ user_email: user.email, json_data: canvasState }, { onConflict: 'user_email' });
       if(error)throw error;
     }catch(e){
       console.error('Failed to save');
     }
-  },[user?.id,platform,layers,brightness,contrast,saturation,hue]);
+  },[user?.email,platform,layers,brightness,contrast,saturation,hue]);
 
   useEffect(()=>{
-    if(!user?.id)return undefined;
+    if(!user?.email)return undefined;
     if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
     autoSaveTimeoutRef.current=setTimeout(()=>{
       saveCanvasToSupabase();
-    },3000);
+    },2000);
     return()=>{
       if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
     };
-  },[saveCanvasToSupabase,user?.id]);
+  },[saveCanvasToSupabase,user?.email]);
 
   function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
   function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setSelectedId(null);setShowFileTab(false);}
@@ -2784,7 +2814,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
             <div style={{fontSize:12,color:T.muted,marginBottom:8}}>
               {p.label} · {p.width}×{p.height}px
             </div>
-            {!((user?.plan==='pro' || token==='test-key-123') || user?.email === 'kadengajkowski@gmail.com')&&(
+            {!isProUser&&(
               <div style={{...css.section,marginTop:0,marginBottom:12,
                 border:`1px solid ${T.warning}`,fontSize:11,lineHeight:1.6}}>
                 <div style={{color:T.warning,fontWeight:'700',marginBottom:4}}>
@@ -2794,7 +2824,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
                   Upgrade to Pro for full {p.width}×{p.height}px export.
                 </div>
                 <button onClick={()=>{
-                  const isPro = user?.plan === 'pro' || user?.is_pro || token === 'test-key-123';
+                  const isPro = isProUser;
                   const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
                   if (isPro || isAdmin) {
                     setShowAlreadyPro(true);
@@ -2897,7 +2927,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
         </button>}
         {!isMobile&&<button
           onClick={()=>{
-            const isPro = user?.plan === 'pro' || user?.is_pro || token === 'test-key-123';
+            const isPro = isProUser;
             const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
             if (!isPro && !isAdmin) {
               setShowPaywall(true);
@@ -2981,7 +3011,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           </label>
           <button onClick={()=>setShowDownload(true)} style={{padding:isMobile?'5px 10px':'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)',flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓{isMobile?'':' Download'}</button>
           <button onClick={()=>{
-            const isPro = user?.plan === 'pro' || user?.is_pro || token === 'test-key-123';
+            const isPro = isProUser;
             const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
             if (isPro || isAdmin) {
               setShowAlreadyPro(true);
@@ -4883,7 +4913,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
       <button
         id="ai-generate-btn"
         onClick={async()=>{
-          const isPro = user?.plan === 'pro' || token === 'test-key-123';
+          const isPro = isProUser;
           const isAdmin = user?.email === 'kadengajkowski@gmail.com';
           console.log(`Gating Check - isPro: ${isPro}, isAdmin: ${isAdmin}`);
           
@@ -5075,7 +5105,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
 
             <button 
               onClick={()=>{
-                const isPro = user?.plan === 'pro' || user?.is_pro || token === 'test-key-123';
+                const isPro = isProUser;
                 const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
                 if (isPro || isAdmin) {
                   setShowPaywall(false);
