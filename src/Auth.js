@@ -1,32 +1,20 @@
 import supabase from './supabaseClient';
 
-export async function signIn({ email, password, setLoading }) {
+export async function signIn({ email, password, setLoading, onSuccess }) {
   setLoading(true);
   try {
-    console.log('[AUTH] Attempting login with:', email);
-    
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    
-    console.log('[AUTH] Response received:', { hasData: !!data, hasError: !!error, hasSession: !!data?.session });
-    console.log('[AUTH] Full data:', data);
-    console.log('[AUTH] Full error:', error);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    // Return success - let App.js handle navigation
     if (!error && data?.session) {
-      console.log('[AUTH] ✓ Session valid - returning success to App.js');
-      return { data, error, success: true };
+      onSuccess();
+      return { data, error: null };
     }
 
-    console.log('[AUTH] ✗ No session or error present - returning to caller');
-    return { data, error, success: false };
-  } catch (error) {
-    console.error('[AUTH] Exception during sign-in:', error);
-    return { data: null, error };
+    return { data, error };
+  } catch (err) {
+    console.error('[AUTH] Sign-in error:', err);
+    return { data: null, error: err };
   } finally {
-    console.log('[AUTH] Finally block - setting loading to false');
     setLoading(false);
   }
 }

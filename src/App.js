@@ -859,17 +859,14 @@ function AuthPage({ mode, setPage, onAuth }) {
           setPage('editor');
         }
       } else {
-        const { data, error, success } = await signIn({ email, password, setLoading });
-        console.log('[APP] signIn returned:', { hasData: !!data, hasError: !!error, success });
-        
-        if (success && data?.user) {
-          console.log('[APP] Login successful - navigating to editor');
-          setPage('editor');
-          return;
-        }
-        
+        const { data, error } = await signIn({
+          email,
+          password,
+          setLoading,
+          onSuccess: () => setPage('editor'),
+        });
+
         if (error) {
-          console.log('[APP] Login error:', error.message);
           if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('too many')) {
             setError('Too many attempts. Please wait a moment and try again.');
           } else if (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed')) {
@@ -884,9 +881,6 @@ function AuthPage({ mode, setPage, onAuth }) {
           } else {
             setError(error.message || 'Login failed. Please try again.');
           }
-        } else {
-          console.log('[APP] Login failed - no success flag and no error');
-          setError('Login failed. Please try again.');
         }
       }
     } catch (err) {
@@ -1149,10 +1143,6 @@ export default function App() {
   }
 
   if (page === 'editor') {
-    if (!session) {
-      setPage('signup');
-      return null;
-    }
     return <Editor onExit={() => setPage('home')} user={user} token={token} brandKit={brandKit} />;
   }
 
