@@ -634,6 +634,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   const [brandKitFace,setBrandKitFace]                 = useState(null);
 
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
+  const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
 
   const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
 
@@ -2754,11 +2755,19 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
                 <div style={{color:T.muted}}>
                   Upgrade to Pro for full {p.width}×{p.height}px export.
                 </div>
-                <button onClick={()=>fetch('https://thumbframe-api-production.up.railway.app/checkout',{
-  method:'POST',
-  headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({plan:'pro'}),
-}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;})}
+                <button onClick={()=>{
+                  const isPro = user?.plan === 'pro' || user?.is_pro || token === 'test-key-123';
+                  const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
+                  if (isPro || isAdmin) {
+                    setShowAlreadyPro(true);
+                    return;
+                  }
+                  fetch('https://thumbframe-api-production.up.railway.app/checkout',{
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({email: user?.email, plan:'pro'}),
+                  }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
+                }}
                   style={{...css.addBtn,marginTop:8,background:T.warning,
                     color:'#000',fontSize:11,fontWeight:'700'}}>
                   Upgrade to Pro — $15/mo
@@ -2850,8 +2859,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
         </button>}
         {!isMobile&&<button
           onClick={()=>{
-            const isPro = user?.plan === 'pro' || token === 'test-key-123';
-            const isAdmin = user?.email === 'kadengajkowski@gmail.com';
+            const isPro = user?.plan === 'pro' || user?.is_pro || token === 'test-key-123';
+            const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
             if (!isPro && !isAdmin) {
               setShowPaywall(true);
               return;
@@ -2933,11 +2942,19 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
             <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{display:'none'}}/>
           </label>
           <button onClick={()=>setShowDownload(true)} style={{padding:isMobile?'5px 10px':'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)',flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓{isMobile?'':' Download'}</button>
-          <button onClick={()=>fetch('https://thumbframe-api-production.up.railway.app/checkout',{
-  method:'POST',
-  headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({plan:'pro'}),
-}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;})}
+          <button onClick={()=>{
+            const isPro = user?.plan === 'pro' || user?.is_pro || token === 'test-key-123';
+            const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
+            if (isPro || isAdmin) {
+              setShowAlreadyPro(true);
+              return;
+            }
+            fetch('https://thumbframe-api-production.up.railway.app/checkout',{
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({email: user?.email, plan:'pro'}),
+            }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
+          }}
             style={{
               padding:'7px 14px',borderRadius:7,
               border:'none',
@@ -5012,6 +5029,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
 
             <button 
               onClick={()=>{
+                const isPro = user?.plan === 'pro' || user?.is_pro || token === 'test-key-123';
+                const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
+                if (isPro || isAdmin) {
+                  setShowPaywall(false);
+                  setShowAlreadyPro(true);
+                  return;
+                }
                 fetch('https://thumbframe-api-production.up.railway.app/checkout',{
                   method:'POST',
                   headers:{'Content-Type':'application/json'},
@@ -5032,6 +5056,22 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
             
             <button onClick={()=>setShowPaywall(false)} style={{width:'100%',padding:'10px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:13,cursor:'pointer'}}>
               Maybe later
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Already Upgraded Notification */}
+      {showAlreadyPro && (
+        <div style={{position:'fixed',inset:0,zIndex:1002,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'}} onClick={e=>{if(e.target===e.currentTarget)setShowAlreadyPro(false);}}>
+          <div style={{width:380,background:T.panel,borderRadius:16,border:`2px solid ${T.success}`,padding:'32px',boxShadow:'0 24px 80px rgba(0,0,0,0.8)',textAlign:'center'}}>
+            <div style={{fontSize:48,marginBottom:16}}>✓</div>
+            <div style={{fontSize:22,fontWeight:'800',marginBottom:8,color:T.text}}>You've already upgraded to Pro!</div>
+            <div style={{fontSize:14,color:T.muted,lineHeight:1.7,marginBottom:24}}>
+              Enjoy your premium features including unlimited AI generation, HD exports, and priority support.
+            </div>
+            <button onClick={()=>setShowAlreadyPro(false)} style={{width:'100%',padding:'12px 24px',borderRadius:10,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:14,fontWeight:'700',boxShadow:'0 4px 16px rgba(34,197,94,0.3)'}}>
+              Got it!
             </button>
           </div>
         </div>
