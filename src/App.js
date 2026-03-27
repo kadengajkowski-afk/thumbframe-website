@@ -818,7 +818,6 @@ function AuthPage({ mode, setPage, onAuth }) {
   const [name,     setName]     = useState('');
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
-  const [showWelcome, setShowWelcome] = useState(false);
   const isSignup = mode === 'signup';
 
   async function submit() {
