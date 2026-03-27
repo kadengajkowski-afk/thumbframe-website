@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import Editor from './Editor';
+import ForgotPassword from './ForgotPassword';
+import UpdatePassword from './UpdatePassword';
+
+const supabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL,
+  process.env.REACT_APP_SUPABASE_ANON_KEY
+);
 
 console.log("--- SYSTEM BOOT V2.1 ---");
 
@@ -278,7 +286,7 @@ function Home({ setPage }) {
           <div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 12px', borderRadius: 20, border: `1px solid ${C.border2}`, background: C.bg2, marginBottom: 24, fontSize: 12, color: C.muted, fontWeight: '500' }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: C.success }} />
-              Free to use — no account needed
+              Free to use — sign up to get started
             </div>
 
             <h1 style={{ fontSize: 'clamp(32px, 4vw, 52px)', fontWeight: '800', lineHeight: 1.1, letterSpacing: '-1.5px', marginBottom: 20, color: C.text }}>
@@ -289,29 +297,29 @@ function Home({ setPage }) {
             <p style={{ fontSize: 16, color: C.muted, lineHeight: 1.7, marginBottom: 12, maxWidth: 440 }}>
               We built ThumbFrame because we were tired of paying for features that should be free, using tools that weren't made for YouTube, and spending hours on thumbnails that didn't perform.
             </p>
-            <p style={{ fontSize: 15, color: C.text2, lineHeight: 1.7, marginBottom: 32, maxWidth: 440, fontStyle: 'italic' }}>
+            <p style={{ fontSize: 15, color: C.text2, lineHeight: 1.7, marginBottom: 32, fontStyle: 'italic' }}>
               "This is the thumbnail editor we wish existed when we started."
             </p>
 
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-              <button onClick={() => setPage('editor')} style={{
+              <button onClick={() => setPage('signup')} style={{
                 padding: '12px 24px', borderRadius: 8, border: 'none',
                 background: C.accent, color: '#fff', cursor: 'pointer',
                 fontSize: 15, fontWeight: '700',
                 boxShadow: `0 4px 20px ${C.accent}44`,
               }}>
-                Start for free →
+                Sign up to get started →
               </button>
-              <button onClick={() => setPage('howitworks')} style={{
+              <button onClick={() => setPage('signup')} style={{
                 padding: '12px 24px', borderRadius: 8,
                 border: `1px solid ${C.border2}`,
                 background: 'transparent', color: C.text2,
                 cursor: 'pointer', fontSize: 15, fontWeight: '500',
               }}>
-                How it works
+                Quick sign up
               </button>
             </div>
-            <p style={{ fontSize: 12, color: C.muted }}>No sign up. No watermark. No credit card.</p>
+            <p style={{ fontSize: 12, color: C.muted }}>No watermark. No credit card.</p>
           </div>
 
           {/* Editor preview */}
@@ -510,8 +518,8 @@ function Home({ setPage }) {
             Built specifically for YouTube creators. Every feature was added because a real creator asked for it.
             No bloat. No learning curve. No subscription wall for basic features.
           </div>
-          <button onClick={() => setPage('editor')} style={{ padding: '11px 24px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: '700' }}>
-            Try it free — no account needed →
+          <button onClick={() => setPage('signup')} style={{ padding: '11px 24px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: '700' }}>
+            Sign up to get started →
           </button>
         </div>
       </div>
@@ -522,7 +530,7 @@ function Home({ setPage }) {
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 32, flexWrap: 'wrap', gap: 12 }}>
             <div>
               <div style={{ fontSize: 12, fontWeight: '700', color: C.accent, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 8 }}>Examples</div>
-              <h2 style={{ fontSize: 'clamp(24px, 3vw, 36px)', fontWeight: '800', letterSpacing: '-0.5px', color: C.text }}>Made with ThumbFrame</h2>
+              <h2 style={{ fontSize: 'clamp(24px, 3vw, 36px)', fontWeight: '800', letterSpacing: '-0.5px', marginBottom: 10, color: C.text }}>Made with ThumbFrame</h2>
             </div>
             <button onClick={() => setPage('examples')} style={{ padding: '8px 18px', borderRadius: 6, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text2, cursor: 'pointer', fontSize: 13, fontWeight: '500' }}>
               See all examples →
@@ -564,7 +572,7 @@ function Home({ setPage }) {
             { icon:'✂️', title:'Background remover',       desc:'Remove backgrounds with one click. AI-powered, handles hair and complex edges. Free on ThumbFrame.', free:true },
             { icon:'🎨', title:'Non-destructive editing',  desc:'Every effect, filter, and adjustment is editable forever. Change your mind on anything, any time.', free:true },
             { icon:'⚡', title:'AI thumbnail generation', desc:'Describe your thumbnail in plain English. Get a starting point in seconds. Tweak from there.', free:false },
-            { icon:'↓',  title:'Full res export',          desc:'Download at 1280×720 — the exact spec YouTube recommends. PNG, JPG, or PNG with transparent background.', free:true },
+            { icon:'↓',  title:'Full res export',          desc:'Download at 1280×720 — the exact spec YouTube recommends for thumbnails.', free:true },
           ].map((f, i) => (
             <div key={i} style={{ padding: 22, borderRadius: 10, border: `1px solid ${C.border}`, background: C.panel, position: 'relative' }}>
               {!f.free && <div style={{ position: 'absolute', top: 14, right: 14, fontSize: 9, background: C.accent, color: '#fff', padding: '2px 7px', borderRadius: 10, fontWeight: '700', letterSpacing: '0.5px' }}>PRO</div>}
@@ -576,7 +584,7 @@ function Home({ setPage }) {
         </div>
       </div>
 
-      {/* ── vs Canva ── */}
+      {/* ── vs Canva ────────────────────────────────────────────────────────────── */}
       <div style={{ background: C.bg2, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '70px 24px' }}>
           <div style={{ textAlign: 'center', marginBottom: 40 }}>
@@ -622,14 +630,14 @@ function Home({ setPage }) {
             Ready to make thumbnails that actually get clicked?
           </h2>
           <p style={{ fontSize: 15, color: C.muted, marginBottom: 32, maxWidth: 400, margin: '0 auto 32px' }}>
-            Free forever. No account required. Open the editor and start in seconds.
+            Sign up free and start creating thumbnails that get clicks.
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={() => setPage('editor')} style={{ padding: '13px 28px', borderRadius: 8, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 15, fontWeight: '700', boxShadow: `0 4px 20px ${C.accent}44` }}>
-              Open ThumbFrame free →
+            <button onClick={() => setPage('signup')} style={{ padding: '13px 28px', borderRadius: 8, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 15, fontWeight: '700', boxShadow: `0 4px 20px ${C.accent}44` }}>
+              Sign up to get started →
             </button>
             <button onClick={() => setPage('signup')} style={{ padding: '13px 28px', borderRadius: 8, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text2, cursor: 'pointer', fontSize: 15, fontWeight: '500' }}>
-              Create account
+              Quick sign up
             </button>
           </div>
           <p style={{ fontSize: 12, color: C.muted, marginTop: 14 }}>No credit card. No watermark. No catch.</p>
@@ -779,7 +787,7 @@ function Examples({ setPage }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
           {all.map((ex, i) => (
             <div key={i} onClick={() => setPage('editor')}
-              style={{ borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.border}`, cursor: 'pointer', background: C.panel, transition: 'transform 0.2s, box-shadow 0.2s' }}
+              style={{ borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.border}`, cursor: 'pointer', background: C.panel, transition: 'transform 0.2s' }}
               onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.12)'; }}
               onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}>
               <div style={{ aspectRatio: '16/9', background: ex.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
@@ -814,18 +822,49 @@ function AuthPage({ mode, setPage, onAuth }) {
 
   async function submit() {
     if (!email || !password) { setError('Email and password required'); return; }
+    if (isSignup && password.length < 8) { setError('Password must be at least 8 characters'); return; }
     setLoading(true); setError('');
+    
     try {
-      const r = await fetch(`${API_BASE}/auth/${isSignup ? 'signup' : 'login'}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name }),
-      });
-      const data = await r.json();
-      if (!r.ok) { setError(data.error || 'Something went wrong'); return; }
-      onAuth(data);
-    } catch(e) {
-      setError('Connection failed — is the API running?');
+      if (isSignup) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name: name || email.split('@')[0],
+            }
+          }
+        });
+        if (error) {
+          setError(error.message);
+        } else if (data.user) {
+          setPage('editor');
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) {
+          if (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed')) {
+            setError(
+              <div>
+                {error.message}
+                <div style={{ marginTop: 8 }}>
+                  Don't have an account? <span onClick={() => setPage('signup')} style={{ color: C.accent, cursor: 'pointer', fontWeight: '600', textDecoration: 'underline' }}>Quick sign up</span>
+                </div>
+              </div>
+            );
+          } else {
+            setError(error.message);
+          }
+        } else if (data.user) {
+          setPage('editor');
+        }
+      }
+    } catch (err) {
+      setError('Connection failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -899,7 +938,7 @@ function AuthPage({ mode, setPage, onAuth }) {
 
         {!isSignup && (
           <p style={{ fontSize: 12, color: C.muted, marginTop: 14, textAlign: 'center' }}>
-            <span style={{ color: C.accent, cursor: 'pointer' }}>Forgot password?</span>
+            <span onClick={() => setPage('forgot-password')} style={{ color: C.accent, cursor: 'pointer' }}>Forgot password?</span>
           </p>
         )}
 
@@ -909,12 +948,6 @@ function AuthPage({ mode, setPage, onAuth }) {
           </span>
           <span onClick={() => setPage(isSignup ? 'login' : 'signup')} style={{ fontSize: 13, color: C.accent, cursor: 'pointer', fontWeight: '600' }}>
             {isSignup ? 'Log in' : 'Sign up free'}
-          </span>
-        </div>
-
-        <div style={{ marginTop: 12, textAlign: 'center' }}>
-          <span onClick={() => { setError(''); setPage('editor'); }} style={{ fontSize: 12, color: C.muted, cursor: 'pointer', textDecoration: 'underline' }}>
-            Continue without account
           </span>
         </div>
       </div>
@@ -962,7 +995,7 @@ function Dashboard({ setPage, token }) {
             </button>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
             {designs.map((d, i) => (
               <div key={i} onClick={() => setPage('editor')}
                 style={{ borderRadius: 10, border: `1px solid ${C.border}`, background: C.panel, cursor: 'pointer', overflow: 'hidden', transition: 'transform 0.15s' }}
@@ -996,6 +1029,29 @@ export default function App() {
   const [user,  setUser]  = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('sf_token') || null);
   const [brandKit, setBrandKit] = useState(null);
+  const [session, setSession] = useState(null);
+
+  useEffect(() => {
+    // Get initial Supabase session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+        setUser({ email: session.user.email, name: session.user.user_metadata?.name });
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session?.user) {
+        setUser({ email: session.user.email, name: session.user.user_metadata?.name });
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -1033,12 +1089,20 @@ export default function App() {
   }
 
   function handleLogout() {
+    supabase.auth.signOut();
     setToken(null); setUser(null);
     localStorage.removeItem('sf_token');
+    setSession(null);
     setPage('home');
   }
 
-  if (page === 'editor') return <Editor onExit={() => setPage('home')} user={user} token={token} brandKit={brandKit} />;
+  if (page === 'editor') {
+    if (!session) {
+      setPage('signup');
+      return null;
+    }
+    return <Editor onExit={() => setPage('home')} user={user} token={token} brandKit={brandKit} />;
+  }
 
   return (
     <div>
@@ -1050,6 +1114,8 @@ export default function App() {
       {page === 'login'      && <AuthPage     mode="login"  setPage={setPage} onAuth={handleAuth} />}
       {page === 'signup'     && <AuthPage     mode="signup" setPage={setPage} onAuth={handleAuth} />}
       {page === 'dashboard'  && <Dashboard    setPage={setPage} token={token} />}
+      {page === 'forgot-password' && <ForgotPassword setPage={setPage} />}
+      {page === 'update-password' && <UpdatePassword setPage={setPage} />}
     </div>
   );
 }
