@@ -1,6 +1,6 @@
 import supabase from './supabaseClient';
 
-export async function signIn({ email, password, setLoading, onSuccess }) {
+export async function signIn({ email, password, setLoading }) {
   setLoading(true);
   try {
     console.log('Attempting login with:', email);
@@ -10,14 +10,10 @@ export async function signIn({ email, password, setLoading, onSuccess }) {
     });
     console.log('Auth result:', data, error);
 
-    // Transition immediately once password auth succeeds.
-    if (!error && data?.session && typeof onSuccess === 'function') {
-      onSuccess(data);
-    }
-
-    // Direct hard redirect to skip waiting for any editor hydration fetches.
+    // Immediate hard redirect on successful login.
     if (!error && data?.session) {
       window.location.href = '/editor';
+      return { data, error, redirected: true };
     }
 
     return { data, error };

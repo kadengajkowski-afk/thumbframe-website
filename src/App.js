@@ -859,7 +859,8 @@ function AuthPage({ mode, setPage, onAuth }) {
           setPage('editor');
         }
       } else {
-        const { data, error } = await signIn({ email, password, setLoading });
+        const { data, error, redirected } = await signIn({ email, password, setLoading });
+        if (redirected) return;
         if (error) {
           if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('too many')) {
             setError('Too many attempts. Please wait a moment and try again.');
