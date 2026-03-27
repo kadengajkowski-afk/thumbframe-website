@@ -633,6 +633,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   const [brandKitColors,setBrandKitColors]             = useState({primary:'#c45c2e',secondary:'#f97316'});
   const [brandKitFace,setBrandKitFace]                 = useState(null);
 
+  const [showPaywall,setShowPaywall]                   = useState(false);
+
   function setLayers(val){
     if(typeof val==='function'){
       setLayersRaw(prev=>{const next=val(prev);layersRef.current=next;return next;});
