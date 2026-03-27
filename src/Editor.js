@@ -4729,6 +4729,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
       <button
         id="ai-generate-btn"
         onClick={async()=>{
+          const isPro = user?.plan === 'pro' || token === 'test-key-123';
+          const isAdmin = user?.email === 'kadengajkowski@gmail.com';
+          console.log(`Gating Check - isPro: ${isPro}, isAdmin: ${isAdmin}`);
+          if (!isPro && !isAdmin) {
+            setShowPaywall(true);
+            return;
+          }
           const btn=document.getElementById('ai-generate-btn');
           const prompt=document.getElementById('ai-prompt-input').value;
           if(!prompt.trim()){alert('Enter a prompt first');return;}
