@@ -863,7 +863,9 @@ function AuthPage({ mode, setPage, onAuth }) {
           password,
         });
         if (error) {
-          if (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed')) {
+          if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('too many')) {
+            setError('Too many attempts. Please wait a moment and try again.');
+          } else if (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed')) {
             setError(
               <div>
                 {error.message}
@@ -873,14 +875,16 @@ function AuthPage({ mode, setPage, onAuth }) {
               </div>
             );
           } else {
-            setError(error.message);
+            setError(error.message || 'Login failed. Please try again.');
           }
-        } else if (data.user) {
+        } else if (data?.user) {
           setPage('editor');
+        } else {
+          setError('Login failed. Please try again.');
         }
       }
     } catch (err) {
-      setError('Connection failed. Please try again.');
+      setError(err?.message || 'Connection failed. Please try again.');
     } finally {
       setLoading(false);
     }
