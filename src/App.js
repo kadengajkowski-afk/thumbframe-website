@@ -818,6 +818,7 @@ function AuthPage({ mode, setPage, onAuth }) {
   const [name,     setName]     = useState('');
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
   const isSignup = mode === 'signup';
 
   async function submit() {
@@ -836,9 +837,30 @@ function AuthPage({ mode, setPage, onAuth }) {
             }
           }
         });
+        
+        // Check if signup failed due to existing account
         if (error) {
           setError(error.message);
-        } else if (data.user) {
+          setLoading(false);
+          return;
+        }
+        
+        // Check if user exists but identities array is empty (existing account)
+        if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+          setError(
+            <div>
+              You already have an account associated with this email.
+              <div style={{ marginTop: 8 }}>
+                <span onClick={() => setPage('login')} style={{ color: C.accent, cursor: 'pointer', fontWeight: '600', textDecoration: 'underline' }}>Click here to Log In instead</span>
+              </div>
+            </div>
+          );
+          setLoading(false);
+          return;
+        }
+        
+        // Successful signup
+        if (data.user) {
           setPage('editor');
         }
       } else {
