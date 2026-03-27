@@ -2379,16 +2379,18 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
             e.clientX-(canvasRef.current.getBoundingClientRect().left+zoomRef.current*(obj.x+(obj.width||100)/2))
           )*180/Math.PI;
           const startRotation=obj.rotation||0;
+          const currentRotation={value:startRotation};
           function onMove(ev){
             const angle=Math.atan2(
               ev.clientY-(canvasRef.current.getBoundingClientRect().top+zoomRef.current*(obj.y+(obj.height||50)/2)),
               ev.clientX-(canvasRef.current.getBoundingClientRect().left+zoomRef.current*(obj.x+(obj.width||100)/2))
             )*180/Math.PI;
             const newRot=startRotation+(angle-startAngle);
+            currentRotation.value=newRot;
             updateLayerSilent(obj.id,{rotation:newRot});
           }
           function onUp(){
-            updateLayer(obj.id,{rotation:obj.rotation||0});
+            updateLayer(obj.id,{rotation:currentRotation.value});
             window.removeEventListener('pointermove',onMove);
             window.removeEventListener('pointerup',onUp);
           }
