@@ -5,17 +5,10 @@ export async function signIn({ email, password, setLoading }) {
   try {
     console.log('[AUTH] Attempting login with:', email);
     
-    // Add 10-second timeout to prevent infinite hanging
-    const authPromise = supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Auth request timed out after 10 seconds')), 10000)
-    );
-    
-    const { data, error } = await Promise.race([authPromise, timeoutPromise]);
     
     console.log('[AUTH] Response received:', { hasData: !!data, hasError: !!error, hasSession: !!data?.session });
     console.log('[AUTH] Full data:', data);
