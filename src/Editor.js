@@ -4929,10 +4929,19 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           if(!prompt.trim()){alert('Enter a prompt first');return;}
           btn.textContent='Generating...';btn.disabled=true;btn.style.opacity='0.6';
           try{
+            const { data: { session } } = await supabase.auth.getSession();
+            if(!session?.access_token){
+              alert('Please log in again to use AI generation');
+              btn.textContent='Generate';btn.disabled=false;btn.style.opacity='1';
+              return;
+            }
             const res=await fetch('https://thumbframe-api-production.up.railway.app/ai-generate',{
               method:'POST',
-              headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({prompt, user_id: user?.email}),
+              headers:{
+                'Content-Type':'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+              body:JSON.stringify({prompt}),
             });
             const data=await res.json();
             if(data.error){

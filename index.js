@@ -101,45 +101,43 @@ app.get('/proxy-image', async(req,res)=>{
 
 app.post('/ai-generate', async (req, res) => {
   try {
-    const { prompt, user_id } = req.body;
+    const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: 'No prompt' });
 
-    // ✅ SECURITY: Check if user has Pro tier before running expensive Replicate API
-    if (user_id) {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('is_pro, is_admin')
-        .eq('email', user_id)
-        .single();
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'Missing authorization token' });
 
-      // ✅ Admin skeleton key - owner bypasses Pro check
-      const isAdmin = profile?.is_admin === true;
-      const isPro = profile?.is_pro === true;
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) return res.status(401).json({ error: 'Invalid authorization token' });
 
-      if (profileError || !profile || (!isPro && !isAdmin)) {
-        console.log(`[AI-GENERATE] ❌ Access denied for ${user_id} - isPro: ${isPro}, isAdmin: ${isAdmin}`);
-        return res.status(403).json({ 
-          error: 'Upgrade to Pro', 
-          message: 'AI generation is a Pro feature. Upgrade to unlock unlimited AI-powered thumbnails.' 
-        });
-      }
-      console.log(`[AI-GENERATE] ✅ Access granted for ${user_id} - isPro: ${isPro}, isAdmin: ${isAdmin}`);
+    const userEmail = user.email;
+    if (!userEmail) return res.status(401).json({ error: 'User email missing in token' });
+
+    const { data: profile } = await supabase.from('profiles').select('is_pro').ilike('email', user.email).single();
+
+    if (!profile?.is_pro) {
+      console.log(`[AI-GENERATE] ❌ Access denied for ${userEmail} - isPro: ${profile?.is_pro === true}`);
+      return res.status(403).json({
+        error: 'Upgrade to Pro',
+        message: 'AI generation is a Pro feature. Upgrade to unlock unlimited AI-powered thumbnails.'
+      });
     }
+
+    console.log(`[AI-GENERATE] ✅ Access granted for ${userEmail} - isPro: true`);
 
     let finalPrompt = prompt;
     let faceUrl = null;
 
-    if (user_id) {
-      const { data: kit } = await supabase
-        .from('brand_kits')
-        .select('*')
-        .eq('user_id', user_id)
-        .single();
+    const { data: kit } = await supabase
+      .from('brand_kits')
+      .select('*')
+      .eq('user_email', userEmail)
+      .single();
 
-      if (kit) {
-        finalPrompt = `${prompt}. Cinematic YouTube thumbnail, 8k resolution. Deeply integrate these hex colors into the background lighting, shadows, and accents: Primary ${kit.primary_color}, Secondary ${kit.secondary_color}.`;
-        faceUrl = kit.face_image_url;
-      }
+    if (kit) {
+      finalPrompt = `${prompt}. Cinematic YouTube thumbnail, 8k resolution. Deeply integrate these hex colors into the background lighting, shadows, and accents: Primary ${kit.primary_color}, Secondary ${kit.secondary_color}.`;
+      faceUrl = kit.face_image_url;
     }
 
     console.log('Generating via Replicate...', { finalPrompt, faceUrl });
