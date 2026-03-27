@@ -1976,9 +1976,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     if(activeTool==='rimlight') return;
     if(activeTool==='brush') return;
     const layer=layers.find(l=>l.id===id);if(!layer)return;
+    console.log('🖱️ Layer clicked:', layer.type, 'id:', id, 'z-index:', layers.indexOf(layer)+1);
     e.stopPropagation();
     justSelectedRef.current=true;
     setSelectedId(id);
+    console.log('✅ Layer selected:', id, 'canDrag:', canDrag, 'activeTool:', activeTool);
     if(layer.type==='background'){setActiveTool('background');return;}
     if(!canDrag||layer.locked)return;
     const rect=canvasRef.current.getBoundingClientRect();
@@ -2372,6 +2374,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
       }}/>
       <div
         onPointerDown={e=>{
+          console.log(' Rotation handle clicked for object:', obj.id, 'type:', obj.type);
           e.stopPropagation();e.preventDefault();
           e.currentTarget.setPointerCapture(e.pointerId);
           const startAngle=Math.atan2(
@@ -2380,6 +2383,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           )*180/Math.PI;
           const startRotation=obj.rotation||0;
           const currentRotation={value:startRotation};
+          console.log(' Starting rotation from:', startRotation, 'degrees');
           function onMove(ev){
             const angle=Math.atan2(
               ev.clientY-(canvasRef.current.getBoundingClientRect().top+zoomRef.current*(obj.y+(obj.height||50)/2)),
@@ -2390,6 +2394,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
             updateLayerSilent(obj.id,{rotation:newRot});
           }
           function onUp(){
+            console.log(' Rotation complete. Final angle:', currentRotation.value, 'degrees');
             updateLayer(obj.id,{rotation:currentRotation.value});
             window.removeEventListener('pointermove',onMove);
             window.removeEventListener('pointerup',onUp);
@@ -2398,18 +2403,22 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           window.addEventListener('pointerup',onUp);
         }}
         style={{
-          position:'absolute',top:-28,left:'50%',
+          position:'absolute',top:-32,left:'50%',
           transform:'translateX(-50%)',
-          width:18,height:18,
+          width:24,height:24,
           background:'#fff',
-          border:`2px solid ${T.accent}`,
+          border:`3px solid ${T.accent}`,
           borderRadius:'50%',
           cursor:'grab',
           zIndex:1001,
           display:'flex',alignItems:'center',justifyContent:'center',
-          fontSize:10,userSelect:'none',
+          fontSize:12,userSelect:'none',
+          boxShadow:'0 2px 8px rgba(0,0,0,0.3)',
+          transition:'transform 0.1s',
         }}
-        title="Rotate">↻</div>
+        onMouseEnter={e=>e.currentTarget.style.transform='translateX(-50%) scale(1.15)'}
+        onMouseLeave={e=>e.currentTarget.style.transform='translateX(-50%) scale(1)'}
+        title="Rotate (drag to rotate)">↻</div>
     </>);
   }
   function getLayerCursor(obj){if(activeTool==='brush')return'crosshair';if(canDrag&&!obj.locked)return'grab';return'pointer';}
