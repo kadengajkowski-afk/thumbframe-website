@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, memo } from 'react';
+import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 import BrandKitSetupModal from './BrandKit';
+import supabase from './supabaseClient';
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
@@ -518,6 +519,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   const zoomRef         = useRef(1);
   const layersRef       = useRef([]);
   const mountedRef = useRef(true);
+  const autoSaveTimeoutRef = useRef(null);
   // Performance: Mouse tracking refs to avoid re-renders
   const mouseRef        = useRef({x:0,y:0});
   const lastRimLightRef = useRef(0);
@@ -1616,6 +1618,38 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
       setCmdLog('Save failed');
     }
   }
+
+  const saveCanvasToSupabase = useCallback(async ()=>{
+    if(!user?.id)return;
+    const canvasJson={
+      platform,
+      layers:JSON.parse(JSON.stringify(layers)),
+      brightness,
+      contrast,
+      saturation,
+      hue,
+    };
+    try{
+      const { error } = await supabase
+        .from('thumbnails')
+        .upsert({ user_id:user.id, json_data:canvasJson },{ onConflict:'user_id' });
+      if(error)throw error;
+    }catch(e){
+      console.error('Failed to save');
+    }
+  },[user?.id,platform,layers,brightness,contrast,saturation,hue]);
+
+  useEffect(()=>{
+    if(!user?.id)return undefined;
+    if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
+    autoSaveTimeoutRef.current=setTimeout(()=>{
+      saveCanvasToSupabase();
+    },3000);
+    return()=>{
+      if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
+    };
+  },[saveCanvasToSupabase,user?.id]);
+
   function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
   function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setSelectedId(null);setShowFileTab(false);}
   function deleteDesign(id){const updated=savedDesigns.filter(d=>d.id!==id);setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));}
