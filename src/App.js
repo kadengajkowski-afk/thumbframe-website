@@ -1028,42 +1028,22 @@ export default function App() {
   const [brandKit, setBrandKit] = useState(null);
 
   useEffect(() => {
-    // Get initial Supabase session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Get initial Supabase session without any profile/table fetches
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        // Fetch profile data to get plan, is_pro, is_admin
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('plan, is_pro, is_admin')
-          .eq('email', session.user.email)
-          .single();
-        
-        setUser({ 
-          email: session.user.email, 
+        setUser({
+          email: session.user.email,
           name: session.user.user_metadata?.name,
-          plan: profile?.plan || profile?.is_pro ? 'pro' : 'free',
-          is_pro: profile?.is_pro,
-          is_admin: profile?.is_admin
         });
       }
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        // Fetch profile data to get plan, is_pro, is_admin
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('plan, is_pro, is_admin')
-          .eq('email', session.user.email)
-          .single();
-        
-        setUser({ 
-          email: session.user.email, 
+        setUser({
+          email: session.user.email,
           name: session.user.user_metadata?.name,
-          plan: profile?.plan || profile?.is_pro ? 'pro' : 'free',
-          is_pro: profile?.is_pro,
-          is_admin: profile?.is_admin
         });
       } else {
         setUser(null);

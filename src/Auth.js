@@ -9,20 +9,20 @@ export async function signIn({ email, password, setLoading }) {
     });
 
     if (error) {
+      setLoading(false);
       return { data: null, error };
     }
 
     if (data?.session) {
-      // Immediate redirect - no queries, no awaits
-      window.location.href = '/';
+      setLoading(false);
+      window.location.href = '/editor';
       return { data, error: null };
     }
 
+    setLoading(false);
     return { data, error: new Error('No session returned') };
   } catch (error) {
-    console.error('Auth error:', error);
-    return { data: null, error };
-  } finally {
     setLoading(false);
+    return { data: null, error };
   }
 }

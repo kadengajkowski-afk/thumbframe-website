@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, memo } from 'react';
-import supabase from './supabaseClient';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 import BrandKitSetupModal from './BrandKit';
@@ -651,27 +650,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     }
   }
 
-  async function hydrateFromSupabase() {
-    if (!user?.email) return;
-    try {
-      const { data, error } = await supabase
-        .from('thumbnails')
-        .select('json_data')
-        .eq('user_email', user.email)
-        .maybeSingle();
-
-      if (error || !data?.json_data?.layers) return;
-      const restoredLayers = data.json_data.layers;
-      setLayers(restoredLayers);
-      historyRef.current = [restoredLayers];
-      historyIndexRef.current = 0;
-      setHistory([restoredLayers]);
-      setHistoryIndex(0);
-    } catch (e) {
-      console.warn('[hydrate] failed:', e);
-    }
-  }
-
   const p  = PLATFORMS[platform];
   const T  = {
     bg:darkMode?'#0f0f0f':'#f2f2f2',panel:darkMode?'#1a1a1a':'#ffffff',
@@ -715,9 +693,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     historyIndexRef.current=0;
     setHistory([[b]]);
     setHistoryIndex(0);
-    (async()=>{
-      await hydrateFromSupabase();
-    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
