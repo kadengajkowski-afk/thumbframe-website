@@ -638,6 +638,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
   const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.email==='kadengajkowski@gmail.com'));
+  const [saveStatus, setSaveStatus]                    = useState('Saved');
 
   const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
   const [showToast,setShowToast]                       = useState(false);
@@ -1672,26 +1673,37 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           };
       const safeCanvasData = canvas.toJSON();
 
+      // AGGRESSIVE LOGGING: Show exactly what we are sending
+      console.log('[AUTO-SAVE] Payload:', { email: safeEmail, dataSize: JSON.stringify(safeCanvasData).length });
+
       // 3. Execute the upsert
-      const { error } = await supabase.from('thumbnails').upsert(
+      const { data, error } = await supabase.from('thumbnails').upsert(
         {
           user_email: safeEmail,
           json_data: safeCanvasData
         },
         { onConflict: 'user_email' }
-      );
+      ).select();
 
       if(error)throw error;
-    }catch(e){
-      console.error('Failed to save');
+
+      console.log('[AUTO-SAVE] Success:', data);
+      setSaveStatus('Saved');
+    }catch(err){
+      console.error('[AUTO-SAVE] Error:', err);
+      setSaveStatus('Error');
     }
   },[user?.email,platform,layers,brightness,contrast,saturation,hue]);
 
   useEffect(()=>{
     if(!user?.email)return undefined;
+    // 1. User interacts with canvas -> setSaveStatus('Unsaved')
+    setSaveStatus('Unsaved');
     if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
-    autoSaveTimeoutRef.current=setTimeout(()=>{
-      saveCanvasToSupabase();
+    autoSaveTimeoutRef.current=setTimeout(async ()=>{
+      // 2. Debounce fires after 2 seconds -> setSaveStatus('Saving...')
+      setSaveStatus('Saving...');
+      await saveCanvasToSupabase();
     },2000);
     return()=>{
       if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
@@ -2970,6 +2982,20 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           }}>PRO</span>
         </button>}
         <div style={{display:'flex',gap:3,alignItems:'center',flexShrink:0,marginLeft:'auto'}}>
+          <div style={{
+            padding:'4px 8px',
+            borderRadius:999,
+            border:`1px solid ${saveStatus==='Error'?T.danger:saveStatus==='Saving...'?T.warning:saveStatus==='Unsaved'?T.muted:T.success}`,
+            background:saveStatus==='Error'?`${T.danger}22`:saveStatus==='Saving...'?`${T.warning}22`:saveStatus==='Unsaved'?`${T.muted}22`:`${T.success}22`,
+            color:saveStatus==='Error'?T.danger:saveStatus==='Saving...'?T.warning:saveStatus==='Unsaved'?T.muted:T.success,
+            fontSize:10,
+            fontWeight:'700',
+            letterSpacing:'0.3px',
+            minWidth:64,
+            textAlign:'center',
+          }}>
+            {saveStatus}
+          </div>
           <button onClick={undo} disabled={historyIndex<=0} style={{...css.iconBtn(false),opacity:historyIndex<=0?0.3:1}}>↩</button>
           <button onClick={redo} disabled={historyIndex>=history.length-1} style={{...css.iconBtn(false),opacity:historyIndex>=history.length-1?0.3:1}}>↪</button>
           <button onClick={()=>saveDesign(designName)}
