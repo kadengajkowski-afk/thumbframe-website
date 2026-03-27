@@ -14,7 +14,7 @@ const jwt        = require('jsonwebtoken');
 const OpenAI     = require('openai');
 const Anthropic  = require('@anthropic-ai/sdk');
 const { Resend } = require('resend');
-const { createClient } = require('@supabase/supabase-js');
+const supabase   = require('./supabaseAdminClient');
 
 const app        = express();
 const PORT       = process.env.PORT || 5000;
@@ -24,7 +24,6 @@ const openai     = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const resend     = new Resend(process.env.RESEND_API_KEY);
 const replicate  = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
-const supabase   = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 console.log('[INIT] Supabase admin client ready:', !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_KEY);
 console.log('[INIT] Resend client ready:', !!process.env.RESEND_API_KEY);

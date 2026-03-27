@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, memo } from 'react';
 import supabase from './supabaseClient';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
-import BrandKitSetupModal from './BrandKitModal';
+import BrandKitSetupModal from './BrandKit';
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
@@ -707,7 +707,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   useEffect(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
-      autoSaveToSupabase();
+      autoSaveProject();
     }, 3000);
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -1639,7 +1639,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   function deleteDesign(id){const updated=savedDesigns.filter(d=>d.id!==id);setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));}
 
   // Auto-save to Supabase
-  async function autoSaveToSupabase() {
+  async function autoSaveProject() {
     if (!user?.email) return;
 
     setAutoSaveStatus('saving');
@@ -1655,36 +1655,30 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
         panOffset
       };
 
-      // Check if a record already exists for this user
-      const { data: existing, error: selectError } = await supabase
+      const nowIso = new Date().toISOString();
+      const { error: canvasSaveError } = await supabase
         .from('thumbnails')
-        .select('id')
-        .eq('user_email', user.email)
-        .maybeSingle();
+        .upsert({
+          user_email: user.email,
+          canvas_data: canvasState,
+          updated_at: nowIso,
+        }, {
+          onConflict: 'user_email'
+        });
 
-      if (selectError) throw selectError;
-
-      let saveError;
-      if (existing) {
-        // Update existing record
-        const { error } = await supabase
+      // Fallback for environments where the JSON column is named json_data
+      let saveError = canvasSaveError;
+      if (saveError && String(saveError.message || '').toLowerCase().includes('canvas_data')) {
+        const { error: jsonSaveError } = await supabase
           .from('thumbnails')
-          .update({
-            canvas_data: canvasState,
-            updated_at: new Date().toISOString()
-          })
-          .eq('user_email', user.email);
-        saveError = error;
-      } else {
-        // Insert new record
-        const { error } = await supabase
-          .from('thumbnails')
-          .insert({
+          .upsert({
             user_email: user.email,
-            canvas_data: canvasState,
-            updated_at: new Date().toISOString()
+            json_data: canvasState,
+            updated_at: nowIso,
+          }, {
+            onConflict: 'user_email'
           });
-        saveError = error;
+        saveError = jsonSaveError;
       }
 
       if (saveError) throw saveError;
@@ -1704,20 +1698,35 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     if (!user?.email) return;
 
     try {
-      const { data, error } = await supabase
+      let activeColumn = 'canvas_data';
+      let { data, error } = await supabase
         .from('thumbnails')
-        .select('canvas_data')
+        .select(activeColumn)
         .eq('user_email', user.email)
         .maybeSingle();
+
+      // Fallback for environments where the JSON column is named json_data
+      if (error && String(error.message || '').toLowerCase().includes('canvas_data')) {
+        activeColumn = 'json_data';
+        const fallback = await supabase
+          .from('thumbnails')
+          .select(activeColumn)
+          .eq('user_email', user.email)
+          .maybeSingle();
+        data = fallback.data;
+        error = fallback.error;
+      }
 
       if (error) {
         console.error('[hydrate] error:', error?.message, error?.code, error?.details, error?.hint);
         return;
       }
 
-      if (data?.canvas_data) {
-        const state = data.canvas_data;
-        if (state.layers && state.layers.length > 0) {
+      const state = data?.[activeColumn];
+      // Null project guard: do not hydrate when no saved JSON exists
+      if (!state) return;
+
+      if (state.layers && state.layers.length > 0) {
           setLayers(state.layers);
           if (state.platform) setPlatform(state.platform);
           if (state.brightness) setBrightness(state.brightness);
@@ -1734,7 +1743,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           setHistoryIndex(0);
           
           showToastNotification('Canvas restored from auto-save', 'success');
-        }
       }
     } catch (e) {
       console.error('Hydration failed:', e);
@@ -2652,6 +2660,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     null,
     {key:'brush',     label:'Brush',        icon:'⌀',  group:'Paint'},
     {key:'rimlight',  label:'Rim Light',    icon:'☀',  group:'Paint'},
+    {key:'removebg',  label:'Remove BG',    icon:'✂',  group:'Paint'},
     null,
     {key:'background',label:'Background',   icon:'▨',   group:'Design'},
     {key:'effects',   label:'Effects',      icon:'✦',   group:'Design'},
@@ -4889,9 +4898,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
               </div>
             )}
 
-            {activeTool==='ai'&&(
+            {activeTool==='removebg'&&(
   <div>
-    <span style={css.label}>AI features</span>
+    <span style={css.label}>Background remover</span>
 
     <div style={{...css.section,marginTop:0}}>
       <div style={{fontSize:13,color:T.text,fontWeight:'700',marginBottom:4}}>🎨 Background Remover</div>
@@ -4965,6 +4974,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
         </div>
       )}
     </div>
+
+  </div>
+)}
+
+            {activeTool==='ai'&&(
+  <div>
+    <span style={css.label}>AI features</span>
 
     <div style={{...css.section,border:`1px solid ${T.warning}`,marginTop:10}}>
       <div style={{fontSize:13,color:T.warning,fontWeight:'700',marginBottom:4}}>⚡ AI Generate — Pro</div>
