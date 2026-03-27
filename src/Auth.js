@@ -12,17 +12,14 @@ export async function signIn({ email, password, setLoading }) {
     console.log('[AUTH] Full data:', data);
     console.log('[AUTH] Full error:', error);
 
-    // Immediate hard redirect on successful login.
+    // Return success - let App.js handle navigation
     if (!error && data?.session) {
-      console.log('[AUTH] ✓ Session valid - redirecting to /editor');
-      console.log('[AUTH] About to call window.location.href');
-      window.location.href = '/editor';
-      console.log('[AUTH] window.location.href called (this may not log if redirect is immediate)');
-      return { data, error, redirected: true };
+      console.log('[AUTH] ✓ Session valid - returning success to App.js');
+      return { data, error, success: true };
     }
 
     console.log('[AUTH] ✗ No session or error present - returning to caller');
-    return { data, error };
+    return { data, error, success: false };
   } catch (error) {
     console.error('[AUTH] Exception during sign-in:', error);
     return { data: null, error };

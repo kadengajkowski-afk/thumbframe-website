@@ -859,9 +859,17 @@ function AuthPage({ mode, setPage, onAuth }) {
           setPage('editor');
         }
       } else {
-        const { data, error, redirected } = await signIn({ email, password, setLoading });
-        if (redirected) return;
+        const { data, error, success } = await signIn({ email, password, setLoading });
+        console.log('[APP] signIn returned:', { hasData: !!data, hasError: !!error, success });
+        
+        if (success && data?.user) {
+          console.log('[APP] Login successful - navigating to editor');
+          setPage('editor');
+          return;
+        }
+        
         if (error) {
+          console.log('[APP] Login error:', error.message);
           if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('too many')) {
             setError('Too many attempts. Please wait a moment and try again.');
           } else if (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed')) {
@@ -876,10 +884,8 @@ function AuthPage({ mode, setPage, onAuth }) {
           } else {
             setError(error.message || 'Login failed. Please try again.');
           }
-        } else if (data?.user) {
-          console.log('Login successful, result:', data);
-          setPage('editor');
         } else {
+          console.log('[APP] Login failed - no success flag and no error');
           setError('Login failed. Please try again.');
         }
       }
