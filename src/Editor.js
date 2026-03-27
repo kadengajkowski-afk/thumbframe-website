@@ -522,7 +522,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   const mouseRef        = useRef({x:0,y:0});
   const lastRimLightRef = useRef(0);
   const rafIdRef        = useRef(null);
-  useEffect(()=>{ mountedRef.current=true; return()=>{ mountedRef.current=false; const rafId=rafIdRef.current; if(rafId)cancelAnimationFrame(rafId); }; },[]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(()=>{
+    mountedRef.current=true; 
+    return()=>{ 
+      mountedRef.current=false; 
+      const rafId=rafIdRef.current; 
+      if(rafId)cancelAnimationFrame(rafId); 
+    }; 
+  },[]);
 
   const [platform,setPlatform]             = useState('youtube');
   const [activeTool,setActiveTool]         = useState('select');
