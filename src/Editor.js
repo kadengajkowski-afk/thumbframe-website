@@ -635,6 +635,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
 
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
 
+  const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
+
   function setLayers(val){
     if(typeof val==='function'){
       setLayersRaw(prev=>{const next=val(prev);layersRef.current=next;return next;});
@@ -2918,40 +2920,89 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
         {!isMobile&&<div style={{width:150,background:T.sidebar,borderRight:`1px solid ${T.border}`,padding:'8px 6px',display:'flex',flexDirection:'column',overflowY:'auto',flexShrink:0}}>
           {(()=>{
             let lastGroup = null;
-            return tools.map((t,i)=>{
-              if(t===null) return <div key={i} style={{height:1,background:T.border,margin:'3px 6px'}}/>;
-              const showLabel = t.group !== lastGroup;
-              lastGroup = t.group;
+            const grouped = [];
+            tools.forEach((t,i)=>{
+              if(t===null) return;
+              if(t.group !== lastGroup){
+                lastGroup = t.group;
+                grouped.push({type:'header',group:t.group});
+              }
+              grouped.push({type:'tool',tool:t});
+            });
+            
+            return grouped.map((item,i)=>{
+              if(item.type==='header'){
+                const isExpanded = expandedCategories[item.group];
+                return(
+                  <div key={`header-${item.group}`} 
+                    onClick={()=>setExpandedCategories(prev=>({...prev,[item.group]:!prev[item.group]}))}
+                    style={{
+                      fontSize:'8px',color:'#e5e5e5',fontWeight:'700',
+                      letterSpacing:'0.8px',textTransform:'uppercase',
+                      padding:'6px 10px 2px',
+                      cursor:'pointer',
+                      display:'flex',
+                      alignItems:'center',
+                      justifyContent:'space-between',
+                      userSelect:'none',
+                    }}>
+                    <span>{item.group}</span>
+                    <span style={{
+                      fontSize:'10px',
+                      transform:isExpanded?'rotate(90deg)':'rotate(0deg)',
+                      transition:'transform 0.2s',
+                      color:T.muted,
+                    }}>›</span>
+                  </div>
+                );
+              }
+              
+              const t = item.tool;
+              const isExpanded = expandedCategories[t.group];
+              if(!isExpanded) return null;
+              
               return(
-                <div key={t.key}>
-                  {showLabel&&<div style={{
-                    fontSize:'8px',color:T.muted,fontWeight:'700',
-                    letterSpacing:'0.8px',textTransform:'uppercase',
-                    padding:'6px 10px 2px',
-                  }}>{t.group}</div>}
-                  <button onClick={()=>setActiveTool(t.key)} title={t.label}
-                    style={css.toolBtn(activeTool===t.key)}>
-                    <span style={{fontSize:13,width:16,textAlign:'center',
-                      flexShrink:0,color:activeTool===t.key?T.accent:T.muted}}>
-                      {t.icon}
-                    </span>
-                    <span style={{fontSize:11,flex:1}}>{t.label}</span>
-                    {t.pro&&<span style={{
-                      fontSize:7,
-                      background:'linear-gradient(135deg,#f59e0b,#ef4444)',
-                      color:'#fff',padding:'1px 4px',borderRadius:4,
-                      fontWeight:'700',flexShrink:0,
-                    }}>PRO</span>}
-                  </button>
-                </div>
+                <button key={t.key} onClick={()=>setActiveTool(t.key)} title={t.label}
+                  style={css.toolBtn(activeTool===t.key)}>
+                  <span style={{fontSize:13,width:16,textAlign:'center',
+                    flexShrink:0,color:activeTool===t.key?T.accent:T.muted}}>
+                    {t.icon}
+                  </span>
+                  <span style={{fontSize:11,flex:1,color:'#e5e5e5'}}>{t.label}</span>
+                  {t.pro&&<span style={{
+                    fontSize:7,
+                    background:'linear-gradient(135deg,#f59e0b,#ef4444)',
+                    color:'#fff',padding:'1px 4px',borderRadius:4,
+                    fontWeight:'700',flexShrink:0,
+                  }}>PRO</span>}
+                </button>
               );
             });
           })()}
           <div style={css.divider}/>
-          <div style={{fontSize:'8px',color:T.muted,fontWeight:'700',letterSpacing:'0.8px',textTransform:'uppercase',padding:'6px 10px 2px',marginTop:4}}>Canvas size</div>
-          {Object.entries(PLATFORMS).map(([key,val])=>(
+          <div 
+            onClick={()=>setExpandedCategories(prev=>({...prev,Canvas:!prev.Canvas}))}
+            style={{
+              fontSize:'8px',color:'#e5e5e5',fontWeight:'700',
+              letterSpacing:'0.8px',textTransform:'uppercase',
+              padding:'6px 10px 2px',marginTop:4,
+              cursor:'pointer',
+              display:'flex',
+              alignItems:'center',
+              justifyContent:'space-between',
+              userSelect:'none',
+            }}>
+            <span>Canvas size</span>
+            <span style={{
+              fontSize:'10px',
+              transform:expandedCategories.Canvas?'rotate(90deg)':'rotate(0deg)',
+              transition:'transform 0.2s',
+              color:T.muted,
+            }}>›</span>
+          </div>
+          {expandedCategories.Canvas&&Object.entries(PLATFORMS).map(([key,val])=>(
             <button key={key} onClick={()=>setPlatform(key)} style={{...css.toolBtn(platform===key),flexDirection:'column',alignItems:'flex-start',gap:1,padding:'6px 10px'}}>
-              <span style={{fontSize:11,fontWeight:'600',color:platform===key?T.accent:T.text}}>{val.label}</span>
+              <span style={{fontSize:11,fontWeight:'600',color:platform===key?T.accent:'#e5e5e5'}}>{val.label}</span>
               <span style={{fontSize:'9px',color:T.muted}}>{val.width}×{val.height}</span>
             </button>
           ))}
