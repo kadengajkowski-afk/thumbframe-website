@@ -1697,6 +1697,16 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   async function hydrateFromSupabase() {
     if (!user?.email) return;
 
+    const initializeFreshCanvas = () => {
+      const background = makeBg(p);
+      setLayers([background]);
+      historyRef.current = [[background]];
+      historyIndexRef.current = 0;
+      setHistory([[background]]);
+      setHistoryIndex(0);
+      setSelectedId(null);
+    };
+
     try {
       let activeColumn = 'canvas_data';
       let { data, error } = await supabase
@@ -1719,33 +1729,46 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
 
       if (error) {
         console.error('[hydrate] error:', error?.message, error?.code, error?.details, error?.hint);
+        initializeFreshCanvas();
         return;
       }
 
       const state = data?.[activeColumn];
-      // Null project guard: do not hydrate when no saved JSON exists
-      if (!state) return;
+      // Empty response guard: initialize a fresh canvas when no saved JSON exists
+      if (!state || !state.layers) {
+        initializeFreshCanvas();
+        return;
+      }
 
-      if (state.layers && state.layers.length > 0) {
-          setLayers(state.layers);
-          if (state.platform) setPlatform(state.platform);
-          if (state.brightness) setBrightness(state.brightness);
-          if (state.contrast) setContrast(state.contrast);
-          if (state.saturation) setSaturation(state.saturation);
-          if (state.hue) setHue(state.hue);
-          if (state.zoom) setZoom(state.zoom);
-          if (state.panOffset) setPanOffset(state.panOffset);
-          
-          // Update history
-          historyRef.current = [state.layers];
-          historyIndexRef.current = 0;
-          setHistory([state.layers]);
-          setHistoryIndex(0);
-          
-          showToastNotification('Canvas restored from auto-save', 'success');
+      // Equivalent to guarding canvas.loadFromJSON: protect hydration from corrupt saved state
+      try {
+        if (state.layers && state.layers.length > 0) {
+            setLayers(state.layers);
+            if (state.platform) setPlatform(state.platform);
+            if (state.brightness) setBrightness(state.brightness);
+            if (state.contrast) setContrast(state.contrast);
+            if (state.saturation) setSaturation(state.saturation);
+            if (state.hue) setHue(state.hue);
+            if (state.zoom) setZoom(state.zoom);
+            if (state.panOffset) setPanOffset(state.panOffset);
+
+            // Update history
+            historyRef.current = [state.layers];
+            historyIndexRef.current = 0;
+            setHistory([state.layers]);
+            setHistoryIndex(0);
+
+            showToastNotification('Canvas restored from auto-save', 'success');
+        } else {
+          initializeFreshCanvas();
+        }
+      } catch (hydrateErr) {
+        console.error('[hydrate] corrupt save payload:', hydrateErr);
+        initializeFreshCanvas();
       }
     } catch (e) {
       console.error('Hydration failed:', e);
+      initializeFreshCanvas();
     }
   }
 
