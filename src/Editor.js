@@ -1641,7 +1641,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   // Auto-save to Supabase
   async function autoSaveToSupabase() {
     if (!user?.email) return;
-    
+
     setAutoSaveStatus('saving');
     try {
       const canvasState = {
@@ -1655,22 +1655,44 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
         panOffset
       };
 
-      const { error } = await supabase
+      // Check if a record already exists for this user
+      const { data: existing, error: selectError } = await supabase
         .from('thumbnails')
-        .upsert({
-          user_email: user.email,
-          canvas_data: canvasState,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_email'
-        });
+        .select('id')
+        .eq('user_email', user.email)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (selectError) throw selectError;
+
+      let saveError;
+      if (existing) {
+        // Update existing record
+        const { error } = await supabase
+          .from('thumbnails')
+          .update({
+            canvas_data: canvasState,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_email', user.email);
+        saveError = error;
+      } else {
+        // Insert new record
+        const { error } = await supabase
+          .from('thumbnails')
+          .insert({
+            user_email: user.email,
+            canvas_data: canvasState,
+            updated_at: new Date().toISOString()
+          });
+        saveError = error;
+      }
+
+      if (saveError) throw saveError;
 
       setAutoSaveStatus('saved');
       setTimeout(() => setAutoSaveStatus('idle'), 2000);
     } catch (e) {
-      console.error('Auto-save failed:', e);
+      console.error('[autoSave] failed:', e?.message, e?.code, e?.details, e?.hint);
       setAutoSaveStatus('error');
       showToastNotification('Auto-save failed. Your work is still saved locally.', 'error');
       setTimeout(() => setAutoSaveStatus('idle'), 3000);
@@ -1680,18 +1702,16 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   // Hydrate canvas from Supabase on mount
   async function hydrateFromSupabase() {
     if (!user?.email) return;
-    
+
     try {
       const { data, error } = await supabase
         .from('thumbnails')
         .select('canvas_data')
         .eq('user_email', user.email)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        if (error.code !== 'PGRST116') { // Not a "no rows" error
-          console.error('Hydration error:', error);
-        }
+        console.error('[hydrate] error:', error?.message, error?.code, error?.details, error?.hint);
         return;
       }
 
