@@ -638,13 +638,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
 
   const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
-
-  // Auto-save state
-  const [autoSaveStatus,setAutoSaveStatus]             = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   const [showToast,setShowToast]                       = useState(false);
-  const [toastMessage,setToastMessage]                 = useState('');
-  const [toastType,setToastType]                       = useState('info'); // 'info' | 'success' | 'error'
-  const autoSaveTimerRef                               = useRef(null);
+  const [toastMessage]                                 = useState('');
+  const [toastType]                                    = useState('info');
 
   function setLayers(val){
     if(typeof val==='function'){
@@ -652,6 +648,27 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     }else{
       layersRef.current=val;
       setLayersRaw(val);
+    }
+  }
+
+  async function hydrateFromSupabase() {
+    if (!user?.email) return;
+    try {
+      const { data, error } = await supabase
+        .from('thumbnails')
+        .select('json_data')
+        .eq('user_email', user.email)
+        .maybeSingle();
+
+      if (error || !data?.json_data?.layers) return;
+      const restoredLayers = data.json_data.layers;
+      setLayers(restoredLayers);
+      historyRef.current = [restoredLayers];
+      historyIndexRef.current = 0;
+      setHistory([restoredLayers]);
+      setHistoryIndex(0);
+    } catch (e) {
+      console.warn('[hydrate] failed:', e);
     }
   }
 
@@ -698,33 +715,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     historyIndexRef.current=0;
     setHistory([[b]]);
     setHistoryIndex(0);
-    // Hydrate canvas from Supabase on mount
     (async()=>{
-      try {
-        await hydrateFromSupabase();
-      } catch (e) {
-        console.warn('[hydrate/useEffect] load failed, using blank canvas:', e);
-        const freshBg = makeBg(p);
-        setLayers([freshBg]);
-        historyRef.current = [[freshBg]];
-        historyIndexRef.current = 0;
-        setHistory([[freshBg]]);
-        setHistoryIndex(0);
-      }
+      await hydrateFromSupabase();
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
-
-  // Auto-save with 3-second debounce on layers changes
-  useEffect(() => {
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      autoSaveProject();
-    }, 3000);
-    return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    };
-  }, [layers, platform, brightness, contrast, saturation, hue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ✅ Window drag handlers — ONLY fire when draggingRef or resizingRef is set
   // This means sidebar sliders are completely unaffected
@@ -1649,121 +1644,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
   function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setSelectedId(null);setShowFileTab(false);}
   function deleteDesign(id){const updated=savedDesigns.filter(d=>d.id!==id);setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));}
-
-  // Auto-save to Supabase
-  async function autoSaveProject() {
-    if (!user?.email) return;
-
-    setAutoSaveStatus('saving');
-    try {
-      const canvasState = {
-        platform,
-        layers: JSON.parse(JSON.stringify(layers)),
-        brightness,
-        contrast,
-        saturation,
-        hue,
-        zoom,
-        panOffset
-      };
-
-      const nowIso = new Date().toISOString();
-      const { error: saveError } = await supabase
-        .from('thumbnails')
-        .upsert({
-          user_email: user.email,
-          json_data: canvasState,
-          updated_at: nowIso,
-        }, {
-          onConflict: 'user_email'
-        });
-
-      if (saveError) throw saveError;
-
-      setAutoSaveStatus('saved');
-      setTimeout(() => setAutoSaveStatus('idle'), 2000);
-    } catch (e) {
-      console.warn('[autoSave] failed:', e?.message, e?.code, e?.details, e?.hint);
-      setAutoSaveStatus('error');
-      showToastNotification('Auto-save failed. Your work is still saved locally.', 'error');
-      setTimeout(() => setAutoSaveStatus('idle'), 3000);
-    }
-  }
-
-  // Hydrate canvas from Supabase on mount
-  async function hydrateFromSupabase() {
-    if (!user?.email) return;
-
-    const initializeFreshCanvas = () => {
-      const background = makeBg(p);
-      setLayers([background]);
-      historyRef.current = [[background]];
-      historyIndexRef.current = 0;
-      setHistory([[background]]);
-      setHistoryIndex(0);
-      setSelectedId(null);
-    };
-
-    try {
-      const activeColumn = 'json_data';
-      let { data, error } = await supabase
-        .from('thumbnails')
-        .select(activeColumn)
-        .eq('user_email', user.email)
-        .maybeSingle();
-
-      if (error) {
-        console.warn('[hydrate] fetch failed, using blank canvas:', error?.message, error?.code, error?.details, error?.hint);
-        initializeFreshCanvas();
-        return;
-      }
-
-      const state = data?.[activeColumn];
-      // Empty response guard: initialize a fresh canvas when no saved JSON exists
-      if (!state || !state.layers) {
-        initializeFreshCanvas();
-        return;
-      }
-
-      // Equivalent to guarding canvas.loadFromJSON: protect hydration from corrupt saved state
-      try {
-        if (state.layers && state.layers.length > 0) {
-            setLayers(state.layers);
-            if (state.platform) setPlatform(state.platform);
-            if (state.brightness) setBrightness(state.brightness);
-            if (state.contrast) setContrast(state.contrast);
-            if (state.saturation) setSaturation(state.saturation);
-            if (state.hue) setHue(state.hue);
-            if (state.zoom) setZoom(state.zoom);
-            if (state.panOffset) setPanOffset(state.panOffset);
-
-            // Update history
-            historyRef.current = [state.layers];
-            historyIndexRef.current = 0;
-            setHistory([state.layers]);
-            setHistoryIndex(0);
-
-            showToastNotification('Canvas restored from auto-save', 'success');
-        } else {
-          initializeFreshCanvas();
-        }
-      } catch (hydrateErr) {
-        console.warn('[hydrate] corrupt save payload, using blank canvas:', hydrateErr);
-        initializeFreshCanvas();
-      }
-    } catch (e) {
-      console.warn('[hydrate] failed, using blank canvas:', e);
-      initializeFreshCanvas();
-    }
-  }
-
-  // Toast notification helper
-  function showToastNotification(message, type = 'info') {
-    setToastMessage(message);
-    setToastType(type);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 4000);
-  }
 
   async function analyzeCTR(){
     setCtrLoading(true);
@@ -3043,15 +2923,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
               display:'flex',alignItems:'center',gap:5}}>
             💾 Save
           </button>
-          {/* Auto-save status indicator */}
-          {user?.email && (
-            <div style={{fontSize:10,color:autoSaveStatus==='saved'?T.success:autoSaveStatus==='saving'?T.warning:autoSaveStatus==='error'?T.danger:T.muted,fontWeight:'600',display:'flex',alignItems:'center',gap:4,padding:'0 8px'}}>
-              {autoSaveStatus === 'saving' && '💾 Saving...'}
-              {autoSaveStatus === 'saved' && '✓ Saved'}
-              {autoSaveStatus === 'error' && '⚠ Error'}
-              {autoSaveStatus === 'idle' && '☁ Auto-save'}
-            </div>
-          )}
           <button onClick={()=>selectedId&&duplicateLayer(selectedId)}
             disabled={!selectedId||selectedLayer?.type==='background'}
             style={{padding:'6px 14px',borderRadius:7,

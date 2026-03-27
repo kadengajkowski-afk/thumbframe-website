@@ -854,33 +854,10 @@ function AuthPage({ mode, setPage, onAuth }) {
           return;
         }
         
-        // Successful signup
-        if (data.user) {
-          setPage('editor');
-        }
       } else {
-        const { data, error } = await signIn({
-          email,
-          password,
-          setLoading,
-          onSuccess: () => setPage('editor'),
-        });
-
+        const { error } = await signIn({ email, password, setLoading });
         if (error) {
-          if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('too many')) {
-            setError('Too many attempts. Please wait a moment and try again.');
-          } else if (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed')) {
-            setError(
-              <div>
-                {error.message}
-                <div style={{ marginTop: 8 }}>
-                  Don't have an account? <span onClick={() => setPage('signup')} style={{ color: C.accent, cursor: 'pointer', fontWeight: '600', textDecoration: 'underline' }}>Quick sign up</span>
-                </div>
-              </div>
-            );
-          } else {
-            setError(error.message || 'Login failed. Please try again.');
-          }
+          setError(error.message || 'Login failed. Please try again.');
         }
       }
     } catch (err) {
@@ -1049,12 +1026,10 @@ export default function App() {
   const [user,  setUser]  = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('sf_token') || null);
   const [brandKit, setBrandKit] = useState(null);
-  const [session, setSession] = useState(null);
 
   useEffect(() => {
     // Get initial Supabase session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
       if (session?.user) {
         // Fetch profile data to get plan, is_pro, is_admin
         const { data: profile } = await supabase
@@ -1075,7 +1050,6 @@ export default function App() {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
       if (session?.user) {
         // Fetch profile data to get plan, is_pro, is_admin
         const { data: profile } = await supabase
@@ -1138,7 +1112,6 @@ export default function App() {
     supabase.auth.signOut();
     setToken(null); setUser(null);
     localStorage.removeItem('sf_token');
-    setSession(null);
     setPage('home');
   }
 
