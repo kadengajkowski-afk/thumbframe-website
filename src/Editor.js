@@ -1652,17 +1652,35 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   }
 
   const saveCanvasToSupabase = useCallback(async ()=>{
-    if(!user?.email)return;
-    const canvasState={
-      platform,
-      layers:JSON.parse(JSON.stringify(layers)),
-      brightness,
-      contrast,
-      saturation,
-      hue,
-    };
     try{
-      const { error } = await supabase.from('thumbnails').upsert({ user_email: user.email, json_data: canvasState }, { onConflict: 'user_email' });
+      // 1. Ensure we have an email and force it to lowercase
+      const safeEmail = user?.email?.toLowerCase();
+      if (!safeEmail) throw new Error('No user email found for save');
+
+      // 2. Serialize the canvas safely (adjust if using Fabric or Konva)
+      const canvas = (canvasRef.current && typeof canvasRef.current.toJSON === 'function')
+        ? canvasRef.current
+        : {
+            toJSON: () => ({
+              platform,
+              layers: JSON.parse(JSON.stringify(layers)),
+              brightness,
+              contrast,
+              saturation,
+              hue,
+            }),
+          };
+      const safeCanvasData = canvas.toJSON();
+
+      // 3. Execute the upsert
+      const { error } = await supabase.from('thumbnails').upsert(
+        {
+          user_email: safeEmail,
+          json_data: safeCanvasData
+        },
+        { onConflict: 'user_email' }
+      );
+
       if(error)throw error;
     }catch(e){
       console.error('Failed to save');
