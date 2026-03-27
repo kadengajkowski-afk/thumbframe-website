@@ -2437,13 +2437,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
 
     if(obj.type==='background')return(
       <div key={obj.id} onMouseDown={e=>{e.stopPropagation();justSelectedRef.current=true;setSelectedId(obj.id);setActiveTool('background');}}
-        style={{position:'absolute',left:0,top:0,width:p.preview.w,height:p.preview.h,zIndex:0,opacity:opacityVal,background:obj.bgGradient?`linear-gradient(180deg,${obj.bgGradient[0]},${obj.bgGradient[1]})`:obj.bgColor,cursor:'pointer'}}>
+        style={{position:'absolute',left:0,top:0,width:p.preview.w,height:p.preview.h,zIndex:0,opacity:opacityVal,background:obj.bgGradient?`linear-gradient(180deg,${obj.bgGradient[0]},${obj.bgGradient[1]})`:obj.bgColor,cursor:'pointer',...flipStyle}}>
         {isSelected&&<div style={{position:'absolute',inset:0,border:`1.5px dashed ${T.accent}`,pointerEvents:'none'}}/>}
         {showGrid&&<div style={{position:'absolute',inset:0,pointerEvents:'none',backgroundImage:`linear-gradient(rgba(255,255,255,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.06) 1px,transparent 1px)`,backgroundSize:'20px 20px'}}/>}
         {showRuler&&<>
           <div style={{position:'absolute',top:0,left:0,right:0,height:16,background:'rgba(0,0,0,0.5)',pointerEvents:'none',overflow:'hidden'}}>{Array.from({length:Math.floor(p.preview.w/40)}).map((_,i)=>(<div key={i} style={{position:'absolute',left:i*40,fontSize:7,color:'rgba(255,255,255,0.7)',paddingLeft:2,top:4}}>{i*40}</div>))}</div>
           <div style={{position:'absolute',top:0,left:0,bottom:0,width:16,background:'rgba(0,0,0,0.5)',pointerEvents:'none',overflow:'hidden'}}>{Array.from({length:Math.floor(p.preview.h/40)}).map((_,i)=>(<div key={i} style={{position:'absolute',top:i*40+4,left:1,fontSize:7,color:'rgba(255,255,255,0.7)'}}>{i*40}</div>))}</div>
         </>}
+        {isSelected&&renderResizeHandles(obj)}
       </div>
     );
     if(obj.type==='text'){
