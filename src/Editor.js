@@ -699,7 +699,19 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     setHistory([[b]]);
     setHistoryIndex(0);
     // Hydrate canvas from Supabase on mount
-    hydrateFromSupabase();
+    (async()=>{
+      try {
+        await hydrateFromSupabase();
+      } catch (e) {
+        console.warn('[hydrate/useEffect] load failed, using blank canvas:', e);
+        const freshBg = makeBg(p);
+        setLayers([freshBg]);
+        historyRef.current = [[freshBg]];
+        historyIndexRef.current = 0;
+        setHistory([[freshBg]]);
+        setHistoryIndex(0);
+      }
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
@@ -1656,37 +1668,22 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
       };
 
       const nowIso = new Date().toISOString();
-      const { error: canvasSaveError } = await supabase
+      const { error: saveError } = await supabase
         .from('thumbnails')
         .upsert({
           user_email: user.email,
-          canvas_data: canvasState,
+          json_data: canvasState,
           updated_at: nowIso,
         }, {
           onConflict: 'user_email'
         });
-
-      // Fallback for environments where the JSON column is named json_data
-      let saveError = canvasSaveError;
-      if (saveError && String(saveError.message || '').toLowerCase().includes('canvas_data')) {
-        const { error: jsonSaveError } = await supabase
-          .from('thumbnails')
-          .upsert({
-            user_email: user.email,
-            json_data: canvasState,
-            updated_at: nowIso,
-          }, {
-            onConflict: 'user_email'
-          });
-        saveError = jsonSaveError;
-      }
 
       if (saveError) throw saveError;
 
       setAutoSaveStatus('saved');
       setTimeout(() => setAutoSaveStatus('idle'), 2000);
     } catch (e) {
-      console.error('[autoSave] failed:', e?.message, e?.code, e?.details, e?.hint);
+      console.warn('[autoSave] failed:', e?.message, e?.code, e?.details, e?.hint);
       setAutoSaveStatus('error');
       showToastNotification('Auto-save failed. Your work is still saved locally.', 'error');
       setTimeout(() => setAutoSaveStatus('idle'), 3000);
@@ -1708,27 +1705,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     };
 
     try {
-      let activeColumn = 'canvas_data';
+      const activeColumn = 'json_data';
       let { data, error } = await supabase
         .from('thumbnails')
         .select(activeColumn)
         .eq('user_email', user.email)
         .maybeSingle();
 
-      // Fallback for environments where the JSON column is named json_data
-      if (error && String(error.message || '').toLowerCase().includes('canvas_data')) {
-        activeColumn = 'json_data';
-        const fallback = await supabase
-          .from('thumbnails')
-          .select(activeColumn)
-          .eq('user_email', user.email)
-          .maybeSingle();
-        data = fallback.data;
-        error = fallback.error;
-      }
-
       if (error) {
-        console.error('[hydrate] error:', error?.message, error?.code, error?.details, error?.hint);
+        console.warn('[hydrate] fetch failed, using blank canvas:', error?.message, error?.code, error?.details, error?.hint);
         initializeFreshCanvas();
         return;
       }
@@ -1763,11 +1748,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           initializeFreshCanvas();
         }
       } catch (hydrateErr) {
-        console.error('[hydrate] corrupt save payload:', hydrateErr);
+        console.warn('[hydrate] corrupt save payload, using blank canvas:', hydrateErr);
         initializeFreshCanvas();
       }
     } catch (e) {
-      console.error('Hydration failed:', e);
+      console.warn('[hydrate] failed, using blank canvas:', e);
       initializeFreshCanvas();
     }
   }
