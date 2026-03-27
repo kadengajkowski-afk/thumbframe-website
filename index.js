@@ -105,6 +105,24 @@ app.post('/ai-generate', async (req, res) => {
     const { prompt, user_id } = req.body;
     if (!prompt) return res.status(400).json({ error: 'No prompt' });
 
+    // ✅ SECURITY: Check if user has Pro tier before running expensive Replicate API
+    if (user_id) {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('is_pro')
+        .eq('email', user_id)
+        .single();
+
+      if (profileError || !profile || !profile.is_pro) {
+        console.log(`[AI-GENERATE] ❌ Access denied for ${user_id} - not Pro tier`);
+        return res.status(403).json({ 
+          error: 'Upgrade to Pro', 
+          message: 'AI generation is a Pro feature. Upgrade to unlock unlimited AI-powered thumbnails.' 
+        });
+      }
+      console.log(`[AI-GENERATE] ✅ Pro user verified: ${user_id}`);
+    }
+
     let finalPrompt = prompt;
     let faceUrl = null;
 

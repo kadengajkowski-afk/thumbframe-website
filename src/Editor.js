@@ -4736,10 +4736,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           const isPro = user?.plan === 'pro' || token === 'test-key-123';
           const isAdmin = user?.email === 'kadengajkowski@gmail.com';
           console.log(`Gating Check - isPro: ${isPro}, isAdmin: ${isAdmin}`);
+          
+          // SECURITY: Block non-Pro users from even attempting the fetch
           if (!isPro && !isAdmin) {
+            console.log('[AI-GENERATE] Non-Pro user blocked - opening upgrade modal');
             setShowPaywall(true);
             return;
           }
+          
           const btn=document.getElementById('ai-generate-btn');
           const prompt=document.getElementById('ai-prompt-input').value;
           if(!prompt.trim()){alert('Enter a prompt first');return;}
@@ -4752,7 +4756,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
             });
             const data=await res.json();
             if(data.error){
-              alert('Error: '+data.error);
+              // Handle 403 from backend Pro check
+              if(res.status === 403){
+                alert('Upgrade to Pro to use AI generation');
+                setShowPaywall(true);
+              } else {
+                alert('Error: '+data.error);
+              }
               btn.textContent='Generate';btn.disabled=false;btn.style.opacity='1';
               return;
             }
@@ -4882,6 +4892,61 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
           setShowBrandKitSetup={setShowBrandKitSetup}
           setCmdLog={setCmdLog}
         />
+      )}
+
+      {/* Upgrade to Pro Modal */}
+      {showPaywall && (
+        <div style={{position:'fixed',inset:0,zIndex:1001,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.8)',backdropFilter:'blur(6px)'}} onClick={e=>{if(e.target===e.currentTarget)setShowPaywall(false);}}>
+          <div style={{width:440,background:T.panel,borderRadius:16,border:`2px solid ${T.warning}`,padding:'32px',boxShadow:'0 32px 120px rgba(0,0,0,0.9)',textAlign:'center'}}>
+            <div style={{fontSize:48,marginBottom:16}}>⚡</div>
+            <div style={{fontSize:24,fontWeight:'800',marginBottom:8,color:T.text}}>Upgrade to Pro</div>
+            <div style={{fontSize:14,color:T.muted,lineHeight:1.7,marginBottom:24}}>
+              AI thumbnail generation is a Pro feature. Unlock unlimited AI-powered thumbnails, HD exports, and priority support for just $15/month.
+            </div>
+            
+            <div style={{background:T.bg2,borderRadius:10,padding:'16px',marginBottom:24,border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:12,fontWeight:'700',color:T.accent,marginBottom:10,textTransform:'uppercase',letterSpacing:'0.5px'}}>Pro Features</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8,textAlign:'left'}}>
+                {[
+                  '⚡ Unlimited AI thumbnail generation',
+                  '📸 HD 4K export (1280×720)',
+                  '🎨 Brand Kit with face integration',
+                  '⚙️ Priority support',
+                  '🚀 Early access to new features'
+                ].map((feature,i)=>(
+                  <div key={i} style={{fontSize:13,color:T.text2,display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{color:T.success,fontSize:11,fontWeight:'700'}}>✓</span>
+                    {feature}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button 
+              onClick={()=>{
+                fetch('https://thumbframe-api-production.up.railway.app/checkout',{
+                  method:'POST',
+                  headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({email: user?.email, plan:'pro'}),
+                }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
+              }}
+              style={{
+                width:'100%',padding:'14px 24px',borderRadius:10,border:'none',
+                background:'linear-gradient(135deg, #f59e0b, #ef4444)',
+                color:'#fff',cursor:'pointer',fontSize:15,fontWeight:'700',
+                boxShadow:'0 4px 20px rgba(245,158,11,0.4)',
+                marginBottom:12,transition:'transform 0.2s'
+              }}
+              onMouseEnter={e=>e.currentTarget.style.transform='translateY(-2px)'}
+              onMouseLeave={e=>e.currentTarget.style.transform='translateY(0)'}>
+              Upgrade to Pro — $15/mo
+            </button>
+            
+            <button onClick={()=>setShowPaywall(false)} style={{width:'100%',padding:'10px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:13,cursor:'pointer'}}>
+              Maybe later
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
