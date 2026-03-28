@@ -144,22 +144,70 @@ app.post('/ai-generate', async (req, res) => {
 
     const model = "black-forest-labs/flux-schnell";
 
+    const generateImage = async ({ brandKitFace, userPrompt }) => {
+      const response = await fetch('https://api.replicate.com/v1/predictions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.REPLICATE_API_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          // Use the latest stable official version hash
+          version: '8baa7ef2d5129f3418310f5ca60715aa9eb95d0319ca2943e868d404b9016140',
+          input: {
+            main_face_image: brandKitFace, // This is the URL from our Brand Kit!
+            prompt: userPrompt,
+            num_steps: 20,
+            start_step: 0,
+            guidance_scale: 4,
+          },
+        }),
+      });
+
+      const prediction = await response.json();
+      if (!response.ok) {
+        throw new Error(prediction?.detail || prediction?.error || `Replicate request failed: ${response.status}`);
+      }
+
+      const pollUrl = prediction?.urls?.get;
+      if (!pollUrl) {
+        throw new Error('Replicate response missing prediction polling URL');
+      }
+
+      for (let i = 0; i < 60; i += 1) {
+        const pollRes = await fetch(pollUrl, {
+          headers: {
+            'Authorization': `Bearer ${process.env.REPLICATE_API_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        const pollData = await pollRes.json();
+
+        if (!pollRes.ok) {
+          throw new Error(pollData?.detail || pollData?.error || `Replicate polling failed: ${pollRes.status}`);
+        }
+
+        if (pollData.status === 'succeeded') {
+          return pollData.output;
+        }
+
+        if (pollData.status === 'failed' || pollData.status === 'canceled') {
+          throw new Error(pollData.error || `Prediction ${pollData.status}`);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
+      throw new Error('Replicate prediction timed out');
+    };
+
     const input = { prompt: finalPrompt, aspect_ratio: "16:9", output_format: "png" };
     if (faceUrl) input.main_face_image = faceUrl; 
 
     let output;
     try {
       if (faceUrl) {
-        const prediction = await replicate.predictions.create({
-          // bytedance/flux-pulid stable version
-          version: '8baa7ef2d5129f3418310f5ca60715aa9eb95d0319ca2943e868d404b9016140',
-          input,
-        });
-        const completed = await replicate.wait(prediction);
-        if (completed.status !== 'succeeded') {
-          throw new Error(completed.error || `Prediction failed with status: ${completed.status}`);
-        }
-        output = completed.output;
+        output = await generateImage({ brandKitFace: faceUrl, userPrompt: finalPrompt });
       } else {
         output = await replicate.run(model, { input });
       }
