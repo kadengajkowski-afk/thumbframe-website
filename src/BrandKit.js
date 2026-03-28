@@ -1,43 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Cropper from 'react-easy-crop';
 import supabase from './supabaseClient';
-
-function createImage(url){
-  return new Promise((resolve,reject)=>{
-    const image = new Image();
-    image.crossOrigin = 'anonymous';
-    image.onload = ()=>resolve(image);
-    image.onerror = reject;
-    image.src = url;
-  });
-}
-
-async function getCroppedBlob(imageSrc, pixelCrop){
-  const image = await createImage(imageSrc);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.floor(pixelCrop.width));
-  canvas.height = Math.max(1, Math.floor(pixelCrop.height));
-  const ctx = canvas.getContext('2d');
-
-  ctx.drawImage(
-    image,
-    pixelCrop.x,
-    pixelCrop.y,
-    pixelCrop.width,
-    pixelCrop.height,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-  return new Promise((resolve,reject)=>{
-    canvas.toBlob((blob)=>{
-      if(blob) resolve(blob);
-      else reject(new Error('Failed to generate cropped image blob'));
-    }, 'image/png');
-  });
-}
+import getCroppedImg from './utils/getCroppedImg';
 
 export default function BrandKitSetupModal({
   T,
@@ -52,21 +16,41 @@ export default function BrandKitSetupModal({
 }) {
   const [primary, setPrimary] = useState(brandKitColors.primary);
   const [secondary, setSecondary] = useState(brandKitColors.secondary);
-  const [uploading, setUploading] = useState(false);
   const [saveStatus, setSaveStatus] = useState('idle');
+  const [isProcessingCrop, setIsProcessingCrop] = useState(false);
 
   const [cropSource, setCropSource] = useState(null);
+  const [cropObjectUrl, setCropObjectUrl] = useState(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const faceAspect = 1;
 
-  async function uploadCroppedFace(){
-    if(!cropSource || !croppedAreaPixels) return;
+  useEffect(() => {
+    return () => {
+      if (cropObjectUrl) URL.revokeObjectURL(cropObjectUrl);
+    };
+  }, [cropObjectUrl]);
 
-    setUploading(true);
+  function clearCropSource() {
+    if (cropObjectUrl) URL.revokeObjectURL(cropObjectUrl);
+    setCropObjectUrl(null);
+    setCropSource(null);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+  }
+
+  async function uploadCroppedFaceIfNeeded(activeUser) {
+    if (!cropSource || !croppedAreaPixels) return brandKitFace;
+
+    setIsProcessingCrop(true);
     try {
-      const croppedBlob = await getCroppedBlob(cropSource, croppedAreaPixels);
-      const fileName = `${user?.email || 'user'}_${Date.now()}.png`;
+      const croppedBlob = await getCroppedImg(cropSource, croppedAreaPixels, {
+        type: 'image/png',
+        quality: 1,
+      });
+      const fileName = `${activeUser?.email || user?.email || 'user'}_${Date.now()}.png`;
       const filePath = `faces/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -77,20 +61,18 @@ export default function BrandKitSetupModal({
           contentType: 'image/png'
         });
 
-      if(uploadError) throw uploadError;
+      if (uploadError) throw uploadError;
 
-      const { data:{ publicUrl } } = supabase.storage
+      const { data: { publicUrl } } = supabase.storage
         .from('brand-assets')
         .getPublicUrl(filePath);
 
       setBrandKitFace(publicUrl);
-      setCropSource(null);
-      setCmdLog('✓ Face image cropped and uploaded');
-    } catch (err) {
-      console.error('Face upload failed:', err);
-      alert('Upload failed: ' + err.message);
+      clearCropSource();
+      setCmdLog('✓ Face cropped in high resolution and uploaded');
+      return publicUrl;
     } finally {
-      setUploading(false);
+      setIsProcessingCrop(false);
     }
   }
 
@@ -98,7 +80,9 @@ export default function BrandKitSetupModal({
     const file = e.target.files?.[0];
     if(!file) return;
 
+    if (cropObjectUrl) URL.revokeObjectURL(cropObjectUrl);
     const objectUrl = URL.createObjectURL(file);
+    setCropObjectUrl(objectUrl);
     setCropSource(objectUrl);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
@@ -115,12 +99,14 @@ export default function BrandKitSetupModal({
         throw new Error('No user found');
       }
 
+      const resolvedFaceUrl = await uploadCroppedFaceIfNeeded(authUser);
+
       const data = {
         user_id: authUser.id,
         user_email: authUser.email,
         primary_color: primary,
         secondary_color: secondary,
-        face_image_url: brandKitFace,
+        face_image_url: resolvedFaceUrl || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -137,6 +123,7 @@ export default function BrandKitSetupModal({
     } catch (err) {
       console.error('Save failed:', err);
       setSaveStatus('error');
+      alert('Save failed: ' + err.message);
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
   };
@@ -169,7 +156,7 @@ export default function BrandKitSetupModal({
           ) : (
             <label style={{display:'block',padding:20,borderRadius:10,border:`2px dashed ${T.border}`,textAlign:'center',cursor:'pointer',background:T.input}}>
               <input type="file" accept="image/*" onChange={handleFaceUploadSelect} style={{display:'none'}}/>
-              <div style={{fontSize:11,color:T.muted}}>{uploading ? 'Uploading...' : '+ Upload face image'}</div>
+              <div style={{fontSize:11,color:T.muted}}>{isProcessingCrop ? 'Processing...' : '+ Upload face image'}</div>
             </label>
           )}
         </div>
@@ -182,12 +169,12 @@ export default function BrandKitSetupModal({
                 image={cropSource}
                 crop={crop}
                 zoom={zoom}
-                aspect={1}
+                aspect={faceAspect}
                 cropShape="rect"
                 showGrid
                 onCropChange={setCrop}
                 onZoomChange={setZoom}
-                onCropComplete={(croppedArea, croppedAreaPx)=>{
+                onCropComplete={(_, croppedAreaPx)=>{
                   setCroppedAreaPixels(croppedAreaPx);
                 }}
               />
@@ -204,32 +191,29 @@ export default function BrandKitSetupModal({
                 style={{flex:1}}
               />
               <button
-                onClick={uploadCroppedFace}
-                disabled={uploading || !croppedAreaPixels}
-                style={{padding:'8px 12px',borderRadius:7,border:'none',background:T.accent,color:'#fff',cursor:uploading?'not-allowed':'pointer',fontSize:12,fontWeight:'700',opacity:uploading?0.6:1}}
-              >
-                {uploading ? 'Saving...' : 'Use cropped face'}
-              </button>
-              <button
-                onClick={()=>setCropSource(null)}
+                onClick={clearCropSource}
                 style={{padding:'8px 12px',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.text,cursor:'pointer',fontSize:12,fontWeight:'600'}}
               >
                 Cancel
               </button>
             </div>
+            <div style={{fontSize:10,color:T.muted,marginTop:6}}>
+              Crop is applied when you click Save Brand Kit.
+            </div>
           </div>
         )}
 
         <div style={{marginBottom:12,textAlign:'center',fontSize:11,color:saveStatus==='saved'?T.success:saveStatus==='saving'?T.warning:saveStatus==='error'?T.danger:T.muted,fontWeight:'600'}}>
+          {isProcessingCrop && 'Processing high-res crop...'}
           {saveStatus === 'saving' && 'Saving...'}
           {saveStatus === 'saved' && 'Changes Saved'}
           {saveStatus === 'error' && 'Save Failed'}
-          {saveStatus === 'idle' && 'Click Save Brand Kit to store changes'}
+          {saveStatus === 'idle' && !isProcessingCrop && 'Click Save Brand Kit to store changes'}
         </div>
 
         <div style={{display:'flex',gap:8}}>
           <button onClick={()=>setShowBrandKitSetup(false)} style={{flex:1,padding:10,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.text,cursor:'pointer',fontSize:13,fontWeight:'600'}}>Cancel</button>
-          <button onClick={handleSave} disabled={saveStatus==='saving'} style={{flex:1,padding:10,borderRadius:7,border:'none',background:T.accent,color:'#fff',cursor:saveStatus==='saving'?'not-allowed':'pointer',fontSize:13,fontWeight:'700',opacity:saveStatus==='saving'?0.6:1}}>Save Brand Kit</button>
+          <button onClick={handleSave} disabled={saveStatus==='saving' || isProcessingCrop} style={{flex:1,padding:10,borderRadius:7,border:'none',background:T.accent,color:'#fff',cursor:(saveStatus==='saving' || isProcessingCrop)?'not-allowed':'pointer',fontSize:13,fontWeight:'700',opacity:(saveStatus==='saving' || isProcessingCrop)?0.6:1}}>{isProcessingCrop?'Processing...':'Save Brand Kit'}</button>
         </div>
       </div>
     </div>
