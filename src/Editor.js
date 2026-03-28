@@ -681,6 +681,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [toastMessage]                                 = useState('');
   const [toastType]                                    = useState('info');
 
+  const resolveAuthToken = useCallback(async()=>{
+    try{
+      const { data:{ session } } = await supabase.auth.getSession();
+      return session?.access_token || token || null;
+    }catch(e){
+      return token || null;
+    }
+  },[token]);
+
   function setLayers(val){
     if(typeof val==='function'){
       setLayersRaw(prev=>{const next=val(prev);layersRef.current=next;return next;});
@@ -760,10 +769,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         let remoteProject = null;
         if(!restoredDraft){
           try{
-            if(token){
+            const authToken = await resolveAuthToken();
+            if(authToken){
               const projectRes = await fetch(`${resolvedApiUrl}/designs/load?id=${encodeURIComponent(resolvedProjectId)}`,{
                 method:'GET',
-                headers:{ authorization:`Bearer ${token}` },
+                headers:{ authorization:`Bearer ${authToken}` },
               });
 
               if(projectRes.ok){
@@ -890,18 +900,19 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     bootstrapEditor();
     return()=>{cancelled=true;};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[user?.id]);
+  },[resolveAuthToken, resolvedApiUrl, user?.id]);
 
   useEffect(()=>{
     if(!showFileTab)return;
 
     async function fetchSavedDesigns(){
       try{
-        if(!token)return;
+        const authToken = await resolveAuthToken();
+        if(!authToken)return;
 
         const response = await fetch(`${resolvedApiUrl}/designs/load`,{
           method:'GET',
-          headers:{ authorization:`Bearer ${token}` },
+          headers:{ authorization:`Bearer ${authToken}` },
         });
 
         if(!response.ok) throw new Error(`Load failed: ${response.status}`);
@@ -913,7 +924,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
 
     fetchSavedDesigns();
-  },[resolvedApiUrl, showFileTab, token]);
+  },[resolveAuthToken, resolvedApiUrl, showFileTab]);
 
   // ✅ Window drag handlers — ONLY fire when draggingRef or resizingRef is set
   // This means sidebar sliders are completely unaffected
@@ -1898,10 +1909,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         const updated=[design,...savedDesigns.filter(d=>d.id!==ensuredProjectId)].slice(0,20);
         setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));
         // Also save to backend if logged in
-        if(token){
+        (async()=>{
+          const authToken = await resolveAuthToken();
+          if(!authToken)return;
           fetch(`${resolvedApiUrl}/designs/save`,{
             method:'POST',
-            headers:{'Content-Type':'application/json','authorization':`Bearer ${token}`},
+            headers:{'Content-Type':'application/json','authorization':`Bearer ${authToken}`},
             body:JSON.stringify({
               id: ensuredProjectId,
               name:canvasData.name,
@@ -1915,7 +1928,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
               canvas_data:canvasData,
             }),
           }).catch(()=>{});
-        }
+        })();
         setCmdLog(`✓ Saved: ${name||'Untitled'}`);
       }
     }catch(e){
@@ -1926,9 +1939,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
   const saveProject = useCallback(async ()=>{
     try{
-      if(!token){
-        console.warn('[SAVE PROJECT] Aborted: missing auth token.');
+      const { data:{ session }, error:sessionError } = await supabase.auth.getSession();
+
+      if(sessionError || !session?.access_token){
+        console.warn('[SAVE PROJECT] Missing session. Redirecting to login.');
         setSaveStatus('Error');
+        window.location.href='/login';
         return;
       }
 
@@ -1958,7 +1974,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         method:'POST',
         headers:{
           'Content-Type':'application/json',
-          authorization:`Bearer ${token}`,
+          authorization:`Bearer ${session.access_token}`,
         },
         body:JSON.stringify({
           id: ensuredProjectId,
@@ -1992,7 +2008,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       console.error('[SAVE PROJECT] Error:', err);
       setSaveStatus('Error');
     }
-  },[aiPrompt, brightness, brandKitColors, contrast, designName, fillColor, hue, lastGeneratedImageUrl, layers, platform, projectId, resolvedApiUrl, saturation, strokeColor, textColor, token]);
+  },[aiPrompt, brightness, brandKitColors, contrast, designName, fillColor, hue, lastGeneratedImageUrl, layers, platform, projectId, resolvedApiUrl, saturation, strokeColor, textColor]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
@@ -2066,10 +2082,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const updated=savedDesigns.filter(d=>d.id!==id);
     setSavedDesigns(updated);
     localStorage.setItem('thumbframe_designs',JSON.stringify(updated));
-    if(token){
+    (async()=>{
+      const authToken = await resolveAuthToken();
+      if(!authToken)return;
       fetch(`${resolvedApiUrl}/designs/${encodeURIComponent(id)}`,
-        { method:'DELETE', headers:{ authorization:`Bearer ${token}` } }).catch(()=>{});
-    }
+        { method:'DELETE', headers:{ authorization:`Bearer ${authToken}` } }).catch(()=>{});
+    })();
   }
 
   async function analyzeCTR(){
