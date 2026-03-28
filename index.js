@@ -151,7 +151,8 @@ app.post('/ai-generate', async (req, res) => {
     try {
       if (faceUrl) {
         const prediction = await replicate.predictions.create({
-          version: '7183e2e2a6d716803859600e16738592c3a51f08bf6060c5a35928f4133f990a',
+          // bytedance/flux-pulid stable version
+          version: '8baa7ef2d5129f3418310f5ca60715aa9eb95d0319ca2943e868d404b9016140',
           input,
         });
         const completed = await replicate.wait(prediction);
