@@ -52,47 +52,36 @@ export default function BrandKitSetupModal({
 	const handleSave = async () => {
 		setSaveStatus('saving');
 
-		// 1. Get the actual authenticated user
-		const { data: { user }, error: userError } = await supabase.auth.getUser();
+		try {
+			const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-		if (userError || !user) {
-			console.error('No user found');
-			setSaveStatus('error');
-			setTimeout(() => setSaveStatus('idle'), 3000);
-			return;
-		}
+			if (userError || !user) {
+				throw new Error('No user found');
+			}
 
-		const primaryColor = primary;
-		const secondaryColor = secondary;
-		const publicUrl = brandKitFace;
+			const data = {
+				user_id: user.id,
+				user_email: user.email,
+				primary_color: primary,
+				secondary_color: secondary,
+				face_image_url: brandKitFace,
+				updated_at: new Date().toISOString(),
+			};
 
-		const { error } = await supabase
-			.from('brand_kits')
-			.upsert(
-				{
-					user_id: user.id,
-					user_email: user.email,
-					primary_color: primaryColor,
-					secondary_color: secondaryColor,
-					face_image_url: publicUrl,
-					updated_at: new Date().toISOString(),
-				},
-				{
-					onConflict: 'user_email', // CRITICAL: This tells the DB to use the email as the lookup key
-					ignoreDuplicates: false    // This ensures it actually updates the data
-				}
-			);
+			const { error } = await supabase
+				.from('brand_kits')
+				.upsert(data, { onConflict: 'user_email' });
 
-		if (error) {
-			console.error('Save failed:', error);
-			setSaveStatus('error');
-			setTimeout(() => setSaveStatus('idle'), 3000);
-		} else {
-			console.log('Success!');
+			if (error) throw error;
+
 			setBrandKitColors({ primary, secondary });
 			setSaveStatus('saved');
 			setCmdLog('✓ Brand Kit saved');
 			setTimeout(() => setSaveStatus('idle'), 2000);
+		} catch (err) {
+			console.error('Save failed:', err);
+			setSaveStatus('error');
+			setTimeout(() => setSaveStatus('idle'), 3000);
 		}
 	};
 

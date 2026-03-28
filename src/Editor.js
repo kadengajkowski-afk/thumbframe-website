@@ -2191,18 +2191,17 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
   function onLayerDragEnd(){setLayerDragId(null);setLayerDragOver(null);}
 
-  async function handleDownload({ tier='basic', format='png', transparent=transparentExport }={}){
+  async function handleDownload({ tier='basic', transparent=transparentExport }={}){
     try{
-      const target = document.getElementById('canvas-container');
+      const target = document.getElementById('thumbnail-canvas');
       if(!target){
         alert('Canvas container not found');
         return;
       }
 
-      const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
-      const hasProAccess = user?.is_pro===true || isProUser || token==='test-key-123' || isAdmin;
+      const isActuallyPro = tier==='pro' && user?.is_pro===true;
 
-      if(tier==='pro' && !hasProAccess){
+      if(tier==='pro' && !isActuallyPro){
         fetch('https://thumbframe-api-production.up.railway.app/checkout',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
@@ -2214,40 +2213,37 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         return;
       }
 
-      const scale = tier==='pro' ? 3 : 1;
+      const scale = isActuallyPro ? 3 : 0.6;
+      const imageQuality = isActuallyPro ? 1.0 : 0.5;
 
       const capturedCanvas = await html2canvas(target, {
-        backgroundColor: transparent ? null : undefined,
+        backgroundColor: transparent ? null : '#000000',
         useCORS: true,
         allowTaint: false,
         logging: false,
         scale,
       });
 
-      const fileBase = `${designName.replace(/\s+/g,'-')}-${p.width}x${p.height}`;
-
-      if(format==='jpg'){
-        const link = document.createElement('a');
-        link.download = `${fileBase}.jpg`;
-        link.href = capturedCanvas.toDataURL('image/jpeg', 0.95);
-        link.click();
-      }else if(format==='webp'){
-        const blob = await new Promise(r=>capturedCanvas.toBlob(r, 'image/webp', 0.92));
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = `${fileBase}.webp`;
-        link.href = url;
-        link.click();
-        URL.revokeObjectURL(url);
-      }else{
-        const blob = await new Promise(r=>capturedCanvas.toBlob(r, 'image/png'));
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = `${fileBase}.png`;
-        link.href = url;
-        link.click();
-        URL.revokeObjectURL(url);
+      if(!isActuallyPro){
+        // Basic tier intentionally degrades output and applies watermark.
+        const ctx = capturedCanvas.getContext('2d');
+        if(ctx){
+          ctx.imageSmoothingEnabled = false;
+          const watermark = 'Created with ThumbFrame';
+          const size = Math.max(14, Math.round(capturedCanvas.width * 0.024));
+          const margin = Math.max(12, Math.round(capturedCanvas.width * 0.02));
+          ctx.font = `700 ${size}px Arial`;
+          ctx.fillStyle = 'rgba(255,255,255,0.58)';
+          const textWidth = ctx.measureText(watermark).width;
+          ctx.fillText(watermark, capturedCanvas.width - textWidth - margin, capturedCanvas.height - margin);
+        }
       }
+
+      const fileBase = `${designName.replace(/\s+/g,'-')}-${isActuallyPro ? 'pro' : 'basic'}`;
+      const link = document.createElement('a');
+      link.download = `${fileBase}.jpg`;
+      link.href = capturedCanvas.toDataURL('image/jpeg', imageQuality);
+      link.click();
 
       setShowDownload(false);
     }catch(err){
@@ -3016,23 +3012,23 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             </div>
             <div style={{...css.section,marginTop:0,marginBottom:10,border:`1px solid ${T.border}`}}>
               <div style={{fontSize:12,fontWeight:'700',color:T.text,marginBottom:4}}>Basic Download</div>
-              <div style={{fontSize:11,color:T.muted,marginBottom:8}}>Standard quality export for all users (scale: 1).</div>
-              <button onClick={()=>handleDownload({tier:'basic',format:'png'})}
+              <div style={{fontSize:11,color:T.muted,marginBottom:8}}>Low quality export for all users (scale: 0.6) with watermark.</div>
+              <button onClick={()=>handleDownload({tier:'basic'})}
                 style={{...css.addBtn,marginTop:0,background:T.input,color:T.text,border:`1px solid ${T.border}`}}>
-                Download Basic PNG
+                Download Basic JPG (Watermarked)
               </button>
             </div>
             <div style={{...css.section,marginTop:0,marginBottom:8,border:`1px solid ${T.warning}`}}>
               <div style={{fontSize:12,fontWeight:'700',color:T.warning,marginBottom:4}}>Pro Download (4K)</div>
-              <div style={{fontSize:11,color:T.muted,marginBottom:8}}>High-definition export for Pro users (scale: 3).</div>
-              <button onClick={()=>handleDownload({tier:'pro',format:'png'})}
+              <div style={{fontSize:11,color:T.muted,marginBottom:8}}>4K-grade export for Pro users only (scale: 3), no watermark.</div>
+              <button onClick={()=>handleDownload({tier:'pro'})}
                 style={{...css.addBtn,marginTop:0,background:T.warning,color:'#000'}}>
-                Download Pro 4K PNG
+                Download Pro 4K JPG
               </button>
               <div style={{fontSize:10,color:T.muted,marginTop:6}}>Non-Pro users will be redirected to upgrade.</div>
             </div>
             <div style={css.section}><div style={css.row}><input type="checkbox" id="transp" checked={transparentExport} onChange={e=>setTransparentExport(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/><label htmlFor="transp" style={{fontSize:12,color:T.text,cursor:'pointer',flex:1}}>Transparent background</label></div></div>
-            <button onClick={()=>handleDownload({tier:'basic',format:'png',transparent:true})} style={{...css.addBtn,background:T.success,marginTop:8}}>Basic PNG with transparency</button>
+            <button onClick={()=>handleDownload({tier:'basic',transparent:true})} style={{...css.addBtn,background:T.success,marginTop:8}}>Basic JPG with transparency</button>
             <button onClick={()=>setShowDownload(false)} style={{width:'100%',padding:9,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:12,cursor:'pointer',marginTop:8}}>Cancel</button>
           </div>
         </div>
@@ -3327,7 +3323,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           }}>
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
             <div style={{transform:`scale(${zoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,transformOrigin:'center center',imageRendering:zoom>1?'pixelated':'high-quality'}}>
-              <div id="canvas-container" ref={canvasRef}
+              <div id="thumbnail-canvas" ref={canvasRef}
                 onMouseMove={(e)=>{
                   if(activeTool==='rimlight'){
                     const rect=canvasRef.current.getBoundingClientRect();
