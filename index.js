@@ -153,7 +153,7 @@ app.post('/ai-generate', async (req, res) => {
         },
         body: JSON.stringify({
           // Use the latest stable official version hash
-          version: '8baa7ef2d5129f3418310f5ca60715aa9eb95d0319ca2943e868d404b9016140',
+          version: '8baa7ef2255075b46f4d91cd238c21d31181b3e6a864463f967960bb0112525b',
           input: {
             main_face_image: brandKitFace, // This is the URL from our Brand Kit!
             prompt: userPrompt,
