@@ -62,15 +62,19 @@ export default function BrandKitSetupModal({
 			return;
 		}
 
+		const primaryColor = primary;
+		const secondaryColor = secondary;
+		const publicUrl = brandKitFace;
+
 		// 2. The Save Logic
 		const { error } = await supabase
 			.from('brand_kits')
 			.upsert({
 				user_id: user.id,
 				user_email: user.email,
-				primary_color: primary,
-				secondary_color: secondary,
-				face_image_url: brandKitFace,
+				primary_color: primaryColor,
+				secondary_color: secondaryColor,
+				face_image_url: publicUrl,
 				updated_at: new Date().toISOString()
 			}, {
 				on_conflict: 'user_email'
