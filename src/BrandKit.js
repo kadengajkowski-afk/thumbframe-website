@@ -49,38 +49,45 @@ export default function BrandKitSetupModal({
 		}
 	}
 
-	async function saveBrandKit() {
-		if (!user?.email) {
-			alert('Please log in to save your Brand Kit');
+	const handleSave = async () => {
+		setSaveStatus('saving');
+
+		// 1. Get the actual authenticated user
+		const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			console.error('No user found');
+			setSaveStatus('error');
+			setTimeout(() => setSaveStatus('idle'), 3000);
 			return;
 		}
 
-		setSaveStatus('saving');
-		try {
-			const { error } = await supabase
-				.from('brand_kits')
-				.upsert({
-					user_email: user.email,
-					primary_color: primary,
-					secondary_color: secondary,
-					face_image_url: brandKitFace,
-					updated_at: new Date().toISOString()
-				}, {
-					onConflict: 'user_email'
-				});
+		// 2. The Save Logic
+		const { error } = await supabase
+			.from('brand_kits')
+			.upsert({
+				user_id: user.id,
+				user_email: user.email,
+				primary_color: primary,
+				secondary_color: secondary,
+				face_image_url: brandKitFace,
+				updated_at: new Date().toISOString()
+			}, {
+				on_conflict: 'user_email'
+			});
 
-			if (error) throw error;
-
+		if (error) {
+			console.error('Save failed:', error);
+			setSaveStatus('error');
+			setTimeout(() => setSaveStatus('idle'), 3000);
+		} else {
+			console.log('Success!');
 			setBrandKitColors({ primary, secondary });
 			setSaveStatus('saved');
 			setCmdLog('✓ Brand Kit saved');
 			setTimeout(() => setSaveStatus('idle'), 2000);
-		} catch (err) {
-			console.error('Save failed:', err);
-			setSaveStatus('error');
-			setTimeout(() => setSaveStatus('idle'), 3000);
 		}
-	}
+	};
 
 	return (
 		<div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'}} onClick={e=>{if(e.target===e.currentTarget)setShowBrandKitSetup(false);}}>
@@ -124,7 +131,7 @@ export default function BrandKitSetupModal({
 
 				<div style={{display:'flex',gap:8}}>
 					<button onClick={()=>setShowBrandKitSetup(false)} style={{flex:1,padding:10,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.text,cursor:'pointer',fontSize:13,fontWeight:'600'}}>Cancel</button>
-					<button onClick={saveBrandKit} disabled={saveStatus==='saving'} style={{flex:1,padding:10,borderRadius:7,border:'none',background:T.accent,color:'#fff',cursor:saveStatus==='saving'?'not-allowed':'pointer',fontSize:13,fontWeight:'700',opacity:saveStatus==='saving'?0.6:1}}>Save Brand Kit</button>
+					<button onClick={handleSave} disabled={saveStatus==='saving'} style={{flex:1,padding:10,borderRadius:7,border:'none',background:T.accent,color:'#fff',cursor:saveStatus==='saving'?'not-allowed':'pointer',fontSize:13,fontWeight:'700',opacity:saveStatus==='saving'?0.6:1}}>Save Brand Kit</button>
 				</div>
 			</div>
 		</div>
