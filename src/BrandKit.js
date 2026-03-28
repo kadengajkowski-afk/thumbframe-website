@@ -66,7 +66,6 @@ export default function BrandKitSetupModal({
 		const secondaryColor = secondary;
 		const publicUrl = brandKitFace;
 
-		// 2. The Save Logic
 		const { error } = await supabase
 			.from('brand_kits')
 			.upsert({
