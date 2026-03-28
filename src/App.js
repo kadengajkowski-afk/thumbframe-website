@@ -1021,37 +1021,124 @@ const API_BASE = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
   : 'https://thumbframe-api-production.up.railway.app';
 
+function getInitialPage() {
+  const path = window.location.pathname.toLowerCase();
+  if (path === '/editor') return 'editor';
+  if (path === '/dashboard') return 'dashboard';
+  if (path === '/login') return 'login';
+  if (path === '/signup') return 'signup';
+  if (path === '/pricing') return 'pricing';
+  if (path === '/examples') return 'examples';
+  if (path === '/howitworks') return 'howitworks';
+  if (path === '/forgot-password') return 'forgot-password';
+  if (path === '/update-password') return 'update-password';
+  return 'home';
+}
+
+function syncPath(page) {
+  const nextPath = page === 'home' ? '/' : `/${page}`;
+  if (window.location.pathname !== nextPath) {
+    window.history.replaceState(null, '', nextPath);
+  }
+}
+
+const PROTECTED_PAGES = new Set(['editor', 'dashboard']);
+
+function LoadingSpinner() {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: C.bg,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+        <div style={{
+          width: 36,
+          height: 36,
+          borderRadius: '50%',
+          border: `3px solid ${C.border}`,
+          borderTopColor: C.accent,
+          animation: 'thumbframe-spin 0.8s linear infinite',
+        }} />
+        <div style={{ fontSize: 13, color: C.muted, fontWeight: '600' }}>Loading session...</div>
+      </div>
+      <style>{`@keyframes thumbframe-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
 export default function App() {
-  const [page,  setPage]  = useState('home');
+  const [page,  setPage]  = useState(getInitialPage);
   const [user,  setUser]  = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('sf_token') || null);
   const [brandKit, setBrandKit] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial Supabase session without any profile/table fetches
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser({
-          email: session.user.email,
-          name: session.user.user_metadata?.name,
-        });
-      }
-    });
+    let mounted = true;
 
-    // Listen for auth changes
+    async function loadSession() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!mounted) return;
+
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.user_metadata?.name,
+            is_pro: session.user.user_metadata?.is_pro === true,
+          });
+        } else {
+          setUser(null);
+        }
+      } catch (error) {
+        if (mounted) {
+          console.error('Session bootstrap failed:', error);
+          setUser(null);
+        }
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    }
+
+    loadSession();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+
       if (session?.user) {
         setUser({
+          id: session.user.id,
           email: session.user.email,
           name: session.user.user_metadata?.name,
+          is_pro: session.user.user_metadata?.is_pro === true,
         });
       } else {
         setUser(null);
       }
+
+      setIsLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
+
+  useEffect(() => {
+    syncPath(page);
+  }, [page]);
+
+  useEffect(() => {
+    if (!isLoading && !user && PROTECTED_PAGES.has(page)) {
+      setPage('home');
+    }
+  }, [isLoading, page, user]);
 
   useEffect(() => {
     if (!token) return;
@@ -1093,6 +1180,14 @@ export default function App() {
     setToken(null); setUser(null);
     localStorage.removeItem('sf_token');
     setPage('home');
+  }
+
+  if (isLoading && PROTECTED_PAGES.has(page)) {
+    return <LoadingSpinner />;
+  }
+
+  if (!isLoading && !user && PROTECTED_PAGES.has(page)) {
+    return <LoadingSpinner />;
   }
 
   if (page === 'editor') {
