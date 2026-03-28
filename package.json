@@ -2,6 +2,9 @@
   "name": "snapframe-website",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",
     "@supabase/supabase-js": "^2.100.0",
@@ -28,16 +31,13 @@
     "uuid": "^9.0.0",
     "web-vitals": "^2.1.4"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "overrides": {
     "yaml": "2.8.3"
   },
   "scripts": {
     "start": "node server.js",
     "dev": "react-scripts start",
-    "build": "CI=false react-scripts build",
+    "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
