@@ -101,7 +101,7 @@ app.get('/proxy-image', async(req,res)=>{
 
 app.post('/ai-generate', async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, face_image_url } = req.body;
     if (!prompt) return res.status(400).json({ error: 'No prompt' });
 
     const authHeader = req.headers.authorization || '';
@@ -138,6 +138,10 @@ app.post('/ai-generate', async (req, res) => {
     if (kit) {
       finalPrompt = `${prompt}. Cinematic YouTube thumbnail, 8k resolution. Deeply integrate these hex colors into the background lighting, shadows, and accents: Primary ${kit.primary_color}, Secondary ${kit.secondary_color}.`;
       faceUrl = kit.face_image_url;
+    }
+
+    if (!faceUrl && face_image_url) {
+      faceUrl = face_image_url;
     }
 
     console.log('Generating via Replicate...', { finalPrompt, faceUrl });

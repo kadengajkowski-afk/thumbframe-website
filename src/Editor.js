@@ -3,6 +3,7 @@ import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 import BrandKitSetupModal from './BrandKit';
 import supabase from './supabaseClient';
+import html2canvas from 'html2canvas';
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
@@ -642,6 +643,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
   const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.email==='kadengajkowski@gmail.com'));
   const [saveStatus, setSaveStatus]                    = useState('Saved');
+  const [aiPrompt,setAiPrompt]                         = useState('');
+  const [lastGeneratedImageUrl,setLastGeneratedImageUrl] = useState('');
 
   const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
   const [showToast,setShowToast]                       = useState(false);
@@ -725,17 +728,18 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     let cancelled=false;
 
     async function fetchBrandKitOnLoad(){
-      if(!user?.id)return;
-      if(brandKitFetchedUserRef.current===user.id)return;
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if(sessionError || !session?.user?.id)return;
+      if(brandKitFetchedUserRef.current===session.user.id)return;
 
-      brandKitFetchedUserRef.current=user.id;
+      brandKitFetchedUserRef.current=session.user.id;
       setBrandKitLoading(true);
 
       try{
         const { data, error } = await supabase
           .from('brand_kits')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', session.user.id)
           .maybeSingle();
 
         if(cancelled)return;
@@ -758,7 +762,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     fetchBrandKitOnLoad();
     return()=>{cancelled=true;};
-  },[user?.id]);
+  },[showBrandKitSetup, user?.id]);
 
   useEffect(()=>{zoomRef.current=zoom;},[zoom]);
 
@@ -1716,37 +1720,32 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
   }
 
-  const saveCanvasToSupabase = useCallback(async ()=>{
-    const canvas = (canvasRef.current && typeof canvasRef.current.toJSON === 'function')
-      ? canvasRef.current
-      : {
-          toJSON: () => ({
-            platform,
-            layers: JSON.parse(JSON.stringify(layers)),
-            brightness,
-            contrast,
-            saturation,
-            hue,
-          }),
-        };
-
+  const saveProject = useCallback(async ()=>{
     try{
-      // 1. Aggressively fetch the session directly from Supabase
       const { data: authData, error: authError } = await supabase.auth.getSession();
       const activeUser = authData?.session?.user;
 
       if (authError || !activeUser || !activeUser.id) {
-        console.warn('[AUTO-SAVE] Aborted: Could not verify active user ID.');
+        console.warn('[SAVE PROJECT] Aborted: Could not verify active user ID.');
         setSaveStatus('Error');
         return;
       }
 
       const safeEmail = activeUser.email.toLowerCase();
-      const safeCanvasData = canvas.toJSON();
+      const safeCanvasData = {
+        name: designName || 'Untitled',
+        platform,
+        layers: JSON.parse(JSON.stringify(layers)),
+        brightness,
+        contrast,
+        saturation,
+        hue,
+        prompt: aiPrompt || null,
+        result_image_url: lastGeneratedImageUrl || null,
+      };
 
-      console.log('[AUTO-SAVE] Payload:', { id: activeUser.id, email: safeEmail });
+      console.log('[SAVE PROJECT] Payload:', { id: activeUser.id, email: safeEmail });
 
-      // 2. Execute the upsert using the freshly fetched activeUser
       const { data, error } = await supabase.from('thumbnails').upsert(
         {
           user_id: activeUser.id,
@@ -1758,27 +1757,25 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
       if(error)throw error;
 
-      console.log('[AUTO-SAVE] Success:', data);
+      console.log('[SAVE PROJECT] Success:', data);
       setSaveStatus('Saved');
     }catch(err){
-      console.error('[AUTO-SAVE] Error:', err);
+      console.error('[SAVE PROJECT] Error:', err);
       setSaveStatus('Error');
     }
-  },[platform,layers,brightness,contrast,saturation,hue]);
+  },[aiPrompt, brightness, contrast, designName, hue, lastGeneratedImageUrl, layers, platform, saturation]);
 
   useEffect(()=>{
-    // 1. User interacts with canvas -> setSaveStatus('Unsaved')
     setSaveStatus('Unsaved');
     if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
     autoSaveTimeoutRef.current=setTimeout(async ()=>{
-      // 2. Debounce fires after 2 seconds -> setSaveStatus('Saving...')
       setSaveStatus('Saving...');
-      await saveCanvasToSupabase();
+      await saveProject();
     },2000);
     return()=>{
       if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
     };
-  },[saveCanvasToSupabase]);
+  },[saveProject]);
 
   function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
   function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setSelectedId(null);setShowFileTab(false);}
@@ -2194,9 +2191,62 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
   function onLayerDragEnd(){setLayerDragId(null);setLayerDragOver(null);}
 
+  async function handleDownload(format='png', transparent=transparentExport){
+    try{
+      const target = document.getElementById('canvas-container');
+      if(!target){
+        alert('Canvas container not found');
+        return;
+      }
+
+      const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
+      const hasProAccess = isProUser || token==='test-key-123' || isAdmin;
+      const scale = hasProAccess ? Math.max(2, window.devicePixelRatio || 1) : 1;
+
+      const capturedCanvas = await html2canvas(target, {
+        backgroundColor: transparent ? null : undefined,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        scale,
+      });
+
+      const fileBase = `${designName.replace(/\s+/g,'-')}-${p.width}x${p.height}`;
+
+      if(format==='jpg'){
+        const link = document.createElement('a');
+        link.download = `${fileBase}.jpg`;
+        link.href = capturedCanvas.toDataURL('image/jpeg', 0.95);
+        link.click();
+      }else if(format==='webp'){
+        const blob = await new Promise(r=>capturedCanvas.toBlob(r, 'image/webp', 0.92));
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `${fileBase}.webp`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+      }else{
+        const blob = await new Promise(r=>capturedCanvas.toBlob(r, 'image/png'));
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `${fileBase}.png`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+
+      setShowDownload(false);
+    }catch(err){
+      console.error('Download failed:', err);
+      alert('Failed to download image. Please try again.');
+    }
+  }
+
+  // eslint-disable-next-line no-unused-vars
   async function exportCanvas(format='png', transparent=false){
     // ✅ Free = 640×360 preview res, Pro = full resolution
-    const isPro   = user?.plan==='pro' || token==='test-key-123';
+    const isPro   = isProUser || token==='test-key-123';
     const isAdmin = user?.email === 'kadengajkowski@gmail.com';
     const hasProAccess = isPro || isAdmin;
     const exportW = hasProAccess ? p.width  : Math.round(p.width  * 0.5);
@@ -2980,21 +3030,21 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             )}
             <div style={css.section}><div style={css.row}><input type="checkbox" id="transp" checked={transparentExport} onChange={e=>setTransparentExport(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/><label htmlFor="transp" style={{fontSize:12,color:T.text,cursor:'pointer',flex:1}}>Transparent background</label></div></div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginTop:14}}>
-              <button onClick={()=>exportCanvas('png',transparentExport)}
+              <button onClick={()=>handleDownload('png')}
                 style={{padding:'12px',borderRadius:8,border:`1px solid ${T.border}`,
                   background:T.input,color:T.text,fontSize:13,cursor:'pointer',
                   fontWeight:'600',textAlign:'center'}}>
                 <div style={{fontSize:20,marginBottom:4}}>PNG</div>
                 <div style={{fontSize:10,color:T.muted}}>Lossless</div>
               </button>
-              <button onClick={()=>exportCanvas('jpg',false)}
+              <button onClick={()=>handleDownload('jpg')}
                 style={{padding:'12px',borderRadius:8,border:`1px solid ${T.border}`,
                   background:T.input,color:T.text,fontSize:13,cursor:'pointer',
                   fontWeight:'600',textAlign:'center',opacity:transparentExport?0.4:1}}>
                 <div style={{fontSize:20,marginBottom:4}}>JPG</div>
                 <div style={{fontSize:10,color:T.muted}}>Smaller</div>
               </button>
-              <button onClick={()=>exportCanvas('webp',false)}
+              <button onClick={()=>handleDownload('webp')}
                 style={{padding:'12px',borderRadius:8,border:`1px solid ${T.border}`,
                   background:T.input,color:T.text,fontSize:13,cursor:'pointer',
                   fontWeight:'600',textAlign:'center',opacity:transparentExport?0.4:1}}>
@@ -3002,7 +3052,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 <div style={{fontSize:10,color:T.muted}}>Best quality</div>
               </button>
             </div>
-            <button onClick={()=>exportCanvas('png',true)} style={{...css.addBtn,background:T.success,marginTop:8}}>PNG with transparency</button>
+            <button onClick={()=>handleDownload('png', true)} style={{...css.addBtn,background:T.success,marginTop:8}}>PNG with transparency</button>
             <button onClick={()=>setShowDownload(false)} style={{width:'100%',padding:9,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:12,cursor:'pointer',marginTop:8}}>Cancel</button>
           </div>
         </div>
@@ -3159,7 +3209,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             ↑ {isMobile?'':'Upload'}
             <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{display:'none'}}/>
           </label>
-          <button onClick={()=>setShowDownload(true)} style={{padding:isMobile?'5px 10px':'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)',flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓{isMobile?'':' Download'}</button>
+          <button onClick={()=>handleDownload('png')} style={{padding:isMobile?'5px 10px':'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)',flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓{isMobile?'':' Download'}</button>
           <button onClick={()=>{
             const isPro = isProUser;
             const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
@@ -3297,7 +3347,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           }}>
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
             <div style={{transform:`scale(${zoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,transformOrigin:'center center',imageRendering:zoom>1?'pixelated':'high-quality'}}>
-              <div ref={canvasRef}
+              <div id="canvas-container" ref={canvasRef}
                 onMouseMove={(e)=>{
                   if(activeTool==='rimlight'){
                     const rect=canvasRef.current.getBoundingClientRect();
@@ -5080,6 +5130,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       </div>
       <input
         id="ai-prompt-input"
+        value={aiPrompt}
+        onChange={e=>setAiPrompt(e.target.value)}
         placeholder="Epic gaming moment, dramatic lighting..."
         style={{padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:12,width:'100%',boxSizing:'border-box',outline:'none',fontFamily:'inherit',marginBottom:8}}
       />
@@ -5098,8 +5150,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           }
           
           const btn=document.getElementById('ai-generate-btn');
-          const prompt=document.getElementById('ai-prompt-input').value;
-          if(!prompt.trim()){alert('Enter a prompt first');return;}
+          if(!aiPrompt.trim()){alert('Enter a prompt first');return;}
           btn.textContent='Generating...';btn.disabled=true;btn.style.opacity='0.6';
           try{
             const { data: { session } } = await supabase.auth.getSession();
@@ -5114,7 +5165,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 'Content-Type':'application/json',
                 'Authorization': `Bearer ${session.access_token}`,
               },
-              body:JSON.stringify({prompt}),
+              body:JSON.stringify({
+                prompt: aiPrompt,
+                face_image_url: brandKit?.face_image_url || brandKitFace || null,
+              }),
             });
             const data=await res.json();
             if(data.error){
@@ -5135,6 +5189,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
               cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
               imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
             });
+            setLastGeneratedImageUrl(data.image || '');
             btn.textContent='✓ Added!';btn.style.background=T.success;
             setTimeout(()=>{
               btn.textContent='Generate';btn.disabled=false;
