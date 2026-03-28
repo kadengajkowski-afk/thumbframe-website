@@ -69,16 +69,24 @@ export default function BrandKitSetupModal({
     
     setSaveStatus('saving');
     try {
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+      if (userError || !authUser) throw (userError || new Error('No user found'));
+
+      const primaryColor = primary;
+      const secondaryColor = secondary;
+      const publicUrl = brandKitFace;
+
       const { error } = await supabase
         .from('brand_kits')
         .upsert({
-          user_email: user.email,
-          primary_color: primary,
-          secondary_color: secondary,
-          face_image_url: brandKitFace,
+          user_id: authUser.id,
+          user_email: authUser.email,
+          primary_color: primaryColor,
+          secondary_color: secondaryColor,
+          face_image_url: publicUrl,
           updated_at: new Date().toISOString()
         }, {
-          onConflict: 'user_email'
+          on_conflict: 'user_email'
         });
 
       if (error) throw error;
@@ -101,16 +109,24 @@ export default function BrandKitSetupModal({
 
     setSaveStatus('saving');
     try {
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+      if (userError || !authUser) throw (userError || new Error('No user found'));
+
+      const primaryColor = primary;
+      const secondaryColor = secondary;
+      const publicUrl = brandKitFace;
+
       const { error } = await supabase
         .from('brand_kits')
         .upsert({
-          user_email: user.email,
-          primary_color: primary,
-          secondary_color: secondary,
-          face_image_url: brandKitFace,
+          user_id: authUser.id,
+          user_email: authUser.email,
+          primary_color: primaryColor,
+          secondary_color: secondaryColor,
+          face_image_url: publicUrl,
           updated_at: new Date().toISOString()
         }, {
-          onConflict: 'user_email'
+          on_conflict: 'user_email'
         });
 
       if (error) throw error;
