@@ -1675,10 +1675,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
 
       // AGGRESSIVE LOGGING: Show exactly what we are sending
       console.log('[AUTO-SAVE] Payload:', { email: safeEmail, dataSize: JSON.stringify(safeCanvasData).length });
+      const userId = user?.id;
 
       // 3. Execute the upsert
       const { data, error } = await supabase.from('thumbnails').upsert(
         {
+          user_id: userId,
           user_email: safeEmail,
           json_data: safeCanvasData
         },
