@@ -521,6 +521,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const layersRef       = useRef([]);
   const mountedRef = useRef(true);
   const autoSaveTimeoutRef = useRef(null);
+  const draftHydratedRef = useRef(false);
   // Performance: Mouse tracking refs to avoid re-renders
   const mouseRef        = useRef({x:0,y:0});
   const lastRimLightRef = useRef(0);
@@ -641,6 +642,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
   const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.email==='kadengajkowski@gmail.com'));
+  const [isLoading,setIsLoading]                       = useState(true);
   const [saveStatus, setSaveStatus]                    = useState('Saved');
   const [aiPrompt,setAiPrompt]                         = useState('');
   const [lastGeneratedImageUrl,setLastGeneratedImageUrl] = useState('');
@@ -724,14 +726,34 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     return()=>{cancelled=true;};
   },[user?.email,user?.is_admin,token]);
 
+  useEffect(()=>{zoomRef.current=zoom;},[zoom]);
+
   useEffect(()=>{
     let cancelled=false;
 
-    async function fetchBrandKitOnLoad(){
+    async function bootstrapEditor(){
       if(!user?.id)return;
+
+      setIsLoading(true);
       setBrandKitLoading(true);
 
       try{
+        try{
+          const s=localStorage.getItem('thumbframe_designs');
+          if(s && !cancelled)setSavedDesigns(JSON.parse(s));
+        }catch(e){
+          console.error('Saved designs restore failed:', e);
+        }
+
+        let restoredDraft = null;
+        try{
+          const rawDraft = localStorage.getItem('thumbframe_draft');
+          if(rawDraft) restoredDraft = JSON.parse(rawDraft);
+        }catch(e){
+          console.error('Draft restore failed:', e);
+          localStorage.removeItem('thumbframe_draft');
+        }
+
         const { data, error } = await supabase
           .from('brand_kits')
           .select('*')
@@ -749,29 +771,70 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           });
         }
         setBrandKitFace(data?.face_image_url||null);
+
+        if(restoredDraft){
+          const restoredLayers = Array.isArray(restoredDraft.layers) && restoredDraft.layers.length>0
+            ? restoredDraft.layers
+            : [makeBg(PLATFORMS[restoredDraft.platform||platform]||p)];
+          setPlatform(restoredDraft.platform||'youtube');
+          setLayers(restoredLayers);
+          layersRef.current=restoredLayers;
+          setBrightness(restoredDraft.brightness||100);
+          setContrast(restoredDraft.contrast||100);
+          setSaturation(restoredDraft.saturation||100);
+          setHue(restoredDraft.hue||0);
+          setDesignName(restoredDraft.designName||'My Design');
+          setAiPrompt(restoredDraft.aiPrompt||'');
+          setLastGeneratedImageUrl(restoredDraft.lastGeneratedImageUrl||'');
+          setProjectId(restoredDraft.projectId||null);
+          if(restoredDraft.textColor)setTextColor(restoredDraft.textColor);
+          if(restoredDraft.strokeColor)setStrokeColor(restoredDraft.strokeColor);
+          if(restoredDraft.fillColor)setFillColor(restoredDraft.fillColor);
+          if(restoredDraft.brandKitColors){
+            setBrandKitColors(restoredDraft.brandKitColors);
+          }
+
+          const snapshot = JSON.parse(JSON.stringify(restoredLayers));
+          historyRef.current=[snapshot];
+          historyIndexRef.current=0;
+          setHistory([snapshot]);
+          setHistoryIndex(0);
+        }else{
+          const b=makeBg(p);
+          setLayers([b]);
+          layersRef.current=[b];
+          historyRef.current=[[b]];
+          historyIndexRef.current=0;
+          setHistory([[b]]);
+          setHistoryIndex(0);
+        }
+
+        draftHydratedRef.current=true;
       }catch(e){
-        if(!cancelled)console.error('Brand Kit fetch failed:',e);
+        if(!cancelled)console.error('Editor bootstrap failed:',e);
+
+        if(!draftHydratedRef.current){
+          const b=makeBg(p);
+          setLayers([b]);
+          layersRef.current=[b];
+          historyRef.current=[[b]];
+          historyIndexRef.current=0;
+          setHistory([[b]]);
+          setHistoryIndex(0);
+          draftHydratedRef.current=true;
+        }
       }finally{
-        if(!cancelled)setBrandKitLoading(false);
+        if(!cancelled){
+          setBrandKitLoading(false);
+          setIsLoading(false);
+        }
       }
     }
 
-    fetchBrandKitOnLoad();
+    bootstrapEditor();
     return()=>{cancelled=true;};
-  },[user?.id]);
-
-  useEffect(()=>{zoomRef.current=zoom;},[zoom]);
-
-  useEffect(()=>{
-    try{const s=localStorage.getItem('thumbframe_designs');if(s)setSavedDesigns(JSON.parse(s));}catch(e){}
-    const b=makeBg(p);
-    setLayers([b]);
-    historyRef.current=[[b]];
-    historyIndexRef.current=0;
-    setHistory([[b]]);
-    setHistoryIndex(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[]);
+  },[user?.id]);
 
   useEffect(()=>{
     if(!showFileTab)return;
@@ -1738,6 +1801,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         hue,
         prompt: aiPrompt || null,
         result_image_url: lastGeneratedImageUrl || null,
+        textColor,
+        strokeColor,
+        fillColor,
+        brandKitColors,
       };
 
       const rowPayload = {
@@ -1763,9 +1830,33 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       console.error('[SAVE PROJECT] Error:', err);
       setSaveStatus('Error');
     }
-  },[aiPrompt, brightness, contrast, designName, hue, lastGeneratedImageUrl, layers, platform, projectId, saturation]);
+  },[aiPrompt, brightness, brandKitColors, contrast, designName, fillColor, hue, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
 
   useEffect(()=>{
+    if(isLoading || !draftHydratedRef.current)return;
+
+    const currentState = {
+      projectId,
+      platform,
+      layers: JSON.parse(JSON.stringify(layers)),
+      brightness,
+      contrast,
+      saturation,
+      hue,
+      designName,
+      aiPrompt,
+      lastGeneratedImageUrl,
+      textColor,
+      strokeColor,
+      fillColor,
+      brandKitColors,
+    };
+
+    localStorage.setItem('thumbframe_draft', JSON.stringify(currentState));
+  },[aiPrompt, brightness, brandKitColors, contrast, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
+
+  useEffect(()=>{
+    if(isLoading || !draftHydratedRef.current)return;
     setSaveStatus('Unsaved');
     if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
     autoSaveTimeoutRef.current=setTimeout(async ()=>{
@@ -1775,7 +1866,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     return()=>{
       if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
     };
-  },[saveProject]);
+  },[isLoading, saveProject]);
 
   function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setProjectId(d.id||null);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
   function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setProjectId(null);setSelectedId(null);setShowFileTab(false);}
@@ -2749,6 +2840,33 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     row:     {display:'flex',gap:6,alignItems:'center'},
     divider: {height:1,background:T.border,margin:'10px 0'},
   };
+
+  if(isLoading){
+    return (
+      <div style={{
+        minHeight:'100vh',
+        display:'flex',
+        alignItems:'center',
+        justifyContent:'center',
+        background:T.bg,
+        color:T.text,
+        fontFamily:'-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      }}>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:14}}>
+          <div style={{
+            width:34,
+            height:34,
+            borderRadius:'50%',
+            border:`3px solid ${T.border}`,
+            borderTopColor:T.accent,
+            animation:'editor-spin 0.8s linear infinite',
+          }}/>
+          <div style={{fontSize:13,fontWeight:'600',color:T.muted}}>Restoring draft...</div>
+          <style>{`@keyframes editor-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    );
+  }
 
   const tools=[
     {key:'select',    label:'Select',       icon:'↖',  group:'Tools'},
