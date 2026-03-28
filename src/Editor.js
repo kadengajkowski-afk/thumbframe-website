@@ -1653,34 +1653,39 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   }
 
   const saveCanvasToSupabase = useCallback(async ()=>{
-    try{
-      // 1. Ensure we have an email and force it to lowercase
-      const safeEmail = user?.email?.toLowerCase();
-      if (!safeEmail) throw new Error('No user email found for save');
+    const canvas = (canvasRef.current && typeof canvasRef.current.toJSON === 'function')
+      ? canvasRef.current
+      : {
+          toJSON: () => ({
+            platform,
+            layers: JSON.parse(JSON.stringify(layers)),
+            brightness,
+            contrast,
+            saturation,
+            hue,
+          }),
+        };
 
-      // 2. Serialize the canvas safely (adjust if using Fabric or Konva)
-      const canvas = (canvasRef.current && typeof canvasRef.current.toJSON === 'function')
-        ? canvasRef.current
-        : {
-            toJSON: () => ({
-              platform,
-              layers: JSON.parse(JSON.stringify(layers)),
-              brightness,
-              contrast,
-              saturation,
-              hue,
-            }),
-          };
+    try{
+      // 1. Aggressively fetch the session directly from Supabase
+      const { data: authData, error: authError } = await supabase.auth.getSession();
+      const activeUser = authData?.session?.user;
+
+      if (authError || !activeUser || !activeUser.id) {
+        console.warn('[AUTO-SAVE] Aborted: Could not verify active user ID.');
+        setSaveStatus('Error');
+        return;
+      }
+
+      const safeEmail = activeUser.email.toLowerCase();
       const safeCanvasData = canvas.toJSON();
 
-      // AGGRESSIVE LOGGING: Show exactly what we are sending
-      console.log('[AUTO-SAVE] Payload:', { email: safeEmail, dataSize: JSON.stringify(safeCanvasData).length });
-      const userId = user?.id;
+      console.log('[AUTO-SAVE] Payload:', { id: activeUser.id, email: safeEmail });
 
-      // 3. Execute the upsert
+      // 2. Execute the upsert using the freshly fetched activeUser
       const { data, error } = await supabase.from('thumbnails').upsert(
         {
-          user_id: userId,
+          user_id: activeUser.id,
           user_email: safeEmail,
           json_data: safeCanvasData
         },
@@ -1695,10 +1700,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
       console.error('[AUTO-SAVE] Error:', err);
       setSaveStatus('Error');
     }
-  },[user?.id,user?.email,platform,layers,brightness,contrast,saturation,hue]);
+  },[platform,layers,brightness,contrast,saturation,hue]);
 
   useEffect(()=>{
-    if(!user?.email)return undefined;
     // 1. User interacts with canvas -> setSaveStatus('Unsaved')
     setSaveStatus('Unsaved');
     if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
@@ -1710,7 +1714,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     return()=>{
       if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
     };
-  },[saveCanvasToSupabase,user?.email]);
+  },[saveCanvasToSupabase]);
 
   function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
   function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setSelectedId(null);setShowFileTab(false);}
