@@ -63,15 +63,23 @@ app.get('/version-test', (req, res) => res.send('API VERSION 2.1 IS LIVE'));
 // ── File storage ───────────────────────────────────────────────────────────────
 const KEYS_FILE    = path.join(__dirname,'keys.json');
 const USERS_FILE   = path.join(__dirname,'users.json');
-const DESIGNS_FILE = path.join(__dirname,'designs.json');
 
 function loadKeys(){ try{ return JSON.parse(fs.readFileSync(KEYS_FILE,'utf8')); }catch(e){ return {}; } }
 function saveKeys(k){ fs.writeFileSync(KEYS_FILE,JSON.stringify(k,null,2)); }
 function loadUsers(){ try{ return JSON.parse(fs.readFileSync(USERS_FILE,'utf8')); }catch(e){ return {}; } }
 function saveUsers(u){ fs.writeFileSync(USERS_FILE,JSON.stringify(u,null,2)); }
-function loadDesigns(){ try{ return JSON.parse(fs.readFileSync(DESIGNS_FILE,'utf8')); }catch(e){ return {}; } }
-function saveDesigns(d){ fs.writeFileSync(DESIGNS_FILE,JSON.stringify(d,null,2)); }
 function validateKey(key){ const keys=loadKeys(); return keys[key]||null; }
+
+async function getSupabaseUserFromRequest(req){
+  const authHeader = req.headers.authorization || '';
+  const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if(!accessToken) return { user:null, error:'Missing authorization token' };
+
+  const { data:{ user }, error } = await supabase.auth.getUser(accessToken);
+  if(error || !user) return { user:null, error:'Invalid authorization token' };
+
+  return { user, error:null };
+}
 
 function authMiddleware(req,res,next){
   const token=req.headers['authorization']?.split(' ')[1];
@@ -553,51 +561,212 @@ app.post('/auth/reset-password', async(req,res)=>{
 });
 
 // ── Designs ────────────────────────────────────────────────────────────────────
-app.post('/designs/save', authMiddleware,(req,res)=>{
+app.post('/designs/save', async(req,res)=>{
   try{
-    const {name,platform,layers,brightness,contrast,saturation,hue,thumbnail}=req.body;
-    const designs=loadDesigns();
-    if(!designs[req.user.email]) designs[req.user.email]=[];
-    const id=Date.now().toString();
-    const existing=designs[req.user.email].findIndex(d=>d.name===name);
-    const design={id,name,platform,layers,brightness,contrast,saturation,hue,
-      thumbnail:thumbnail||null,created:new Date().toLocaleDateString(),
-      updated:new Date().toISOString()};
-    if(existing>=0){
-      designs[req.user.email][existing]={...designs[req.user.email][existing],...design};
-    }else{
-      designs[req.user.email].unshift(design);
-    }
-    designs[req.user.email]=designs[req.user.email].slice(0,50);
-    saveDesigns(designs);
-    res.json({success:true,id:design.id});
+    const { user, error:userError } = await getSupabaseUserFromRequest(req);
+    if(userError || !user) return res.status(401).json({error:userError||'Unauthorized'});
+
+    const {
+      id,
+      projectId,
+      name,
+      platform,
+      layers,
+      brightness,
+      contrast,
+      saturation,
+      hue,
+      thumbnail,
+      canvas_data,
+      prompt,
+      result_image_url,
+      textColor,
+      strokeColor,
+      fillColor,
+      brandKitColors,
+    } = req.body;
+
+    const resolvedId = (id || projectId || uuidv4()).toString();
+    const resolvedCanvasData = canvas_data || {
+      name: name || 'Untitled',
+      platform: platform || 'youtube',
+      layers: Array.isArray(layers) ? layers : [],
+      brightness: brightness ?? 100,
+      contrast: contrast ?? 100,
+      saturation: saturation ?? 100,
+      hue: hue ?? 0,
+      prompt: prompt || null,
+      result_image_url: result_image_url || null,
+      textColor: textColor || null,
+      strokeColor: strokeColor || null,
+      fillColor: fillColor || null,
+      brandKitColors: brandKitColors || null,
+    };
+
+    const rowPayload = {
+      id: resolvedId,
+      user_id: user.id,
+      user_email: user.email?.toLowerCase() || null,
+      canvas_data: resolvedCanvasData,
+      json_data: resolvedCanvasData,
+      thumbnail: thumbnail || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('thumbnails')
+      .upsert(rowPayload, { onConflict:'id' })
+      .select('id')
+      .single();
+
+    if(error) throw error;
+
+    res.json({ success:true, id:data?.id || resolvedId });
   }catch(err){
+    console.error('Design save failed:', err);
     res.status(500).json({error:'Save failed'});
   }
 });
 
-app.get('/designs', authMiddleware,(req,res)=>{
-  const designs=loadDesigns();
-  const list=(designs[req.user.email]||[]).map(d=>({
-    id:d.id,name:d.name,platform:d.platform,
-    created:d.created,updated:d.updated,thumbnail:d.thumbnail,
-  }));
-  res.json({designs:list});
+app.get('/designs/load', async(req,res)=>{
+  try{
+    const { user, error:userError } = await getSupabaseUserFromRequest(req);
+    if(userError || !user) return res.status(401).json({error:userError||'Unauthorized'});
+
+    const requestedId = req.query.id;
+
+    if(requestedId){
+      const { data, error } = await supabase
+        .from('thumbnails')
+        .select('*')
+        .eq('id', requestedId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if(error) throw error;
+      if(!data) return res.status(404).json({error:'Not found'});
+
+      const canvas = data.canvas_data || data.json_data || {};
+      return res.json({
+        design:{
+          id: data.id,
+          ...canvas,
+          thumbnail: data.thumbnail || null,
+          updated: data.updated_at || null,
+        },
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('thumbnails')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending:false })
+      .limit(50);
+
+    if(error) throw error;
+
+    const designs = (data || []).map((row)=>{
+      const canvas = row.canvas_data || row.json_data || {};
+      return {
+        id: row.id,
+        name: canvas.name || 'Untitled',
+        platform: canvas.platform || 'youtube',
+        thumbnail: row.thumbnail || null,
+        updated: row.updated_at || null,
+        canvas_data: canvas,
+        json_data: canvas,
+      };
+    });
+
+    res.json({designs});
+  }catch(err){
+    console.error('Design load failed:', err);
+    res.status(500).json({error:'Load failed'});
+  }
 });
 
-app.get('/designs/:id', authMiddleware,(req,res)=>{
-  const designs=loadDesigns();
-  const design=(designs[req.user.email]||[]).find(d=>d.id===req.params.id);
-  if(!design) return res.status(404).json({error:'Not found'});
-  res.json({design});
+app.get('/designs', async(req,res)=>{
+  try{
+    const { user, error:userError } = await getSupabaseUserFromRequest(req);
+    if(userError || !user) return res.status(401).json({error:userError||'Unauthorized'});
+
+    const { data, error } = await supabase
+      .from('thumbnails')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending:false })
+      .limit(50);
+
+    if(error) throw error;
+
+    const designs = (data || []).map((row)=>{
+      const canvas = row.canvas_data || row.json_data || {};
+      return {
+        id: row.id,
+        name: canvas.name || 'Untitled',
+        platform: canvas.platform || 'youtube',
+        thumbnail: row.thumbnail || null,
+        updated: row.updated_at || null,
+        canvas_data: canvas,
+        json_data: canvas,
+      };
+    });
+
+    res.json({designs});
+  }catch(err){
+    console.error('Design list failed:', err);
+    res.status(500).json({error:'Load failed'});
+  }
 });
 
-app.delete('/designs/:id', authMiddleware,(req,res)=>{
-  const designs=loadDesigns();
-  if(!designs[req.user.email]) return res.status(404).json({error:'No designs'});
-  designs[req.user.email]=designs[req.user.email].filter(d=>d.id!==req.params.id);
-  saveDesigns(designs);
-  res.json({success:true});
+app.get('/designs/:id', async(req,res)=>{
+  try{
+    const { user, error:userError } = await getSupabaseUserFromRequest(req);
+    if(userError || !user) return res.status(401).json({error:userError||'Unauthorized'});
+
+    const { data, error } = await supabase
+      .from('thumbnails')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if(error) throw error;
+    if(!data) return res.status(404).json({error:'Not found'});
+
+    const canvas = data.canvas_data || data.json_data || {};
+    res.json({
+      design:{
+        id: data.id,
+        ...canvas,
+        thumbnail: data.thumbnail || null,
+        updated: data.updated_at || null,
+      },
+    });
+  }catch(err){
+    console.error('Design fetch failed:', err);
+    res.status(500).json({error:'Load failed'});
+  }
+});
+
+app.delete('/designs/:id', async(req,res)=>{
+  try{
+    const { user, error:userError } = await getSupabaseUserFromRequest(req);
+    if(userError || !user) return res.status(401).json({error:userError||'Unauthorized'});
+
+    const { error } = await supabase
+      .from('thumbnails')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('user_id', user.id);
+
+    if(error) throw error;
+    res.json({success:true});
+  }catch(err){
+    console.error('Design delete failed:', err);
+    res.status(500).json({error:'Delete failed'});
+  }
 });
 
 // ── Stripe checkout ────────────────────────────────────────────────────────────
