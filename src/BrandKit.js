@@ -68,16 +68,20 @@ export default function BrandKitSetupModal({
 
 		const { error } = await supabase
 			.from('brand_kits')
-			.upsert({
-				user_id: user.id,
-				user_email: user.email,
-				primary_color: primaryColor,
-				secondary_color: secondaryColor,
-				face_image_url: publicUrl,
-				updated_at: new Date().toISOString()
-			}, {
-				on_conflict: 'user_email'
-			});
+			.upsert(
+				{
+					user_id: user.id,
+					user_email: user.email,
+					primary_color: primaryColor,
+					secondary_color: secondaryColor,
+					face_image_url: publicUrl,
+					updated_at: new Date().toISOString(),
+				},
+				{
+					on_conflict: 'user_email', // CRITICAL: This tells the DB to use the email as the lookup key
+					ignoreDuplicates: false    // This ensures it actually updates the data
+				}
+			);
 
 		if (error) {
 			console.error('Save failed:', error);
