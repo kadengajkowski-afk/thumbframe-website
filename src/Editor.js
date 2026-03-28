@@ -506,7 +506,7 @@ function Slider({min,max,step,value,onChange,onCommit,style}){
   );
 }
 
-export default function Editor({onExit, user, token, apiUrl, brandKit}){
+export default function Editor({onExit, user, token, apiUrl, brandKit: initialBrandKit}){
   const canvasRef       = useRef(null);
   const brushOverlayRef = useRef(null);
   const cmdInputRef     = useRef(null);
@@ -632,8 +632,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
 
   const [showBrandKitSetup,setShowBrandKitSetup]       = useState(false);
+  const [brandKit,setBrandKit]                         = useState(initialBrandKit||null);
   const [brandKitColors,setBrandKitColors]             = useState({primary:'#c45c2e',secondary:'#f97316'});
   const [brandKitFace,setBrandKitFace]                 = useState(null);
+  const [brandKitLoading,setBrandKitLoading]           = useState(false);
+  const brandKitFetchedUserRef                         = useRef(null);
 
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
@@ -717,6 +720,45 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     loadProStatus();
     return()=>{cancelled=true;};
   },[user?.email,user?.is_admin,token]);
+
+  useEffect(()=>{
+    let cancelled=false;
+
+    async function fetchBrandKitOnLoad(){
+      if(!user?.id)return;
+      if(brandKitFetchedUserRef.current===user.id)return;
+
+      brandKitFetchedUserRef.current=user.id;
+      setBrandKitLoading(true);
+
+      try{
+        const { data, error } = await supabase
+          .from('brand_kits')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if(cancelled)return;
+        if(error)throw error;
+
+        setBrandKit(data||null);
+        if(data?.primary_color||data?.secondary_color){
+          setBrandKitColors({
+            primary:data?.primary_color||'#c45c2e',
+            secondary:data?.secondary_color||'#f97316',
+          });
+        }
+        setBrandKitFace(data?.face_image_url||null);
+      }catch(e){
+        if(!cancelled)console.error('Brand Kit fetch failed:',e);
+      }finally{
+        if(!cancelled)setBrandKitLoading(false);
+      }
+    }
+
+    fetchBrandKitOnLoad();
+    return()=>{cancelled=true;};
+  },[user?.id]);
 
   useEffect(()=>{zoomRef.current=zoom;},[zoom]);
 
@@ -2041,6 +2083,23 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
   function addText(){addRecentColor(textColor);addLayer({type:'text',text:textInput||'MY THUMBNAIL',fontSize,fontFamily,fontWeight,fontItalic,textColor,strokeColor,strokeWidth,shadowEnabled,shadowColor,shadowBlur,shadowX,shadowY,glowEnabled,glowColor,arcEnabled,arcRadius,letterSpacing,lineHeight,textAlign});}
   function addShape(type){addRecentColor(fillColor);addLayer({type:'shape',shape:type,fillColor,strokeColor,width:100,height:100});}
   function addSvgSticker(svg,label){addLayer({type:'svg',svg,label,width:64,height:64});}
+  function addBrandFaceToCanvas(url){
+    if(!url)return;
+    const img=new Image();
+    img.onload=()=>{
+      const cW=p.preview.w,cH=p.preview.h,aspect=img.naturalWidth/img.naturalHeight,ca=cW/cH;
+      let w,h;
+      if(aspect>ca){w=cW*0.5;h=w/aspect;}else{h=cH*0.5;w=h*aspect;}
+      addLayer({
+        type:'image',src:url,width:Math.round(w),height:Math.round(h),
+        originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,
+        x:Math.round((cW-w)/2),y:Math.round((cH-h)/2),
+        cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+        imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+      });
+    };
+    img.src=url;
+  }
 
   function handleImageUpload(e){
     Array.from(e.target.files).forEach(file=>{
@@ -4176,6 +4235,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
                   <div style={{fontSize:11,color:T.muted,lineHeight:1.6,marginBottom:12}}>
                     Save your brand colors and face image. They'll be auto-injected into AI-generated thumbnails.
                   </div>
+                  {brandKitLoading&&(
+                    <div style={{fontSize:11,color:T.muted,marginBottom:10}}>Loading Brand Assets...</div>
+                  )}
                   {user ? (
                     <button onClick={()=>setShowBrandKitSetup(true)} style={{...css.addBtn,marginTop:0}}>
                       {brandKit ? '✓ Edit Brand Kit' : '+ Setup Brand Kit'}
@@ -4207,6 +4269,26 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
                     )}
                   </div>
                 )}
+
+                <div style={{...css.section}}>
+                  <div style={{fontSize:11,fontWeight:'600',color:T.text,marginBottom:8}}>Brand Assets</div>
+                  {brandKitFace&&(
+                    <div style={{marginBottom:10}}>
+                      <div style={{fontSize:9,color:T.muted,marginBottom:4}}>Face Thumbnail (click to add)</div>
+                      <img
+                        src={brandKitFace}
+                        alt="Brand face"
+                        onClick={()=>addBrandFaceToCanvas(brandKitFace)}
+                        style={{width:80,height:80,borderRadius:8,objectFit:'cover',border:`1px solid ${T.border}`,cursor:'pointer'}}
+                      />
+                    </div>
+                  )}
+                  <div style={{fontSize:9,color:T.muted,marginBottom:4}}>Quick Select Colors</div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button onClick={()=>{updateBg({bgColor:brandKitColors.primary,bgGradient:null});addRecentColor(brandKitColors.primary);}} style={{width:34,height:34,borderRadius:6,border:`1px solid ${T.border}`,background:brandKitColors.primary,cursor:'pointer'}} title="Apply primary to background"/>
+                    <button onClick={()=>{setTextColor(brandKitColors.secondary);addRecentColor(brandKitColors.secondary);}} style={{width:34,height:34,borderRadius:6,border:`1px solid ${T.border}`,background:brandKitColors.secondary,cursor:'pointer'}} title="Apply secondary to text"/>
+                  </div>
+                </div>
               </div>
             )}
 
