@@ -162,6 +162,7 @@ app.post('/ai-generate', async (req, res) => {
           input: {
             main_face_image: brandKitFace,
             prompt: userPrompt,
+            id_weight: 1.0,
             num_steps: 20,
             start_step: 0,
             guidance_scale: 4,

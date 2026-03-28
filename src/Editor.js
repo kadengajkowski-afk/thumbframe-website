@@ -41,6 +41,21 @@ const BLEND_MODES = [
   'color-dodge','color-burn','hard-light','soft-light','difference','exclusion',
 ];
 
+function getProjectIdFromUrl(){
+  return new URLSearchParams(window.location.search).get('project');
+}
+
+function syncProjectIdToUrl(projectId){
+  if(!projectId)return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('project', projectId);
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function getProjectStorageKey(projectId){
+  return `project_state_${projectId}`;
+}
+
 const TEXT_TEMPLATES = [
   { label:'YouTube Bold', text:'WATCH THIS',        fontSize:56, fontFamily:'Impact',     fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:4, shadowEnabled:true,  letterSpacing:2, lineHeight:1.2, textAlign:'center' },
   { label:'Gaming',       text:'EPIC MOMENT',       fontSize:52, fontFamily:'Arial Black', fontWeight:800, textColor:'#FFD700', strokeColor:'#000000', strokeWidth:3, shadowEnabled:true,  letterSpacing:1, lineHeight:1.2, textAlign:'center' },
@@ -745,53 +760,83 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           console.error('Saved designs restore failed:', e);
         }
 
+        const resolvedProjectId = getProjectIdFromUrl() || crypto.randomUUID();
+        if(!cancelled){
+          setProjectId(resolvedProjectId);
+          syncProjectIdToUrl(resolvedProjectId);
+        }
+
         let restoredDraft = null;
         try{
-          const rawDraft = localStorage.getItem('thumbframe_draft');
+          const rawDraft = localStorage.getItem(getProjectStorageKey(resolvedProjectId));
           if(rawDraft) restoredDraft = JSON.parse(rawDraft);
         }catch(e){
           console.error('Draft restore failed:', e);
-          localStorage.removeItem('thumbframe_draft');
+          localStorage.removeItem(getProjectStorageKey(resolvedProjectId));
         }
 
-        const { data, error } = await supabase
-          .from('brand_kits')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
+        let remoteProject = null;
+        if(!restoredDraft){
+          try{
+            const { data: projectData, error: projectError } = await supabase
+              .from('thumbnails')
+              .select('id,json_data')
+              .eq('id', resolvedProjectId)
+              .eq('user_id', user.id)
+              .maybeSingle();
 
-        if(cancelled)return;
-        if(error)throw error;
-
-        setBrandKit(data||null);
-        if(data?.primary_color||data?.secondary_color){
-          setBrandKitColors({
-            primary:data?.primary_color||'#c45c2e',
-            secondary:data?.secondary_color||'#f97316',
-          });
+            if(projectError)throw projectError;
+            remoteProject = projectData?.json_data ? { ...projectData.json_data, projectId: projectData.id } : null;
+          }catch(projectErr){
+            if(!cancelled)console.error('Project restore failed:', projectErr);
+          }
         }
-        setBrandKitFace(data?.face_image_url||null);
 
-        if(restoredDraft){
-          const restoredLayers = Array.isArray(restoredDraft.layers) && restoredDraft.layers.length>0
-            ? restoredDraft.layers
-            : [makeBg(PLATFORMS[restoredDraft.platform||platform]||p)];
-          setPlatform(restoredDraft.platform||'youtube');
+        try{
+          const { data, error } = await supabase
+            .from('brand_kits')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+
+          if(cancelled)return;
+          if(error)throw error;
+
+          setBrandKit(data||null);
+          if(data?.primary_color||data?.secondary_color){
+            setBrandKitColors({
+              primary:data?.primary_color||'#c45c2e',
+              secondary:data?.secondary_color||'#f97316',
+            });
+          }
+          setBrandKitFace(data?.face_image_url||null);
+        }catch(brandKitErr){
+          if(!cancelled)console.error('Brand Kit fetch failed:',brandKitErr);
+        }
+
+        const stateToRestore = restoredDraft || remoteProject;
+
+        if(stateToRestore){
+          const restoredPlatform = stateToRestore.platform||'youtube';
+          const restoredLayers = Array.isArray(stateToRestore.layers) && stateToRestore.layers.length>0
+            ? stateToRestore.layers
+            : [makeBg(PLATFORMS[restoredPlatform]||p)];
+          setPlatform(restoredPlatform);
           setLayers(restoredLayers);
           layersRef.current=restoredLayers;
-          setBrightness(restoredDraft.brightness||100);
-          setContrast(restoredDraft.contrast||100);
-          setSaturation(restoredDraft.saturation||100);
-          setHue(restoredDraft.hue||0);
-          setDesignName(restoredDraft.designName||'My Design');
-          setAiPrompt(restoredDraft.aiPrompt||'');
-          setLastGeneratedImageUrl(restoredDraft.lastGeneratedImageUrl||'');
-          setProjectId(restoredDraft.projectId||null);
-          if(restoredDraft.textColor)setTextColor(restoredDraft.textColor);
-          if(restoredDraft.strokeColor)setStrokeColor(restoredDraft.strokeColor);
-          if(restoredDraft.fillColor)setFillColor(restoredDraft.fillColor);
-          if(restoredDraft.brandKitColors){
-            setBrandKitColors(restoredDraft.brandKitColors);
+          setBrightness(stateToRestore.brightness||100);
+          setContrast(stateToRestore.contrast||100);
+          setSaturation(stateToRestore.saturation||100);
+          setHue(stateToRestore.hue||0);
+          setDesignName(stateToRestore.designName||stateToRestore.name||'My Design');
+          setAiPrompt(stateToRestore.aiPrompt||stateToRestore.prompt||'');
+          setLastGeneratedImageUrl(stateToRestore.lastGeneratedImageUrl||stateToRestore.result_image_url||'');
+          setProjectId(stateToRestore.projectId||resolvedProjectId);
+          if(stateToRestore.textColor)setTextColor(stateToRestore.textColor);
+          if(stateToRestore.strokeColor)setStrokeColor(stateToRestore.strokeColor);
+          if(stateToRestore.fillColor)setFillColor(stateToRestore.fillColor);
+          if(stateToRestore.brandKitColors){
+            setBrandKitColors(stateToRestore.brandKitColors);
           }
 
           const snapshot = JSON.parse(JSON.stringify(restoredLayers));
@@ -807,6 +852,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           historyIndexRef.current=0;
           setHistory([[b]]);
           setHistoryIndex(0);
+          setProjectId(resolvedProjectId);
         }
 
         draftHydratedRef.current=true;
@@ -1818,7 +1864,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
       const { data, error } = await supabase.from('thumbnails').upsert(
         rowPayload,
-        { onConflict: 'user_email' }
+        { onConflict: 'id' }
       ).select('id').single();
 
       if(error)throw error;
@@ -1852,7 +1898,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       brandKitColors,
     };
 
-    localStorage.setItem('thumbframe_draft', JSON.stringify(currentState));
+    if(projectId){
+      localStorage.setItem(getProjectStorageKey(projectId), JSON.stringify(currentState));
+    }
   },[aiPrompt, brightness, brandKitColors, contrast, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
 
   useEffect(()=>{
@@ -1868,8 +1916,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     };
   },[isLoading, saveProject]);
 
-  function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setProjectId(d.id||null);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
-  function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setProjectId(null);setSelectedId(null);setShowFileTab(false);}
+  function loadDesign(d){const nextProjectId=d.id||crypto.randomUUID();setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setProjectId(nextProjectId);syncProjectIdToUrl(nextProjectId);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
+  function newCanvas(){const b=makeBg(p);const nextProjectId=crypto.randomUUID();setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setProjectId(nextProjectId);syncProjectIdToUrl(nextProjectId);setSelectedId(null);setShowFileTab(false);}
   function deleteDesign(id){const updated=savedDesigns.filter(d=>d.id!==id);setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));}
 
   async function analyzeCTR(){
