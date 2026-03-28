@@ -142,14 +142,20 @@ app.post('/ai-generate', async (req, res) => {
 
     console.log('Generating via Replicate...', { finalPrompt, faceUrl });
 
-    const model = faceUrl 
-      ? "zsxkib/flux-pulid:8aaaaa6f6717d23d91cf331b2ec91079d8ef92c73eb2eb45a05b331002af2aeb" 
+    const model = faceUrl
+      ? "zsxkib/flux-pulid"
       : "black-forest-labs/flux-schnell";
 
     const input = { prompt: finalPrompt, aspect_ratio: "16:9", output_format: "png" };
     if (faceUrl) input.main_face_image = faceUrl; 
 
-    const output = await replicate.run(model, { input });
+    let output;
+    try {
+      output = await replicate.run(model, { input });
+    } catch (replicateErr) {
+      console.error('Replicate prediction error message:', replicateErr?.message);
+      throw replicateErr;
+    }
     const imageUrl = Array.isArray(output) ? output[0] : output;
 
     const imgRes = await fetch(imageUrl);
