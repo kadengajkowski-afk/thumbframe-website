@@ -78,7 +78,7 @@ export default function BrandKitSetupModal({
 					updated_at: new Date().toISOString(),
 				},
 				{
-					on_conflict: 'user_email', // CRITICAL: This tells the DB to use the email as the lookup key
+					onConflict: 'user_email', // CRITICAL: This tells the DB to use the email as the lookup key
 					ignoreDuplicates: false    // This ensures it actually updates the data
 				}
 			);
