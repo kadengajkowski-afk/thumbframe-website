@@ -718,6 +718,37 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     return()=>{cancelled=true;};
   },[user?.email,user?.is_admin,token]);
 
+  const fetchSavedDesigns = useCallback(async ()=>{
+    if(!user?.id)return;
+
+    try{
+      const { data, error } = await supabase.from('thumbnails').select('*').eq('user_id', user.id);
+      if(error)throw error;
+
+      console.log('[FETCH SAVES]', data);
+
+      const mappedDesigns=(data||[]).map(item=>{
+        const designData=item.json_data||{};
+        return {
+          id:item.id,
+          name:designData.name||'Autosave',
+          created:item.updated_at?new Date(item.updated_at).toLocaleDateString():'Just now',
+          platform:designData.platform||'youtube',
+          layers:designData.layers||[],
+          brightness:designData.brightness||100,
+          contrast:designData.contrast||100,
+          saturation:designData.saturation||100,
+          hue:designData.hue||0,
+          json_data:item.json_data,
+        };
+      });
+
+      setSavedDesigns(mappedDesigns);
+    }catch(err){
+      console.error('[FETCH SAVES] Error:', err);
+    }
+  },[user?.id]);
+
   useEffect(()=>{zoomRef.current=zoom;},[zoom]);
 
   useEffect(()=>{
@@ -730,6 +761,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
     setHistoryIndex(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
+
+  useEffect(()=>{
+    if(showFileTab)fetchSavedDesigns();
+  },[showFileTab,fetchSavedDesigns]);
 
   // ✅ Window drag handlers — ONLY fire when draggingRef or resizingRef is set
   // This means sidebar sliders are completely unaffected
