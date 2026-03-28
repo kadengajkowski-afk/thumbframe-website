@@ -637,7 +637,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [brandKitColors,setBrandKitColors]             = useState({primary:'#c45c2e',secondary:'#f97316'});
   const [brandKitFace,setBrandKitFace]                 = useState(null);
   const [brandKitLoading,setBrandKitLoading]           = useState(false);
-  const brandKitFetchedUserRef                         = useRef(null);
 
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
@@ -645,6 +644,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [saveStatus, setSaveStatus]                    = useState('Saved');
   const [aiPrompt,setAiPrompt]                         = useState('');
   const [lastGeneratedImageUrl,setLastGeneratedImageUrl] = useState('');
+  const [projectId,setProjectId]                       = useState(null);
 
   const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
   const [showToast,setShowToast]                       = useState(false);
@@ -728,19 +728,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     let cancelled=false;
 
     async function fetchBrandKitOnLoad(){
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if(sessionError || !session?.user?.id)return;
-      if(brandKitFetchedUserRef.current===session.user.id)return;
-
-      brandKitFetchedUserRef.current=session.user.id;
+      if(!user?.id)return;
       setBrandKitLoading(true);
 
       try{
         const { data, error } = await supabase
           .from('brand_kits')
           .select('*')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
+          .eq('user_id', user.id)
+          .single();
 
         if(cancelled)return;
         if(error)throw error;
@@ -762,7 +758,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     fetchBrandKitOnLoad();
     return()=>{cancelled=true;};
-  },[showBrandKitSetup, user?.id]);
+  },[user?.id]);
 
   useEffect(()=>{zoomRef.current=zoom;},[zoom]);
 
@@ -1744,26 +1740,30 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         result_image_url: lastGeneratedImageUrl || null,
       };
 
+      const rowPayload = {
+        ...(projectId ? { id: projectId } : {}),
+        user_id: activeUser.id,
+        user_email: safeEmail,
+        json_data: safeCanvasData,
+      };
+
       console.log('[SAVE PROJECT] Payload:', { id: activeUser.id, email: safeEmail });
 
       const { data, error } = await supabase.from('thumbnails').upsert(
-        {
-          user_id: activeUser.id,
-          user_email: safeEmail,
-          json_data: safeCanvasData
-        },
+        rowPayload,
         { onConflict: 'user_email' }
-      ).select();
+      ).select('id').single();
 
       if(error)throw error;
 
+      if(data?.id && data.id!==projectId)setProjectId(data.id);
       console.log('[SAVE PROJECT] Success:', data);
       setSaveStatus('Saved');
     }catch(err){
       console.error('[SAVE PROJECT] Error:', err);
       setSaveStatus('Error');
     }
-  },[aiPrompt, brightness, contrast, designName, hue, lastGeneratedImageUrl, layers, platform, saturation]);
+  },[aiPrompt, brightness, contrast, designName, hue, lastGeneratedImageUrl, layers, platform, projectId, saturation]);
 
   useEffect(()=>{
     setSaveStatus('Unsaved');
@@ -1777,8 +1777,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     };
   },[saveProject]);
 
-  function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
-  function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setSelectedId(null);setShowFileTab(false);}
+  function loadDesign(d){setLayers(d.layers);setPlatform(d.platform||'youtube');setBrightness(d.brightness||100);setContrast(d.contrast||100);setSaturation(d.saturation||100);setHue(d.hue||0);setProjectId(d.id||null);setSelectedId(null);setShowFileTab(false);setCmdLog(`Loaded: ${d.name}`);}
+  function newCanvas(){const b=makeBg(p);setLayers([b]);historyRef.current=[[b]];historyIndexRef.current=0;setHistory([[b]]);setHistoryIndex(0);setProjectId(null);setSelectedId(null);setShowFileTab(false);}
   function deleteDesign(id){const updated=savedDesigns.filter(d=>d.id!==id);setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));}
 
   async function analyzeCTR(){
@@ -2191,7 +2191,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
   function onLayerDragEnd(){setLayerDragId(null);setLayerDragOver(null);}
 
-  async function handleDownload(format='png', transparent=transparentExport){
+  async function handleDownload({ tier='basic', format='png', transparent=transparentExport }={}){
     try{
       const target = document.getElementById('canvas-container');
       if(!target){
@@ -2200,8 +2200,21 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       }
 
       const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
-      const hasProAccess = isProUser || token==='test-key-123' || isAdmin;
-      const scale = hasProAccess ? Math.max(2, window.devicePixelRatio || 1) : 1;
+      const hasProAccess = user?.is_pro===true || isProUser || token==='test-key-123' || isAdmin;
+
+      if(tier==='pro' && !hasProAccess){
+        fetch('https://thumbframe-api-production.up.railway.app/checkout',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({email: user?.email, plan:'pro'}),
+        }).then(r=>r.json()).then(d=>{
+          if(d?.url)window.location.href=d.url;
+          else alert('Upgrade to Pro to unlock 4K downloads.');
+        }).catch(()=>alert('Upgrade to Pro to unlock 4K downloads.'));
+        return;
+      }
+
+      const scale = tier==='pro' ? 3 : 1;
 
       const capturedCanvas = await html2canvas(target, {
         backgroundColor: transparent ? null : undefined,
@@ -2869,6 +2882,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     </div>
                     <div style={{display:'flex',gap:5}}>
                       <button onClick={()=>loadDesign({
+                        id:savedDesigns[0].id,
                         layers:savedDesigns[0].json_data.layers||[],
                         platform:savedDesigns[0].json_data.platform||'youtube',
                         brightness:savedDesigns[0].json_data.brightness||100,
@@ -2995,64 +3009,30 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
       {showDownload&&(
         <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'}} onClick={e=>{if(e.target===e.currentTarget)setShowDownload(false);}}>
-          <div style={{width:340,background:T.panel,borderRadius:14,border:`1px solid ${T.border}`,padding:'24px',boxShadow:'0 24px 80px rgba(0,0,0,0.8)'}}>
+          <div style={{width:380,background:T.panel,borderRadius:14,border:`1px solid ${T.border}`,padding:'24px',boxShadow:'0 24px 80px rgba(0,0,0,0.8)'}}>
             <div style={{fontSize:15,fontWeight:'700',marginBottom:4}}>Download image</div>
-            <div style={{fontSize:12,color:T.muted,marginBottom:8}}>
+            <div style={{fontSize:12,color:T.muted,marginBottom:10}}>
               {p.label} · {p.width}×{p.height}px
             </div>
-            {!isProUser&&(
-              <div style={{...css.section,marginTop:0,marginBottom:12,
-                border:`1px solid ${T.warning}`,fontSize:11,lineHeight:1.6}}>
-                <div style={{color:T.warning,fontWeight:'700',marginBottom:4}}>
-                  ⚡ Free tier exports at {Math.round(p.width*0.5)}×{Math.round(p.height*0.5)}px
-                </div>
-                <div style={{color:T.muted}}>
-                  Upgrade to Pro for full {p.width}×{p.height}px export.
-                </div>
-                <button onClick={()=>{
-                  const isPro = isProUser;
-                  const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
-                  if (isPro || isAdmin) {
-                    setShowAlreadyPro(true);
-                    return;
-                  }
-                  fetch('https://thumbframe-api-production.up.railway.app/checkout',{
-                    method:'POST',
-                    headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({email: user?.email, plan:'pro'}),
-                  }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
-                }}
-                  style={{...css.addBtn,marginTop:8,background:T.warning,
-                    color:'#000',fontSize:11,fontWeight:'700'}}>
-                  Upgrade to Pro — $15/mo
-                </button>
-              </div>
-            )}
-            <div style={css.section}><div style={css.row}><input type="checkbox" id="transp" checked={transparentExport} onChange={e=>setTransparentExport(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/><label htmlFor="transp" style={{fontSize:12,color:T.text,cursor:'pointer',flex:1}}>Transparent background</label></div></div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginTop:14}}>
-              <button onClick={()=>handleDownload('png')}
-                style={{padding:'12px',borderRadius:8,border:`1px solid ${T.border}`,
-                  background:T.input,color:T.text,fontSize:13,cursor:'pointer',
-                  fontWeight:'600',textAlign:'center'}}>
-                <div style={{fontSize:20,marginBottom:4}}>PNG</div>
-                <div style={{fontSize:10,color:T.muted}}>Lossless</div>
-              </button>
-              <button onClick={()=>handleDownload('jpg')}
-                style={{padding:'12px',borderRadius:8,border:`1px solid ${T.border}`,
-                  background:T.input,color:T.text,fontSize:13,cursor:'pointer',
-                  fontWeight:'600',textAlign:'center',opacity:transparentExport?0.4:1}}>
-                <div style={{fontSize:20,marginBottom:4}}>JPG</div>
-                <div style={{fontSize:10,color:T.muted}}>Smaller</div>
-              </button>
-              <button onClick={()=>handleDownload('webp')}
-                style={{padding:'12px',borderRadius:8,border:`1px solid ${T.border}`,
-                  background:T.input,color:T.text,fontSize:13,cursor:'pointer',
-                  fontWeight:'600',textAlign:'center',opacity:transparentExport?0.4:1}}>
-                <div style={{fontSize:20,marginBottom:4}}>WebP</div>
-                <div style={{fontSize:10,color:T.muted}}>Best quality</div>
+            <div style={{...css.section,marginTop:0,marginBottom:10,border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:12,fontWeight:'700',color:T.text,marginBottom:4}}>Basic Download</div>
+              <div style={{fontSize:11,color:T.muted,marginBottom:8}}>Standard quality export for all users (scale: 1).</div>
+              <button onClick={()=>handleDownload({tier:'basic',format:'png'})}
+                style={{...css.addBtn,marginTop:0,background:T.input,color:T.text,border:`1px solid ${T.border}`}}>
+                Download Basic PNG
               </button>
             </div>
-            <button onClick={()=>handleDownload('png', true)} style={{...css.addBtn,background:T.success,marginTop:8}}>PNG with transparency</button>
+            <div style={{...css.section,marginTop:0,marginBottom:8,border:`1px solid ${T.warning}`}}>
+              <div style={{fontSize:12,fontWeight:'700',color:T.warning,marginBottom:4}}>Pro Download (4K)</div>
+              <div style={{fontSize:11,color:T.muted,marginBottom:8}}>High-definition export for Pro users (scale: 3).</div>
+              <button onClick={()=>handleDownload({tier:'pro',format:'png'})}
+                style={{...css.addBtn,marginTop:0,background:T.warning,color:'#000'}}>
+                Download Pro 4K PNG
+              </button>
+              <div style={{fontSize:10,color:T.muted,marginTop:6}}>Non-Pro users will be redirected to upgrade.</div>
+            </div>
+            <div style={css.section}><div style={css.row}><input type="checkbox" id="transp" checked={transparentExport} onChange={e=>setTransparentExport(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/><label htmlFor="transp" style={{fontSize:12,color:T.text,cursor:'pointer',flex:1}}>Transparent background</label></div></div>
+            <button onClick={()=>handleDownload({tier:'basic',format:'png',transparent:true})} style={{...css.addBtn,background:T.success,marginTop:8}}>Basic PNG with transparency</button>
             <button onClick={()=>setShowDownload(false)} style={{width:'100%',padding:9,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:12,cursor:'pointer',marginTop:8}}>Cancel</button>
           </div>
         </div>
@@ -3209,7 +3189,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             ↑ {isMobile?'':'Upload'}
             <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{display:'none'}}/>
           </label>
-          <button onClick={()=>handleDownload('png')} style={{padding:isMobile?'5px 10px':'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)',flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓{isMobile?'':' Download'}</button>
+          <button onClick={()=>setShowDownload(true)} style={{padding:isMobile?'5px 10px':'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)',flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓{isMobile?'':' Download'}</button>
           <button onClick={()=>{
             const isPro = isProUser;
             const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';

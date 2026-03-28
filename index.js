@@ -144,9 +144,11 @@ app.post('/ai-generate', async (req, res) => {
       faceUrl = face_image_url;
     }
 
-    console.log('Generating via Replicate...', { finalPrompt, faceUrl });
-
     const model = "black-forest-labs/flux-schnell";
+    const fluxPulidModel = "bytedance/flux-pulid";
+    const fluxPulidVersion = '8baa7ef2255075b46f4d91cd238c21d31181b3e6a864463f967960bb0112525b';
+
+    console.log('Generating via Replicate...', { finalPrompt, faceUrl, model: faceUrl ? fluxPulidModel : model });
 
     const generateImage = async ({ brandKitFace, userPrompt }) => {
       const response = await fetch('https://api.replicate.com/v1/predictions', {
@@ -156,10 +158,9 @@ app.post('/ai-generate', async (req, res) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          // Use the latest stable official version hash
-          version: '8baa7ef2255075b46f4d91cd238c21d31181b3e6a864463f967960bb0112525b',
+          version: fluxPulidVersion,
           input: {
-            main_face_image: brandKitFace, // This is the URL from our Brand Kit!
+            main_face_image: brandKitFace,
             prompt: userPrompt,
             num_steps: 20,
             start_step: 0,
