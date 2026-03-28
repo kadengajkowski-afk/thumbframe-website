@@ -710,37 +710,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     return()=>window.removeEventListener('resize',check);
   },[]);
 
-  useEffect(()=>{
-    let cancelled=false;
-
-    async function loadProStatus(){
-      const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
-      if(token==='test-key-123' || isAdmin){
-        if(!cancelled)setIsProUser(true);
-        return;
-      }
-      if(!user?.email){
-        if(!cancelled)setIsProUser(false);
-        return;
-      }
-
-      try{
-        const { data, error } = await supabase.from('profiles').select('is_pro').eq('email', user.email).single();
-        if(cancelled)return;
-        if(error){
-          setIsProUser(false);
-          return;
-        }
-        setIsProUser(!!data?.is_pro);
-      }catch(e){
-        if(!cancelled)setIsProUser(false);
-      }
-    }
-
-    loadProStatus();
-    return()=>{cancelled=true;};
-  },[user?.email,user?.is_admin,token]);
-
   useEffect(()=>{zoomRef.current=zoom;},[zoom]);
 
   useEffect(()=>{
@@ -793,25 +762,47 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         }
 
         try{
-          const { data, error } = await supabase
-            .from('brand_kits')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
+          const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
+          const [brandKitResult, profileResult] = await Promise.allSettled([
+            supabase
+              .from('brand_kits')
+              .select('*')
+              .eq('user_email', user.email)
+              .single(),
+            user?.email
+              ? supabase.from('profiles').select('is_pro').eq('email', user.email).single()
+              : Promise.resolve({ data: null, error: null }),
+          ]);
 
           if(cancelled)return;
-          if(error)throw error;
 
-          setBrandKit(data||null);
-          if(data?.primary_color||data?.secondary_color){
-            setBrandKitColors({
-              primary:data?.primary_color||'#c45c2e',
-              secondary:data?.secondary_color||'#f97316',
-            });
+          if(token==='test-key-123' || isAdmin){
+            setIsProUser(true);
+          }else if(profileResult.status==='fulfilled'){
+            const { data: profileData, error: profileError } = profileResult.value;
+            if(profileError) setIsProUser(false);
+            else setIsProUser(!!profileData?.is_pro);
+          }else{
+            setIsProUser(false);
           }
-          setBrandKitFace(data?.face_image_url||null);
+
+          if(brandKitResult.status==='fulfilled'){
+            const { data, error } = brandKitResult.value;
+            if(error)throw error;
+
+            setBrandKit(data||null);
+            if(data?.primary_color||data?.secondary_color){
+              setBrandKitColors({
+                primary:data?.primary_color||'#c45c2e',
+                secondary:data?.secondary_color||'#f97316',
+              });
+            }
+            setBrandKitFace(data?.face_image_url||null);
+          }else{
+            throw brandKitResult.reason;
+          }
         }catch(brandKitErr){
-          if(!cancelled)console.error('Brand Kit fetch failed:',brandKitErr);
+          if(!cancelled)console.error('Brand Kit/Profile bootstrap failed:',brandKitErr);
         }
 
         const stateToRestore = restoredDraft || remoteProject;
@@ -821,6 +812,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           const restoredLayers = Array.isArray(stateToRestore.layers) && stateToRestore.layers.length>0
             ? stateToRestore.layers
             : [makeBg(PLATFORMS[restoredPlatform]||p)];
+          // Advance idCounter past any restored IDs to prevent collisions when adding new layers
+          const maxRestoredId = restoredLayers.reduce((m,l)=>Math.max(m,typeof l.id==='number'?l.id:0),0);
+          if(maxRestoredId>=idCounter) idCounter=maxRestoredId+1;
           setPlatform(restoredPlatform);
           setLayers(restoredLayers);
           layersRef.current=restoredLayers;
@@ -2217,7 +2211,37 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     addLayer({type:'text',text:t.text,fontSize:t.fontSize,fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,fontItalic:false,textColor:t.textColor,strokeColor:t.strokeColor,strokeWidth:t.strokeWidth,shadowEnabled:t.shadowEnabled,shadowColor:'#000000',shadowBlur:14,shadowX:2,shadowY:2,glowEnabled:false,glowColor:'#f97316',arcEnabled:false,arcRadius:120,letterSpacing:t.letterSpacing||0,lineHeight:t.lineHeight||1.2,textAlign:t.textAlign||'left'});
   }
   function addText(){addRecentColor(textColor);addLayer({type:'text',text:textInput||'MY THUMBNAIL',fontSize,fontFamily,fontWeight,fontItalic,textColor,strokeColor,strokeWidth,shadowEnabled,shadowColor,shadowBlur,shadowX,shadowY,glowEnabled,glowColor,arcEnabled,arcRadius,letterSpacing,lineHeight,textAlign});}
-  function addShape(type){addRecentColor(fillColor);addLayer({type:'shape',shape:type,fillColor,strokeColor,width:100,height:100});}
+  function addShape(type){
+    addRecentColor(fillColor);
+    const id=newId();
+    const x=snapToGrid?Math.round(40/10)*10:40;
+    const y=snapToGrid?Math.round(40/10)*10:40;
+    const shapeLayer={
+      id,
+      type:'shape',
+      shape:type,
+      fillColor,
+      strokeColor,
+      width:100,
+      height:100,
+      x,
+      y,
+      opacity:100,
+      hidden:false,
+      locked:false,
+      blendMode:'normal',
+      flipH:false,
+      flipV:false,
+      rotation:0,
+      effects:defaultEffects(),
+    };
+    setLayers(prev=>{
+      const nl=[...prev,shapeLayer];
+      pushHistory(nl);
+      return nl;
+    });
+    setSelectedId(id);
+  }
   function addSvgSticker(svg,label){addLayer({type:'svg',svg,label,width:64,height:64});}
   function addBrandFaceToCanvas(url){
     if(!url)return;
@@ -3649,60 +3673,36 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                        activeTool==='zoom'?'zoom-in':
                        'default'}}>
 
-                {/* Filtered visual layer */}
-                <div style={{position:'absolute',inset:0,filter:canvasFilter,zIndex:0,pointerEvents:'none'}}>
+                <div style={{position:'absolute',inset:0,filter:canvasFilter,zIndex:0}}>
+                  <div style={{position:'absolute',inset:0,
+                    pointerEvents: (activeTool==='brush'||activeTool==='zoom') ? 'none' : 'auto',
+                  }}>
+                    {layers.map(obj=>renderLayerElement(obj))}
+                  </div>
+
+                  {/* Paint overlay for non-active brush images */}
                   {layers.map(obj=>{
-                    if(obj.hidden)return null;
-                    const opacityVal=(obj.opacity??100)/100;
-                    const blendStyle={mixBlendMode:obj.blendMode||'normal'};
-                    const flipStyle={transform:`scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`};
-                    const effectsStyle=getEffectsStyle(obj.effects);
-                    if(obj.type==='background')return(
-                      <div key={`f-${obj.id}`} style={{position:'absolute',left:0,top:0,width:p.preview.w,height:p.preview.h,opacity:opacityVal,background:obj.bgGradient?`linear-gradient(180deg,${obj.bgGradient[0]},${obj.bgGradient[1]})`:obj.bgColor}}>
-                        {showGrid&&<div style={{position:'absolute',inset:0,backgroundImage:`linear-gradient(rgba(255,255,255,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.06) 1px,transparent 1px)`,backgroundSize:'20px 20px'}}/>}
-                        {showRuler&&<>
-                          <div style={{position:'absolute',top:0,left:0,right:0,height:16,background:'rgba(0,0,0,0.5)',overflow:'hidden'}}>{Array.from({length:Math.floor(p.preview.w/40)}).map((_,i)=>(<div key={i} style={{position:'absolute',left:i*40,fontSize:7,color:'rgba(255,255,255,0.7)',paddingLeft:2,top:4}}>{i*40}</div>))}</div>
-                          <div style={{position:'absolute',top:0,left:0,bottom:0,width:16,background:'rgba(0,0,0,0.5)',overflow:'hidden'}}>{Array.from({length:Math.floor(p.preview.h/40)}).map((_,i)=>(<div key={i} style={{position:'absolute',top:i*40+4,left:1,fontSize:7,color:'rgba(255,255,255,0.7)'}}>{i*40}</div>))}</div>
-                        </>}
+                    if(obj.hidden||!obj.paintSrc||obj.type==='background')return null;
+                    if(obj.id===brushingImageId)return null;
+                    const cropW=obj.width-(obj.cropLeft||0)-(obj.cropRight||0);
+                    const cropH=obj.height-(obj.cropTop||0)-(obj.cropBottom||0);
+                    return(
+                      <div key={`paint-${obj.id}`} style={{
+                        position:'absolute',left:obj.x,top:obj.y,
+                        width:cropW,height:cropH,
+                        zIndex:layers.indexOf(obj)+2,
+                        overflow:'hidden',pointerEvents:'none',
+                      }}>
+                        <img src={obj.paintSrc} alt="" style={{
+                          position:'absolute',top:0,left:0,
+                          width:obj.width,height:obj.height,
+                          display:'block',
+                          marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),
+                        }}/>
                       </div>
                     );
-                    if(obj.type==='text'){const ts=(()=>{const pts=[];if(obj.shadowEnabled)pts.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)pts.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return pts.length?pts.join(','):'none';})();return<div key={`f-${obj.id}`} style={{position:'absolute',left:obj.x,top:obj.y,opacity:opacityVal,...blendStyle,...flipStyle,...effectsStyle,fontFamily:obj.fontFamily,fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`}}>{obj.text}</div>;}
-                    if(obj.type==='image')return<div key={`f-${obj.id}`} style={{position:'absolute',left:obj.x,top:obj.y,opacity:opacityVal,...blendStyle,overflow:'hidden',width:obj.width-(obj.cropLeft||0)-(obj.cropRight||0),height:obj.height-(obj.cropTop||0)-(obj.cropBottom||0),...effectsStyle}}><img src={obj.src} alt="" style={{width:obj.width,height:obj.height,display:'block',transform:`scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`,filter:`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${obj.imgBlur||0}px)`,marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),imageRendering:'high-quality',WebkitFontSmoothing:'antialiased'}}/></div>;
-                    if(obj.type==='shape')return<div key={`f-${obj.id}`} style={{position:'absolute',left:obj.x,top:obj.y,opacity:opacityVal,...blendStyle,...flipStyle,...effectsStyle}}>{renderShapeSVG(obj.shape,obj.fillColor,obj.strokeColor,obj.width,obj.height)}</div>;
-                    if(obj.type==='svg')return<div key={`f-${obj.id}`} style={{position:'absolute',left:obj.x,top:obj.y,opacity:opacityVal,...blendStyle,...flipStyle,...effectsStyle,width:obj.width,height:obj.height}}><div style={{width:'100%',height:'100%'}} dangerouslySetInnerHTML={{__html:obj.svg}}/></div>;
-                    return null;
                   })}
                 </div>
-
-                {/* Interactive layer */}
-                <div style={{position:'absolute',inset:0,zIndex:1,
-                  pointerEvents: (activeTool==='brush'||activeTool==='zoom') ? 'none' : 'auto',
-                }}>
-                  {layers.map(obj=>renderLayerElement(obj))}
-                </div>
-
-                {/* ✅ Paint overlay — shows brush strokes when brush tool is not active */}
-                {layers.map(obj=>{
-                  if(obj.hidden||!obj.paintSrc||obj.type==='background')return null;
-                  if(obj.id===brushingImageId)return null; // brush canvas handles this
-                  const cropW=obj.width-(obj.cropLeft||0)-(obj.cropRight||0);
-                  const cropH=obj.height-(obj.cropTop||0)-(obj.cropBottom||0);
-                  return(
-                    <div key={`paint-${obj.id}`} style={{
-                      position:'absolute',left:obj.x,top:obj.y,
-                      width:cropW,height:cropH,
-                      zIndex:layers.indexOf(obj)+2,
-                      overflow:'hidden',pointerEvents:'none',
-                    }}>
-                      <img src={obj.paintSrc} alt="" style={{
-                        position:'absolute',top:0,left:0,
-                        width:obj.width,height:obj.height,
-                        display:'block',
-                        marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),
-                      }}/>
-                    </div>
-                  );
-                })}
 
                 {/* ✅ Brush overlay — no CSS width/height, no filter, canvas sizes itself */}
                 {brushingImageId&&selectedLayer&&!maskingLayerId&&(
