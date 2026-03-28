@@ -25,7 +25,7 @@ const anthropic  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const resend     = new Resend(process.env.RESEND_API_KEY);
 const replicate  = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 
-console.log('[INIT] Supabase admin client ready:', !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_KEY);
+console.log('[INIT] Supabase admin client ready:', !!process.env.SUPABASE_URL && !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY));
 console.log('[INIT] Resend client ready:', !!process.env.RESEND_API_KEY);
 
 const allowedOrigins = [
