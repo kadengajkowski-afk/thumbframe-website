@@ -142,21 +142,36 @@ app.post('/ai-generate', async (req, res) => {
 
     console.log('Generating via Replicate...', { finalPrompt, faceUrl });
 
-    const model = faceUrl
-      ? "zsxkib/flux-pulid"
-      : "black-forest-labs/flux-schnell";
+    const model = "black-forest-labs/flux-schnell";
 
     const input = { prompt: finalPrompt, aspect_ratio: "16:9", output_format: "png" };
     if (faceUrl) input.main_face_image = faceUrl; 
 
     let output;
     try {
-      output = await replicate.run(model, { input });
+      if (faceUrl) {
+        const prediction = await replicate.predictions.create({
+          version: '7183e2e2a6d716803859600e16738592c3a51f08bf6060c5a35928f4133f990a',
+          input,
+        });
+        const completed = await replicate.wait(prediction);
+        if (completed.status !== 'succeeded') {
+          throw new Error(completed.error || `Prediction failed with status: ${completed.status}`);
+        }
+        output = completed.output;
+      } else {
+        output = await replicate.run(model, { input });
+      }
     } catch (replicateErr) {
       console.error('Replicate prediction error message:', replicateErr?.message);
       throw replicateErr;
     }
-    const imageUrl = Array.isArray(output) ? output[0] : output;
+
+    const firstOutput = Array.isArray(output) ? output[0] : output;
+    const imageUrl = typeof firstOutput === 'string'
+      ? firstOutput
+      : (firstOutput?.url?.() || firstOutput?.toString?.());
+    if (!imageUrl) throw new Error('Replicate returned no output URL');
 
     const imgRes = await fetch(imageUrl);
     const buffer = Buffer.from(await imgRes.arrayBuffer());
