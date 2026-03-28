@@ -681,15 +681,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [toastMessage]                                 = useState('');
   const [toastType]                                    = useState('info');
 
-  const resolveAuthToken = useCallback(async()=>{
-    try{
-      const { data:{ session } } = await supabase.auth.getSession();
-      return session?.access_token || token || null;
-    }catch(e){
-      return token || null;
-    }
-  },[token]);
-
   function setLayers(val){
     if(typeof val==='function'){
       setLayersRaw(prev=>{const next=val(prev);layersRef.current=next;return next;});
@@ -766,27 +757,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           localStorage.removeItem(getProjectStorageKey(resolvedProjectId));
         }
 
-        let remoteProject = null;
-        if(!restoredDraft){
-          try{
-            const authToken = await resolveAuthToken();
-            if(authToken){
-              const projectRes = await fetch(`${resolvedApiUrl}/designs/load?id=${encodeURIComponent(resolvedProjectId)}`,{
-                method:'GET',
-                headers:{ authorization:`Bearer ${authToken}` },
-              });
-
-              if(projectRes.ok){
-                const projectPayload = await projectRes.json();
-                const remoteCanvas = projectPayload?.design?.canvas_data || projectPayload?.design?.json_data || projectPayload?.design;
-                remoteProject = remoteCanvas ? { ...remoteCanvas, projectId: projectPayload.design.id || resolvedProjectId } : null;
-              }
-            }
-          }catch(projectErr){
-            if(!cancelled)console.error('Project restore failed:', projectErr);
-          }
-        }
-
         try{
           const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
           const [brandKitResult, profileResult] = await Promise.allSettled([
@@ -831,7 +801,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           if(!cancelled)console.error('Brand Kit/Profile bootstrap failed:',brandKitErr);
         }
 
-        const stateToRestore = restoredDraft || remoteProject;
+        const stateToRestore = restoredDraft;
 
         if(stateToRestore){
           const restoredPlatform = stateToRestore.platform||'youtube';
@@ -900,31 +870,17 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     bootstrapEditor();
     return()=>{cancelled=true;};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[resolveAuthToken, resolvedApiUrl, user?.id]);
+  },[resolvedApiUrl, user?.id]);
 
   useEffect(()=>{
     if(!showFileTab)return;
-
-    async function fetchSavedDesigns(){
-      try{
-        const authToken = await resolveAuthToken();
-        if(!authToken)return;
-
-        const response = await fetch(`${resolvedApiUrl}/designs`,{
-          method:'GET',
-          headers:{ authorization:`Bearer ${authToken}` },
-        });
-
-        if(!response.ok) throw new Error(`Load failed: ${response.status}`);
-        const payload = await response.json();
-        setSavedDesigns(payload?.designs || []);
-      }catch(err){
-        console.error('[FETCH SAVES] Error:', err);
-      }
+    try{
+      const s=localStorage.getItem('thumbframe_designs');
+      if(s)setSavedDesigns(JSON.parse(s));
+    }catch(err){
+      console.error('[FETCH SAVES] Error:', err);
     }
-
-    fetchSavedDesigns();
-  },[resolveAuthToken, resolvedApiUrl, showFileTab]);
+  },[showFileTab]);
 
   // ✅ Window drag handlers — ONLY fire when draggingRef or resizingRef is set
   // This means sidebar sliders are completely unaffected
@@ -1826,12 +1782,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
   function saveDesign(name){
     try{
-      const ensuredProjectId = projectId || generateProjectId();
-      if(!projectId){
-        setProjectId(ensuredProjectId);
-        syncProjectIdToUrl(ensuredProjectId);
-      }
-
       // Generate thumbnail by rendering layers to a temp canvas
       let thumbnail = null;
       try {
@@ -1875,62 +1825,27 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       }
 
       function finishSave(thumb){
-        const canvasData = {
-          name:name||'Untitled',
-          platform,
-          layers:JSON.parse(JSON.stringify(layers)),
-          brightness,
-          contrast,
-          saturation,
-          hue,
-          prompt: aiPrompt || null,
-          result_image_url: lastGeneratedImageUrl || null,
-          textColor,
-          strokeColor,
-          fillColor,
-          brandKitColors,
-        };
-
-        const design={
-          id:ensuredProjectId,
-          name:canvasData.name,
-          created:new Date().toLocaleDateString(),
-          platform,
-          layers:canvasData.layers,
-          brightness,
-          contrast,
-          saturation,
-          hue,
-          thumbnail:thumb,
-          canvas_data:canvasData,
-          json_data:canvasData,
-        };
-
-        const updated=[design,...savedDesigns.filter(d=>d.id!==ensuredProjectId)].slice(0,20);
+        const design={id:Date.now(),name:name||'Untitled',created:new Date().toLocaleDateString(),platform,layers:JSON.parse(JSON.stringify(layers)),brightness,contrast,saturation,hue,thumbnail:thumb};
+        const updated=[design,...savedDesigns.filter(d=>d.name!==name)].slice(0,20);
         setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));
         // Also save to backend if logged in
-        (async()=>{
-          const authToken = await resolveAuthToken();
-          if(!authToken)return;
-          const { data:{ session } } = await supabase.auth.getSession();
+        if(token){
+          const authToken = token;
           fetch(`${resolvedApiUrl}/designs/save`,{
             method:'POST',
             headers:{'Content-Type':'application/json','authorization':`Bearer ${authToken}`},
             body:JSON.stringify({
-              id: ensuredProjectId,
-              name:canvasData.name,
+              name:name||'Untitled',
               platform,
-              layers:canvasData.layers,
-              user_email: session?.user?.email || user?.email || null,
+              layers:JSON.parse(JSON.stringify(layers)),
               brightness,
               contrast,
               saturation,
               hue,
               thumbnail:thumb,
-              canvas_data:canvasData,
             }),
           }).catch(()=>{});
-        })();
+        }
         setCmdLog(`✓ Saved: ${name||'Untitled'}`);
       }
     }catch(e){
@@ -1941,77 +1856,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
   const saveProject = useCallback(async ()=>{
     try{
-      const { data:{ session }, error:sessionError } = await supabase.auth.getSession();
-
-      if(sessionError || !session?.access_token){
-        console.warn('[SAVE PROJECT] Missing session. Redirecting to login.');
-        setSaveStatus('Error');
-        window.location.href='/login';
-        return;
-      }
-
-      const ensuredProjectId = projectId || generateProjectId();
-      if(!projectId){
-        setProjectId(ensuredProjectId);
-        syncProjectIdToUrl(ensuredProjectId);
-      }
-
-      const safeCanvasData = {
-        name: designName || 'Untitled',
-        platform,
-        layers: JSON.parse(JSON.stringify(layers)),
-        brightness,
-        contrast,
-        saturation,
-        hue,
-        prompt: aiPrompt || null,
-        result_image_url: lastGeneratedImageUrl || null,
-        textColor,
-        strokeColor,
-        fillColor,
-        brandKitColors,
-      };
-
-      const response = await fetch(`${resolvedApiUrl}/designs/save`,{
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          authorization:`Bearer ${session.access_token}`,
-        },
-        body:JSON.stringify({
-          id: ensuredProjectId,
-          name: safeCanvasData.name,
-          platform,
-          layers: safeCanvasData.layers,
-          user_email: session?.user?.email || user?.email || null,
-          brightness,
-          contrast,
-          saturation,
-          hue,
-          prompt: safeCanvasData.prompt,
-          result_image_url: safeCanvasData.result_image_url,
-          textColor: safeCanvasData.textColor,
-          strokeColor: safeCanvasData.strokeColor,
-          fillColor: safeCanvasData.fillColor,
-          brandKitColors: safeCanvasData.brandKitColors,
-          canvas_data: safeCanvasData,
-        }),
-      });
-
-      if(!response.ok) throw new Error(`Save failed: ${response.status}`);
-      const payload = await response.json();
-
-      if(payload?.id && payload.id!==projectId){
-        setProjectId(payload.id);
-        syncProjectIdToUrl(payload.id);
-      }
-
       setSaveStatus('Saved');
     }catch(err){
       console.error('[SAVE PROJECT] Error:', err);
       setSaveStatus('Error');
     }
-  },[aiPrompt, brightness, brandKitColors, contrast, designName, fillColor, hue, lastGeneratedImageUrl, layers, platform, projectId, resolvedApiUrl, saturation, strokeColor, textColor, user?.email]);
+  },[]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
@@ -2052,19 +1902,18 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   },[isLoading, saveProject]);
 
   function loadDesign(d){
-    const payload=d?.canvas_data||d?.json_data||d;
-    const nextProjectId=d?.id||payload?.projectId||generateProjectId();
-    setLayers(payload?.layers||[]);
-    setPlatform(payload?.platform||'youtube');
-    setBrightness(payload?.brightness||100);
-    setContrast(payload?.contrast||100);
-    setSaturation(payload?.saturation||100);
-    setHue(payload?.hue||0);
+    const nextProjectId=generateProjectId();
+    setLayers(d?.layers||[]);
+    setPlatform(d?.platform||'youtube');
+    setBrightness(d?.brightness||100);
+    setContrast(d?.contrast||100);
+    setSaturation(d?.saturation||100);
+    setHue(d?.hue||0);
     setProjectId(nextProjectId);
     syncProjectIdToUrl(nextProjectId);
     setSelectedId(null);
     setShowFileTab(false);
-    setCmdLog(`Loaded: ${payload?.name||'Untitled'}`);
+    setCmdLog(`Loaded: ${d?.name||'Untitled'}`);
   }
 
   function newCanvas(){
@@ -2085,12 +1934,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const updated=savedDesigns.filter(d=>d.id!==id);
     setSavedDesigns(updated);
     localStorage.setItem('thumbframe_designs',JSON.stringify(updated));
-    (async()=>{
-      const authToken = await resolveAuthToken();
-      if(!authToken)return;
-      fetch(`${resolvedApiUrl}/designs/${encodeURIComponent(id)}`,
-        { method:'DELETE', headers:{ authorization:`Bearer ${authToken}` } }).catch(()=>{});
-    })();
   }
 
   async function analyzeCTR(){
@@ -3052,27 +2895,23 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
               <div style={{flex:1,padding:'12px',overflowY:'auto'}}>
                 <div style={{fontSize:10,color:T.muted,fontWeight:'700',letterSpacing:'0.8px',textTransform:'uppercase',marginBottom:10}}>Saved ({savedDesigns.length})</div>
                 {savedDesigns.length===0&&<div style={{fontSize:12,color:T.muted,padding:'20px 0',textAlign:'center'}}>No saved designs yet.</div>}
-                {(savedDesigns[0]?.canvas_data || savedDesigns[0]?.json_data)&&(
-                  <div style={{padding:'10px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,marginBottom:8,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:'600'}}>{(savedDesigns[0].canvas_data||savedDesigns[0].json_data)?.name||'Autosave'}</div>
-                      <div style={{fontSize:10,color:T.muted,marginTop:2}}>{savedDesigns[0].updated_at?new Date(savedDesigns[0].updated_at).toLocaleDateString():'Just now'} · {(savedDesigns[0].canvas_data||savedDesigns[0].json_data)?.platform||'youtube'}</div>
+                {savedDesigns.map(d=>(
+                  <div key={d.id} style={{padding:'10px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,marginBottom:8,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+                      {d.thumbnail&&(
+                        <img src={d.thumbnail} alt="thumb" style={{width:56,height:32,objectFit:'cover',borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0}}/>
+                      )}
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:'600',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.name||'Untitled'}</div>
+                        <div style={{fontSize:10,color:T.muted,marginTop:2}}>{d.created||'Just now'} · {d.platform||'youtube'}</div>
+                      </div>
                     </div>
-                    <div style={{display:'flex',gap:5}}>
-                      <button onClick={()=>loadDesign({
-                        id:savedDesigns[0].id,
-                        layers:(savedDesigns[0].canvas_data||savedDesigns[0].json_data)?.layers||[],
-                        platform:(savedDesigns[0].canvas_data||savedDesigns[0].json_data)?.platform||'youtube',
-                        brightness:(savedDesigns[0].canvas_data||savedDesigns[0].json_data)?.brightness||100,
-                        contrast:(savedDesigns[0].canvas_data||savedDesigns[0].json_data)?.contrast||100,
-                        saturation:(savedDesigns[0].canvas_data||savedDesigns[0].json_data)?.saturation||100,
-                        hue:(savedDesigns[0].canvas_data||savedDesigns[0].json_data)?.hue||0,
-                        name:(savedDesigns[0].canvas_data||savedDesigns[0].json_data)?.name||'Autosave',
-                      })} style={{padding:'5px 10px',borderRadius:5,border:`1px solid ${T.accent}`,background:'transparent',color:T.accent,fontSize:11,cursor:'pointer',fontWeight:'600'}}>Open</button>
-                      <button onClick={()=>deleteDesign(savedDesigns[0].id)} style={{padding:'5px 8px',borderRadius:5,border:`1px solid ${T.danger}`,background:'transparent',color:T.danger,fontSize:11,cursor:'pointer'}}>×</button>
+                    <div style={{display:'flex',gap:5,flexShrink:0}}>
+                      <button onClick={()=>loadDesign(d)} style={{padding:'5px 10px',borderRadius:5,border:`1px solid ${T.accent}`,background:'transparent',color:T.accent,fontSize:11,cursor:'pointer',fontWeight:'600'}}>Open</button>
+                      <button onClick={()=>deleteDesign(d.id)} style={{padding:'5px 8px',borderRadius:5,border:`1px solid ${T.danger}`,background:'transparent',color:T.danger,fontSize:11,cursor:'pointer'}}>×</button>
                     </div>
                   </div>
-                )}
+                ))}
               </div>
             </div>
           </div>
