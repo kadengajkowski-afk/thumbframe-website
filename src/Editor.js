@@ -1695,7 +1695,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit}){
       console.error('[AUTO-SAVE] Error:', err);
       setSaveStatus('Error');
     }
-  },[user?.email,platform,layers,brightness,contrast,saturation,hue]);
+  },[user?.id,user?.email,platform,layers,brightness,contrast,saturation,hue]);
 
   useEffect(()=>{
     if(!user?.email)return undefined;
