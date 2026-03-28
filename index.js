@@ -563,52 +563,44 @@ app.post('/auth/reset-password', async(req,res)=>{
 // ── Designs ────────────────────────────────────────────────────────────────────
 app.post('/designs/save', async(req,res)=>{
   try{
-    const { user, error:userError } = await getSupabaseUserFromRequest(req);
-    if(userError || !user) return res.status(401).json({error:userError||'Unauthorized'});
-
     const {
       id,
-      projectId,
       name,
-      platform,
       layers,
-      brightness,
-      contrast,
-      saturation,
-      hue,
+      user_email,
       thumbnail,
-      canvas_data,
-      prompt,
-      result_image_url,
-      textColor,
-      strokeColor,
-      fillColor,
-      brandKitColors,
     } = req.body;
 
-    const resolvedId = (id || projectId || uuidv4()).toString();
-    const resolvedCanvasData = canvas_data || {
+    if(!id) return res.status(400).json({ error:'Missing required field: id' });
+
+    const authHeader = req.headers.authorization || '';
+    const hasBearer = authHeader.startsWith('Bearer ');
+    let resolvedUserEmail = (user_email || '').toLowerCase();
+    let resolvedUserId = null;
+
+    if(hasBearer){
+      const { user } = await getSupabaseUserFromRequest(req);
+      if(user?.email){
+        resolvedUserEmail = user.email.toLowerCase();
+        resolvedUserId = user.id;
+      }
+    }
+
+    if(!resolvedUserEmail){
+      return res.status(400).json({ error:'Missing required field: user_email' });
+    }
+
+    const resolvedCanvasData = {
+      id,
       name: name || 'Untitled',
-      platform: platform || 'youtube',
       layers: Array.isArray(layers) ? layers : [],
-      brightness: brightness ?? 100,
-      contrast: contrast ?? 100,
-      saturation: saturation ?? 100,
-      hue: hue ?? 0,
-      prompt: prompt || null,
-      result_image_url: result_image_url || null,
-      textColor: textColor || null,
-      strokeColor: strokeColor || null,
-      fillColor: fillColor || null,
-      brandKitColors: brandKitColors || null,
     };
 
     const rowPayload = {
-      id: resolvedId,
-      user_id: user.id,
-      user_email: user.email?.toLowerCase() || null,
+      id: id.toString(),
+      user_id: resolvedUserId,
+      user_email: resolvedUserEmail,
       canvas_data: resolvedCanvasData,
-      json_data: resolvedCanvasData,
       thumbnail: thumbnail || null,
       updated_at: new Date().toISOString(),
     };
@@ -621,68 +613,43 @@ app.post('/designs/save', async(req,res)=>{
 
     if(error) throw error;
 
-    res.json({ success:true, id:data?.id || resolvedId });
+    res.json({ success:true, id:data?.id || id.toString() });
   }catch(err){
-    console.error('Design save failed:', err);
-    res.status(500).json({error:'Save failed'});
+    console.error('[DESIGNS/SAVE] Database error:', err?.message || err, err?.stack || '');
+    res.status(500).json({ error:`Design save failed: ${err?.message || 'Unknown database error'}` });
   }
 });
 
 app.get('/designs/load', async(req,res)=>{
   try{
-    const { user, error:userError } = await getSupabaseUserFromRequest(req);
-    if(userError || !user) return res.status(401).json({error:userError||'Unauthorized'});
-
     const requestedId = req.query.id;
 
-    if(requestedId){
-      const { data, error } = await supabase
-        .from('thumbnails')
-        .select('*')
-        .eq('id', requestedId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if(error) throw error;
-      if(!data) return res.status(404).json({error:'Not found'});
-
-      const canvas = data.canvas_data || data.json_data || {};
-      return res.json({
-        design:{
-          id: data.id,
-          ...canvas,
-          thumbnail: data.thumbnail || null,
-          updated: data.updated_at || null,
-        },
-      });
-    }
+    if(!requestedId) return res.status(400).json({ error:'Missing required query parameter: id' });
 
     const { data, error } = await supabase
       .from('thumbnails')
       .select('*')
-      .eq('user_id', user.id)
-      .order('updated_at', { ascending:false })
-      .limit(50);
+      .eq('id', requestedId)
+      .maybeSingle();
 
     if(error) throw error;
+    if(!data) return res.status(404).json({error:'Not found'});
 
-    const designs = (data || []).map((row)=>{
-      const canvas = row.canvas_data || row.json_data || {};
-      return {
-        id: row.id,
+    const canvas = data.canvas_data || {};
+    res.json({
+      design:{
+        id: data.id,
         name: canvas.name || 'Untitled',
-        platform: canvas.platform || 'youtube',
-        thumbnail: row.thumbnail || null,
-        updated: row.updated_at || null,
+        layers: Array.isArray(canvas.layers) ? canvas.layers : [],
+        user_email: data.user_email || null,
+        thumbnail: data.thumbnail || null,
+        updated: data.updated_at || null,
         canvas_data: canvas,
-        json_data: canvas,
-      };
+      },
     });
-
-    res.json({designs});
   }catch(err){
-    console.error('Design load failed:', err);
-    res.status(500).json({error:'Load failed'});
+    console.error('[DESIGNS/LOAD] Database error:', err?.message || err, err?.stack || '');
+    res.status(500).json({ error:`Design load failed: ${err?.message || 'Unknown database error'}` });
   }
 });
 
@@ -715,8 +682,8 @@ app.get('/designs', async(req,res)=>{
 
     res.json({designs});
   }catch(err){
-    console.error('Design list failed:', err);
-    res.status(500).json({error:'Load failed'});
+    console.error('[DESIGNS/LIST] Database error:', err?.message || err, err?.stack || '');
+    res.status(500).json({error:`Design list failed: ${err?.message || 'Unknown database error'}`});
   }
 });
 
@@ -745,8 +712,8 @@ app.get('/designs/:id', async(req,res)=>{
       },
     });
   }catch(err){
-    console.error('Design fetch failed:', err);
-    res.status(500).json({error:'Load failed'});
+    console.error('[DESIGNS/FETCH] Database error:', err?.message || err, err?.stack || '');
+    res.status(500).json({error:`Design fetch failed: ${err?.message || 'Unknown database error'}`});
   }
 });
 
@@ -764,8 +731,8 @@ app.delete('/designs/:id', async(req,res)=>{
     if(error) throw error;
     res.json({success:true});
   }catch(err){
-    console.error('Design delete failed:', err);
-    res.status(500).json({error:'Delete failed'});
+    console.error('[DESIGNS/DELETE] Database error:', err?.message || err, err?.stack || '');
+    res.status(500).json({error:`Design delete failed: ${err?.message || 'Unknown database error'}`});
   }
 });
 

@@ -910,7 +910,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         const authToken = await resolveAuthToken();
         if(!authToken)return;
 
-        const response = await fetch(`${resolvedApiUrl}/designs/load`,{
+        const response = await fetch(`${resolvedApiUrl}/designs`,{
           method:'GET',
           headers:{ authorization:`Bearer ${authToken}` },
         });
@@ -1912,6 +1912,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         (async()=>{
           const authToken = await resolveAuthToken();
           if(!authToken)return;
+          const { data:{ session } } = await supabase.auth.getSession();
           fetch(`${resolvedApiUrl}/designs/save`,{
             method:'POST',
             headers:{'Content-Type':'application/json','authorization':`Bearer ${authToken}`},
@@ -1920,6 +1921,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
               name:canvasData.name,
               platform,
               layers:canvasData.layers,
+              user_email: session?.user?.email || user?.email || null,
               brightness,
               contrast,
               saturation,
@@ -1981,6 +1983,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           name: safeCanvasData.name,
           platform,
           layers: safeCanvasData.layers,
+          user_email: session?.user?.email || user?.email || null,
           brightness,
           contrast,
           saturation,
@@ -2008,7 +2011,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       console.error('[SAVE PROJECT] Error:', err);
       setSaveStatus('Error');
     }
-  },[aiPrompt, brightness, brandKitColors, contrast, designName, fillColor, hue, lastGeneratedImageUrl, layers, platform, projectId, resolvedApiUrl, saturation, strokeColor, textColor]);
+  },[aiPrompt, brightness, brandKitColors, contrast, designName, fillColor, hue, lastGeneratedImageUrl, layers, platform, projectId, resolvedApiUrl, saturation, strokeColor, textColor, user?.email]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
