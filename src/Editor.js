@@ -2157,13 +2157,22 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   },[aiPrompt, brightness, brandKitColors, buildProjectSnapshot, contrast, currentDesignId, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
 
   useEffect(()=>{
-    if(!layers || layers.length===0)return;
-    if(isLoading || !draftHydratedRef.current)return;
+    console.log('[AutoSave] Canvas updated. Checking layers...', layers);
+
+    if(!layers || layers.length===0){
+      console.log('[AutoSave] Canvas is empty. Aborting.');
+      return;
+    }
+
     const signature=buildSaveSignature(buildProjectSnapshot(layers));
     if(signature===lastSavedSignatureRef.current)return;
+
     setSaveStatus('Unsaved');
+    console.log('[AutoSave] Starting 2-second debounce timer...');
+
     const timer=setTimeout(async ()=>{
       try{
+        console.log('[AutoSave] Timer finished. Saving to Supabase...');
         const result = await saveProject({
           silent:true,
           backgroundExistingSave:true,
@@ -2179,9 +2188,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     },2000);
 
     return()=>{
+      console.log('[AutoSave] User kept drawing. Resetting timer.');
       clearTimeout(timer);
     };
-  },[buildProjectSnapshot, buildSaveSignature, isLoading, layers, saveProject, setCurrentProjectId]);
+  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId]);
 
   async function loadProject(d){
     try{
