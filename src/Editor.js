@@ -785,12 +785,33 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   function persistSavedDesigns(nextDesign){
-    setSavedDesigns(prev=>{
-      const next=[
-        nextDesign,
-        ...prev.filter(design=>design.projectId!==nextDesign.projectId&&design.id!==nextDesign.id),
-      ].slice(0,20);
-      return next;
+    setSavedDesigns(prevList=>{
+      const list = Array.isArray(prevList) ? prevList : [];
+      const targetId = nextDesign?.id || nextDesign?.currentDesignId || nextDesign?.projectId || null;
+      if(!targetId){
+        return [...list, nextDesign].slice(0,20);
+      }
+
+      const existingIndex = list.findIndex(item => (
+        item?.id===targetId ||
+        item?.currentDesignId===targetId ||
+        item?.projectId===targetId
+      ));
+
+      if(existingIndex>=0){
+        return list.map((item, idx)=>idx===existingIndex
+          ? {
+              ...item,
+              ...nextDesign,
+              last_edited: nextDesign?.last_edited || new Date().toISOString(),
+            }
+          : item);
+      }
+
+      return [...list, {
+        ...nextDesign,
+        last_edited: nextDesign?.last_edited || new Date().toISOString(),
+      }].slice(0,20);
     });
   }
 
@@ -870,7 +891,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         const normalizedName =
           row?.name ||
           (typeof canvasData?.name==='string' && canvasData.name.trim() ? canvasData.name.trim() : '') ||
-          `Project ${String(row?.id || '').slice(-6) || 'Untitled'}`;
+          'Untitled Project';
 
         return {
           id:row?.id,
@@ -2034,11 +2055,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
   const saveProject = useCallback(async ({nameOverride, silent=true} = {})=>{
     try{
-      const nextName=(nameOverride||designName||'Untitled').trim()||'Untitled';
+      const nextName=(nameOverride||designName||'Untitled Project').trim()||'Untitled Project';
       const snapshot=buildProjectSnapshot();
       const signature=buildSaveSignature({...snapshot,designName:nextName});
       const thumbnail=await generateDesignThumbnail(snapshot.layers);
       let persistedId=currentDesignIdRef.current;
+      let persistedEditedAt = new Date().toISOString();
 
       if(token){
         const authToken = token;
@@ -2074,6 +2096,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
         const payload = await response.json().catch(()=>({}));
         const returnedId = payload?.data?.id || payload?.id || payload?.design?.id || null;
+        persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
         if(returnedId && returnedId !== currentDesignIdRef.current){
           currentDesignIdRef.current=returnedId;
           setCurrentDesignId(returnedId);
@@ -2093,6 +2116,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         contrast,
         saturation,
         hue,
+        last_edited:persistedEditedAt,
         canvas_data:{
           name:nextName,
           platform,
