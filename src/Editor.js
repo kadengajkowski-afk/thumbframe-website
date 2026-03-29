@@ -2053,12 +2053,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     saveProject({nameOverride:name, silent:false}).catch(()=>{});
   }
 
-  const saveProject = useCallback(async ({nameOverride, silent=true} = {})=>{
+  const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false} = {})=>{
     try{
       const nextName=(nameOverride||designName||'Untitled Project').trim()||'Untitled Project';
       const snapshot=buildProjectSnapshot();
       const signature=buildSaveSignature({...snapshot,designName:nextName});
       const thumbnail=await generateDesignThumbnail(snapshot.layers);
+      const hadExistingDesignId = Boolean(currentDesignIdRef.current);
       let persistedId=currentDesignIdRef.current;
       let persistedEditedAt = new Date().toISOString();
 
@@ -2129,6 +2130,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         thumbnail,
       };
 
+      if(backgroundExistingSave && hadExistingDesignId){
+        lastSavedSignatureRef.current=signature;
+        return { id:persistedId||null, design:savedDesign };
+      }
+
       persistSavedDesigns(savedDesign);
       lastSavedSignatureRef.current=signature;
       setSaveStatus('Saved');
@@ -2158,9 +2164,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     setSaveStatus('Unsaved');
     if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
     autoSaveTimeoutRef.current=setTimeout(async ()=>{
-      setSaveStatus('Saving...');
       try{
-        await saveProject({silent:true});
+        const isExistingDesign = Boolean(currentDesignIdRef.current);
+        if(!isExistingDesign){
+          setSaveStatus('Saving...');
+        }
+        await saveProject({
+          silent:true,
+          backgroundExistingSave:isExistingDesign,
+        });
       }catch(err){
         console.error('[AUTO SAVE] Error:', err);
       }
