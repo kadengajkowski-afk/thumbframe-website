@@ -597,23 +597,59 @@ app.post('/auth/reset-password', async(req,res)=>{
 // ── Designs ────────────────────────────────────────────────────────────────────
 app.post('/designs/save', authMiddleware,(req,res)=>{
   try{
-    const {name,platform,layers,brightness,contrast,saturation,hue,thumbnail}=req.body;
-    const designs=loadDesigns();
-    if(!designs[req.user.email]) designs[req.user.email]=[];
-    const id=Date.now().toString();
-    const existing=designs[req.user.email].findIndex(d=>d.name===name);
-    const design={id,name,platform,layers,brightness,contrast,saturation,hue,
-      thumbnail:thumbnail||null,created:new Date().toLocaleDateString(),
-      updated:new Date().toISOString()};
-    if(existing>=0){
-      designs[req.user.email][existing]={...designs[req.user.email][existing],...design};
-    }else{
-      designs[req.user.email].unshift(design);
+    const {
+      id,
+      name,
+      platform,
+      layers,
+      brightness,
+      contrast,
+      saturation,
+      hue,
+      thumbnail,
+      json_data,
+      canvas_data,
+    }=req.body;
+
+    const payloadJsonData =
+      (json_data && typeof json_data==='object')
+        ? json_data
+        : ((canvas_data && typeof canvas_data==='object')
+          ? canvas_data
+          : {
+              name: name || 'Untitled Project',
+              platform: platform || 'youtube',
+              layers: Array.isArray(layers) ? layers : [],
+              brightness: brightness ?? 100,
+              contrast: contrast ?? 100,
+              saturation: saturation ?? 100,
+              hue: hue ?? 0,
+            });
+
+    const upsertRow = {
+      ...(id ? { id } : {}),
+      user_email:req.user.email,
+      name:payloadJsonData?.name || name || 'Untitled Project',
+      platform:payloadJsonData?.platform || platform || 'youtube',
+      thumbnail:thumbnail||null,
+      json_data:payloadJsonData,
+      last_edited:new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('thumbnails')
+      .upsert(upsertRow, { onConflict:'id' })
+      .select('id,last_edited,json_data')
+      .single();
+
+    if(error){
+      console.error('Design save error:', error);
+      return res.status(500).json({error:'Save failed'});
     }
-    designs[req.user.email]=designs[req.user.email].slice(0,50);
-    saveDesigns(designs);
-    res.json({success:true,id:design.id});
+
+    res.json({success:true,data});
   }catch(err){
+    console.error('Design save route error:', err);
     res.status(500).json({error:'Save failed'});
   }
 });
@@ -627,7 +663,7 @@ app.get('/designs/list', async (req, res) => {
 
     const { data, error } = await supabase
       .from('thumbnails')
-      .select('id,user_email,last_edited,canvas_data')
+      .select('id,user_email,name,last_edited,json_data')
       .eq('user_email', email)
       .order('last_edited', { ascending: false });
 

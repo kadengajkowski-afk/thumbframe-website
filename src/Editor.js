@@ -594,7 +594,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const zoomRef         = useRef(1);
   const layersRef       = useRef([]);
   const mountedRef = useRef(true);
-  const autoSaveTimeoutRef = useRef(null);
   const currentDesignIdRef = useRef(null);
   const lastSavedSignatureRef = useRef('');
   const draftStateRef = useRef(null);
@@ -732,6 +731,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [lastGeneratedImageUrl,setLastGeneratedImageUrl] = useState('');
   const [projectId,setProjectId]                       = useState(null);
   const [currentDesignId,setCurrentDesignId]           = useState(null);
+  const setCurrentProjectId = setCurrentDesignId;
 
   const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
   const [showToast,setShowToast]                       = useState(false);
@@ -769,7 +769,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
   ),[aiPrompt, brandKitColors, brightness, contrast, designName, fillColor, hue, lastGeneratedImageUrl, platform, projectId, saturation, strokeColor, textColor]);
 
-  function buildSaveSignature(snapshot){
+  const buildSaveSignature = useCallback((snapshot)=>{
     return JSON.stringify({
       projectId: snapshot?.projectId || null,
       platform: snapshot?.platform || 'youtube',
@@ -782,7 +782,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       aiPrompt: snapshot?.aiPrompt || '',
       lastGeneratedImageUrl: snapshot?.lastGeneratedImageUrl || '',
     });
-  }
+  },[]);
 
   function persistSavedDesigns(nextDesign){
     setSavedDesigns(prevList=>{
@@ -884,13 +884,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         : (Array.isArray(payload?.data) ? payload.data : []);
 
       const normalized = rows.map((row)=>{
-        const canvasData = row?.canvas_data;
-        const layersFromCanvas = Array.isArray(canvasData)
-          ? canvasData
-          : (Array.isArray(canvasData?.layers) ? canvasData.layers : []);
+        const jsonData = row?.json_data;
+        const layersFromJson = Array.isArray(jsonData)
+          ? jsonData
+          : (Array.isArray(jsonData?.layers) ? jsonData.layers : []);
         const normalizedName =
           row?.name ||
-          (typeof canvasData?.name==='string' && canvasData.name.trim() ? canvasData.name.trim() : '') ||
+          (typeof jsonData?.name==='string' && jsonData.name.trim() ? jsonData.name.trim() : '') ||
           'Untitled Project';
 
         return {
@@ -899,14 +899,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           projectId:row?.id,
           name:normalizedName,
           created:row?.last_edited ? new Date(row.last_edited).toLocaleString() : 'Just now',
-          platform:canvasData?.platform || row?.platform || 'youtube',
-          layers:layersFromCanvas,
-          brightness:canvasData?.brightness ?? row?.brightness ?? 100,
-          contrast:canvasData?.contrast ?? row?.contrast ?? 100,
-          saturation:canvasData?.saturation ?? row?.saturation ?? 100,
-          hue:canvasData?.hue ?? row?.hue ?? 0,
+          platform:jsonData?.platform || row?.platform || 'youtube',
+          layers:layersFromJson,
+          brightness:jsonData?.brightness ?? row?.brightness ?? 100,
+          contrast:jsonData?.contrast ?? row?.contrast ?? 100,
+          saturation:jsonData?.saturation ?? row?.saturation ?? 100,
+          hue:jsonData?.hue ?? row?.hue ?? 0,
           thumbnail:row?.thumbnail || null,
-          canvas_data:canvasData,
+          json_data:jsonData,
           last_edited:row?.last_edited || null,
         };
       });
@@ -2059,7 +2059,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const snapshot=buildProjectSnapshot();
       const signature=buildSaveSignature({...snapshot,designName:nextName});
       const thumbnail=await generateDesignThumbnail(snapshot.layers);
-      const hadExistingDesignId = Boolean(currentDesignIdRef.current);
       let persistedId=currentDesignIdRef.current;
       let persistedEditedAt = new Date().toISOString();
 
@@ -2073,7 +2072,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             project_id:projectId,
             name:nextName,
             platform,
-            canvas_data:{
+            json_data:{
               name:nextName,
               platform,
               layers:snapshot.layers,
@@ -2100,7 +2099,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
         if(returnedId && returnedId !== currentDesignIdRef.current){
           currentDesignIdRef.current=returnedId;
-          setCurrentDesignId(returnedId);
+          setCurrentProjectId(returnedId);
         }
         persistedId = returnedId || persistedId;
       }
@@ -2118,7 +2117,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         saturation,
         hue,
         last_edited:persistedEditedAt,
-        canvas_data:{
+        json_data:{
           name:nextName,
           platform,
           layers:snapshot.layers,
@@ -2130,7 +2129,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         thumbnail,
       };
 
-      if(backgroundExistingSave && hadExistingDesignId){
+      if(backgroundExistingSave){
         lastSavedSignatureRef.current=signature;
         return { id:persistedId||null, design:savedDesign };
       }
@@ -2146,7 +2145,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       if(!silent) setCmdLog('Save failed');
       throw err;
     }
-  },[brightness, buildProjectSnapshot, contrast, designName, generateDesignThumbnail, hue, platform, projectId, resolvedApiUrl, saturation, token]);
+  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, resolvedApiUrl, saturation, setCurrentProjectId, token]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
@@ -2158,36 +2157,38 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   },[aiPrompt, brightness, brandKitColors, buildProjectSnapshot, contrast, currentDesignId, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
 
   useEffect(()=>{
+    if(!layers || layers.length===0)return;
     if(isLoading || !draftHydratedRef.current)return;
     const signature=buildSaveSignature(buildProjectSnapshot(layers));
     if(signature===lastSavedSignatureRef.current)return;
     setSaveStatus('Unsaved');
-    if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
-    autoSaveTimeoutRef.current=setTimeout(async ()=>{
+    const timer=setTimeout(async ()=>{
       try{
-        const isExistingDesign = Boolean(currentDesignIdRef.current);
-        if(!isExistingDesign){
-          setSaveStatus('Saving...');
-        }
-        await saveProject({
+        const result = await saveProject({
           silent:true,
-          backgroundExistingSave:isExistingDesign,
+          backgroundExistingSave:true,
         });
+
+        if(result?.id && result.id !== currentDesignIdRef.current){
+          currentDesignIdRef.current=result.id;
+          setCurrentProjectId(result.id);
+        }
       }catch(err){
         console.error('[AUTO SAVE] Error:', err);
       }
-    },3000);
+    },2000);
+
     return()=>{
-      if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
+      clearTimeout(timer);
     };
-  },[brightness, buildProjectSnapshot, contrast, designName, hue, isLoading, layers, platform, projectId, saturation, saveProject]);
+  },[buildProjectSnapshot, buildSaveSignature, isLoading, layers, saveProject, setCurrentProjectId]);
 
   async function loadProject(d){
     try{
       let projectData=d;
       const loadedId=d?.currentDesignId||d?.id||null;
 
-      if(!projectData?.canvas_data && token && loadedId){
+      if(!projectData?.json_data && !projectData?.canvas_data && token && loadedId){
         const response = await fetch(`${resolvedApiUrl}/designs/load?id=${encodeURIComponent(loadedId)}`,
           { headers:{ authorization:`Bearer ${token}` } });
         if(response.ok){
@@ -2196,19 +2197,21 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         }
       }
 
-      const clonedCanvasData = JSON.parse(JSON.stringify(projectData?.canvas_data || []));
-      const hydratedLayers = Array.isArray(clonedCanvasData)
-        ? clonedCanvasData
-        : (Array.isArray(clonedCanvasData?.layers) ? clonedCanvasData.layers : []);
-      const canvasMeta = Array.isArray(clonedCanvasData) ? {} : (clonedCanvasData || {});
+      const sourceJsonData = projectData?.json_data || projectData?.canvas_data || [];
+      const clonedJsonData = JSON.parse(JSON.stringify(sourceJsonData));
+      const hydratedLayersRaw = Array.isArray(clonedJsonData)
+        ? clonedJsonData
+        : (Array.isArray(clonedJsonData?.layers) ? clonedJsonData.layers : []);
+      const hydratedLayers = Array.isArray(hydratedLayersRaw) ? hydratedLayersRaw : [];
+      const jsonMeta = Array.isArray(clonedJsonData) ? {} : (clonedJsonData || {});
 
       const nextProjectId=projectData?.projectId||projectData?.project_id||d?.projectId||generateProjectId();
-      const nextPlatform=projectData?.platform||canvasMeta?.platform||'youtube';
-      const nextName=projectData?.name||canvasMeta?.name||'Untitled';
-      const nextBrightness=projectData?.brightness??canvasMeta?.brightness??100;
-      const nextContrast=projectData?.contrast??canvasMeta?.contrast??100;
-      const nextSaturation=projectData?.saturation??canvasMeta?.saturation??100;
-      const nextHue=projectData?.hue??canvasMeta?.hue??0;
+      const nextPlatform=projectData?.platform||jsonMeta?.platform||'youtube';
+      const nextName=projectData?.name||jsonMeta?.name||'Untitled';
+      const nextBrightness=projectData?.brightness??jsonMeta?.brightness??100;
+      const nextContrast=projectData?.contrast??jsonMeta?.contrast??100;
+      const nextSaturation=projectData?.saturation??jsonMeta?.saturation??100;
+      const nextHue=projectData?.hue??jsonMeta?.hue??0;
 
       setLayers([]);
       layersRef.current=[];
