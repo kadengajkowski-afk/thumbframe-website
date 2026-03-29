@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, memo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 import BrandKitSetupModal from './BrandKit';
@@ -502,6 +502,48 @@ function getSafeImageSrc(layer){
   return null;
 }
 
+class CanvasErrorBoundary extends React.Component {
+  constructor(props){
+    super(props);
+    this.state={hasError:false};
+  }
+
+  static getDerivedStateFromError(){
+    return {hasError:true};
+  }
+
+  componentDidCatch(error, info){
+    console.error('[Canvas ErrorBoundary] Canvas render failed:', error, info);
+  }
+
+  render(){
+    if(this.state.hasError){
+      return (
+        <div style={{
+          width:'100%',
+          maxWidth:700,
+          minHeight:220,
+          border:'1px solid rgba(255,255,255,0.15)',
+          borderRadius:8,
+          display:'flex',
+          alignItems:'center',
+          justifyContent:'center',
+          flexDirection:'column',
+          gap:8,
+          color:'#d1d5db',
+          background:'rgba(0,0,0,0.22)',
+          padding:18,
+          textAlign:'center',
+        }}>
+          <div style={{fontSize:16,fontWeight:'700'}}>Canvas render error</div>
+          <div style={{fontSize:12,opacity:0.85}}>A layer failed to render. Remove the last edited image and try again.</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function ArcText({obj}){
   const ts=(()=>{const p=[];if(obj.shadowEnabled)p.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)p.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return p.length?p.join(','):'none';})();
   const base={fontFamily:obj.fontFamily,fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`};
@@ -683,6 +725,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
   const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.email==='kadengajkowski@gmail.com'));
   const [isLoading,setIsLoading]                       = useState(true);
+  const [removeBgBusy,setRemoveBgBusy]                 = useState(false);
   const [saveStatus, setSaveStatus]                    = useState('Saved');
   const [aiPrompt,setAiPrompt]                         = useState('');
   const [lastGeneratedImageUrl,setLastGeneratedImageUrl] = useState('');
@@ -2326,56 +2369,170 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   };
 
   function applyRimLight(x, y){
-    if(!selectedLayer || selectedLayer.type !== 'image') return;
+    try{
+      if(!selectedLayer || selectedLayer.type!=='image') return;
 
-    const hex     = rimLightColor.replace('#','');
-    const lr      = parseInt(hex.slice(0,2),16);
-    const lg      = parseInt(hex.slice(2,4),16);
-    const lb      = parseInt(hex.slice(4,6),16);
-    const lightR  = Math.round((rimLightSize/100)*Math.max(selectedLayer.width,selectedLayer.height)*0.7);
-    const intensity = rimLightIntensity/100;
-    const softness  = rimLightSoftness/100;
+      const layerSnapshot={...selectedLayer};
+      const baseSrc=getSafeImageSrc({src:layerSnapshot.src});
+      if(!baseSrc) throw new Error('Invalid base image source');
 
-    const baseImg = new Image();
-    baseImg.onload = () => {
-      const tmp = document.createElement('canvas');
-      tmp.width  = baseImg.naturalWidth;
-      tmp.height = baseImg.naturalHeight;
-      const ctx  = tmp.getContext('2d');
+      const hex=rimLightColor.replace('#','');
+      const lr=parseInt(hex.slice(0,2),16);
+      const lg=parseInt(hex.slice(2,4),16);
+      const lb=parseInt(hex.slice(4,6),16);
+      const lightR=Math.round((rimLightSize/100)*Math.max(layerSnapshot.width,layerSnapshot.height)*0.7);
+      const intensity=rimLightIntensity/100;
+      const softness=rimLightSoftness/100;
 
-      // Draw base image (selectedLayer.src)
-      ctx.drawImage(baseImg, 0, 0, tmp.width, tmp.height);
+      const baseImg=new Image();
+      baseImg.crossOrigin='Anonymous';
+      baseImg.onload=()=>{
+        try{
+          const tmp=document.createElement('canvas');
+          tmp.width=baseImg.naturalWidth;
+          tmp.height=baseImg.naturalHeight;
+          const ctx=tmp.getContext('2d');
+          if(!ctx) throw new Error('Canvas context unavailable');
 
-      // Draw paintSrc on top if it exists
-      if(selectedLayer.paintSrc){
-        const paintImg = new Image();
-        paintImg.onload = () => {
-          ctx.drawImage(paintImg, 0, 0, tmp.width, tmp.height);
-          applyGradient();
+          ctx.drawImage(baseImg,0,0,tmp.width,tmp.height);
+
+          const applyGradient=()=>{
+            try{
+              const scaleX=tmp.width/layerSnapshot.width;
+              const scaleY=tmp.height/layerSnapshot.height;
+              const scaledX=x*scaleX;
+              const scaledY=y*scaleY;
+              const scaledR=lightR*Math.max(scaleX,scaleY);
+
+              const gradient=ctx.createRadialGradient(scaledX,scaledY,0,scaledX,scaledY,scaledR);
+              gradient.addColorStop(0,`rgba(${lr},${lg},${lb},${intensity*0.6})`);
+              gradient.addColorStop(softness*0.5,`rgba(${lr},${lg},${lb},${intensity*0.3})`);
+              gradient.addColorStop(1,`rgba(${lr},${lg},${lb},0)`);
+              ctx.fillStyle=gradient;
+              ctx.fillRect(0,0,tmp.width,tmp.height);
+
+              const nextSrc=tmp.toDataURL('image/png');
+              if(!getSafeImageSrc({src:nextSrc})) throw new Error('Invalid rim-light output source');
+
+              setLayers(prev=>{
+                const hasTarget=prev.some(layer=>layer.id===layerSnapshot.id&&layer.type==='image');
+                if(!hasTarget) return prev;
+                const nl=prev.map(layer=>layer.id===layerSnapshot.id&&layer.type==='image'
+                  ? {...layer,src:nextSrc,paintSrc:null}
+                  : layer);
+                pushHistoryDebounced(nl);
+                return nl;
+              });
+            }catch(err){
+              console.error('[RIM LIGHT] Apply failed:', err);
+              alert('Rim light failed to apply. Please try again.');
+            }
+          };
+
+          const paintSrc=getSafeImageSrc({src:layerSnapshot.paintSrc});
+          if(paintSrc){
+            const paintImg=new Image();
+            paintImg.crossOrigin='Anonymous';
+            paintImg.onload=()=>{
+              try{ ctx.drawImage(paintImg,0,0,tmp.width,tmp.height); }catch(err){ console.error('[RIM LIGHT] Paint overlay draw failed:', err); }
+              applyGradient();
+            };
+            paintImg.onerror=()=>applyGradient();
+            paintImg.src=paintSrc;
+          }else{
+            applyGradient();
+          }
+        }catch(err){
+          console.error('[RIM LIGHT] Processing failed:', err);
+          alert('Rim light failed to apply. Please try again.');
+        }
+      };
+      baseImg.onerror=()=>alert('Rim light failed to load the image source.');
+      baseImg.src=baseSrc;
+    }catch(err){
+      console.error('[RIM LIGHT] Error:', err);
+      alert('Rim light failed to apply. Please try again.');
+    }
+  }
+
+  async function removeBackgroundFromSelected(){
+    const layer=selectedLayer;
+    if(!layer || layer.type!=='image'){
+      alert('Select an image layer first.');
+      return;
+    }
+
+    const targetId=layer.id;
+    try{
+      setRemoveBgBusy(true);
+      let base64Src=getSafeImageSrc(layer);
+      if(!base64Src) throw new Error('Selected layer has no valid source');
+
+      if(!base64Src.startsWith('data:image/')){
+        const response=await fetch(base64Src);
+        if(!response.ok) throw new Error(`Image fetch failed (${response.status})`);
+        const blob=await response.blob();
+        base64Src=await readBlobAsDataUrl(blob);
+      }
+
+      if(!base64Src || !base64Src.startsWith('data:image/')){
+        throw new Error('Failed to normalize source image');
+      }
+
+      const res=await fetch('https://thumbframe-api-production.up.railway.app/remove-bg',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({imageUrl:base64Src}),
+      });
+      if(!res.ok) throw new Error(`Remove background request failed (${res.status})`);
+
+      const data=await res.json();
+      if(data?.error) throw new Error(data.error);
+
+      const candidateSrc=typeof data?.image==='string' ? data.image.trim() : '';
+      if(!candidateSrc || !getSafeImageSrc({src:candidateSrc})){
+        throw new Error('Remove background returned invalid image data');
+      }
+
+      const safeDataUrl=await new Promise((resolve,reject)=>{
+        const img=new Image();
+        img.crossOrigin='Anonymous';
+        img.onload=()=>{
+          try{
+            const tmp=document.createElement('canvas');
+            tmp.width=img.naturalWidth;
+            tmp.height=img.naturalHeight;
+            const ctx=tmp.getContext('2d');
+            if(!ctx) throw new Error('Canvas context unavailable');
+            ctx.drawImage(img,0,0,tmp.width,tmp.height);
+            const next=tmp.toDataURL('image/png');
+            if(!getSafeImageSrc({src:next})) throw new Error('Invalid processed image output');
+            resolve(next);
+          }catch(err){
+            reject(err);
+          }
         };
-        paintImg.src = selectedLayer.paintSrc;
-      } else {
-        applyGradient();
-      }
+        img.onerror=()=>reject(new Error('Processed image could not be loaded'));
+        img.src=candidateSrc;
+      });
 
-      function applyGradient(){
-        const scaleX = tmp.width / selectedLayer.width;
-        const scaleY = tmp.height / selectedLayer.height;
-        const scaledX = x * scaleX;
-        const scaledY = y * scaleY;
-        const scaledR = lightR * Math.max(scaleX, scaleY);
+      setLayers(prev=>{
+        const hasTarget=prev.some(item=>item.id===targetId&&item.type==='image');
+        if(!hasTarget) return prev;
+        const nl=prev.map(item=>item.id===targetId&&item.type==='image'
+          ? {...item,src:safeDataUrl,paintSrc:null}
+          : item);
+        pushHistoryDebounced(nl);
+        return nl;
+      });
 
-        const gradient = ctx.createRadialGradient(scaledX, scaledY, 0, scaledX, scaledY, scaledR);
-        gradient.addColorStop(0,            `rgba(${lr},${lg},${lb},${intensity*0.6})`);
-        gradient.addColorStop(softness*0.5, `rgba(${lr},${lg},${lb},${intensity*0.3})`);
-        gradient.addColorStop(1,            `rgba(${lr},${lg},${lb},0)`);
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, tmp.width, tmp.height);
-
-        updateLayer(selectedLayer.id, { src: tmp.toDataURL('image/png'), paintSrc: null });
-      }
-    };
-    baseImg.src = selectedLayer.src;
+      setCmdLog('Background removed');
+    }catch(err){
+      console.error('[REMOVE BG] Error:', err);
+      alert('Failed to remove background. Check your connection and try again.');
+    }finally{
+      setRemoveBgBusy(false);
+    }
   }
 
   function addMaskToLayer(id){ // eslint-disable-line no-unused-vars
@@ -2506,21 +2663,74 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     });
   }
 
-  async function addImageFromFile(file){
-    const dataUrl = await readFileAsDataUrl(file);
-    if(!dataUrl) return;
-
-    await new Promise(resolve=>{
-      const img=new Image();
-      img.onload=()=>{
-        const cW=p.preview.w,cH=p.preview.h,ia=img.naturalWidth/img.naturalHeight,ca=cW/cH;
-        let w,h;if(ia>ca){h=cH;w=h*ia;}else{w=cW;h=w/ia;}
-        addLayer({type:'image',src:dataUrl,width:Math.round(w),height:Math.round(h),originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,x:Math.round((cW-w)/2),y:Math.round((cH-h)/2),cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0});
-        resolve();
-      };
-      img.onerror=()=>resolve();
-      img.src=dataUrl;
+  function readBlobAsDataUrl(blob){
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(typeof reader.result==='string'?reader.result:'');
+      reader.onerror=()=>reject(new Error('Failed to convert blob to base64'));
+      reader.readAsDataURL(blob);
     });
+  }
+
+  async function addImageFromFile(file){
+    try{
+      const dataUrl = await readFileAsDataUrl(file);
+      if(!getSafeImageSrc({src:dataUrl})) throw new Error('Invalid image source');
+
+      await new Promise((resolve,reject)=>{
+        const img=new Image();
+        img.onload=()=>{
+          const cW=p.preview.w,cH=p.preview.h,ia=img.naturalWidth/img.naturalHeight,ca=cW/cH;
+          if(!Number.isFinite(ia) || ia<=0){
+            reject(new Error('Image dimensions are invalid'));
+            return;
+          }
+          let w,h;if(ia>ca){h=cH;w=h*ia;}else{w=cW;h=w/ia;}
+
+          const id=newId();
+          const layer={
+            id,
+            type:'image',
+            src:dataUrl,
+            width:Math.round(w),
+            height:Math.round(h),
+            originalWidth:img.naturalWidth,
+            originalHeight:img.naturalHeight,
+            x:Math.round((cW-w)/2),
+            y:Math.round((cH-h)/2),
+            cropTop:0,
+            cropBottom:0,
+            cropLeft:0,
+            cropRight:0,
+            imgBrightness:100,
+            imgContrast:100,
+            imgSaturate:100,
+            imgBlur:0,
+            opacity:100,
+            hidden:false,
+            locked:false,
+            blendMode:'normal',
+            flipH:false,
+            flipV:false,
+            rotation:0,
+            effects:defaultEffects(),
+          };
+
+          setLayers(prev=>{
+            const nl=[...prev,layer];
+            pushHistory(nl);
+            return nl;
+          });
+          setSelectedId(id);
+          resolve();
+        };
+        img.onerror=()=>reject(new Error('Image decode failed'));
+        img.src=dataUrl;
+      });
+    }catch(err){
+      console.error('[ADD IMAGE] Failed:', err);
+      alert('Failed to add image. Please try a different file.');
+    }
   }
 
   async function handleImageUpload(e){
@@ -2530,6 +2740,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         await addImageFromFile(file);
       }catch(err){
         console.error('[ADD IMAGE] Upload failed:', err);
+        alert('Failed to add image. Please try a different file.');
       }
     }));
     e.target.value='';
@@ -3641,6 +3852,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             }
           }}>
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+            <CanvasErrorBoundary>
             <div style={{transform:`scale(${zoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,transformOrigin:'center center',imageRendering:zoom>1?'pixelated':'high-quality'}}>
               <div id="thumbnail-canvas" ref={canvasRef}
                 onMouseMove={(e)=>{
@@ -3727,6 +3939,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                             return;
                           }
                           const img=new Image();
+                          img.crossOrigin='Anonymous';
                           img.onload=()=>{
                             sCtx.save();
                             sCtx.globalAlpha=(obj.opacity??100)/100;
@@ -3932,6 +4145,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 )}
               </div>
             </div>
+            </CanvasErrorBoundary>
             <div style={{fontSize:10,color:'#444',letterSpacing:'0.3px'}}>
               {p.label} · {p.width}×{p.height}px · {layers.length} layer{layers.length!==1?'s':''} · {Math.round(zoom*100)}%
             </div>
@@ -5329,57 +5543,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         <div>
           <button
             id="removebg-btn"
-            onClick={async()=>{
-              const btn=document.getElementById('removebg-btn');
-              const orig=btn.textContent;
-              btn.textContent='Removing...';
-              btn.disabled=true;
-              btn.style.opacity='0.6';
-              try{
-                let base64Src = selectedLayer.src;
-                // If it's a blob URL, convert to base64 first
-                if(!base64Src.startsWith('data:')){
-                  const response=await fetch(selectedLayer.src);
-                  const blob=await response.blob();
-                  base64Src = await new Promise((resolve,reject)=>{
-                    const reader=new FileReader();
-                    reader.onload=()=>resolve(reader.result);
-                    reader.onerror=()=>reject(new Error('Failed to read'));
-                    reader.readAsDataURL(blob);
-                  });
-                }
-                const res=await fetch('https://thumbframe-api-production.up.railway.app/remove-bg',{
-                  method:'POST',
-                  headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({imageUrl:base64Src}),
-                });
-                const data=await res.json();
-                if(data.error){
-                  alert('Error: '+data.error);
-                  btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';
-                  return;
-                }
-                const nImg=new Image();
-                nImg.onload=()=>{
-                  updateLayer(selectedId,{src:data.image,paintSrc:null});
-                  btn.textContent='Done!';btn.style.background=T.success;
-                  setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';btn.style.background=T.accent;},2000);
-                };
-                nImg.onerror=()=>{
-                  updateLayer(selectedId,{src:data.image,paintSrc:null});
-                  btn.textContent='Done!';btn.style.background=T.success;
-                  setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';btn.style.background=T.accent;},2000);
-                };
-                nImg.src=data.image;
-              }catch(e){
-                console.error('RemoveBG error:', e);
-                alert('Failed to remove background. Check your connection and try again.');
-                btn.textContent=orig;btn.disabled=false;btn.style.opacity='1';
-              }
-            }}
-            style={{width:'100%',padding:10,borderRadius:7,background:T.accent,color:'#fff',border:'none',fontSize:12,cursor:'pointer',fontWeight:'700',transition:'all 0.2s'}}
+            onClick={removeBackgroundFromSelected}
+            disabled={removeBgBusy}
+            style={{width:'100%',padding:10,borderRadius:7,background:removeBgBusy?T.muted:T.accent,color:'#fff',border:'none',fontSize:12,cursor:removeBgBusy?'not-allowed':'pointer',fontWeight:'700',transition:'all 0.2s',opacity:removeBgBusy?0.7:1}}
           >
-            Remove background
+            {removeBgBusy?'Removing...':'Remove background'}
           </button>
           <div style={{fontSize:10,color:T.muted,marginTop:5,textAlign:'center'}}>
             Powered by remove.bg · 50 free/month
