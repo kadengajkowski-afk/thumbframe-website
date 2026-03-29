@@ -597,6 +597,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const autoSaveTimeoutRef = useRef(null);
   const currentDesignIdRef = useRef(null);
   const lastSavedSignatureRef = useRef('');
+  const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
   // Performance: Mouse tracking refs to avoid re-renders
   const mouseRef        = useRef({x:0,y:0});
@@ -789,7 +790,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         nextDesign,
         ...prev.filter(design=>design.projectId!==nextDesign.projectId&&design.id!==nextDesign.id),
       ].slice(0,20);
-      localStorage.setItem('thumbframe_designs',JSON.stringify(next));
       return next;
     });
   }
@@ -2059,9 +2059,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     const currentState = buildProjectSnapshot(layers);
 
-    if(projectId){
-      localStorage.setItem(getProjectStorageKey(projectId), JSON.stringify(currentState));
-    }
+    // Keep latest draft in memory to avoid localStorage quota crashes.
+    draftStateRef.current = currentState;
   },[aiPrompt, brightness, brandKitColors, buildProjectSnapshot, contrast, currentDesignId, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
 
   useEffect(()=>{
@@ -2190,7 +2189,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   function deleteDesign(id){
     const updated=savedDesigns.filter(d=>d.id!==id);
     setSavedDesigns(updated);
-    localStorage.setItem('thumbframe_designs',JSON.stringify(updated));
   }
 
   async function analyzeCTR(){
