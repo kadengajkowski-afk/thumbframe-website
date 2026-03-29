@@ -843,9 +843,71 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
   },[p.preview.h, p.preview.w]);
 
+  const fetchSavedDesigns = useCallback(async ()=>{
+    const userEmail = user?.email;
+    if(!userEmail){
+      setSavedDesigns([]);
+      return;
+    }
+
+    try{
+      const endpoint = `${resolvedApiUrl}/designs/list?email=${encodeURIComponent(userEmail)}`;
+      const response = await fetch(endpoint);
+      if(!response.ok){
+        throw new Error(`Design list request failed (${response.status})`);
+      }
+
+      const payload = await response.json().catch(()=>[]);
+      const rows = Array.isArray(payload)
+        ? payload
+        : (Array.isArray(payload?.data) ? payload.data : []);
+
+      const normalized = rows.map((row)=>{
+        const canvasData = row?.canvas_data;
+        const layersFromCanvas = Array.isArray(canvasData)
+          ? canvasData
+          : (Array.isArray(canvasData?.layers) ? canvasData.layers : []);
+        const normalizedName =
+          row?.name ||
+          (typeof canvasData?.name==='string' && canvasData.name.trim() ? canvasData.name.trim() : '') ||
+          `Project ${String(row?.id || '').slice(-6) || 'Untitled'}`;
+
+        return {
+          id:row?.id,
+          currentDesignId:row?.id,
+          projectId:row?.id,
+          name:normalizedName,
+          created:row?.last_edited ? new Date(row.last_edited).toLocaleString() : 'Just now',
+          platform:canvasData?.platform || row?.platform || 'youtube',
+          layers:layersFromCanvas,
+          brightness:canvasData?.brightness ?? row?.brightness ?? 100,
+          contrast:canvasData?.contrast ?? row?.contrast ?? 100,
+          saturation:canvasData?.saturation ?? row?.saturation ?? 100,
+          hue:canvasData?.hue ?? row?.hue ?? 0,
+          thumbnail:row?.thumbnail || null,
+          canvas_data:canvasData,
+          last_edited:row?.last_edited || null,
+        };
+      });
+
+      setSavedDesigns(normalized);
+    }catch(err){
+      console.error('[FETCH SAVED DESIGNS] Failed:', err);
+      setSavedDesigns([]);
+    }
+  },[resolvedApiUrl, user?.email]);
+
   useEffect(()=>{
     currentDesignIdRef.current=currentDesignId;
   },[currentDesignId]);
+
+  useEffect(()=>{
+    if(user?.email) return;
+    setSavedDesigns([]);
+    setLayers([]);
+    layersRef.current=[];
+    setSelectedId(null);
+  },[user?.email]);
   const T  = {
     bg:darkMode?'#0f0f0f':'#f2f2f2',panel:darkMode?'#1a1a1a':'#ffffff',
     sidebar:darkMode?'#161616':'#fafafa',input:darkMode?'#242424':'#ffffff',
@@ -890,12 +952,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       setBrandKitLoading(true);
 
       try{
-        try{
-          const s=localStorage.getItem('thumbframe_designs');
-          if(s && !cancelled)setSavedDesigns(JSON.parse(s));
-        }catch(e){
-          console.error('Saved designs restore failed:', e);
-        }
+        await fetchSavedDesigns();
 
         const resolvedProjectId = getProjectIdFromUrl() || generateProjectId();
         if(!cancelled){
@@ -1066,17 +1123,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     bootstrapEditor();
     return()=>{cancelled=true;};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[resolvedApiUrl, user?.id]);
+  },[fetchSavedDesigns, resolvedApiUrl, user?.id]);
 
   useEffect(()=>{
     if(!showFileTab)return;
-    try{
-      const s=localStorage.getItem('thumbframe_designs');
-      if(s)setSavedDesigns(JSON.parse(s));
-    }catch(err){
-      console.error('[FETCH SAVES] Error:', err);
-    }
-  },[showFileTab]);
+    fetchSavedDesigns();
+  },[fetchSavedDesigns, showFileTab]);
 
   // ✅ Window drag handlers — ONLY fire when draggingRef or resizingRef is set
   // This means sidebar sliders are completely unaffected

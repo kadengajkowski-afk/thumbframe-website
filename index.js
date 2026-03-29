@@ -622,7 +622,7 @@ app.get('/designs/list', async (req, res) => {
   try {
     const email = (req.query.email || '').toString().trim();
     if (!email) {
-      return res.status(400).json({ error: 'Missing email query parameter' });
+      return res.status(401).json({ error: 'Unauthorized: Email required' });
     }
 
     const { data, error } = await supabase
