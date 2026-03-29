@@ -2062,6 +2062,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       let persistedId=currentDesignIdRef.current;
       let persistedEditedAt = new Date().toISOString();
 
+      if(!token){
+        console.warn('[AutoSave] Aborted: auth token is missing');
+      }
+
       if(token){
         const authToken = token;
         const response = await fetch(`${resolvedApiUrl}/designs/save`,{
@@ -2165,7 +2169,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
 
     const signature=buildSaveSignature(buildProjectSnapshot(layers));
-    if(signature===lastSavedSignatureRef.current)return;
+    if(signature===lastSavedSignatureRef.current){
+      console.warn('[AutoSave] Aborted: signature unchanged, no new canvas changes.');
+      return;
+    }
 
     setSaveStatus('Unsaved');
     console.log('[AutoSave] Starting 2-second debounce timer...');
@@ -2173,6 +2180,17 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const timer=setTimeout(async ()=>{
       try{
         console.log('[AutoSave] Timer finished. Saving to Supabase...');
+
+        if(typeof saveProject!=='function'){
+          console.warn('[AutoSave] Aborted: saveProject function is unavailable');
+          return;
+        }
+
+        if(!token){
+          console.warn('[AutoSave] Aborted: auth token is missing');
+          return;
+        }
+
         const result = await saveProject({
           silent:true,
           backgroundExistingSave:true,
@@ -2182,8 +2200,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           currentDesignIdRef.current=result.id;
           setCurrentProjectId(result.id);
         }
-      }catch(err){
-        console.error('[AUTO SAVE] Error:', err);
+      }catch(error){
+        console.error('[AutoSave] CRITICAL EXECUTION FAILURE:', error);
       }
     },2000);
 
@@ -2191,7 +2209,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       console.log('[AutoSave] User kept drawing. Resetting timer.');
       clearTimeout(timer);
     };
-  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId]);
+  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, token]);
 
   async function loadProject(d){
     try{
