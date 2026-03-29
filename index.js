@@ -648,6 +648,7 @@ app.post('/designs/save', async (req,res)=>{
 
     const upsertRow = {
       ...(body.id ? { id: body.id } : {}),
+      user_id:      user.id,
       user_email:   user.email,
       name:         jsonData.name || body.name || 'Untitled',
       platform:     jsonData.platform || body.platform || 'youtube',

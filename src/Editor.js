@@ -2065,6 +2065,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       const email = session?.user?.email;
+      const userId = session?.user?.id;
       const resolvedPlatform = platform || 'youtube';
 
       console.log('[DEBUG] Sending token to backend:', token ? token.substring(0, 10) + '...' : 'NO TOKEN – session is null');
@@ -2080,6 +2081,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             name:nextName,
             platform:resolvedPlatform,
             user_email:email,
+            user_id:userId,
             json_data:{
               name:nextName,
               platform:resolvedPlatform,
