@@ -2053,7 +2053,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     saveProject({nameOverride:name, silent:false}).catch(()=>{});
   }
 
-  const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false, authToken=null} = {})=>{
+  const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false} = {})=>{
     try{
       const nextName=(nameOverride||designName||'Untitled Project').trim()||'Untitled Project';
       const snapshot=buildProjectSnapshot();
@@ -2061,28 +2061,25 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const thumbnail=await generateDesignThumbnail(snapshot.layers);
       let persistedId=currentDesignIdRef.current;
       let persistedEditedAt = new Date().toISOString();
-      const userEmail = user?.email || null;
 
-      if(!userEmail){
-        console.warn('[AutoSave] Aborted: userEmail is missing');
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const email = session?.user?.email;
+
+      if(!token || !email){
+        console.error('[STORAGE] Failed: No active session found. Please log in.');
         return;
       }
 
-      const finalAuthToken = authToken;
-      if(!finalAuthToken){
-        console.warn('[AutoSave] Aborted: No auth token parameter provided');
-        return;
-      }
-
-      const response = await fetch(`${resolvedApiUrl}/designs/save`,{
+      const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save',{
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization': 'Bearer ' + finalAuthToken},
+        headers:{'Content-Type':'application/json','Authorization': 'Bearer ' + token},
           body:JSON.stringify({
             id:currentDesignIdRef.current||undefined,
             project_id:projectId,
             name:nextName,
             platform,
-            user_email:userEmail,
+            user_email:email,
             json_data:{
               name:nextName,
               platform,
@@ -2103,14 +2100,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
       if(!response.ok){
         const errText = await response.text().catch(()=>'');
-        console.error('[SAVE PROJECT] Response not ok. Status:', response.status, 'Body:', errText);
+        console.error('[STORAGE] Request failed. Status:', response.status, 'Body:', errText);
         throw new Error(`Save failed with status ${response.status}: ${errText}`);
       }
 
       const payload = await response.json().catch(()=>({}));
       const returnedId = payload?.data?.id || payload?.id || payload?.design?.id || null;
       persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
-      console.log('[AutoSave] Success. Returned ID:', returnedId);
+      console.log('[STORAGE] Success. ID:', returnedId);
       if(returnedId && returnedId !== currentDesignIdRef.current){
         currentDesignIdRef.current=returnedId;
         setCurrentProjectId(returnedId);
@@ -2153,12 +2150,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       if(!silent) setCmdLog(`✓ Saved: ${nextName}`);
       return { id:persistedId||null, design:savedDesign };
     }catch(err){
-      console.error('[SAVE PROJECT] Error:', err);
+      console.error('[STORAGE] Error:', err);
       setSaveStatus('Error');
       if(!silent) setCmdLog('Save failed');
       throw err;
     }
-  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, resolvedApiUrl, saturation, setCurrentProjectId, user?.email]);
+  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, saturation, setCurrentProjectId]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
@@ -2188,27 +2185,16 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     const timer=setTimeout(async ()=>{
       try{
-        console.log('[AutoSave] Timer finished. Saving to Supabase...');
+        console.log('[STORAGE] Timer fired. Calling save...');
 
         if(typeof saveProject!=='function'){
-          console.warn('[AutoSave] Aborted: saveProject function is unavailable');
+          console.warn('[STORAGE] Aborted: saveProject function is unavailable');
           return;
         }
-
-        const { data: sessionData } = await supabase.auth.getSession();
-        const freshToken = sessionData?.session?.access_token;
-
-        if(!freshToken){
-          console.warn('[AutoSave] Aborted: No fresh session found');
-          return;
-        }
-
-        console.log('[AutoSave] Fresh session obtained. Calling saveProject with authToken...');
 
         const result = await saveProject({
           silent:true,
           backgroundExistingSave:true,
-          authToken:freshToken,
         });
 
         if(result?.id && result.id !== currentDesignIdRef.current){
@@ -2216,12 +2202,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           setCurrentProjectId(result.id);
         }
       }catch(error){
-        console.error('[AutoSave] CRITICAL EXECUTION FAILURE:', error);
+        console.error('[STORAGE] Timer error:', error);
       }
     },2000);
 
     return()=>{
-      console.log('[AutoSave] User kept drawing. Resetting timer.');
+      console.log('[STORAGE] Timer reset.');
       clearTimeout(timer);
     };
   },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, user?.email, projectId, resolvedApiUrl]);
