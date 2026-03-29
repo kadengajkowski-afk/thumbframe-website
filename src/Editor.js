@@ -2065,33 +2065,25 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       const email = session?.user?.email;
-
-      console.log('[DEBUG] Sending token to backend:', token?.substring(0, 10) + '...');
-      console.log('[DEBUG] User email:', email);
+      const resolvedPlatform = platform || 'youtube';
 
       const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization': 'Bearer ' + token},
           body:JSON.stringify({
             id:currentDesignIdRef.current||undefined,
-            project_id:projectId,
             name:nextName,
-            platform,
+            platform:resolvedPlatform,
             user_email:email,
             json_data:{
               name:nextName,
-              platform,
+              platform:resolvedPlatform,
               layers:snapshot.layers,
               brightness,
               contrast,
               saturation,
               hue,
             },
-            layers:snapshot.layers,
-            brightness,
-            contrast,
-            saturation,
-            hue,
             thumbnail,
           }),
         });
@@ -2105,7 +2097,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const payload = await response.json().catch(()=>({}));
       const returnedId = payload?.data?.id || payload?.id || payload?.design?.id || null;
       persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
-      console.log('[STORAGE] Success. ID:', returnedId);
+      console.log('[STORAGE] Save succeeded. ID:', returnedId, '| Name:', nextName, '| Platform:', resolvedPlatform);
       if(returnedId && returnedId !== currentDesignIdRef.current){
         currentDesignIdRef.current=returnedId;
         setCurrentProjectId(returnedId);
@@ -2139,6 +2131,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
       if(backgroundExistingSave){
         lastSavedSignatureRef.current=signature;
+        setSaveStatus('Saved');
+        setCmdLog(`✓ Auto-saved: ${nextName}`);
         return { id:persistedId||null, design:savedDesign };
       }
 
