@@ -2067,6 +2067,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const email = session?.user?.email;
       const resolvedPlatform = platform || 'youtube';
 
+      console.log('[DEBUG] Sending token to backend:', token ? token.substring(0, 10) + '...' : 'NO TOKEN – session is null');
+      if (!token) {
+        throw new Error('[STORAGE] Cannot save: no active session token. Please log in again.');
+      }
+
       const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization': 'Bearer ' + token},
