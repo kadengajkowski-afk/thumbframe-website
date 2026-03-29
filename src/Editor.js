@@ -2070,7 +2070,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
       const response = await fetch(`${resolvedApiUrl}/designs/save`,{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{'Content-Type':'application/json','authorization':`Bearer ${token}`},
           body:JSON.stringify({
             id:currentDesignIdRef.current||undefined,
             project_id:projectId,
@@ -2104,6 +2104,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const payload = await response.json().catch(()=>({}));
       const returnedId = payload?.data?.id || payload?.id || payload?.design?.id || null;
       persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
+      console.log('[AutoSave] Success. Returned ID:', returnedId);
       if(returnedId && returnedId !== currentDesignIdRef.current){
         currentDesignIdRef.current=returnedId;
         setCurrentProjectId(returnedId);
@@ -2151,7 +2152,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       if(!silent) setCmdLog('Save failed');
       throw err;
     }
-  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, resolvedApiUrl, saturation, setCurrentProjectId, user?.email]);
+  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, resolvedApiUrl, saturation, setCurrentProjectId, token, user?.email]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
@@ -2206,7 +2207,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       console.log('[AutoSave] User kept drawing. Resetting timer.');
       clearTimeout(timer);
     };
-  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, user?.email]);
+  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, token, user?.email]);
 
   async function loadProject(d){
     try{
