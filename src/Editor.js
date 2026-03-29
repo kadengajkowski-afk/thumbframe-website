@@ -2053,7 +2053,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     saveProject({nameOverride:name, silent:false}).catch(()=>{});
   }
 
-  const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false} = {})=>{
+  const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false, authToken=null} = {})=>{
     try{
       const nextName=(nameOverride||designName||'Untitled Project').trim()||'Untitled Project';
       const snapshot=buildProjectSnapshot();
@@ -2068,9 +2068,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         return;
       }
 
+      const finalAuthToken = authToken || token;
+      if(!finalAuthToken){
+        console.warn('[AutoSave] Aborted: No auth token available');
+        return;
+      }
+
       const response = await fetch(`${resolvedApiUrl}/designs/save`,{
         method:'POST',
-        headers:{'Content-Type':'application/json','authorization':`Bearer ${token}`},
+        headers:{'Content-Type':'application/json','Authorization': 'Bearer ' + finalAuthToken},
           body:JSON.stringify({
             id:currentDesignIdRef.current||undefined,
             project_id:projectId,
@@ -2189,9 +2195,20 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           return;
         }
 
+        const { data: sessionData } = await supabase.auth.getSession();
+        const freshToken = sessionData?.session?.access_token;
+
+        if(!freshToken){
+          console.warn('[AutoSave] Aborted: No fresh session found');
+          return;
+        }
+
+        console.log('[AutoSave] Fresh session obtained. Calling saveProject with authToken...');
+
         const result = await saveProject({
           silent:true,
           backgroundExistingSave:true,
+          authToken:freshToken,
         });
 
         if(result?.id && result.id !== currentDesignIdRef.current){
@@ -2207,7 +2224,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       console.log('[AutoSave] User kept drawing. Resetting timer.');
       clearTimeout(timer);
     };
-  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, token, user?.email]);
+  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, user?.email, resolvedApiUrl]);
 
   async function loadProject(d){
     try{
