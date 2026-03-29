@@ -2482,7 +2482,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const res=await fetch('https://thumbframe-api-production.up.railway.app/remove-bg',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({imageUrl:base64Src}),
+        body:JSON.stringify({image:base64Src}),
       });
       if(!res.ok) throw new Error(`Remove background request failed (${res.status})`);
 

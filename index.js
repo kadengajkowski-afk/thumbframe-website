@@ -44,6 +44,7 @@ app.use(cors({
 app.options('*', cors());
 app.use('/webhook', express.raw({ type:'application/json' }));
 app.use(express.json({ limit:'50mb' }));
+app.use(express.urlencoded({ limit:'50mb', extended:true }));
 
 // ── Serve React Frontend (MUST be before API routes) ──────────────────────────
 app.use(express.static(path.join(__dirname, 'build'), {
@@ -319,15 +320,39 @@ Rules:
 // ── Background remover ─────────────────────────────────────────────────────────
 app.post('/remove-bg', async(req,res)=>{
   try{
-    const {imageUrl}=req.body;
-    if(!imageUrl) return res.status(400).json({error:'No image'});
+    const imageInput = (req.body?.image || req.body?.imageUrl || '').toString().trim();
+    if(!imageInput){
+      console.error('[REMOVE BG] 400 Missing image payload. Expected body.image (or imageUrl fallback).');
+      return res.status(400).json({error:'Missing image data. Expected { image: <base64-or-url> }'});
+    }
+
+    if(!process.env.REMOVEBG_API_KEY){
+      console.error('[REMOVE BG] 400 Missing REMOVEBG_API_KEY env var.');
+      return res.status(400).json({error:'remove.bg API key is not configured on the server'});
+    }
+
     let imageBuffer;
-    if(imageUrl.startsWith('data:')){
-      imageBuffer=Buffer.from(imageUrl.split(',')[1],'base64');
+    if(imageInput.startsWith('data:')){
+      const base64Part = imageInput.split(',')[1] || '';
+      if(!base64Part){
+        console.error('[REMOVE BG] 400 Invalid base64 payload: missing data segment.');
+        return res.status(400).json({error:'Invalid image data URL payload'});
+      }
+      imageBuffer=Buffer.from(base64Part,'base64');
     }else{
-      const r=await fetch(imageUrl);
+      const r=await fetch(imageInput);
+      if(!r.ok){
+        console.error(`[REMOVE BG] 400 Image URL fetch failed: status=${r.status}`);
+        return res.status(400).json({error:'Could not fetch image URL for background removal'});
+      }
       imageBuffer=Buffer.from(await r.arrayBuffer());
     }
+
+    if(!imageBuffer || imageBuffer.length===0){
+      console.error('[REMOVE BG] 400 Image buffer is empty after payload processing.');
+      return res.status(400).json({error:'Image payload could not be processed'});
+    }
+
     const formData=new FormData();
     formData.append('image_file',imageBuffer,{filename:'image.png'});
     formData.append('size','auto');
@@ -339,7 +364,13 @@ app.post('/remove-bg', async(req,res)=>{
     if(!response.ok){
       const errText=await response.text();
       console.error('remove.bg error:',response.status,errText);
-      return res.status(400).json({error:'remove.bg failed'});
+      if(response.status===400){
+        return res.status(400).json({error:'remove.bg rejected the image payload'});
+      }
+      if(response.status===401||response.status===403){
+        return res.status(400).json({error:'Invalid remove.bg API key'});
+      }
+      return res.status(500).json({error:'remove.bg failed'});
     }
     const buffer=Buffer.from(await response.arrayBuffer());
     res.json({image:`data:image/png;base64,${buffer.toString('base64')}`});
