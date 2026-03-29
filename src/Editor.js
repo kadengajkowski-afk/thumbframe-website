@@ -2068,9 +2068,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         return;
       }
 
-      const finalAuthToken = authToken || token;
+      const finalAuthToken = authToken;
       if(!finalAuthToken){
-        console.warn('[AutoSave] Aborted: No auth token available');
+        console.warn('[AutoSave] Aborted: No auth token parameter provided');
         return;
       }
 
@@ -2158,7 +2158,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       if(!silent) setCmdLog('Save failed');
       throw err;
     }
-  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, resolvedApiUrl, saturation, setCurrentProjectId, token, user?.email]);
+  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, resolvedApiUrl, saturation, setCurrentProjectId, user?.email]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
@@ -2224,7 +2224,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       console.log('[AutoSave] User kept drawing. Resetting timer.');
       clearTimeout(timer);
     };
-  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, user?.email, resolvedApiUrl]);
+  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, user?.email, projectId, resolvedApiUrl]);
 
   async function loadProject(d){
     try{
