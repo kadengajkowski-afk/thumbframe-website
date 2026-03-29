@@ -595,7 +595,7 @@ app.post('/auth/reset-password', async(req,res)=>{
 });
 
 // ── Designs ────────────────────────────────────────────────────────────────────
-app.post('/designs/save', authMiddleware,(req,res)=>{
+app.post('/designs/save', authMiddleware, async (req,res)=>{
   try{
     const {
       id,
