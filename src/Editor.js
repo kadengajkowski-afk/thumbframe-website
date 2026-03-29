@@ -543,6 +543,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const layersRef       = useRef([]);
   const mountedRef = useRef(true);
   const autoSaveTimeoutRef = useRef(null);
+  const currentDesignIdRef = useRef(null);
+  const lastSavedSignatureRef = useRef('');
   const draftHydratedRef = useRef(false);
   // Performance: Mouse tracking refs to avoid re-renders
   const mouseRef        = useRef({x:0,y:0});
@@ -675,6 +677,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [aiPrompt,setAiPrompt]                         = useState('');
   const [lastGeneratedImageUrl,setLastGeneratedImageUrl] = useState('');
   const [projectId,setProjectId]                       = useState(null);
+  const [currentDesignId,setCurrentDesignId]           = useState(null);
 
   const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
   const [showToast,setShowToast]                       = useState(false);
@@ -691,6 +694,100 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   const p  = PLATFORMS[platform];
+
+  const buildProjectSnapshot = useCallback((layerSnapshot = layersRef.current)=>(
+    {
+      projectId,
+      currentDesignId: currentDesignIdRef.current,
+      platform,
+      layers: JSON.parse(JSON.stringify(layerSnapshot)),
+      brightness,
+      contrast,
+      saturation,
+      hue,
+      designName,
+      aiPrompt,
+      lastGeneratedImageUrl,
+      textColor,
+      strokeColor,
+      fillColor,
+      brandKitColors,
+    }
+  ),[aiPrompt, brandKitColors, brightness, contrast, designName, fillColor, hue, lastGeneratedImageUrl, platform, projectId, saturation, strokeColor, textColor]);
+
+  function buildSaveSignature(snapshot){
+    return JSON.stringify({
+      projectId: snapshot?.projectId || null,
+      platform: snapshot?.platform || 'youtube',
+      designName: snapshot?.designName || '',
+      layers: snapshot?.layers || [],
+      brightness: snapshot?.brightness ?? 100,
+      contrast: snapshot?.contrast ?? 100,
+      saturation: snapshot?.saturation ?? 100,
+      hue: snapshot?.hue ?? 0,
+      aiPrompt: snapshot?.aiPrompt || '',
+      lastGeneratedImageUrl: snapshot?.lastGeneratedImageUrl || '',
+    });
+  }
+
+  function persistSavedDesigns(nextDesign){
+    setSavedDesigns(prev=>{
+      const next=[
+        nextDesign,
+        ...prev.filter(design=>design.projectId!==nextDesign.projectId&&design.id!==nextDesign.id),
+      ].slice(0,20);
+      localStorage.setItem('thumbframe_designs',JSON.stringify(next));
+      return next;
+    });
+  }
+
+  const generateDesignThumbnail = useCallback(async (layerSnapshot)=>{
+    try{
+      const tmpCanvas = document.createElement('canvas');
+      tmpCanvas.width = 320;
+      tmpCanvas.height = Math.round(320 * p.preview.h / p.preview.w);
+      const tctx = tmpCanvas.getContext('2d');
+      if(!tctx)return null;
+
+      const sx = tmpCanvas.width / p.preview.w;
+      const sy = tmpCanvas.height / p.preview.h;
+      const bgLayer = layerSnapshot.find(l=>l.type==='background');
+
+      if(bgLayer){
+        if(bgLayer.bgGradient){
+          const gradient=tctx.createLinearGradient(0,0,0,tmpCanvas.height);
+          gradient.addColorStop(0,bgLayer.bgGradient[0]);
+          gradient.addColorStop(1,bgLayer.bgGradient[1]);
+          tctx.fillStyle=gradient;
+        }else{
+          tctx.fillStyle=bgLayer.bgColor||'#f97316';
+        }
+        tctx.fillRect(0,0,tmpCanvas.width,tmpCanvas.height);
+      }
+
+      const imageLayers = layerSnapshot.filter(layer=>layer.type==='image'&&!layer.hidden);
+      await Promise.all(imageLayers.map(layer=>
+        new Promise(resolve=>{
+          const img=new Image();
+          img.onload=()=>{
+            tctx.drawImage(img, layer.x*sx, layer.y*sy, layer.width*sx, layer.height*sy);
+            resolve();
+          };
+          img.onerror=()=>resolve();
+          img.src=layer.paintSrc||layer.src;
+        })
+      ));
+
+      return tmpCanvas.toDataURL('image/jpeg',0.6);
+    }catch(err){
+      console.error('[SAVE PROJECT] Thumbnail generation failed:', err);
+      return null;
+    }
+  },[p.preview.h, p.preview.w]);
+
+  useEffect(()=>{
+    currentDesignIdRef.current=currentDesignId;
+  },[currentDesignId]);
   const T  = {
     bg:darkMode?'#0f0f0f':'#f2f2f2',panel:darkMode?'#1a1a1a':'#ffffff',
     sidebar:darkMode?'#161616':'#fafafa',input:darkMode?'#242424':'#ffffff',
@@ -808,6 +905,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           const restoredLayers = Array.isArray(stateToRestore.layers) && stateToRestore.layers.length>0
             ? stateToRestore.layers
             : [makeBg(PLATFORMS[restoredPlatform]||p)];
+          const restoredCurrentDesignId = stateToRestore.currentDesignId||stateToRestore.currentId||null;
           // Advance idCounter past any restored IDs to prevent collisions when adding new layers
           const maxRestoredId = restoredLayers.reduce((m,l)=>Math.max(m,typeof l.id==='number'?l.id:0),0);
           if(maxRestoredId>=idCounter) idCounter=maxRestoredId+1;
@@ -822,6 +920,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           setAiPrompt(stateToRestore.aiPrompt||stateToRestore.prompt||'');
           setLastGeneratedImageUrl(stateToRestore.lastGeneratedImageUrl||stateToRestore.result_image_url||'');
           setProjectId(stateToRestore.projectId||resolvedProjectId);
+          currentDesignIdRef.current=restoredCurrentDesignId;
+          setCurrentDesignId(restoredCurrentDesignId);
           if(stateToRestore.textColor)setTextColor(stateToRestore.textColor);
           if(stateToRestore.strokeColor)setStrokeColor(stateToRestore.strokeColor);
           if(stateToRestore.fillColor)setFillColor(stateToRestore.fillColor);
@@ -834,6 +934,18 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           historyIndexRef.current=0;
           setHistory([snapshot]);
           setHistoryIndex(0);
+          lastSavedSignatureRef.current=buildSaveSignature({
+            projectId:stateToRestore.projectId||resolvedProjectId,
+            platform:restoredPlatform,
+            layers:restoredLayers,
+            brightness:stateToRestore.brightness||100,
+            contrast:stateToRestore.contrast||100,
+            saturation:stateToRestore.saturation||100,
+            hue:stateToRestore.hue||0,
+            designName:stateToRestore.designName||stateToRestore.name||'My Design',
+            aiPrompt:stateToRestore.aiPrompt||stateToRestore.prompt||'',
+            lastGeneratedImageUrl:stateToRestore.lastGeneratedImageUrl||stateToRestore.result_image_url||'',
+          });
         }else{
           const b=makeBg(p);
           setLayers([b]);
@@ -843,6 +955,20 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           setHistory([[b]]);
           setHistoryIndex(0);
           setProjectId(resolvedProjectId);
+          currentDesignIdRef.current=null;
+          setCurrentDesignId(null);
+          lastSavedSignatureRef.current=buildSaveSignature({
+            projectId:resolvedProjectId,
+            platform,
+            layers:[b],
+            brightness:100,
+            contrast:100,
+            saturation:100,
+            hue:0,
+            designName:'My Design',
+            aiPrompt:'',
+            lastGeneratedImageUrl:'',
+          });
         }
 
         draftHydratedRef.current=true;
@@ -1781,138 +1907,141 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   function saveDesign(name){
-    try{
-      // Generate thumbnail by rendering layers to a temp canvas
-      let thumbnail = null;
-      try {
-        const tmpCanvas = document.createElement('canvas');
-        tmpCanvas.width = 320;
-        tmpCanvas.height = Math.round(320 * p.preview.h / p.preview.w);
-        const tctx = tmpCanvas.getContext('2d');
-        const sx = tmpCanvas.width / p.preview.w;
-        const sy = tmpCanvas.height / p.preview.h;
-        // Draw background
-        const bgLayer = layers.find(l=>l.type==='background');
-        if(bgLayer){
-          if(bgLayer.bgGradient){
-            const g=tctx.createLinearGradient(0,0,0,tmpCanvas.height);
-            g.addColorStop(0,bgLayer.bgGradient[0]);
-            g.addColorStop(1,bgLayer.bgGradient[1]);
-            tctx.fillStyle=g;
-          } else {
-            tctx.fillStyle=bgLayer.bgColor||'#f97316';
-          }
-          tctx.fillRect(0,0,tmpCanvas.width,tmpCanvas.height);
-        }
-        // Draw image layers
-        const imagePromises = layers.filter(l=>l.type==='image'&&!l.hidden).map(obj=>
-          new Promise(resolve=>{
-            const img=new Image();
-            img.onload=()=>{
-              tctx.drawImage(img, obj.x*sx, obj.y*sy, obj.width*sx, obj.height*sy);
-              resolve();
-            };
-            img.onerror=()=>resolve();
-            img.src=obj.paintSrc||obj.src;
-          })
-        );
-        Promise.all(imagePromises).then(()=>{
-          thumbnail = tmpCanvas.toDataURL('image/jpeg', 0.6);
-          finishSave(thumbnail);
-        });
-      } catch(e) {
-        finishSave(null);
-      }
+    saveProject({nameOverride:name, silent:false}).catch(()=>{});
+  }
 
-      function finishSave(thumb){
-        const design={id:Date.now(),name:name||'Untitled',created:new Date().toLocaleDateString(),platform,layers:JSON.parse(JSON.stringify(layers)),brightness,contrast,saturation,hue,thumbnail:thumb};
-        const updated=[design,...savedDesigns.filter(d=>d.name!==name)].slice(0,20);
-        setSavedDesigns(updated);localStorage.setItem('thumbframe_designs',JSON.stringify(updated));
-        // Also save to backend if logged in
-        if(token){
-          const authToken = token;
-          fetch(`${resolvedApiUrl}/designs/save`,{
-            method:'POST',
-            headers:{'Content-Type':'application/json','authorization':`Bearer ${authToken}`},
-            body:JSON.stringify({
-              name:name||'Untitled',
+  const saveProject = useCallback(async ({nameOverride, silent=true} = {})=>{
+    try{
+      const nextName=(nameOverride||designName||'Untitled').trim()||'Untitled';
+      const snapshot=buildProjectSnapshot();
+      const signature=buildSaveSignature({...snapshot,designName:nextName});
+      const thumbnail=await generateDesignThumbnail(snapshot.layers);
+      let persistedId=currentDesignIdRef.current;
+
+      if(token){
+        const authToken = token;
+        const response = await fetch(`${resolvedApiUrl}/designs/save`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','authorization':`Bearer ${authToken}`},
+          body:JSON.stringify({
+            id:currentDesignIdRef.current||undefined,
+            project_id:projectId,
+            name:nextName,
+            platform,
+            canvas_data:{
+              name:nextName,
               platform,
-              layers:JSON.parse(JSON.stringify(layers)),
+              layers:snapshot.layers,
               brightness,
               contrast,
               saturation,
               hue,
-              thumbnail:thumb,
-            }),
-          }).catch(()=>{});
-        }
-        setCmdLog(`✓ Saved: ${name||'Untitled'}`);
-      }
-    }catch(e){
-      console.error('Save failed:', e);
-      setCmdLog('Save failed');
-    }
-  }
+            },
+            layers:snapshot.layers,
+            brightness,
+            contrast,
+            saturation,
+            hue,
+            thumbnail,
+          }),
+        });
 
-  const saveProject = useCallback(async ()=>{
-    try{
+        if(!response.ok){
+          throw new Error(`Save failed with status ${response.status}`);
+        }
+
+        const payload = await response.json().catch(()=>({}));
+        const returnedId = payload?.data?.id || payload?.id || payload?.design?.id || null;
+        if(returnedId && returnedId !== currentDesignIdRef.current){
+          currentDesignIdRef.current=returnedId;
+          setCurrentDesignId(returnedId);
+        }
+        persistedId = returnedId || persistedId;
+      }
+
+      const savedDesign={
+        id:persistedId||projectId||Date.now(),
+        projectId,
+        currentDesignId:persistedId||null,
+        name:nextName,
+        created:new Date().toLocaleString(),
+        platform,
+        layers:snapshot.layers,
+        brightness,
+        contrast,
+        saturation,
+        hue,
+        thumbnail,
+      };
+
+      persistSavedDesigns(savedDesign);
+      lastSavedSignatureRef.current=signature;
       setSaveStatus('Saved');
+      if(!silent) setCmdLog(`✓ Saved: ${nextName}`);
+      return { id:persistedId||null, design:savedDesign };
     }catch(err){
       console.error('[SAVE PROJECT] Error:', err);
       setSaveStatus('Error');
+      if(!silent) setCmdLog('Save failed');
+      throw err;
     }
-  },[]);
+  },[brightness, buildProjectSnapshot, contrast, designName, generateDesignThumbnail, hue, platform, projectId, resolvedApiUrl, saturation, token]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
 
-    const currentState = {
-      projectId,
-      platform,
-      layers: JSON.parse(JSON.stringify(layers)),
-      brightness,
-      contrast,
-      saturation,
-      hue,
-      designName,
-      aiPrompt,
-      lastGeneratedImageUrl,
-      textColor,
-      strokeColor,
-      fillColor,
-      brandKitColors,
-    };
+    const currentState = buildProjectSnapshot(layers);
 
     if(projectId){
       localStorage.setItem(getProjectStorageKey(projectId), JSON.stringify(currentState));
     }
-  },[aiPrompt, brightness, brandKitColors, contrast, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
+  },[aiPrompt, brightness, brandKitColors, buildProjectSnapshot, contrast, currentDesignId, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
+    const signature=buildSaveSignature(buildProjectSnapshot(layers));
+    if(signature===lastSavedSignatureRef.current)return;
     setSaveStatus('Unsaved');
     if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
     autoSaveTimeoutRef.current=setTimeout(async ()=>{
       setSaveStatus('Saving...');
-      await saveProject();
-    },2000);
+      try{
+        await saveProject({silent:true});
+      }catch(err){
+        console.error('[AUTO SAVE] Error:', err);
+      }
+    },3000);
     return()=>{
       if(autoSaveTimeoutRef.current)clearTimeout(autoSaveTimeoutRef.current);
     };
-  },[isLoading, saveProject]);
+  },[brightness, buildProjectSnapshot, contrast, designName, hue, isLoading, layers, platform, projectId, saturation, saveProject]);
 
   function loadDesign(d){
-    const nextProjectId=generateProjectId();
+    const nextProjectId=d?.projectId||generateProjectId();
     setLayers(d?.layers||[]);
     setPlatform(d?.platform||'youtube');
     setBrightness(d?.brightness||100);
     setContrast(d?.contrast||100);
     setSaturation(d?.saturation||100);
     setHue(d?.hue||0);
+    currentDesignIdRef.current=d?.currentDesignId||d?.id||null;
+    setCurrentDesignId(d?.currentDesignId||d?.id||null);
     setProjectId(nextProjectId);
     syncProjectIdToUrl(nextProjectId);
     setSelectedId(null);
     setShowFileTab(false);
+    lastSavedSignatureRef.current=buildSaveSignature({
+      projectId:nextProjectId,
+      platform:d?.platform||'youtube',
+      layers:d?.layers||[],
+      brightness:d?.brightness||100,
+      contrast:d?.contrast||100,
+      saturation:d?.saturation||100,
+      hue:d?.hue||0,
+      designName:d?.name||'Untitled',
+      aiPrompt:'',
+      lastGeneratedImageUrl:'',
+    });
     setCmdLog(`Loaded: ${d?.name||'Untitled'}`);
   }
 
@@ -1924,10 +2053,24 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     historyIndexRef.current=0;
     setHistory([[b]]);
     setHistoryIndex(0);
+    currentDesignIdRef.current=null;
+    setCurrentDesignId(null);
     setProjectId(nextProjectId);
     syncProjectIdToUrl(nextProjectId);
     setSelectedId(null);
     setShowFileTab(false);
+    lastSavedSignatureRef.current=buildSaveSignature({
+      projectId:nextProjectId,
+      platform,
+      layers:[b],
+      brightness:100,
+      contrast:100,
+      saturation:100,
+      hue:0,
+      designName:'My Design',
+      aiPrompt:'',
+      lastGeneratedImageUrl:'',
+    });
   }
 
   function deleteDesign(id){
