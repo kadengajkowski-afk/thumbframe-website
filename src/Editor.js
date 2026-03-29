@@ -2058,7 +2058,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const nextName=(nameOverride||designName||'Untitled Project').trim()||'Untitled Project';
       const snapshot=buildProjectSnapshot();
       const signature=buildSaveSignature({...snapshot,designName:nextName});
+      console.time('[DEBUG] generateDesignThumbnail');
       const thumbnail=await generateDesignThumbnail(snapshot.layers);
+      console.timeEnd('[DEBUG] generateDesignThumbnail');
       let persistedId=currentDesignIdRef.current;
       let persistedEditedAt = new Date().toISOString();
 
@@ -2069,6 +2071,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const resolvedPlatform = platform || 'youtube';
 
       console.log('[DEBUG] Sending token to backend:', token ? token.substring(0, 10) + '...' : 'NO TOKEN – session is null');
+      console.log('[DEBUG] user_id:', userId || 'NULL – session.user.id missing');
       if (!token) {
         throw new Error('[STORAGE] Cannot save: no active session token. Please log in again.');
       }
