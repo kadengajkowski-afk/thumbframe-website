@@ -595,8 +595,27 @@ app.post('/auth/reset-password', async(req,res)=>{
 });
 
 // ── Designs ────────────────────────────────────────────────────────────────────
-app.post('/designs/save', authMiddleware, async (req,res)=>{
+app.post('/designs/save', async (req,res)=>{
   try{
+    const authHeader = req.headers.authorization || '';
+    const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    
+    console.log('[AUTH] Token received start:', accessToken?.substring(0,5));
+    
+    if(!accessToken){
+      console.error('[AUTH] No token in Authorization header');
+      return res.status(401).json({error:'Missing authorization token'});
+    }
+
+    const { data:{ user }, error } = await supabase.auth.getUser(accessToken);
+    
+    if(error || !user){
+      console.error('[AUTH] Supabase token verification failed:', error?.message);
+      return res.status(401).json({error:'Invalid authorization token'});
+    }
+
+    console.log('[AUTH] User verified:', user.email);
+
     const {
       id,
       name,
@@ -628,7 +647,7 @@ app.post('/designs/save', authMiddleware, async (req,res)=>{
 
     const upsertRow = {
       ...(id ? { id } : {}),
-      user_email:req.user.email,
+      user_email:user.email,
       name:payloadJsonData?.name || name || 'Untitled Project',
       platform:payloadJsonData?.platform || platform || 'youtube',
       thumbnail:thumbnail||null,
@@ -636,17 +655,18 @@ app.post('/designs/save', authMiddleware, async (req,res)=>{
       last_edited:new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
+    const { data, error:saveError } = await supabase
       .from('thumbnails')
       .upsert(upsertRow, { onConflict:'id' })
       .select('id,last_edited,json_data')
       .single();
 
-    if(error){
-      console.error('Design save error:', error);
+    if(saveError){
+      console.error('Design save error:', saveError);
       return res.status(500).json({error:'Save failed'});
     }
 
+    console.log('[STORAGE] Design saved:', data?.id);
     res.json({success:true,data});
   }catch(err){
     console.error('Design save route error:', err);

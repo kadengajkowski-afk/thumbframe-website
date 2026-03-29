@@ -2066,6 +2066,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const token = session?.access_token;
       const email = session?.user?.email;
 
+      console.log('[DEBUG] Token start:', token?.substring(0,5));
+      console.log('[STORAGE] User email:', email);
+
       if(!token || !email){
         console.error('[STORAGE] Failed: No active session found. Please log in.');
         return;
