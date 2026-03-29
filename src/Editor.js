@@ -2068,16 +2068,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         return;
       }
 
-      const authToken = token;
-      if(!authToken){
-        console.warn('[AutoSave] Aborted: auth token is missing');
-        return;
-      }
-
-      if(authToken){
-        const response = await fetch(`${resolvedApiUrl}/designs/save`,{
-          method:'POST',
-          headers:{'Content-Type':'application/json','authorization':`Bearer ${authToken}`},
+      const response = await fetch(`${resolvedApiUrl}/designs/save`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
           body:JSON.stringify({
             id:currentDesignIdRef.current||undefined,
             project_id:projectId,
@@ -2102,21 +2095,20 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           }),
         });
 
-        if(!response.ok){
-          const errText = await response.text().catch(()=>'');
-          console.error('[SAVE PROJECT] Response not ok. Status:', response.status, 'Body:', errText);
-          throw new Error(`Save failed with status ${response.status}: ${errText}`);
-        }
-
-        const payload = await response.json().catch(()=>({}));
-        const returnedId = payload?.data?.id || payload?.id || payload?.design?.id || null;
-        persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
-        if(returnedId && returnedId !== currentDesignIdRef.current){
-          currentDesignIdRef.current=returnedId;
-          setCurrentProjectId(returnedId);
-        }
-        persistedId = returnedId || persistedId;
+      if(!response.ok){
+        const errText = await response.text().catch(()=>'');
+        console.error('[SAVE PROJECT] Response not ok. Status:', response.status, 'Body:', errText);
+        throw new Error(`Save failed with status ${response.status}: ${errText}`);
       }
+
+      const payload = await response.json().catch(()=>({}));
+      const returnedId = payload?.data?.id || payload?.id || payload?.design?.id || null;
+      persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
+      if(returnedId && returnedId !== currentDesignIdRef.current){
+        currentDesignIdRef.current=returnedId;
+        setCurrentProjectId(returnedId);
+      }
+      persistedId = returnedId || persistedId;
 
       const savedDesign={
         id:persistedId||projectId||Date.now(),
@@ -2159,7 +2151,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       if(!silent) setCmdLog('Save failed');
       throw err;
     }
-  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, resolvedApiUrl, saturation, setCurrentProjectId, token, user?.email]);
+  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, resolvedApiUrl, saturation, setCurrentProjectId, user?.email]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
@@ -2214,7 +2206,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       console.log('[AutoSave] User kept drawing. Resetting timer.');
       clearTimeout(timer);
     };
-  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, token, user?.email]);
+  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, user?.email]);
 
   async function loadProject(d){
     try{
