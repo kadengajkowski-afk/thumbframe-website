@@ -492,6 +492,16 @@ function getLayerIcon(obj){if(obj.type==='background')return'▣';if(obj.type===
 function getLayerColor(obj){if(obj.type==='background')return obj.bgColor||'#f97316';if(obj.type==='text')return obj.textColor||'#fff';if(obj.type==='shape')return obj.fillColor||'#FF4500';return'#555';}
 function getLayerName(obj){if(obj.type==='background')return'Background';if(obj.type==='text')return obj.text?.slice(0,18)||'Text';if(obj.type==='shape')return(obj.shape?.charAt(0).toUpperCase()+obj.shape?.slice(1))||'Shape';if(obj.type==='svg')return obj.label||'Element';if(obj.type==='image')return'Image';return'Layer';}
 
+function getSafeImageSrc(layer){
+  const raw = (layer?.paintSrc || layer?.src || '').toString().trim();
+  if(!raw) return null;
+  if(/^data:image\//i.test(raw)) return raw;
+  if(/^blob:/i.test(raw)) return raw;
+  if(/^https?:\/\//i.test(raw)) return raw;
+  if(raw.startsWith('/')) return raw;
+  return null;
+}
+
 function ArcText({obj}){
   const ts=(()=>{const p=[];if(obj.shadowEnabled)p.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)p.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return p.length?p.join(','):'none';})();
   const base={fontFamily:obj.fontFamily,fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`};
@@ -768,13 +778,18 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const imageLayers = layerSnapshot.filter(layer=>layer.type==='image'&&!layer.hidden);
       await Promise.all(imageLayers.map(layer=>
         new Promise(resolve=>{
+          const imageSrc = getSafeImageSrc(layer);
+          if(!imageSrc){
+            resolve();
+            return;
+          }
           const img=new Image();
           img.onload=()=>{
             tctx.drawImage(img, layer.x*sx, layer.y*sy, layer.width*sx, layer.height*sy);
             resolve();
           };
           img.onerror=()=>resolve();
-          img.src=layer.paintSrc||layer.src;
+          img.src=imageSrc;
         })
       ));
 
@@ -1971,6 +1986,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         contrast,
         saturation,
         hue,
+        canvas_data:{
+          name:nextName,
+          platform,
+          layers:snapshot.layers,
+          brightness,
+          contrast,
+          saturation,
+          hue,
+        },
         thumbnail,
       };
 
@@ -2016,33 +2040,75 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     };
   },[brightness, buildProjectSnapshot, contrast, designName, hue, isLoading, layers, platform, projectId, saturation, saveProject]);
 
-  function loadDesign(d){
-    const nextProjectId=d?.projectId||generateProjectId();
-    setLayers(d?.layers||[]);
-    setPlatform(d?.platform||'youtube');
-    setBrightness(d?.brightness||100);
-    setContrast(d?.contrast||100);
-    setSaturation(d?.saturation||100);
-    setHue(d?.hue||0);
-    currentDesignIdRef.current=d?.currentDesignId||d?.id||null;
-    setCurrentDesignId(d?.currentDesignId||d?.id||null);
-    setProjectId(nextProjectId);
-    syncProjectIdToUrl(nextProjectId);
-    setSelectedId(null);
-    setShowFileTab(false);
-    lastSavedSignatureRef.current=buildSaveSignature({
-      projectId:nextProjectId,
-      platform:d?.platform||'youtube',
-      layers:d?.layers||[],
-      brightness:d?.brightness||100,
-      contrast:d?.contrast||100,
-      saturation:d?.saturation||100,
-      hue:d?.hue||0,
-      designName:d?.name||'Untitled',
-      aiPrompt:'',
-      lastGeneratedImageUrl:'',
-    });
-    setCmdLog(`Loaded: ${d?.name||'Untitled'}`);
+  async function loadDesign(d){
+    try{
+      let projectData=d;
+      const loadedId=d?.currentDesignId||d?.id||null;
+
+      if(!projectData?.canvas_data && token && loadedId){
+        const response = await fetch(`${resolvedApiUrl}/designs/load?id=${encodeURIComponent(loadedId)}`,
+          { headers:{ authorization:`Bearer ${token}` } });
+        if(response.ok){
+          const payload=await response.json().catch(()=>({}));
+          projectData = payload?.design || payload?.data || payload || d;
+        }
+      }
+
+      const canvasData = projectData?.canvas_data;
+      const hydratedLayers = Array.isArray(canvasData)
+        ? canvasData
+        : (Array.isArray(canvasData?.layers) ? canvasData.layers : []);
+
+      const nextProjectId=projectData?.projectId||projectData?.project_id||d?.projectId||generateProjectId();
+      const nextPlatform=projectData?.platform||canvasData?.platform||'youtube';
+      const nextName=projectData?.name||canvasData?.name||'Untitled';
+      const nextBrightness=projectData?.brightness??canvasData?.brightness??100;
+      const nextContrast=projectData?.contrast??canvasData?.contrast??100;
+      const nextSaturation=projectData?.saturation??canvasData?.saturation??100;
+      const nextHue=projectData?.hue??canvasData?.hue??0;
+
+      setLayers(hydratedLayers);
+      layersRef.current=hydratedLayers;
+      setPlatform(nextPlatform);
+      setBrightness(nextBrightness);
+      setContrast(nextContrast);
+      setSaturation(nextSaturation);
+      setHue(nextHue);
+      setDesignName(nextName);
+
+      const nextPersistedId=projectData?.id||d?.currentDesignId||d?.id||null;
+      currentDesignIdRef.current=nextPersistedId;
+      setCurrentDesignId(nextPersistedId);
+
+      setProjectId(nextProjectId);
+      syncProjectIdToUrl(nextProjectId);
+      setSelectedId(null);
+      setShowFileTab(false);
+
+      const snapshot = JSON.parse(JSON.stringify(hydratedLayers));
+      historyRef.current=[snapshot];
+      historyIndexRef.current=0;
+      setHistory([snapshot]);
+      setHistoryIndex(0);
+
+      lastSavedSignatureRef.current=buildSaveSignature({
+        projectId:nextProjectId,
+        platform:nextPlatform,
+        layers:hydratedLayers,
+        brightness:nextBrightness,
+        contrast:nextContrast,
+        saturation:nextSaturation,
+        hue:nextHue,
+        designName:nextName,
+        aiPrompt:'',
+        lastGeneratedImageUrl:'',
+      });
+
+      setCmdLog(`Loaded: ${nextName}`);
+    }catch(err){
+      console.error('[LOAD PROJECT] Error:', err);
+      setCmdLog('Load failed');
+    }
   }
 
   function newCanvas(){
@@ -2863,6 +2929,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const cropW=obj.width-(obj.cropLeft||0)-(obj.cropRight||0);
       const cropH=obj.height-(obj.cropTop||0)-(obj.cropBottom||0);
       const hasMask=obj.mask?.enabled&&obj.mask?.data;
+      const imageSrc = getSafeImageSrc(obj);
       return(
         <div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)}
           style={{
@@ -2876,13 +2943,23 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             maskSize: hasMask?`${cropW}px ${cropH}px`:'none',
             maskRepeat:'no-repeat',
           }}>
-          <img src={obj.src} alt="" draggable={false} style={{
-            width:obj.width,height:obj.height,display:'block',
-            pointerEvents:'none',userSelect:'none',WebkitUserSelect:'none',
-            marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),
-            transform:`scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`,
-            filter:`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${obj.imgBlur||0}px)`,
-          }}/>
+          {imageSrc ? (
+            <img src={imageSrc} alt="" draggable={false} style={{
+              width:obj.width,height:obj.height,display:'block',
+              pointerEvents:'none',userSelect:'none',WebkitUserSelect:'none',
+              marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),
+              transform:`scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`,
+              filter:`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${obj.imgBlur||0}px)`,
+            }}/>
+          ) : (
+            <div style={{
+              width:cropW,height:cropH,display:'flex',alignItems:'center',justifyContent:'center',
+              border:'1px dashed rgba(255,255,255,0.35)',background:'rgba(0,0,0,0.2)',
+              color:'rgba(255,255,255,0.7)',fontSize:11,fontWeight:'600',textTransform:'uppercase',
+            }}>
+              Missing image source
+            </div>
+          )}
           {isSelected&&renderResizeHandles(obj)}
           {isSelected&&renderCropHandles(obj)}
           <DelBtn/>
@@ -2976,7 +3053,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     if(obj.type==='image'){
       const cropW=(obj.width-(obj.cropLeft||0)-(obj.cropRight||0))*scale;
       const cropH=(obj.height-(obj.cropTop||0)-(obj.cropBottom||0))*scale;
-      return<div style={{position:'absolute',left:obj.x*scale,top:obj.y*scale,width:cropW,height:cropH,overflow:'hidden',opacity:(obj.opacity||100)/100,pointerEvents:'none'}}><img src={obj.src} alt="" style={{width:obj.width*scale,height:obj.height*scale,display:'block',marginLeft:-(obj.cropLeft||0)*scale,marginTop:-(obj.cropTop||0)*scale}}/></div>;
+      const imageSrc = getSafeImageSrc(obj);
+      if(!imageSrc){
+        return <div style={{position:'absolute',left:obj.x*scale,top:obj.y*scale,width:cropW,height:cropH,opacity:(obj.opacity||100)/100,pointerEvents:'none',border:'1px dashed rgba(255,255,255,0.35)',background:'rgba(0,0,0,0.2)'}}/>;
+      }
+      return<div style={{position:'absolute',left:obj.x*scale,top:obj.y*scale,width:cropW,height:cropH,overflow:'hidden',opacity:(obj.opacity||100)/100,pointerEvents:'none'}}><img src={imageSrc} alt="" style={{width:obj.width*scale,height:obj.height*scale,display:'block',marginLeft:-(obj.cropLeft||0)*scale,marginTop:-(obj.cropTop||0)*scale}}/></div>;
     }
     if(obj.type==='shape')return<div style={{position:'absolute',left:obj.x*scale,top:obj.y*scale,opacity:(obj.opacity||100)/100,transform:`scale(${scale})`,transformOrigin:'top left',pointerEvents:'none'}}>{renderShapeSVG(obj.shape,obj.fillColor,obj.strokeColor,obj.width,obj.height)}</div>;
     if(obj.type==='svg')return<div style={{position:'absolute',left:obj.x*scale,top:obj.y*scale,width:obj.width*scale,height:obj.height*scale,opacity:(obj.opacity||100)/100,pointerEvents:'none'}} dangerouslySetInnerHTML={{__html:obj.svg}}/>;
@@ -3610,6 +3691,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                           sCtx.fillRect(0,0,p.preview.w,p.preview.h);
                           drawNext(index+1);
                         } else if(obj.type==='image'){
+                          const imageSrc = getSafeImageSrc(obj);
+                          if(!imageSrc){
+                            drawNext(index+1);
+                            return;
+                          }
                           const img=new Image();
                           img.onload=()=>{
                             sCtx.save();
@@ -3620,7 +3706,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                             drawNext(index+1);
                           };
                           img.onerror=()=>drawNext(index+1);
-                          img.src=obj.paintSrc||obj.src;
+                          img.src=imageSrc;
                         } else {
                           drawNext(index+1);
                         }
@@ -3701,6 +3787,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                   {/* Paint overlay for non-active brush images */}
                   {layers.map(obj=>{
                     if(obj.hidden||!obj.paintSrc||obj.type==='background')return null;
+                    const overlaySrc = getSafeImageSrc({ src: obj.paintSrc });
+                    if(!overlaySrc)return null;
                     if(obj.id===brushingImageId)return null;
                     const cropW=obj.width-(obj.cropLeft||0)-(obj.cropRight||0);
                     const cropH=obj.height-(obj.cropTop||0)-(obj.cropBottom||0);
@@ -3711,7 +3799,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                         zIndex:layers.indexOf(obj)+2,
                         overflow:'hidden',pointerEvents:'none',
                       }}>
-                        <img src={obj.paintSrc} alt="" style={{
+                        <img src={overlaySrc} alt="" style={{
                           position:'absolute',top:0,left:0,
                           width:obj.width,height:obj.height,
                           display:'block',
