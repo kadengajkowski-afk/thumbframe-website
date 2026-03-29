@@ -2040,7 +2040,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     };
   },[brightness, buildProjectSnapshot, contrast, designName, hue, isLoading, layers, platform, projectId, saturation, saveProject]);
 
-  async function loadDesign(d){
+  async function loadProject(d){
     try{
       let projectData=d;
       const loadedId=d?.currentDesignId||d?.id||null;
@@ -2054,18 +2054,23 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         }
       }
 
-      const canvasData = projectData?.canvas_data;
-      const hydratedLayers = Array.isArray(canvasData)
-        ? canvasData
-        : (Array.isArray(canvasData?.layers) ? canvasData.layers : []);
+      const clonedCanvasData = JSON.parse(JSON.stringify(projectData?.canvas_data || []));
+      const hydratedLayers = Array.isArray(clonedCanvasData)
+        ? clonedCanvasData
+        : (Array.isArray(clonedCanvasData?.layers) ? clonedCanvasData.layers : []);
+      const canvasMeta = Array.isArray(clonedCanvasData) ? {} : (clonedCanvasData || {});
 
       const nextProjectId=projectData?.projectId||projectData?.project_id||d?.projectId||generateProjectId();
-      const nextPlatform=projectData?.platform||canvasData?.platform||'youtube';
-      const nextName=projectData?.name||canvasData?.name||'Untitled';
-      const nextBrightness=projectData?.brightness??canvasData?.brightness??100;
-      const nextContrast=projectData?.contrast??canvasData?.contrast??100;
-      const nextSaturation=projectData?.saturation??canvasData?.saturation??100;
-      const nextHue=projectData?.hue??canvasData?.hue??0;
+      const nextPlatform=projectData?.platform||canvasMeta?.platform||'youtube';
+      const nextName=projectData?.name||canvasMeta?.name||'Untitled';
+      const nextBrightness=projectData?.brightness??canvasMeta?.brightness??100;
+      const nextContrast=projectData?.contrast??canvasMeta?.contrast??100;
+      const nextSaturation=projectData?.saturation??canvasMeta?.saturation??100;
+      const nextHue=projectData?.hue??canvasMeta?.hue??0;
+
+      setLayers([]);
+      layersRef.current=[];
+      await new Promise(resolve=>setTimeout(resolve,0));
 
       setLayers(hydratedLayers);
       layersRef.current=hydratedLayers;
@@ -2492,17 +2497,42 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     img.src=url;
   }
 
-  function handleImageUpload(e){
-    Array.from(e.target.files).forEach(file=>{
-      const url=URL.createObjectURL(file);
+  function readFileAsDataUrl(file){
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(typeof reader.result==='string'?reader.result:'');
+      reader.onerror=()=>reject(new Error('Failed to read image file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function addImageFromFile(file){
+    const dataUrl = await readFileAsDataUrl(file);
+    if(!dataUrl) return;
+
+    await new Promise(resolve=>{
       const img=new Image();
       img.onload=()=>{
         const cW=p.preview.w,cH=p.preview.h,ia=img.naturalWidth/img.naturalHeight,ca=cW/cH;
         let w,h;if(ia>ca){h=cH;w=h*ia;}else{w=cW;h=w/ia;}
-        addLayer({type:'image',src:url,width:Math.round(w),height:Math.round(h),originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,x:Math.round((cW-w)/2),y:Math.round((cH-h)/2),cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0});
+        addLayer({type:'image',src:dataUrl,width:Math.round(w),height:Math.round(h),originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,x:Math.round((cW-w)/2),y:Math.round((cH-h)/2),cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0});
+        resolve();
       };
-      img.src=url;
+      img.onerror=()=>resolve();
+      img.src=dataUrl;
     });
+  }
+
+  async function handleImageUpload(e){
+    const files = Array.from(e.target.files||[]);
+    await Promise.all(files.map(async file=>{
+      try{
+        await addImageFromFile(file);
+      }catch(err){
+        console.error('[ADD IMAGE] Upload failed:', err);
+      }
+    }));
+    e.target.value='';
   }
 
   function updateSuggestions(val){if(!val.trim()){setCmdSuggestions([]);return;}const v=val.toLowerCase();setCmdSuggestions(ALL_COMMANDS.filter(c=>c.cmd.toLowerCase().startsWith(v)||c.desc.toLowerCase().includes(v)).slice(0,6));}
@@ -3131,7 +3161,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                       </div>
                     </div>
                     <div style={{display:'flex',gap:5,flexShrink:0}}>
-                      <button onClick={()=>loadDesign(d)} style={{padding:'5px 10px',borderRadius:5,border:`1px solid ${T.accent}`,background:'transparent',color:T.accent,fontSize:11,cursor:'pointer',fontWeight:'600'}}>Open</button>
+                      <button onClick={()=>loadProject(d)} style={{padding:'5px 10px',borderRadius:5,border:`1px solid ${T.accent}`,background:'transparent',color:T.accent,fontSize:11,cursor:'pointer',fontWeight:'600'}}>Open</button>
                       <button onClick={()=>deleteDesign(d.id)} style={{padding:'5px 8px',borderRadius:5,border:`1px solid ${T.danger}`,background:'transparent',color:T.danger,fontSize:11,cursor:'pointer'}}>×</button>
                     </div>
                   </div>
