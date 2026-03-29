@@ -587,6 +587,31 @@ app.post('/designs/save', authMiddleware,(req,res)=>{
   }
 });
 
+app.get('/designs/list', async (req, res) => {
+  try {
+    const email = (req.query.email || '').toString().trim();
+    if (!email) {
+      return res.status(400).json({ error: 'Missing email query parameter' });
+    }
+
+    const { data, error } = await supabase
+      .from('thumbnails')
+      .select('id,user_email,last_edited,canvas_data')
+      .eq('user_email', email)
+      .order('last_edited', { ascending: false });
+
+    if (error) {
+      console.error('Design list fetch error:', error);
+      return res.status(500).json({ error: 'Failed to fetch designs list' });
+    }
+
+    res.json(data || []);
+  } catch (err) {
+    console.error('Design list route error:', err);
+    res.status(500).json({ error: 'Failed to fetch designs list' });
+  }
+});
+
 app.get('/designs/load', authMiddleware,(req,res)=>{
   const designs=loadDesigns();
   const design=(designs[req.user.email]||[]).find(d=>d.id===req.query.id);

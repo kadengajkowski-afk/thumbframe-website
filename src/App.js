@@ -953,17 +953,74 @@ function AuthPage({ mode, setPage, onAuth }) {
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
-function Dashboard({ setPage, token }) {
+function Dashboard({ setPage, user }) {
   const [designs, setDesigns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    if (!token) { setLoading(false); return; }
-    fetch(`${API_BASE}/designs`, { headers: { authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(data => { setDesigns(data.designs || []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [token]);
+    const userEmail = user?.email;
+    if (!userEmail) {
+      setDesigns([]);
+      setLoadError('');
+      setLoading(false);
+      return;
+    }
+
+    const apiBase = (process.env.REACT_APP_API_URL || '').replace(/\/$/, '');
+    const listPath = `/designs/list?email=${encodeURIComponent(userEmail)}`;
+    const listUrl = apiBase ? `${apiBase}${listPath}` : listPath;
+    const controller = new AbortController();
+
+    setLoading(true);
+    setLoadError('');
+
+    fetch(listUrl, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed to fetch designs list'))))
+      .then((payload) => {
+        const list = Array.isArray(payload)
+          ? payload
+          : (Array.isArray(payload?.data) ? payload.data : []);
+        setDesigns(list);
+        setLoading(false);
+      })
+      .catch((error) => {
+        if (error.name === 'AbortError') return;
+        setDesigns([]);
+        setLoadError('Could not load saved designs right now.');
+        setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [user?.email]);
+
+  function parseCanvasData(canvasData) {
+    if (!canvasData) return null;
+    if (typeof canvasData === 'object') return canvasData;
+    if (typeof canvasData !== 'string') return null;
+
+    try {
+      return JSON.parse(canvasData);
+    } catch {
+      return null;
+    }
+  }
+
+  function getProjectName(design) {
+    const parsed = parseCanvasData(design.canvas_data);
+    const fromCanvas = parsed?.name || parsed?.title || parsed?.projectName;
+    if (typeof fromCanvas === 'string' && fromCanvas.trim()) return fromCanvas.trim();
+
+    if (design?.id) return `Project ${String(design.id).slice(-6)}`;
+    return 'Untitled project';
+  }
+
+  function formatEditedDate(value) {
+    if (!value) return 'Last edited: Unknown';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Last edited: Unknown';
+    return `Last edited: ${date.toLocaleString()}`;
+  }
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', paddingTop: 80 }}>
@@ -980,6 +1037,11 @@ function Dashboard({ setPage, token }) {
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: C.muted, fontSize: 14 }}>Loading designs…</div>
+        ) : loadError ? (
+          <div style={{ padding: '32px 28px', borderRadius: 12, border: `1px solid ${C.border}`, background: C.panel, textAlign: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: '700', marginBottom: 8, color: C.text }}>Saved designs are unavailable</div>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>{loadError}</div>
+          </div>
         ) : designs.length === 0 ? (
           <div style={{ padding: '60px 40px', borderRadius: 12, border: `1px solid ${C.border}`, background: C.panel, textAlign: 'center' }}>
             <div style={{ fontSize: 40, marginBottom: 14 }}>🎨</div>
@@ -993,19 +1055,20 @@ function Dashboard({ setPage, token }) {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
-            {designs.map((d, i) => (
-              <div key={i} onClick={() => setPage('editor')}
+            {designs.map((d) => (
+              <div key={d.id || `${d.user_email || 'design'}-${d.last_edited || 'unknown'}`} onClick={() => setPage('editor')}
                 style={{ borderRadius: 10, border: `1px solid ${C.border}`, background: C.panel, cursor: 'pointer', overflow: 'hidden', transition: 'transform 0.15s' }}
                 onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
                 onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
                 <div style={{ aspectRatio: '16/9', background: `linear-gradient(135deg, ${C.bg3}, ${C.bg2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                  {d.thumbnail
-                    ? <img src={d.thumbnail} alt={d.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span style={{ fontSize: 24 }}>🎨</span>}
+                  <div style={{ textAlign: 'center', color: C.muted }}>
+                    <div style={{ fontSize: 24, marginBottom: 6 }}>🗂️</div>
+                    <div style={{ fontSize: 11, fontWeight: '600', letterSpacing: '0.2px' }}>Saved canvas data</div>
+                  </div>
                 </div>
                 <div style={{ padding: '12px 14px' }}>
-                  <div style={{ fontSize: 13, fontWeight: '600', color: C.text, marginBottom: 3 }}>{d.name}</div>
-                  <div style={{ fontSize: 11, color: C.muted }}>{d.created} · {d.platform}</div>
+                  <div style={{ fontSize: 13, fontWeight: '600', color: C.text, marginBottom: 3 }}>{getProjectName(d)}</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>{formatEditedDate(d.last_edited)}</div>
                 </div>
               </div>
             ))}
@@ -1203,7 +1266,7 @@ export default function App() {
       {page === 'examples'   && <Examples     setPage={setPage} />}
       {page === 'login'      && <AuthPage     mode="login"  setPage={setPage} onAuth={handleAuth} />}
       {page === 'signup'     && <AuthPage     mode="signup" setPage={setPage} onAuth={handleAuth} />}
-      {page === 'dashboard'  && <Dashboard    setPage={setPage} token={token} />}
+      {page === 'dashboard'  && <Dashboard    setPage={setPage} user={user} />}
       {page === 'forgot-password' && <ForgotPassword setPage={setPage} />}
       {page === 'update-password' && <UpdatePassword setPage={setPage} />}
     </div>
