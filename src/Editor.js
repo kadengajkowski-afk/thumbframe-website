@@ -2065,16 +2065,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
       if(!userEmail){
         console.warn('[AutoSave] Aborted: userEmail is missing');
+        return;
       }
 
-      let authToken = token || null;
-      if(!authToken){
-        const { data:{ session } } = await supabase.auth.getSession();
-        authToken = session?.access_token || null;
-      }
-
+      const authToken = token;
       if(!authToken){
         console.warn('[AutoSave] Aborted: auth token is missing');
+        return;
       }
 
       if(authToken){
@@ -2086,6 +2083,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             project_id:projectId,
             name:nextName,
             platform,
+            user_email:userEmail,
             json_data:{
               name:nextName,
               platform,
@@ -2105,7 +2103,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         });
 
         if(!response.ok){
-          throw new Error(`Save failed with status ${response.status}`);
+          const errText = await response.text().catch(()=>'');
+          console.error('[SAVE PROJECT] Response not ok. Status:', response.status, 'Body:', errText);
+          throw new Error(`Save failed with status ${response.status}: ${errText}`);
         }
 
         const payload = await response.json().catch(()=>({}));
