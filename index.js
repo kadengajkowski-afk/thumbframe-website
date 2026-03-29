@@ -674,7 +674,6 @@ app.post('/designs/save', async (req,res)=>{
       ...(id ? { id } : {}),
       user_email:user.email,
       name:payloadJsonData?.name || name || 'Untitled Project',
-      platform:payloadJsonData?.platform || platform || 'youtube',
       thumbnail:thumbnail||null,
       json_data:payloadJsonData,
       last_edited:new Date().toISOString(),
