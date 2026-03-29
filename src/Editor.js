@@ -2654,15 +2654,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     img.src=url;
   }
 
-  function readFileAsDataUrl(file){
-    return new Promise((resolve,reject)=>{
-      const reader=new FileReader();
-      reader.onload=()=>resolve(typeof reader.result==='string'?reader.result:'');
-      reader.onerror=()=>reject(new Error('Failed to read image file'));
-      reader.readAsDataURL(file);
-    });
-  }
-
   function readBlobAsDataUrl(blob){
     return new Promise((resolve,reject)=>{
       const reader=new FileReader();
@@ -2672,77 +2663,88 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     });
   }
 
-  async function addImageFromFile(file){
-    try{
-      const dataUrl = await readFileAsDataUrl(file);
-      if(!getSafeImageSrc({src:dataUrl})) throw new Error('Invalid image source');
+  function addImageFromFile(file){
+    if(!file) return;
 
-      await new Promise((resolve,reject)=>{
-        const img=new Image();
-        img.onload=()=>{
-          const cW=p.preview.w,cH=p.preview.h,ia=img.naturalWidth/img.naturalHeight,ca=cW/cH;
-          if(!Number.isFinite(ia) || ia<=0){
-            reject(new Error('Image dimensions are invalid'));
-            return;
-          }
-          let w,h;if(ia>ca){h=cH;w=h*ia;}else{w=cW;h=w/ia;}
+    const reader = new FileReader();
 
-          const id=newId();
-          const layer={
-            id,
-            type:'image',
-            src:dataUrl,
-            width:Math.round(w),
-            height:Math.round(h),
-            originalWidth:img.naturalWidth,
-            originalHeight:img.naturalHeight,
-            x:Math.round((cW-w)/2),
-            y:Math.round((cH-h)/2),
-            cropTop:0,
-            cropBottom:0,
-            cropLeft:0,
-            cropRight:0,
-            imgBrightness:100,
-            imgContrast:100,
-            imgSaturate:100,
-            imgBlur:0,
-            opacity:100,
-            hidden:false,
-            locked:false,
-            blendMode:'normal',
-            flipH:false,
-            flipV:false,
-            rotation:0,
-            effects:defaultEffects(),
-          };
-
-          setLayers(prev=>{
-            const nl=[...prev,layer];
-            pushHistory(nl);
-            return nl;
-          });
-          setSelectedId(id);
-          resolve();
-        };
-        img.onerror=()=>reject(new Error('Image decode failed'));
-        img.src=dataUrl;
-      });
-    }catch(err){
-      console.error('[ADD IMAGE] Failed:', err);
-      alert('Failed to add image. Please try a different file.');
-    }
-  }
-
-  async function handleImageUpload(e){
-    const files = Array.from(e.target.files||[]);
-    await Promise.all(files.map(async file=>{
+    reader.onload = () => {
       try{
-        await addImageFromFile(file);
+        const base64Src = typeof reader.result==='string' ? reader.result : '';
+        if(!getSafeImageSrc({src:base64Src})) throw new Error('Invalid image source from FileReader');
+
+        const img = new Image();
+        img.onload = () => {
+          try{
+            const cW=p.preview.w,cH=p.preview.h,ia=img.naturalWidth/img.naturalHeight,ca=cW/cH;
+            if(!Number.isFinite(ia) || ia<=0) throw new Error('Image dimensions are invalid');
+
+            let w,h;if(ia>ca){h=cH;w=h*ia;}else{w=cW;h=w/ia;}
+
+            const id=newId();
+            const newLayerObj={
+              id,
+              type:'image',
+              src:base64Src,
+              width:Math.round(w),
+              height:Math.round(h),
+              originalWidth:img.naturalWidth,
+              originalHeight:img.naturalHeight,
+              x:Math.round((cW-w)/2),
+              y:Math.round((cH-h)/2),
+              cropTop:0,
+              cropBottom:0,
+              cropLeft:0,
+              cropRight:0,
+              imgBrightness:100,
+              imgContrast:100,
+              imgSaturate:100,
+              imgBlur:0,
+              opacity:100,
+              hidden:false,
+              locked:false,
+              blendMode:'normal',
+              flipH:false,
+              flipV:false,
+              rotation:0,
+              effects:defaultEffects(),
+            };
+
+            setLayers(prevLayers=>{
+              const nextLayers=[...prevLayers,newLayerObj];
+              pushHistory(nextLayers);
+              return nextLayers;
+            });
+            setSelectedId(id);
+          }catch(err){
+            console.error('[ADD IMAGE] Image processing failed:', err);
+            alert('Failed to add image. Please try a different file.');
+          }
+        };
+
+        img.onerror = () => {
+          console.error('[ADD IMAGE] Image decode failed');
+          alert('Failed to decode image file. Please try another image.');
+        };
+
+        img.src = base64Src;
       }catch(err){
-        console.error('[ADD IMAGE] Upload failed:', err);
+        console.error('[ADD IMAGE] FileReader onload failed:', err);
         alert('Failed to add image. Please try a different file.');
       }
-    }));
+    };
+
+    reader.onerror = (error) => {
+      console.error('[ADD IMAGE] FileReader error:', error);
+      alert('Failed to read image file. Please try another file.');
+    };
+
+    reader.readAsDataURL(file);
+  }
+
+  function handleImageUpload(e){
+    const files = Array.from(e.target.files||[]);
+    files.forEach(file=>addImageFromFile(file));
     e.target.value='';
   }
 
