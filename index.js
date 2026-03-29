@@ -641,44 +641,22 @@ app.post('/designs/save', async (req,res)=>{
 
     console.log('[AUTH] Token verified. User:', user.email, 'UID:', user.id);
 
-    const {
-      id,
-      name,
-      platform,
-      layers,
-      brightness,
-      contrast,
-      saturation,
-      hue,
-      thumbnail,
-      json_data,
-      canvas_data,
-    }=req.body;
-
-    const payloadJsonData =
-      (json_data && typeof json_data==='object')
-        ? json_data
-        : ((canvas_data && typeof canvas_data==='object')
-          ? canvas_data
-          : {
-              name: name || 'Untitled Project',
-              platform: platform || 'youtube',
-              layers: Array.isArray(layers) ? layers : [],
-              brightness: brightness ?? 100,
-              contrast: contrast ?? 100,
-              saturation: saturation ?? 100,
-              hue: hue ?? 0,
-            });
+    const body = req.body || {};
+    const jsonData = (body.json_data && typeof body.json_data === 'object')
+      ? body.json_data
+      : { name: body.name || 'Untitled', platform: body.platform || 'youtube' };
 
     const upsertRow = {
-      ...(id ? { id } : {}),
-      user_email:user.email,
-      name:payloadJsonData?.name || name || 'Untitled Project',
-      platform:payloadJsonData?.platform || platform || 'youtube',
-      thumbnail:thumbnail||null,
-      json_data:payloadJsonData,
-      last_edited:new Date().toISOString(),
+      ...(body.id ? { id: body.id } : {}),
+      user_email:   user.email,
+      name:         jsonData.name || body.name || 'Untitled',
+      platform:     jsonData.platform || body.platform || 'youtube',
+      thumbnail:    body.thumbnail || null,
+      json_data:    jsonData,
+      last_edited:  new Date().toISOString(),
     };
+
+    console.log('[STORAGE] Upserting row for user:', user.email, '| id:', upsertRow.id || '(new)', '| name:', upsertRow.name);
 
     const { data, error:saveError } = await supabase
       .from('thumbnails')
@@ -687,8 +665,8 @@ app.post('/designs/save', async (req,res)=>{
       .single();
 
     if(saveError){
-      console.error('[STORAGE] Supabase upsert error:', saveError.message, saveError.code);
-      return res.status(500).json({error: `Database save failed: ${saveError.message}`});
+      console.error('[STORAGE] Supabase upsert error:', saveError.message, '| code:', saveError.code, '| details:', saveError.details);
+      return res.status(500).json({ error: `Database save failed: ${saveError.message}`, code: saveError.code, details: saveError.details });
     }
 
     console.log('[STORAGE] Design successfully saved:', data?.id, 'for user:', user.email);
