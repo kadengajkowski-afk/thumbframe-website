@@ -85,11 +85,31 @@ async function getSupabaseUserFromRequest(req){
   return { user, error:null };
 }
 
-function authMiddleware(req,res,next){
-  const token=req.headers['authorization']?.split(' ')[1];
-  if(!token) return res.status(401).json({error:'No token'});
-  try{ req.user=jwt.verify(token,JWT_SECRET); next(); }
-  catch(e){ res.status(401).json({error:'Invalid token'}); }
+async function authMiddleware(req,res,next){
+  try{
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    
+    if(!token){
+      console.error('[AUTH] No token in Authorization header');
+      return res.status(401).json({error:'Missing authorization token'});
+    }
+
+    const { data:{ user }, error } = await supabase.auth.getUser(token);
+    
+    if(error || !user){
+      console.error('[AUTH] Token verification failed:', error?.message);
+      return res.status(401).json({error: `Token verification failed: ${error?.message || 'Unknown error'}`});
+    }
+    
+    req.user = { email: user.email, id: user.id };
+    req.userId = user.id;
+    console.log('[AUTH] Middleware verified user:', user.email);
+    next();
+  }catch(err){
+    console.error('[AUTH] Middleware error:', err.message);
+    res.status(401).json({error: `Authentication error: ${err.message}`});
+  }
 }
 
 // ── Health ─────────────────────────────────────────────────────────────────────
@@ -609,12 +629,17 @@ app.post('/designs/save', async (req,res)=>{
 
     const { data:{ user }, error } = await supabase.auth.getUser(accessToken);
     
-    if(error || !user){
-      console.error('[AUTH] Supabase token verification failed:', error?.message);
-      return res.status(401).json({error:'Invalid authorization token'});
+    if(error){
+      console.error('[AUTH] Token verification error:', error.message, error.code);
+      return res.status(401).json({error: `Token verification failed: ${error.message}`});
+    }
+    
+    if(!user){
+      console.error('[AUTH] Token valid but no user associated');
+      return res.status(401).json({error:'Token valid but user not found'});
     }
 
-    console.log('[AUTH] User verified:', user.email);
+    console.log('[AUTH] Token verified. User:', user.email, 'UID:', user.id);
 
     const {
       id,
@@ -662,15 +687,15 @@ app.post('/designs/save', async (req,res)=>{
       .single();
 
     if(saveError){
-      console.error('Design save error:', saveError);
-      return res.status(500).json({error:'Save failed'});
+      console.error('[STORAGE] Supabase upsert error:', saveError.message, saveError.code);
+      return res.status(500).json({error: `Database save failed: ${saveError.message}`});
     }
 
-    console.log('[STORAGE] Design saved:', data?.id);
+    console.log('[STORAGE] Design successfully saved:', data?.id, 'for user:', user.email);
     res.json({success:true,data});
   }catch(err){
-    console.error('Design save route error:', err);
-    res.status(500).json({error:'Save failed'});
+    console.error('[STORAGE] Unhandled error in /designs/save route:', err.message, err.stack);
+    res.status(500).json({error: `Server error: ${err.message}`});
   }
 });
 

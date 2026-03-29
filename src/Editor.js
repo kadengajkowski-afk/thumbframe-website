@@ -2066,13 +2066,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const token = session?.access_token;
       const email = session?.user?.email;
 
-      console.log('[DEBUG] Token start:', token?.substring(0,5));
-      console.log('[STORAGE] User email:', email);
-
-      if(!token || !email){
-        console.error('[STORAGE] Failed: No active session found. Please log in.');
-        return;
-      }
+      console.log('[DEBUG] Sending token to backend:', token?.substring(0, 10) + '...');
+      console.log('[DEBUG] User email:', email);
 
       const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save',{
         method:'POST',
