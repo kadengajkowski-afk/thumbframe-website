@@ -857,6 +857,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             return;
           }
           const img=new Image();
+          img.crossOrigin='Anonymous';
           img.onload=()=>{
             tctx.drawImage(img, layer.x*sx, layer.y*sy, layer.width*sx, layer.height*sy);
             resolve();
@@ -866,11 +867,21 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         })
       ));
 
-      const dataUrl = tmpCanvas.toDataURL('image/jpeg',0.6);
+      let dataUrl;
+      try{
+        dataUrl = tmpCanvas.toDataURL('image/jpeg',0.6);
+      }catch(err){
+        console.error('[THUMBNAIL] toDataURL failed:', {
+          name: err?.name,
+          message: err?.message,
+          stack: err?.stack,
+        });
+        throw err;
+      }
       console.log('[THUMBNAIL] Generated OK, length:', dataUrl?.length);
       return dataUrl;
     }catch(err){
-      console.error('[SAVE PROJECT] Thumbnail generation failed:', err);
+      console.error('[SAVE PROJECT] Thumbnail generation failed:', err?.message || err, err);
       return null;
     }
   },[p.preview.h, p.preview.w]);
@@ -2960,6 +2971,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   function addBrandFaceToCanvas(url){
     if(!url)return;
     const img=new Image();
+    img.crossOrigin='Anonymous';
     img.onload=()=>{
       const cW=p.preview.w,cH=p.preview.h,aspect=img.naturalWidth/img.naturalHeight,ca=cW/cH;
       let w,h;
@@ -2995,6 +3007,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         if(!getSafeImageSrc({src:base64Src})) throw new Error('Invalid image source from FileReader');
 
         const img = new Image();
+        img.crossOrigin='Anonymous';
         img.onload = () => {
           try{
             const cW=p.preview.w,cH=p.preview.h,ia=img.naturalWidth/img.naturalHeight,ca=cW/cH;
