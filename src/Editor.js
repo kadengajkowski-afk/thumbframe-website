@@ -866,7 +866,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         })
       ));
 
-      return tmpCanvas.toDataURL('image/jpeg',0.6);
+      const dataUrl = tmpCanvas.toDataURL('image/jpeg',0.6);
+      console.log('[THUMBNAIL] Generated OK, length:', dataUrl?.length);
+      return dataUrl;
     }catch(err){
       console.error('[SAVE PROJECT] Thumbnail generation failed:', err);
       return null;
@@ -2198,6 +2200,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     try{
       // Thumbnail: only generate for manual saves — keeps auto-saves fast.
       const thumbnail = silent ? null : await generateDesignThumbnail(snapshot.layers);
+      console.log('[SAVE] thumbnail result:', thumbnail ? `data URL (${thumbnail.length} chars)` : 'NULL/falsy');
 
       const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save', {
         method: 'POST',
