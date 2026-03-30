@@ -642,6 +642,10 @@ app.post('/designs/save', async (req,res)=>{
     console.log('[AUTH] Token verified. User:', user.email, 'UID:', user.id);
 
     const body = req.body || {};
+    console.log('[SAVE] body keys:', Object.keys(body));
+    console.log('[SAVE] thumbnail field:', body.thumbnail ? `present (${String(body.thumbnail).length} chars)` : `MISSING/FALSY (value: ${JSON.stringify(body.thumbnail)})`);
+    console.log('[SAVE] Content-Length header:', req.headers['content-length']);
+
     const jsonData = (body.json_data && typeof body.json_data === 'object')
       ? body.json_data
       : { name: body.name || 'Untitled', platform: body.platform || 'youtube' };
@@ -657,7 +661,7 @@ app.post('/designs/save', async (req,res)=>{
       last_edited:  new Date().toISOString(),
     };
 
-    console.log('[STORAGE] Upserting row for user:', user.email, '| id:', upsertRow.id || '(new)', '| name:', upsertRow.name);
+    console.log('[STORAGE] Upserting row for user:', user.email, '| id:', upsertRow.id || '(new)', '| name:', upsertRow.name, '| thumbnail:', upsertRow.thumbnail ? `present (${String(upsertRow.thumbnail).length} chars)` : 'NULL');
 
     const { data, error:saveError } = await supabase
       .from('thumbnails')
