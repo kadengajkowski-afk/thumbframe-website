@@ -1325,7 +1325,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     window.addEventListener('pointermove',onMove);
     window.addEventListener('pointerup',onUp);
     return()=>{window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};
-  },[snapToGrid,lockAspect,p.preview.w,p.preview.h]);
+  },[snapToGrid,lockAspect,p.preview.w,p.preview.h,triggerAutoSave]);
 
   useEffect(()=>{
     const handler=(e)=>{
