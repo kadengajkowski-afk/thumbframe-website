@@ -5,7 +5,6 @@ import BrandKitSetupModal from './BrandKit';
 import supabase from './supabaseClient';
 import html2canvas from 'html2canvas';
 import Cropper from 'react-easy-crop';
-/* eslint-disable no-use-before-define */
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
@@ -774,6 +773,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   useEffect(()=>{
     layersRef.current = layers;
   },[layers]);
+
+  const saveProjectRef = useRef(null);
+  const debouncedSaveRef = useRef(null);
+  const triggerAutoSave = useCallback(() => {
+    if(debouncedSaveRef.current){
+      debouncedSaveRef.current();
+    }
+  }, []);
 
   const p  = PLATFORMS[platform];
 
@@ -2376,29 +2383,24 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
   },[buildSaveSignature, generateDesignThumbnail, setCurrentProjectId]);
 
-  const saveProjectRef = useRef(saveProject);
   useEffect(()=>{
     saveProjectRef.current = saveProject;
   },[saveProject]);
 
-  const debouncedSaveRef = useRef(
-    debounce(() => {
-      saveProjectRef.current({ silent: true });
-    }, 1500)
-  );
-
-  const triggerAutoSave = useCallback(() => {
-    if (debouncedSaveRef.current) {
-      debouncedSaveRef.current();
-    }
-  }, []);
-
   useEffect(() => {
-    const currentDebouncer = debouncedSaveRef.current;
+    const currentDebouncer = debounce(() => {
+      if(saveProjectRef.current){
+        saveProjectRef.current({ silent:true });
+      }
+    }, 1500);
+
+    debouncedSaveRef.current = currentDebouncer;
+
     return () => {
-      if (currentDebouncer) {
+      if(currentDebouncer){
         currentDebouncer.cancel();
       }
+      debouncedSaveRef.current = null;
     };
   }, []);
 
