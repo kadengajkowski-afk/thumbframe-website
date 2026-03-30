@@ -596,6 +596,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const mountedRef = useRef(true);
   const currentDesignIdRef = useRef(null);
   const lastSavedSignatureRef = useRef('');
+  const saveStatusTimerRef = useRef(null);
   const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
   // Performance: Mouse tracking refs to avoid re-renders
@@ -2054,13 +2055,30 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false} = {})=>{
+    // Immediate UI feedback — don't wait for the network
+    clearTimeout(saveStatusTimerRef.current);
+    setSaveStatus('Saving...');
+
     try{
       const nextName=(nameOverride||designName||'Untitled Project').trim()||'Untitled Project';
       const snapshot=buildProjectSnapshot();
       const signature=buildSaveSignature({...snapshot,designName:nextName});
-      console.time('[DEBUG] generateDesignThumbnail');
-      const thumbnail=await generateDesignThumbnail(snapshot.layers);
-      console.timeEnd('[DEBUG] generateDesignThumbnail');
+
+      // Zombie check: if the ref still holds an ID that's been deleted from the local
+      // list, clear it so the next save creates a fresh row rather than resurrecting it.
+      if(currentDesignIdRef.current){
+        const stillExists = savedDesigns.some(
+          d => d.id === currentDesignIdRef.current || d.currentDesignId === currentDesignIdRef.current
+        );
+        if(!stillExists){
+          console.warn('[STORAGE] Zombie check: currentDesignIdRef points to a deleted design. Clearing ref.');
+          currentDesignIdRef.current = null;
+        }
+      }
+
+      // Thumbnail optimization: only generate for manual saves — auto-saves skip it to stay fast.
+      const thumbnail = silent ? null : await generateDesignThumbnail(snapshot.layers);
+
       let persistedId=currentDesignIdRef.current;
       let persistedEditedAt = new Date().toISOString();
 
@@ -2108,11 +2126,16 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const returnedId = payload?.data?.id || payload?.id || payload?.design?.id || null;
       persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
       console.log('[STORAGE] Save succeeded. ID:', returnedId, '| Name:', nextName, '| Platform:', resolvedPlatform);
+
+      // Update ref and sync URL if the server returned an ID that differs from what we held.
       if(returnedId && returnedId !== currentDesignIdRef.current){
-        const isFirstSave = !currentDesignIdRef.current;
         currentDesignIdRef.current=returnedId;
         setCurrentProjectId(returnedId);
-        if(isFirstSave){
+      }
+      // Sync URL whenever the returned ID isn't already in the query string.
+      if(returnedId){
+        const urlId = new URLSearchParams(window.location.search).get('project');
+        if(urlId !== String(returnedId)){
           syncProjectIdToUrl(returnedId);
         }
       }
@@ -2143,25 +2166,29 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         thumbnail,
       };
 
+      lastSavedSignatureRef.current=signature;
+
+      // Show 'Saved' for 3 seconds then clear the status.
+      clearTimeout(saveStatusTimerRef.current);
+      setSaveStatus('Saved');
+      saveStatusTimerRef.current = setTimeout(()=> setSaveStatus(''), 3000);
+
       if(backgroundExistingSave){
-        lastSavedSignatureRef.current=signature;
-        setSaveStatus('Saved');
         setCmdLog(`✓ Auto-saved: ${nextName}`);
         return { id:persistedId||null, design:savedDesign };
       }
 
       persistSavedDesigns(savedDesign);
-      lastSavedSignatureRef.current=signature;
-      setSaveStatus('Saved');
       if(!silent) setCmdLog(`✓ Saved: ${nextName}`);
       return { id:persistedId||null, design:savedDesign };
     }catch(err){
       console.error('[STORAGE] Error:', err);
+      clearTimeout(saveStatusTimerRef.current);
       setSaveStatus('Error');
       if(!silent) setCmdLog('Save failed');
       throw err;
     }
-  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, saturation, setCurrentProjectId]);
+  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, saturation, savedDesigns, setCurrentProjectId]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
@@ -2327,6 +2354,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   function deleteDesign(id){
     const updated=savedDesigns.filter(d=>d.id!==id);
     setSavedDesigns(updated);
+    // If the currently active design is being deleted, clear its ref and the save
+    // signature so the auto-saver doesn't resurrect it as a new row (zombie save).
+    if(currentDesignIdRef.current === id){
+      currentDesignIdRef.current = null;
+      lastSavedSignatureRef.current = '';
+    }
   }
 
   async function analyzeCTR(){
