@@ -53,6 +53,12 @@ function syncProjectIdToUrl(projectId){
   window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
+function clearProjectIdFromUrl(){
+  const url = new URL(window.location.href);
+  url.searchParams.delete('project');
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
 function getProjectStorageKey(projectId){
   return `project_state_${projectId}`;
 }
@@ -597,6 +603,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const currentDesignIdRef = useRef(null);
   const lastSavedSignatureRef = useRef('');
   const saveStatusTimerRef = useRef(null);
+  const deletedIdsRef = useRef(new Set());
   const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
   // Performance: Mouse tracking refs to avoid re-renders
@@ -2064,14 +2071,24 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const snapshot=buildProjectSnapshot();
       const signature=buildSaveSignature({...snapshot,designName:nextName});
 
-      // Zombie check: if the ref still holds an ID that's been deleted from the local
-      // list, clear it so the next save creates a fresh row rather than resurrecting it.
-      if(currentDesignIdRef.current){
+      // Rule 2 — Resurrection guard: abort immediately if the target ID was deleted.
+      // This ref-based check is synchronous and immune to React state update lag.
+      const targetId = currentDesignIdRef.current;
+      if(targetId && deletedIdsRef.current.has(targetId)){
+        console.warn('[STORAGE] Resurrection guard: save aborted — ID', targetId, 'was deleted.');
+        currentDesignIdRef.current = null;
+        lastSavedSignatureRef.current = '';
+        clearTimeout(saveStatusTimerRef.current);
+        setSaveStatus('');
+        return null;
+      }
+      // Secondary zombie check: catch IDs cleared from state but not yet in deletedIdsRef.
+      if(targetId){
         const stillExists = savedDesigns.some(
-          d => d.id === currentDesignIdRef.current || d.currentDesignId === currentDesignIdRef.current
+          d => d.id === targetId || d.currentDesignId === targetId
         );
         if(!stillExists){
-          console.warn('[STORAGE] Zombie check: currentDesignIdRef points to a deleted design. Clearing ref.');
+          console.warn('[STORAGE] Zombie check: stale ref cleared for ID', targetId);
           currentDesignIdRef.current = null;
         }
       }
@@ -2352,13 +2369,26 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   function deleteDesign(id){
-    const updated=savedDesigns.filter(d=>d.id!==id);
+    // Rule 1 — Flag the ID immediately so the resurrection guard blocks any
+    // in-flight or pending auto-save before React state even propagates.
+    deletedIdsRef.current.add(id);
+
+    const updated=savedDesigns.filter(d=>d.id!==id && d.currentDesignId!==id);
     setSavedDesigns(updated);
-    // If the currently active design is being deleted, clear its ref and the save
-    // signature so the auto-saver doesn't resurrect it as a new row (zombie save).
-    if(currentDesignIdRef.current === id){
+
+    const isActive = currentDesignIdRef.current === id;
+
+    if(isActive){
+      // Rule 1 — Clear the ref and wipe the save signature so a queued debounce
+      // timer cannot fire with this stale ID.
       currentDesignIdRef.current = null;
       lastSavedSignatureRef.current = '';
+
+      // Rule 1 — Remove the ?project= param from the URL.
+      clearProjectIdFromUrl();
+
+      // Rule 3 — Redirect to a clean editor so the auto-saver has no target.
+      window.location.replace('/editor');
     }
   }
 
