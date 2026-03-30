@@ -14,219 +14,6 @@ const PLATFORMS = {
   linkedin:  { label:'LinkedIn',  width:1200, height:627,  preview:{ w:480, h:251 } },
 };
 
-const FONTS = [
-  'Impact','Arial Black','Arial','Georgia','Courier New','Verdana',
-  'Trebuchet MS','Times New Roman','Comic Sans MS','Palatino',
-  'Garamond','Tahoma','Lucida Console','Century Gothic','Candara',
-  'Franklin Gothic Medium','Rockwell','Copperplate','Papyrus',
-  'Helvetica','Segoe UI','Calibri','Cambria','Brush Script MT',
-];
-
-const FONT_WEIGHTS = [
-  {label:'Thin',value:100},{label:'Light',value:300},{label:'Regular',value:400},
-  {label:'Medium',value:500},{label:'SemiBold',value:600},{label:'Bold',value:700},
-  {label:'ExtraBold',value:800},{label:'Black',value:900},
-];
-
-const GRADIENTS = [
-  ['#f97316','#1a1a2e'],['#FF416C','#FF4B2B'],['#0F6E56','#9FE1CB'],
-  ['#185FA5','#00BFFF'],['#FFD700','#FF6347'],['#FF1493','#FF8C00'],
-  ['#00FA9A','#006400'],['#9400D3','#4B0082'],['#2a2a2a','#888780'],
-  ['#851c1c','#FAC775'],['#00C9FF','#92FE9D'],['#FC466B','#3F5EFB'],
-  ['#f7971e','#ffd200'],['#11998e','#38ef7d'],['#4776E6','#8E54E9'],
-  ['#eb3349','#f45c43'],['#D4537E','#FBEAF0'],['#FF6347','#FFD700'],
-];
-
-const BLEND_MODES = [
-  'normal','multiply','screen','overlay','darken','lighten',
-  'color-dodge','color-burn','hard-light','soft-light','difference','exclusion',
-];
-
-function getProjectIdFromUrl(){
-  return new URLSearchParams(window.location.search).get('project');
-}
-
-function syncProjectIdToUrl(projectId){
-  if(!projectId)return;
-  const url = new URL(window.location.href);
-  url.searchParams.set('project', projectId);
-  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
-}
-
-function clearProjectIdFromUrl(){
-  const url = new URL(window.location.href);
-  url.searchParams.delete('project');
-  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
-}
-
-function getProjectStorageKey(projectId){
-  return `project_state_${projectId}`;
-}
-
-function generateProjectId(){
-  if(window.crypto?.randomUUID) return window.crypto.randomUUID();
-  return `project_${Date.now()}_${Math.random().toString(36).slice(2,10)}`;
-}
-
-const TEXT_TEMPLATES = [
-  { label:'YouTube Bold', text:'WATCH THIS',        fontSize:56, fontFamily:'Impact',     fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:4, shadowEnabled:true,  letterSpacing:2, lineHeight:1.2, textAlign:'center' },
-  { label:'Gaming',       text:'EPIC MOMENT',       fontSize:52, fontFamily:'Arial Black', fontWeight:800, textColor:'#FFD700', strokeColor:'#000000', strokeWidth:3, shadowEnabled:true,  letterSpacing:1, lineHeight:1.2, textAlign:'center' },
-  { label:'Clean',        text:'My Title',          fontSize:44, fontFamily:'Helvetica',   fontWeight:700, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:0, shadowEnabled:false, letterSpacing:0, lineHeight:1.3, textAlign:'left'   },
-  { label:'Business',     text:'RESULTS',           fontSize:48, fontFamily:'Arial Black', fontWeight:800, textColor:'#ffffff', strokeColor:'#1a1a2e', strokeWidth:2, shadowEnabled:true,  letterSpacing:4, lineHeight:1.2, textAlign:'center' },
-  { label:'Viral',        text:"YOU WON'T BELIEVE", fontSize:38, fontFamily:'Impact',      fontWeight:900, textColor:'#FF4444', strokeColor:'#000000', strokeWidth:3, shadowEnabled:true,  letterSpacing:1, lineHeight:1.2, textAlign:'center' },
-  { label:'Minimal',      text:'Simple & Clean',    fontSize:36, fontFamily:'Segoe UI',    fontWeight:300, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:0, shadowEnabled:false, letterSpacing:8, lineHeight:1.5, textAlign:'center' },
-];
-
-const SHAPES_BASIC = [
-  { key:'rect',      label:'Rectangle', icon:'▬' },
-  { key:'roundrect', label:'Rounded',   icon:'▢' },
-  { key:'circle',    label:'Circle',    icon:'●' },
-  { key:'triangle',  label:'Triangle',  icon:'▲' },
-  { key:'star',      label:'Star',      icon:'★' },
-  { key:'star6',     label:'Star 6pt',  icon:'✦' },
-  { key:'arrow',     label:'Arrow →',   icon:'➤' },
-  { key:'arrowleft', label:'Arrow ←',   icon:'◄' },
-  { key:'diamond',   label:'Diamond',   icon:'◆' },
-  { key:'hexagon',   label:'Hexagon',   icon:'⬡' },
-  { key:'pentagon',  label:'Pentagon',  icon:'⬠' },
-  { key:'cross',     label:'Cross',     icon:'✚' },
-  { key:'heart',     label:'Heart',     icon:'♥' },
-  { key:'speech',    label:'Speech',    icon:'💬' },
-  { key:'badge',     label:'Badge',     icon:'🏷' },
-  { key:'line',      label:'Line',      icon:'—' },
-];
-
-const VIRAL_TEMPLATES = [
-  {
-    id:'mrbeast',
-    label:'MrBeast Style',
-    category:'Gaming',
-    preview:{ bg:'linear-gradient(135deg,#FFD700,#FF6B00)', text:'WATCH THIS' },
-    layers:[
-      { type:'background', bgColor:'#1a1a1a', bgGradient:null },
-      { type:'text', text:'YOU WON\'T', fontSize:72, fontFamily:'Impact',
-        fontWeight:900, fontItalic:false, textColor:'#FFD700',
-        strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
-        glowEnabled:false, glowColor:'#FFD700', arcEnabled:false, arcRadius:120,
-        letterSpacing:2, lineHeight:1.2, textAlign:'center', x:60, y:80 },
-      { type:'text', text:'BELIEVE THIS', fontSize:72, fontFamily:'Impact',
-        fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
-        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
-        letterSpacing:2, lineHeight:1.2, textAlign:'center', x:60, y:170 },
-      { type:'shape', shape:'star', fillColor:'#FFD700',
-        strokeColor:'#FF6B00', width:60, height:60, x:20, y:60 },
-      { type:'shape', shape:'star', fillColor:'#FFD700',
-        strokeColor:'#FF6B00', width:40, height:40, x:360, y:80 },
-    ],
-  },
-  {
-    id:'mkbhd',
-    label:'MKBHD Style',
-    category:'Tech',
-    preview:{ bg:'linear-gradient(135deg,#000000,#1a1a1a)', text:'REVIEW' },
-    layers:[
-      { type:'background', bgColor:'#000000', bgGradient:null },
-      { type:'shape', shape:'rect', fillColor:'#FF0000',
-        strokeColor:'#FF0000', width:8, height:200, x:40, y:60 },
-      { type:'text', text:'THE TRUTH', fontSize:64, fontFamily:'Arial Black',
-        fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
-        shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
-        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
-        letterSpacing:6, lineHeight:1.2, textAlign:'left', x:70, y:110 },
-      { type:'text', text:'ABOUT THIS', fontSize:32, fontFamily:'Arial',
-        fontWeight:400, fontItalic:false, textColor:'#888888',
-        strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
-        shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
-        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
-        letterSpacing:4, lineHeight:1.2, textAlign:'left', x:70, y:160 },
-    ],
-  },
-  {
-    id:'gaming_epic',
-    label:'Epic Gaming',
-    category:'Gaming',
-    preview:{ bg:'linear-gradient(135deg,#2c2c54,#706fd3)', text:'EPIC WIN' },
-    layers:[
-      { type:'background', bgColor:'#0d0d1a',
-        bgGradient:['#0d0d1a','#1a1a3e'] },
-      { type:'shape', shape:'star6', fillColor:'#FFD700',
-        strokeColor:'#FF6B00', width:80, height:80, x:30, y:30 },
-      { type:'text', text:'EPIC', fontSize:96, fontFamily:'Impact',
-        fontWeight:900, fontItalic:false, textColor:'#FFD700',
-        strokeColor:'#FF6B00', strokeWidth:4, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:30, shadowX:4, shadowY:4,
-        glowEnabled:true, glowColor:'#FFD700', arcEnabled:false, arcRadius:120,
-        letterSpacing:8, lineHeight:1.2, textAlign:'center', x:100, y:80 },
-      { type:'text', text:'MOMENT', fontSize:56, fontFamily:'Impact',
-        fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#000000', strokeWidth:3, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
-        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
-        letterSpacing:4, lineHeight:1.2, textAlign:'center', x:120, y:190 },
-    ],
-  },
-  {
-    id:'minecraft_glow',
-    label:'Minecraft Glow',
-    category:'Gaming',
-    preview:{ bg:'linear-gradient(135deg,#1a472a,#2d6a4f)', text:'MINECRAFT' },
-    layers:[
-      { type:'background', bgColor:'#0a1628',
-        bgGradient:['#0a1628','#1a3a2a'] },
-      { type:'shape', shape:'rect', fillColor:'rgba(0,150,255,0.15)',
-        strokeColor:'rgba(0,150,255,0.4)', width:400, height:120, x:40, y:180 },
-      { type:'text', text:'MINECRAFT', fontSize:68, fontFamily:'Arial Black',
-        fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#00ff88', strokeWidth:3, shadowEnabled:true,
-        shadowColor:'#00ff88', shadowBlur:30, shadowX:0, shadowY:0,
-        glowEnabled:true, glowColor:'#00ff88', arcEnabled:false, arcRadius:120,
-        letterSpacing:3, lineHeight:1.2, textAlign:'center', x:40, y:80 },
-      { type:'text', text:'BUT EVERYTHING IS DIFFERENT', fontSize:28,
-        fontFamily:'Arial Black', fontWeight:700, fontItalic:false,
-        textColor:'#88ddff', strokeColor:'#000000', strokeWidth:1,
-        shadowEnabled:true, shadowColor:'#000000', shadowBlur:10,
-        shadowX:2, shadowY:2, glowEnabled:false, glowColor:'#f97316',
-        arcEnabled:false, arcRadius:120, letterSpacing:1, lineHeight:1.2,
-        textAlign:'center', x:60, y:180 },
-    ],
-  },
-  {
-    id:'viral_reaction',
-    label:'Reaction',
-    category:'Viral',
-    preview:{ bg:'linear-gradient(135deg,#FF416C,#FF4B2B)', text:'WAIT WHAT' },
-    layers:[
-      { type:'background', bgColor:'#FF4B2B',
-        bgGradient:['#FF416C','#FF4B2B'] },
-      { type:'text', text:'WAIT...', fontSize:88, fontFamily:'Impact',
-        fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:4, shadowY:4,
-        glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
-        letterSpacing:4, lineHeight:1.2, textAlign:'center', x:100, y:60 },
-      { type:'text', text:'WHAT?!', fontSize:88, fontFamily:'Impact',
-        fontWeight:900, fontItalic:false, textColor:'#FFD700',
-        strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:4, shadowY:4,
-        glowEnabled:false, glowColor:'#FFD700', arcEnabled:false, arcRadius:120,
-        letterSpacing:4, lineHeight:1.2, textAlign:'center', x:110, y:170 },
-      { type:'shape', shape:'arrow', fillColor:'#FFD700',
-        strokeColor:'#000000', width:120, height:40, x:20, y:150 },
-    ],
-  },
-  {
-    id:'finance',
-    label:'Finance/Business',
-    category:'Business',
-    preview:{ bg:'linear-gradient(135deg,#0f2027,#2c5364)', text:'$1,000,000' },
-    layers:[
-      { type:'background', bgColor:'#0a1628',
-        bgGradient:['#0a1628','#0f2027'] },
-      { type:'shape', shape:'rect', fillColor:'#00C853',
         strokeColor:'#00C853', width:300, height:4, x:80, y:155 },
       { type:'text', text:'HOW I MADE', fontSize:36, fontFamily:'Arial Black',
         fontWeight:700, fontItalic:false, textColor:'#88bbdd',
@@ -921,6 +708,218 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
   },[p.preview.h, p.preview.w]);
 
+  const saveProject = useCallback(async ({nameOverride, silent=true} = {})=>{
+    // Keep silent saves in the background to avoid interrupting canvas interactions.
+    if(!silent){
+      clearTimeout(saveStatusTimerRef.current);
+      setSaveStatus('Saving...');
+      setCmdLog('Saving project...');
+    }
+
+    // ── Step 2: Check lock ────────────────────────────────────────────────────
+    if(isSavingRef.current){
+      console.warn('[STORAGE] Save skipped — a save is already in progress.');
+      if(!silent){
+        clearTimeout(saveStatusTimerRef.current);
+        setSaveStatus('Unsaved');
+      }
+      return null;
+    }
+
+    // ── Step 3: All pre-flight checks — UNLOCKED ─────────────────────────────
+    const nextName = (nameOverride||saveMetaRef.current.designName||'Untitled Project').trim()||'Untitled Project';
+    const snapshot = {
+      projectId: saveMetaRef.current.projectId,
+      currentDesignId: currentDesignIdRef.current,
+      platform: saveMetaRef.current.platform,
+      layers: JSON.parse(JSON.stringify(layersRef.current)),
+      brightness: saveMetaRef.current.brightness,
+      contrast: saveMetaRef.current.contrast,
+      saturation: saveMetaRef.current.saturation,
+      hue: saveMetaRef.current.hue,
+      designName: saveMetaRef.current.designName,
+      aiPrompt: saveMetaRef.current.aiPrompt,
+      lastGeneratedImageUrl: saveMetaRef.current.lastGeneratedImageUrl,
+      textColor: saveMetaRef.current.textColor,
+      strokeColor: saveMetaRef.current.strokeColor,
+      fillColor: saveMetaRef.current.fillColor,
+      brandKitColors: saveMetaRef.current.brandKitColors,
+    };
+    const signature = buildSaveSignature({...snapshot, designName: nextName});
+
+    // Resurrection guard — synchronous, immune to React state lag.
+    const targetId = currentDesignIdRef.current;
+    if(targetId && deletedIdsRef.current.has(targetId)){
+      console.warn('[STORAGE] Resurrection guard: save aborted — ID', targetId, 'was deleted.');
+      currentDesignIdRef.current = null;
+      lastSavedSignatureRef.current = '';
+      if(!silent){
+        clearTimeout(saveStatusTimerRef.current);
+        setSaveStatus('');
+      }
+      return null;
+    }
+
+    // ── Step 4: Engage lock — right before any network activity ──────────────
+    isSavingRef.current = true;
+    try{
+      // Session and auth checks are inside the lock-protected try block.
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const email = session?.user?.email;
+      const userId = session?.user?.id;
+      const resolvedPlatform = snapshot.platform || 'youtube';
+
+      console.log('[DEBUG] Sending token to backend:', token ? token.substring(0, 10) + '...' : 'NO TOKEN – session is null');
+      console.log('[DEBUG] user_id:', userId || 'NULL – session.user.id missing');
+      if(!token){
+        console.error('[STORAGE] Cannot save: no active session token.');
+        if(!silent){
+          clearTimeout(saveStatusTimerRef.current);
+          setSaveStatus('Error');
+          setCmdLog('Save failed: not logged in');
+        }
+        return null;
+      }
+
+      let thumbnailData = null;
+      try{
+        const quality = silent ? 0.1 : 1.0;
+        thumbnailData = await generateDesignThumbnail(quality);
+      }catch(imgErr){
+        console.warn('[STORAGE] Thumbnail generation failed, continuing without preview:', imgErr);
+      }
+      console.log('[SAVE] thumbnail result:', thumbnailData ? `data URL (${thumbnailData.length} chars)` : 'NULL/falsy');
+
+      const freshestLayers = JSON.parse(JSON.stringify(layersRef.current));
+      let persistedId = currentDesignIdRef.current;
+      let persistedEditedAt = new Date().toISOString();
+
+      const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          id: currentDesignIdRef.current || undefined,
+          name: nextName,
+          platform: resolvedPlatform,
+          user_email: email,
+          user_id: userId,
+          json_data: {
+            name: nextName,
+            platform: resolvedPlatform,
+            layers: freshestLayers,
+            brightness: snapshot.brightness,
+            contrast: snapshot.contrast,
+            saturation: snapshot.saturation,
+            hue: snapshot.hue,
+          },
+          thumbnail: thumbnailData,
+        }),
+      });
+
+      if(!response.ok){
+        const errText = await response.text().catch(()=>'' );
+        console.error('[STORAGE] Request failed. Status:', response.status, 'Body:', errText);
+        throw new Error(`Save failed with status ${response.status}: ${errText}`);
+      }
+
+      const payload = await response.json().catch(()=>({}));
+      const returnedId = payload?.data?.id || payload?.id || payload?.design?.id || null;
+      persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
+      console.log('[STORAGE] Save succeeded. ID:', returnedId, '| Name:', nextName, '| Platform:', resolvedPlatform);
+
+      // Update ref and sync URL if the server returned a new ID.
+      if(returnedId && returnedId !== currentDesignIdRef.current){
+        currentDesignIdRef.current = returnedId;
+        setCurrentProjectId(returnedId);
+      }
+      if(returnedId){
+        const urlId = new URLSearchParams(window.location.search).get('project');
+        if(urlId !== String(returnedId)){
+          syncProjectIdToUrl(returnedId);
+        }
+      }
+      persistedId = returnedId || persistedId;
+
+      const savedDesign = {
+        id: persistedId || snapshot.projectId || Date.now(),
+        projectId: snapshot.projectId,
+        currentDesignId: persistedId || null,
+        name: nextName,
+        created: new Date().toLocaleString(),
+        platform: resolvedPlatform,
+        layers: freshestLayers,
+        brightness: snapshot.brightness,
+        contrast: snapshot.contrast,
+        saturation: snapshot.saturation,
+        hue: snapshot.hue,
+        last_edited: persistedEditedAt,
+        json_data: {
+          name: nextName,
+          platform: resolvedPlatform,
+          layers: freshestLayers,
+          brightness: snapshot.brightness,
+          contrast: snapshot.contrast,
+          saturation: snapshot.saturation,
+          hue: snapshot.hue,
+        },
+        thumbnail: thumbnailData,
+      };
+
+      lastSavedSignatureRef.current = signature;
+
+      if(!silent){
+        clearTimeout(saveStatusTimerRef.current);
+        setSaveStatus('Saved');
+        saveStatusTimerRef.current = setTimeout(() => setSaveStatus(''), 3000);
+      }
+
+      if(!silent){
+        persistSavedDesigns(savedDesign);
+        setCmdLog(`✓ Saved: ${nextName}`);
+      }
+
+      return { id: persistedId || null, design: savedDesign };
+    }catch(err){
+      console.error('[STORAGE] Save failed:', err);
+      if(!silent){
+        clearTimeout(saveStatusTimerRef.current);
+        setSaveStatus('Error');
+        setCmdLog('Save failed');
+      }
+      return null;
+    }finally{
+      // THIS MUST EXECUTE NO MATTER WHAT — releases the lock unconditionally.
+      isSavingRef.current = false;
+    }
+  },[buildSaveSignature, generateDesignThumbnail, setCurrentProjectId]);
+
+  const saveProjectRef = useRef(saveProject);
+  useEffect(()=>{
+    saveProjectRef.current = saveProject;
+  },[saveProject]);
+
+  const debouncedSaveRef = useRef(
+    debounce(() => {
+      saveProjectRef.current({ silent: true });
+    }, 1500)
+  );
+
+  const triggerAutoSave = useCallback(() => {
+    if (debouncedSaveRef.current) {
+      debouncedSaveRef.current();
+    }
+  }, []);
+
+  useEffect(() => {
+    const currentDebouncer = debouncedSaveRef.current;
+    return () => {
+      if (currentDebouncer) {
+        currentDebouncer.cancel();
+      }
+    };
+  }, []);
+
   const fetchSavedDesigns = useCallback(async ()=>{
     const userEmail = user?.email;
     if(!userEmail){
@@ -1128,219 +1127,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             throw brandKitResult.reason;
           }
         }catch(brandKitErr){
-          if(!cancelled)console.error('Brand Kit/Profile bootstrap failed:',brandKitErr);
-        }
-
-        const stateToRestore = restoredDraft;
-
-        if(remoteDesign){
-          // ── Path A: Hydrate from Supabase remote design (Dashboard → Editor nav) ──
-          const jsonData = remoteDesign.json_data || {};
-          const remoteLayers = Array.isArray(jsonData.layers) && jsonData.layers.length > 0
-            ? jsonData.layers
-            : [makeBg(PLATFORMS[jsonData.platform || 'youtube'] || p)];
-          const remotePlatform = jsonData.platform || remoteDesign.platform || 'youtube';
-          const remoteBrightness = jsonData.brightness ?? 100;
-          const remoteContrast   = jsonData.contrast   ?? 100;
-          const remoteSaturation = jsonData.saturation ?? 100;
-          const remoteHue        = jsonData.hue        ?? 0;
-          const remoteName       = remoteDesign.name   || jsonData.name || 'My Design';
-
-          const maxRemoteId = remoteLayers.reduce((m,l)=>Math.max(m,typeof l.id==='number'?l.id:0),0);
-          if(maxRemoteId>=idCounter) idCounter=maxRemoteId+1;
-
-          setPlatform(remotePlatform);
-          setLayers(remoteLayers);
-          layersRef.current=remoteLayers;
-          setBrightness(remoteBrightness);
-          setContrast(remoteContrast);
-          setSaturation(remoteSaturation);
-          setHue(remoteHue);
-          setDesignName(remoteName);
-          setProjectId(resolvedProjectId);
-          currentDesignIdRef.current=remoteDesign.id;
-          setCurrentDesignId(remoteDesign.id);
-          syncProjectIdToUrl(remoteDesign.id);
-
-          const snapshot = JSON.parse(JSON.stringify(remoteLayers));
-          historyRef.current=[snapshot];
-          historyIndexRef.current=0;
-          setHistory([snapshot]);
-          setHistoryIndex(0);
-          lastSavedSignatureRef.current=buildSaveSignature({
-            projectId:resolvedProjectId,
-            platform:remotePlatform,
-            layers:remoteLayers,
-            brightness:remoteBrightness,
-            contrast:remoteContrast,
-            saturation:remoteSaturation,
-            hue:remoteHue,
-            designName:remoteName,
-            aiPrompt:'',
-            lastGeneratedImageUrl:'',
-          });
-        }else if(stateToRestore){
-          const restoredPlatform = stateToRestore.platform||'youtube';
-          const restoredLayers = Array.isArray(stateToRestore.layers) && stateToRestore.layers.length>0
-            ? stateToRestore.layers
-            : [makeBg(PLATFORMS[restoredPlatform]||p)];
-          const restoredCurrentDesignId = stateToRestore.currentDesignId||stateToRestore.currentId||null;
-          // Advance idCounter past any restored IDs to prevent collisions when adding new layers
-          const maxRestoredId = restoredLayers.reduce((m,l)=>Math.max(m,typeof l.id==='number'?l.id:0),0);
-          if(maxRestoredId>=idCounter) idCounter=maxRestoredId+1;
-          setPlatform(restoredPlatform);
-          setLayers(restoredLayers);
-          layersRef.current=restoredLayers;
-          setBrightness(stateToRestore.brightness||100);
-          setContrast(stateToRestore.contrast||100);
-          setSaturation(stateToRestore.saturation||100);
-          setHue(stateToRestore.hue||0);
-          setDesignName(stateToRestore.designName||stateToRestore.name||'My Design');
-          setAiPrompt(stateToRestore.aiPrompt||stateToRestore.prompt||'');
-          setLastGeneratedImageUrl(stateToRestore.lastGeneratedImageUrl||stateToRestore.result_image_url||'');
-          setProjectId(stateToRestore.projectId||resolvedProjectId);
-          currentDesignIdRef.current=restoredCurrentDesignId;
-          setCurrentDesignId(restoredCurrentDesignId);
-          if(stateToRestore.textColor)setTextColor(stateToRestore.textColor);
-          if(stateToRestore.strokeColor)setStrokeColor(stateToRestore.strokeColor);
-          if(stateToRestore.fillColor)setFillColor(stateToRestore.fillColor);
-          if(stateToRestore.brandKitColors){
-            setBrandKitColors(stateToRestore.brandKitColors);
-          }
-
-          const snapshot = JSON.parse(JSON.stringify(restoredLayers));
-          historyRef.current=[snapshot];
-          historyIndexRef.current=0;
-          setHistory([snapshot]);
-          setHistoryIndex(0);
-          lastSavedSignatureRef.current=buildSaveSignature({
-            projectId:stateToRestore.projectId||resolvedProjectId,
-            platform:restoredPlatform,
-            layers:restoredLayers,
-            brightness:stateToRestore.brightness||100,
-            contrast:stateToRestore.contrast||100,
-            saturation:stateToRestore.saturation||100,
-            hue:stateToRestore.hue||0,
-            designName:stateToRestore.designName||stateToRestore.name||'My Design',
-            aiPrompt:stateToRestore.aiPrompt||stateToRestore.prompt||'',
-            lastGeneratedImageUrl:stateToRestore.lastGeneratedImageUrl||stateToRestore.result_image_url||'',
-          });
-        }else{
-          const b=makeBg(p);
-          setLayers([b]);
-          layersRef.current=[b];
-          historyRef.current=[[b]];
-          historyIndexRef.current=0;
-          setHistory([[b]]);
-          setHistoryIndex(0);
-          setProjectId(resolvedProjectId);
-          currentDesignIdRef.current=null;
-          setCurrentDesignId(null);
-          lastSavedSignatureRef.current=buildSaveSignature({
-            projectId:resolvedProjectId,
-            platform,
-            layers:[b],
-            brightness:100,
-            contrast:100,
-            saturation:100,
-            hue:0,
-            designName:'My Design',
-            aiPrompt:'',
-            lastGeneratedImageUrl:'',
-          });
-        }
-
-        draftHydratedRef.current=true;
-      }catch(e){
-        if(!cancelled)console.error('Editor bootstrap failed:',e);
-
-        if(!draftHydratedRef.current){
-          const b=makeBg(p);
-          setLayers([b]);
-          layersRef.current=[b];
-          historyRef.current=[[b]];
-          historyIndexRef.current=0;
-          setHistory([[b]]);
-          setHistoryIndex(0);
-          draftHydratedRef.current=true;
-        }
-      }finally{
-        if(!cancelled){
-          setBrandKitLoading(false);
-          setIsLoading(false);
-        }
-      }
-    }
-
-    bootstrapEditor();
-    return()=>{cancelled=true;};
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[fetchSavedDesigns, resolvedApiUrl, user?.id]);
-
-  useEffect(()=>{
-    if(!showFileTab)return;
-    fetchSavedDesigns();
-  },[fetchSavedDesigns, showFileTab]);
-
-  // ✅ Window drag handlers — ONLY fire when draggingRef or resizingRef is set
-  // This means sidebar sliders are completely unaffected
-  useEffect(()=>{
-    function onMove(e){
-      if(!draggingRef.current&&!resizingRef.current)return;
-      const rs=resizeStartRef.current;
-      const z=zoomRef.current;
-      if(resizingRef.current&&rs){
-        const dx=(e.clientX-rs.mouseX)/z,dy=(e.clientY-rs.mouseY)/z;
-        setLayers(prev=>{
-          const layer=prev.find(l=>l.id===resizingRef.current);if(!layer)return prev;
-          if(layer.type==='text')return prev.map(l=>l.id===resizingRef.current?{...l,fontSize:Math.max(8,Math.round(rs.origFontSize+dx*0.5))}:l);
-          const nw=Math.max(20,Math.round(rs.origW+dx));
-          const nh=lockAspect?Math.round(nw/rs.aspect):Math.max(20,Math.round(rs.origH+dy));
-          return prev.map(l=>l.id===resizingRef.current?{...l,width:nw,height:nh}:l);
-        });
-        return;
-      }
-      if(!draggingRef.current||!canvasRef.current)return;
-      const rect=canvasRef.current.getBoundingClientRect();
-      let x=(e.clientX-rect.left)/z-dragOffsetRef.current.x;
-      let y=(e.clientY-rect.top)/z-dragOffsetRef.current.y;
-      if(snapToGrid){x=Math.round(x/10)*10;y=Math.round(y/10)*10;}
-      x=Math.max(-p.preview.w+10,Math.min(p.preview.w-10,x));
-      y=Math.max(-p.preview.h+10,Math.min(p.preview.h-10,y));
-      setLayers(prev=>prev.map(l=>l.id===draggingRef.current?{...l,x,y}:l));
-    }
-    function onUp(){
-      if(!draggingRef.current&&!resizingRef.current)return;
-      const clone=JSON.parse(JSON.stringify(layersRef.current));
-      const newHist=[...historyRef.current.slice(0,historyIndexRef.current+1),clone];
-      historyRef.current=newHist;
-      historyIndexRef.current=newHist.length-1;
-      setHistory(newHist);
-      setHistoryIndex(newHist.length-1);
-      draggingRef.current=null;
-      resizingRef.current=null;
-      resizeStartRef.current=null;
-      triggerAutoSave();
-    }
-    window.addEventListener('pointermove',onMove);
-    window.addEventListener('pointerup',onUp);
-    return()=>{window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};
-  },[snapToGrid,lockAspect,p.preview.w,p.preview.h,triggerAutoSave]);
-
-  useEffect(()=>{
-    const handler=(e)=>{
-      const active=document.activeElement;
-      const typing=active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.tagName==='SELECT';
-      if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}
-      if((e.ctrlKey||e.metaKey)&&e.key==='y'){e.preventDefault();redo();}
-      if((e.ctrlKey||e.metaKey)&&e.key==='c'){if(selectedId){const l=layers.find(x=>x.id===selectedId);if(l)setClipboard(l);}}
-      if((e.ctrlKey||e.metaKey)&&e.key==='v'){if(clipboard)duplicateLayerFromObj(clipboard);}
-      if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();if(selectedId)duplicateLayer(selectedId);}
-      if(!typing&&(e.key==='Delete'||e.key==='Backspace')){if(selectedId)deleteLayer(selectedId);}
-      if((e.ctrlKey||e.metaKey)&&(e.key==='+'||e.key==='=')){e.preventDefault();setZoom(z=>Math.min(16,+(z+0.1).toFixed(1)));}
-      if((e.ctrlKey||e.metaKey)&&e.key==='-'){e.preventDefault();setZoom(z=>Math.max(0.25,+(z-0.1).toFixed(1)));}
-      if((e.ctrlKey||e.metaKey)&&e.key==='0'){e.preventDefault();setZoom(1);}
-      if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();setCmdOpen(o=>!o);setTimeout(()=>cmdInputRef.current?.focus(),50);}
       if((e.ctrlKey||e.metaKey)&&e.key==='i'){
         e.preventDefault();
         setShowAiBar(o=>!o);
@@ -2189,219 +1975,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     saveProject({nameOverride:name, silent:false}).catch(()=>{});
   }
 
-  const saveProject = useCallback(async ({nameOverride, silent=true} = {})=>{
-    // Keep silent saves in the background to avoid interrupting canvas interactions.
-    if(!silent){
-      clearTimeout(saveStatusTimerRef.current);
-      setSaveStatus('Saving...');
-      setCmdLog('Saving project...');
-    }
-
-    // ── Step 2: Check lock ────────────────────────────────────────────────────
-    if(isSavingRef.current){
-      console.warn('[STORAGE] Save skipped — a save is already in progress.');
-      if(!silent){
-        clearTimeout(saveStatusTimerRef.current);
-        setSaveStatus('Unsaved');
-      }
-      return null;
-    }
-
-    // ── Step 3: All pre-flight checks — UNLOCKED ─────────────────────────────
-    const nextName = (nameOverride||saveMetaRef.current.designName||'Untitled Project').trim()||'Untitled Project';
-    const snapshot = {
-      projectId: saveMetaRef.current.projectId,
-      currentDesignId: currentDesignIdRef.current,
-      platform: saveMetaRef.current.platform,
-      layers: JSON.parse(JSON.stringify(layersRef.current)),
-      brightness: saveMetaRef.current.brightness,
-      contrast: saveMetaRef.current.contrast,
-      saturation: saveMetaRef.current.saturation,
-      hue: saveMetaRef.current.hue,
-      designName: saveMetaRef.current.designName,
-      aiPrompt: saveMetaRef.current.aiPrompt,
-      lastGeneratedImageUrl: saveMetaRef.current.lastGeneratedImageUrl,
-      textColor: saveMetaRef.current.textColor,
-      strokeColor: saveMetaRef.current.strokeColor,
-      fillColor: saveMetaRef.current.fillColor,
-      brandKitColors: saveMetaRef.current.brandKitColors,
-    };
-    const signature = buildSaveSignature({...snapshot, designName: nextName});
-
-    // Resurrection guard — synchronous, immune to React state lag.
-    const targetId = currentDesignIdRef.current;
-    if(targetId && deletedIdsRef.current.has(targetId)){
-      console.warn('[STORAGE] Resurrection guard: save aborted — ID', targetId, 'was deleted.');
-      currentDesignIdRef.current = null;
-      lastSavedSignatureRef.current = '';
-      if(!silent){
-        clearTimeout(saveStatusTimerRef.current);
-        setSaveStatus('');
-      }
-      return null;
-    }
-
-    // ── Step 4: Engage lock — right before any network activity ──────────────
-    isSavingRef.current = true;
-    try{
-      // Session and auth checks are inside the lock-protected try block.
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      const email = session?.user?.email;
-      const userId = session?.user?.id;
-      const resolvedPlatform = snapshot.platform || 'youtube';
-
-      console.log('[DEBUG] Sending token to backend:', token ? token.substring(0, 10) + '...' : 'NO TOKEN – session is null');
-      console.log('[DEBUG] user_id:', userId || 'NULL – session.user.id missing');
-      if(!token){
-        console.error('[STORAGE] Cannot save: no active session token.');
-        if(!silent){
-          clearTimeout(saveStatusTimerRef.current);
-          setSaveStatus('Error');
-          setCmdLog('Save failed: not logged in');
-        }
-        return null;
-      }
-
-      let thumbnailData = null;
-      try{
-        const quality = silent ? 0.1 : 1.0;
-        thumbnailData = await generateDesignThumbnail(quality);
-      }catch(imgErr){
-        console.warn('[STORAGE] Thumbnail generation failed, continuing without preview:', imgErr);
-      }
-      console.log('[SAVE] thumbnail result:', thumbnailData ? `data URL (${thumbnailData.length} chars)` : 'NULL/falsy');
-
-      const freshestLayers = JSON.parse(JSON.stringify(layersRef.current));
-      let persistedId = currentDesignIdRef.current;
-      let persistedEditedAt = new Date().toISOString();
-
-      const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({
-          id: currentDesignIdRef.current || undefined,
-          name: nextName,
-          platform: resolvedPlatform,
-          user_email: email,
-          user_id: userId,
-          json_data: {
-            name: nextName,
-            platform: resolvedPlatform,
-            layers: freshestLayers,
-            brightness: snapshot.brightness,
-            contrast: snapshot.contrast,
-            saturation: snapshot.saturation,
-            hue: snapshot.hue,
-          },
-          thumbnail: thumbnailData,
-        }),
-      });
-
-      if(!response.ok){
-        const errText = await response.text().catch(()=>'');
-        console.error('[STORAGE] Request failed. Status:', response.status, 'Body:', errText);
-        throw new Error(`Save failed with status ${response.status}: ${errText}`);
-      }
-
-      const payload = await response.json().catch(()=>({}));
-      const returnedId = payload?.data?.id || payload?.id || payload?.design?.id || null;
-      persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
-      console.log('[STORAGE] Save succeeded. ID:', returnedId, '| Name:', nextName, '| Platform:', resolvedPlatform);
-
-      // Update ref and sync URL if the server returned a new ID.
-      if(returnedId && returnedId !== currentDesignIdRef.current){
-        currentDesignIdRef.current = returnedId;
-        setCurrentProjectId(returnedId);
-      }
-      if(returnedId){
-        const urlId = new URLSearchParams(window.location.search).get('project');
-        if(urlId !== String(returnedId)){
-          syncProjectIdToUrl(returnedId);
-        }
-      }
-      persistedId = returnedId || persistedId;
-
-      const savedDesign = {
-        id: persistedId || snapshot.projectId || Date.now(),
-        projectId: snapshot.projectId,
-        currentDesignId: persistedId || null,
-        name: nextName,
-        created: new Date().toLocaleString(),
-        platform: resolvedPlatform,
-        layers: freshestLayers,
-        brightness: snapshot.brightness,
-        contrast: snapshot.contrast,
-        saturation: snapshot.saturation,
-        hue: snapshot.hue,
-        last_edited: persistedEditedAt,
-        json_data: {
-          name: nextName,
-          platform: resolvedPlatform,
-          layers: freshestLayers,
-          brightness: snapshot.brightness,
-          contrast: snapshot.contrast,
-          saturation: snapshot.saturation,
-          hue: snapshot.hue,
-        },
-        thumbnail: thumbnailData,
-      };
-
-      lastSavedSignatureRef.current = signature;
-
-      if(!silent){
-        clearTimeout(saveStatusTimerRef.current);
-        setSaveStatus('Saved');
-        saveStatusTimerRef.current = setTimeout(() => setSaveStatus(''), 3000);
-      }
-
-      if(!silent){
-        persistSavedDesigns(savedDesign);
-        setCmdLog(`✓ Saved: ${nextName}`);
-      }
-
-      return { id: persistedId || null, design: savedDesign };
-    }catch(err){
-      console.error('[STORAGE] Save failed:', err);
-      if(!silent){
-        clearTimeout(saveStatusTimerRef.current);
-        setSaveStatus('Error');
-        setCmdLog('Save failed');
-      }
-      return null;
-    }finally{
-      // THIS MUST EXECUTE NO MATTER WHAT — releases the lock unconditionally.
-      isSavingRef.current = false;
-    }
-  },[buildSaveSignature, generateDesignThumbnail, setCurrentProjectId]);
-
-  const saveProjectRef = useRef(saveProject);
-  useEffect(()=>{
-    saveProjectRef.current = saveProject;
-  },[saveProject]);
-
-  const debouncedSaveRef = useRef(
-    debounce(() => {
-      saveProjectRef.current({ silent: true });
-    }, 1500)
-  );
-
-  const triggerAutoSave = useCallback(() => {
-    if (debouncedSaveRef.current) {
-      debouncedSaveRef.current();
-    }
-  }, []);
-
-  useEffect(() => {
-    const currentDebouncer = debouncedSaveRef.current;
-    return () => {
-      if (currentDebouncer) {
-        currentDebouncer.cancel();
-      }
-    };
-  }, []);
-
-  useEffect(()=>{
+    useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
 
     const currentState = buildProjectSnapshot(layers);
@@ -6242,3 +5816,5 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     </div>
   );
 }
+
+
