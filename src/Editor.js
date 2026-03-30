@@ -586,6 +586,19 @@ function Slider({min,max,step,value,onChange,onCommit,style}){
   );
 }
 
+function debounce(fn, wait){
+  let timer = null;
+  const debounced = (...args)=>{
+    if(timer) clearTimeout(timer);
+    timer = setTimeout(()=>fn(...args), wait);
+  };
+  debounced.cancel = ()=>{
+    if(timer) clearTimeout(timer);
+    timer = null;
+  };
+  return debounced;
+}
+
 export default function Editor({onExit, user, token, apiUrl, brandKit: initialBrandKit}){
   const resolvedApiUrl = (apiUrl || process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
   const canvasRef       = useRef(null);
@@ -607,6 +620,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const isSavingRef = useRef(false);
   const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
+  const saveProjectRef = useRef(null);
+  const requestDebouncedSaveRef = useRef(()=>{});
   // Performance: Mouse tracking refs to avoid re-renders
   const mouseRef        = useRef({x:0,y:0});
   const lastRimLightRef = useRef(0);
@@ -1285,6 +1300,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       draggingRef.current=null;
       resizingRef.current=null;
       resizeStartRef.current=null;
+      requestDebouncedSaveRef.current();
     }
     window.addEventListener('pointermove',onMove);
     window.addEventListener('pointerup',onUp);
@@ -2150,17 +2166,20 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false} = {})=>{
-    // ── Step 1: Instant UI feedback — happens before EVERYTHING else ──────────
-    // User sees feedback the moment they click Save or auto-save fires.
-    clearTimeout(saveStatusTimerRef.current);
-    setSaveStatus(silent ? 'Saving...' : 'Saving...');
-    setCmdLog(silent ? 'Auto-saving...' : 'Saving project...');
+    // Keep silent saves in the background to avoid interrupting canvas interactions.
+    if(!silent){
+      clearTimeout(saveStatusTimerRef.current);
+      setSaveStatus('Saving...');
+      setCmdLog('Saving project...');
+    }
 
     // ── Step 2: Check lock ────────────────────────────────────────────────────
     if(isSavingRef.current){
       console.warn('[STORAGE] Save skipped — a save is already in progress.');
-      clearTimeout(saveStatusTimerRef.current);
-      setSaveStatus('Unsaved');
+      if(!silent){
+        clearTimeout(saveStatusTimerRef.current);
+        setSaveStatus('Unsaved');
+      }
       return null;
     }
 
@@ -2175,8 +2194,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       console.warn('[STORAGE] Resurrection guard: save aborted — ID', targetId, 'was deleted.');
       currentDesignIdRef.current = null;
       lastSavedSignatureRef.current = '';
-      clearTimeout(saveStatusTimerRef.current);
-      setSaveStatus('');
+      if(!silent){
+        clearTimeout(saveStatusTimerRef.current);
+        setSaveStatus('');
+      }
       return null;
     }
 
@@ -2191,9 +2212,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     console.log('[DEBUG] user_id:', userId || 'NULL – session.user.id missing');
     if(!token){
       console.error('[STORAGE] Cannot save: no active session token.');
-      clearTimeout(saveStatusTimerRef.current);
-      setSaveStatus('Error');
-      setCmdLog('Save failed: not logged in');
+      if(!silent){
+        clearTimeout(saveStatusTimerRef.current);
+        setSaveStatus('Error');
+        setCmdLog('Save failed: not logged in');
+      }
       return null;
     }
 
@@ -2286,12 +2309,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
       lastSavedSignatureRef.current = signature;
 
-      clearTimeout(saveStatusTimerRef.current);
-      setSaveStatus('Saved');
-      saveStatusTimerRef.current = setTimeout(() => setSaveStatus(''), 3000);
+      if(!silent){
+        clearTimeout(saveStatusTimerRef.current);
+        setSaveStatus('Saved');
+        saveStatusTimerRef.current = setTimeout(() => setSaveStatus(''), 3000);
+      }
 
       if(backgroundExistingSave){
-        setCmdLog(`✓ Auto-saved: ${nextName}`);
+        // Keep silent background saves out of main UI state updates.
       } else {
         persistSavedDesigns(savedDesign);
         if(!silent) setCmdLog(`✓ Saved: ${nextName}`);
@@ -2300,9 +2325,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       saveResult = { id: persistedId || null, design: savedDesign };
     }catch(err){
       console.error('[STORAGE] Save failed:', err);
-      clearTimeout(saveStatusTimerRef.current);
-      setSaveStatus('Error');
-      if(!silent) setCmdLog('Save failed');
+      if(!silent){
+        clearTimeout(saveStatusTimerRef.current);
+        setSaveStatus('Error');
+        setCmdLog('Save failed');
+      }
     }finally{
       // THIS MUST EXECUTE NO MATTER WHAT — releases the lock unconditionally.
       isSavingRef.current = false;
@@ -2312,6 +2339,24 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, saturation, setCurrentProjectId]);
 
   useEffect(()=>{
+    saveProjectRef.current = saveProject;
+  },[saveProject]);
+
+  const debouncedSave = useCallback(debounce(() => {
+    if(typeof saveProjectRef.current==='function'){
+      saveProjectRef.current({ silent:true, backgroundExistingSave:true }).catch((error)=>{
+        console.error('[AutoSave] Debounced save failed:', error);
+      });
+    }
+  },1500), []);
+
+  useEffect(()=>{
+    requestDebouncedSaveRef.current = debouncedSave;
+  },[debouncedSave]);
+
+  useEffect(()=>()=>debouncedSave.cancel(),[debouncedSave]);
+
+  useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
 
     const currentState = buildProjectSnapshot(layers);
@@ -2319,52 +2364,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     // Keep latest draft in memory to avoid localStorage quota crashes.
     draftStateRef.current = currentState;
   },[aiPrompt, brightness, brandKitColors, buildProjectSnapshot, contrast, currentDesignId, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
-
-  useEffect(()=>{
-    console.log('[AutoSave] Canvas updated. Checking layers...', layers);
-
-    if(!layers || layers.length===0){
-      console.log('[AutoSave] Canvas is empty. Aborting.');
-      return;
-    }
-
-    const signature=buildSaveSignature(buildProjectSnapshot(layers));
-    if(signature===lastSavedSignatureRef.current){
-      console.warn('[AutoSave] Aborted: signature unchanged, no new canvas changes.');
-      return;
-    }
-
-    setSaveStatus('Unsaved');
-    console.log('[AutoSave] Starting 2-second debounce timer...');
-
-    const timer=setTimeout(async ()=>{
-      try{
-        console.log('[STORAGE] Timer fired. Calling save...');
-
-        if(typeof saveProject!=='function'){
-          console.warn('[STORAGE] Aborted: saveProject function is unavailable');
-          return;
-        }
-
-        const result = await saveProject({
-          silent:true,
-          backgroundExistingSave:true,
-        });
-
-        if(result?.id && result.id !== currentDesignIdRef.current){
-          currentDesignIdRef.current=result.id;
-          setCurrentProjectId(result.id);
-        }
-      }catch(error){
-        console.error('[STORAGE] Timer error:', error);
-      }
-    },2000);
-
-    return()=>{
-      console.log('[STORAGE] Timer reset.');
-      clearTimeout(timer);
-    };
-  },[layers, buildProjectSnapshot, buildSaveSignature, saveProject, setCurrentProjectId, user?.email, projectId, resolvedApiUrl]);
 
   async function loadProject(d){
     try{
@@ -3643,6 +3642,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     return null;
   });
 
+  const CanvasLayerRenderer = memo(function CanvasLayerRenderer({ layers, renderLayerElement }) {
+    return <>{layers.map(obj=>renderLayerElement(obj))}</>;
+  }, (prevProps, nextProps) => prevProps.layers === nextProps.layers);
+
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100vh',background:T.bg,color:T.text,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',overflow:'hidden'}}>
 
@@ -3672,7 +3675,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                   letterSpacing:'0.8px',textTransform:'uppercase',marginBottom:6}}>
                   Save
                 </div>
-                <input value={designName} onChange={e=>setDesignName(e.target.value)}
+                <input value={designName} onChange={e=>setDesignName(e.target.value)} onBlur={debouncedSave}
                   style={css.input} placeholder="Design name..."/>
                 <button onClick={()=>saveProject({ silent: false, nameOverride: designName })}
                   style={{...css.addBtn,marginTop:6}}>
@@ -4362,7 +4365,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                   <div style={{position:'absolute',inset:0,
                     pointerEvents: (activeTool==='brush'||activeTool==='zoom') ? 'none' : 'auto',
                   }}>
-                    {layers.map(obj=>renderLayerElement(obj))}
+                    <CanvasLayerRenderer layers={layers} renderLayerElement={renderLayerElement} />
                   </div>
 
                   {/* Paint overlay for non-active brush images */}
@@ -4902,7 +4905,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     onCommit={v=>updateLayer(selectedId,{opacity:v})}
                     style={{width:'100%'}}/>
                   <span style={css.label}>Live edit text</span>
-                  <input value={selectedLayer.text} onChange={e=>updateLayer(selectedId,{text:e.target.value})} style={css.input} placeholder="Edit text..."/>
+                  <input value={selectedLayer.text} onChange={e=>updateLayer(selectedId,{text:e.target.value})} onBlur={debouncedSave} style={css.input} placeholder="Edit text..."/>
                   <span style={css.label}>Letter spacing</span>
                   <Slider min={-5} max={30} value={selectedLayer.letterSpacing||0}
                     onChange={v=>updateLayerSilent(selectedId,{letterSpacing:v})}
