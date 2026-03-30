@@ -2386,13 +2386,18 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }, 1500)
   );
 
-  const triggerAutoSave = useCallback(()=>{
-    debouncedSaveRef.current();
-  },[]);
+  const triggerAutoSave = useCallback(() => {
+    if (debouncedSaveRef.current) {
+      debouncedSaveRef.current();
+    }
+  }, []);
 
   useEffect(() => {
+    const currentDebouncer = debouncedSaveRef.current;
     return () => {
-      debouncedSaveRef.current.cancel();
+      if (currentDebouncer) {
+        currentDebouncer.cancel();
+      }
     };
   }, []);
 
