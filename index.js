@@ -42,7 +42,44 @@ app.use(cors({
 }));
 
 app.options('*', cors());
-app.use('/webhook', express.raw({ type:'application/json' }));
+
+app.post('/webhook', express.raw({ type:'application/json' }), async (req, res) => {
+  const signature = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error('[WEBHOOK] Signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'customer.subscription.deleted') {
+    const customerId = event.data.object.customer;
+
+    if (customerId) {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_pro: false, subscription_active: false })
+        .eq('stripe_customer_id', customerId);
+
+      if (error) {
+        console.error('[WEBHOOK] Failed to revoke subscription for customer:', customerId, error.message);
+      } else {
+        console.log('[WEBHOOK] Subscription revoked for customer:', customerId);
+      }
+    } else {
+      console.warn('[WEBHOOK] customer.subscription.deleted missing customer ID');
+    }
+  }
+
+  return res.send({ received: true });
+});
+
 app.use(express.json({ limit:'50mb' }));
 app.use(express.urlencoded({ limit:'50mb', extended:true }));
 
@@ -891,62 +928,6 @@ app.post('/billing/portal', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('[billing/portal] error:', err);
     res.status(500).json({ error: err.message || 'Failed to create billing portal session' });
-  }
-});
-
-app.post('/webhook', express.raw({type:'application/json'}), async (req,res)=>{
-  try{
-    const sig=req.headers['stripe-signature'];
-    const event=stripe.webhooks.constructEvent(req.body,sig,process.env.STRIPE_WEBHOOK_SECRET);
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object;
-        const customerEmail = session.customer_details?.email;
-
-        console.log(`[CEO LOG] 🚀 Webhook received for email: ${customerEmail}`);
-
-        if (!customerEmail) {
-          console.error("[CEO ERROR] ❌ No email found in Stripe session object.");
-          break;
-        }
-
-        // UPSERT: This creates the row if it's missing, or updates it if it exists.
-        console.log(`[CEO LOG] 🔨 Attempting DB Upsert for ${customerEmail}...`);
-        const { data, error: dbError } = await supabase
-          .from('profiles')
-          .upsert(
-            { email: customerEmail, is_pro: true },
-            { onConflict: 'email' }
-          );
-
-        if (dbError) {
-          console.error(`[CEO ERROR] ❌ Supabase rejected the upsert: ${dbError.message}`);
-          console.error(`[CEO ERROR] Hint: Check if RLS is blocking the Service Key or if the email column is unique.`);
-        } else {
-          console.log(`[CEO LOG] ✅ Database successfully updated for ${customerEmail}.`);
-
-          // EMAIL TRIGGER
-          try {
-            console.log(`[CEO LOG] 📧 Attempting to send Resend email to ${customerEmail}...`);
-            await resend.emails.send({
-              from: 'ThumbFrame <onboarding@resend.dev>',
-              to: customerEmail,
-              subject: 'Welcome to ThumbFrame Pro! 🚀',
-              html: '<h1>Welcome to Pro!</h1><p>Your features are unlocked.</p>'
-            });
-            console.log(`[CEO LOG] 📬 Welcome email successfully sent.`);
-          } catch (emailErr) {
-            console.error(`[CEO ERROR] ❌ Resend failed: ${emailErr.message}`);
-          }
-        }
-        break;
-      }
-      default:
-        break;
-    }
-    res.json({received:true});
-  }catch(err){
-    res.status(400).send(`Webhook Error: ${err.message}`);
   }
 });
 
