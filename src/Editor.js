@@ -2063,74 +2063,86 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false} = {})=>{
-    // Concurrency lock — if a save is already in-flight, abort immediately.
-    // This prevents the upload race condition where two auto-saves fire back-to-back
-    // before the first one returns the new UUID, causing duplicate rows.
+    // ── Step 1: Check lock ────────────────────────────────────────────────────
+    // If a save is already in-flight, bail before doing any work.
     if(isSavingRef.current){
       console.warn('[STORAGE] Save skipped — a save is already in progress.');
       return null;
     }
-    isSavingRef.current = true;
 
-    // Immediate UI feedback — don't wait for the network
+    // ── Step 2: All pre-flight checks & async prep — UNLOCKED ────────────────
+    // If any of these fail or return early, the lock was never engaged so
+    // there is no deadlock to worry about.
+
+    const nextName = (nameOverride||designName||'Untitled Project').trim()||'Untitled Project';
+    const snapshot = buildProjectSnapshot();
+    const signature = buildSaveSignature({...snapshot, designName: nextName});
+
+    // Resurrection guard — synchronous, ref-based, immune to React state lag.
+    const targetId = currentDesignIdRef.current;
+    if(targetId && deletedIdsRef.current.has(targetId)){
+      console.warn('[STORAGE] Resurrection guard: save aborted — ID', targetId, 'was deleted.');
+      currentDesignIdRef.current = null;
+      lastSavedSignatureRef.current = '';
+      clearTimeout(saveStatusTimerRef.current);
+      setSaveStatus('');
+      return null;
+    }
+
+    // Thumbnail: only generate for manual saves — skipping it keeps auto-saves fast.
+    const thumbnail = silent ? null : await generateDesignThumbnail(snapshot.layers);
+
+    // Session — get auth token before locking.
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const email = session?.user?.email;
+    const userId = session?.user?.id;
+    const resolvedPlatform = platform || 'youtube';
+
+    console.log('[DEBUG] Sending token to backend:', token ? token.substring(0, 10) + '...' : 'NO TOKEN – session is null');
+    console.log('[DEBUG] user_id:', userId || 'NULL – session.user.id missing');
+    if(!token){
+      console.error('[STORAGE] Cannot save: no active session token.');
+      setSaveStatus('Error');
+      return null;
+    }
+
+    // Immediate UI feedback — after pre-flight passes, right before we lock.
     clearTimeout(saveStatusTimerRef.current);
     setSaveStatus('Saving...');
 
+    // ── Step 3: Engage lock — right before the fetch call ────────────────────
+    isSavingRef.current = true;
+
+    let persistedId = currentDesignIdRef.current;
+    let persistedEditedAt = new Date().toISOString();
+    let saveResult = null;
+
+    // ── Step 4: Ironclad try / catch / finally ────────────────────────────────
+    // NO return statements inside this try block — every path falls through
+    // to finally so the lock is guaranteed to release.
     try{
-      const nextName=(nameOverride||designName||'Untitled Project').trim()||'Untitled Project';
-      const snapshot=buildProjectSnapshot();
-      const signature=buildSaveSignature({...snapshot,designName:nextName});
-
-      // Rule 2 — Resurrection guard: abort immediately if the target ID was deleted.
-      // This ref-based check is synchronous and immune to React state update lag.
-      const targetId = currentDesignIdRef.current;
-      if(targetId && deletedIdsRef.current.has(targetId)){
-        console.warn('[STORAGE] Resurrection guard: save aborted — ID', targetId, 'was deleted.');
-        currentDesignIdRef.current = null;
-        lastSavedSignatureRef.current = '';
-        clearTimeout(saveStatusTimerRef.current);
-        setSaveStatus('');
-        return null;
-      }
-      // Thumbnail optimization: only generate for manual saves — auto-saves skip it to stay fast.
-      const thumbnail = silent ? null : await generateDesignThumbnail(snapshot.layers);
-
-      let persistedId=currentDesignIdRef.current;
-      let persistedEditedAt = new Date().toISOString();
-
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      const email = session?.user?.email;
-      const userId = session?.user?.id;
-      const resolvedPlatform = platform || 'youtube';
-
-      console.log('[DEBUG] Sending token to backend:', token ? token.substring(0, 10) + '...' : 'NO TOKEN – session is null');
-      console.log('[DEBUG] user_id:', userId || 'NULL – session.user.id missing');
-      if (!token) {
-        throw new Error('[STORAGE] Cannot save: no active session token. Please log in again.');
-      }
-
-      const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization': 'Bearer ' + token},
-          body:JSON.stringify({
-            id:currentDesignIdRef.current||undefined,
-            name:nextName,
-            platform:resolvedPlatform,
-            user_email:email,
-            user_id:userId,
-            json_data:{
-              name:nextName,
-              platform:resolvedPlatform,
-              layers:snapshot.layers,
-              brightness,
-              contrast,
-              saturation,
-              hue,
-            },
-            thumbnail,
-          }),
-        });
+      const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          id: currentDesignIdRef.current || undefined,
+          name: nextName,
+          platform: resolvedPlatform,
+          user_email: email,
+          user_id: userId,
+          json_data: {
+            name: nextName,
+            platform: resolvedPlatform,
+            layers: snapshot.layers,
+            brightness,
+            contrast,
+            saturation,
+            hue,
+          },
+          thumbnail,
+        }),
+      });
 
       if(!response.ok){
         const errText = await response.text().catch(()=>'');
@@ -2143,12 +2155,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
       console.log('[STORAGE] Save succeeded. ID:', returnedId, '| Name:', nextName, '| Platform:', resolvedPlatform);
 
-      // Update ref and sync URL if the server returned an ID that differs from what we held.
+      // Update ref and sync URL if the server returned a new ID.
       if(returnedId && returnedId !== currentDesignIdRef.current){
-        currentDesignIdRef.current=returnedId;
+        currentDesignIdRef.current = returnedId;
         setCurrentProjectId(returnedId);
       }
-      // Sync URL whenever the returned ID isn't already in the query string.
       if(returnedId){
         const urlId = new URLSearchParams(window.location.search).get('project');
         if(urlId !== String(returnedId)){
@@ -2157,23 +2168,23 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       }
       persistedId = returnedId || persistedId;
 
-      const savedDesign={
-        id:persistedId||projectId||Date.now(),
+      const savedDesign = {
+        id: persistedId || projectId || Date.now(),
         projectId,
-        currentDesignId:persistedId||null,
-        name:nextName,
-        created:new Date().toLocaleString(),
+        currentDesignId: persistedId || null,
+        name: nextName,
+        created: new Date().toLocaleString(),
         platform,
-        layers:snapshot.layers,
+        layers: snapshot.layers,
         brightness,
         contrast,
         saturation,
         hue,
-        last_edited:persistedEditedAt,
-        json_data:{
-          name:nextName,
+        last_edited: persistedEditedAt,
+        json_data: {
+          name: nextName,
           platform,
-          layers:snapshot.layers,
+          layers: snapshot.layers,
           brightness,
           contrast,
           saturation,
@@ -2182,30 +2193,31 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         thumbnail,
       };
 
-      lastSavedSignatureRef.current=signature;
+      lastSavedSignatureRef.current = signature;
 
-      // Show 'Saved' for 3 seconds then clear the status.
       clearTimeout(saveStatusTimerRef.current);
       setSaveStatus('Saved');
-      saveStatusTimerRef.current = setTimeout(()=> setSaveStatus(''), 3000);
+      saveStatusTimerRef.current = setTimeout(() => setSaveStatus(''), 3000);
 
       if(backgroundExistingSave){
         setCmdLog(`✓ Auto-saved: ${nextName}`);
-        return { id:persistedId||null, design:savedDesign };
+      } else {
+        persistSavedDesigns(savedDesign);
+        if(!silent) setCmdLog(`✓ Saved: ${nextName}`);
       }
 
-      persistSavedDesigns(savedDesign);
-      if(!silent) setCmdLog(`✓ Saved: ${nextName}`);
-      return { id:persistedId||null, design:savedDesign };
+      saveResult = { id: persistedId || null, design: savedDesign };
     }catch(err){
-      console.error('[STORAGE] Error:', err);
+      console.error('[STORAGE] Save failed:', err);
       clearTimeout(saveStatusTimerRef.current);
       setSaveStatus('Error');
       if(!silent) setCmdLog('Save failed');
-      throw err;
-    } finally {
+    }finally{
+      // THIS MUST EXECUTE NO MATTER WHAT — releases the lock unconditionally.
       isSavingRef.current = false;
     }
+
+    return saveResult;
   },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, saturation, setCurrentProjectId]);
 
   useEffect(()=>{
