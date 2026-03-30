@@ -687,7 +687,7 @@ app.get('/designs/list', async (req, res) => {
 
     const { data, error } = await supabase
       .from('thumbnails')
-      .select('id,user_email,name,last_edited,json_data')
+      .select('id, name, user_email, platform, thumbnail, last_edited, json_data')
       .eq('user_email', email)
       .order('last_edited', { ascending: false });
 

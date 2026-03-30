@@ -2082,17 +2082,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         setSaveStatus('');
         return null;
       }
-      // Secondary zombie check: catch IDs cleared from state but not yet in deletedIdsRef.
-      if(targetId){
-        const stillExists = savedDesigns.some(
-          d => d.id === targetId || d.currentDesignId === targetId
-        );
-        if(!stillExists){
-          console.warn('[STORAGE] Zombie check: stale ref cleared for ID', targetId);
-          currentDesignIdRef.current = null;
-        }
-      }
-
       // Thumbnail optimization: only generate for manual saves — auto-saves skip it to stay fast.
       const thumbnail = silent ? null : await generateDesignThumbnail(snapshot.layers);
 
