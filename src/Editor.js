@@ -1375,11 +1375,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const ni=historyIndexRef.current-1;if(ni<0)return;
     historyIndexRef.current=ni;setHistoryIndex(ni);
     setLayers(JSON.parse(JSON.stringify(historyRef.current[ni])));
+    requestDebouncedSaveRef.current();
   }
   function redo(){
     const ni=historyIndexRef.current+1;if(ni>=historyRef.current.length)return;
     historyIndexRef.current=ni;setHistoryIndex(ni);
     setLayers(JSON.parse(JSON.stringify(historyRef.current[ni])));
+    requestDebouncedSaveRef.current();
   }
 
   function addLayer(obj){
@@ -1389,13 +1391,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const layer={...obj,id,x:sx,y:sy,opacity:100,hidden:false,locked:false,blendMode:'normal',flipH:false,flipV:false,rotation:0,effects:defaultEffects()};
     setLayers(prev=>{const nl=[...prev,layer];pushHistory(nl);return nl;});
     setSelectedId(id);
+    requestDebouncedSaveRef.current();
   }
 
-  function updateLayer(id,updates){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,...updates}:l);pushHistoryDebounced(nl);return nl;});}
+  function updateLayer(id,updates){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,...updates}:l);pushHistoryDebounced(nl);return nl;});requestDebouncedSaveRef.current();}
   function updateLayerSilent(id,updates){setLayers(prev=>prev.map(l=>l.id===id?{...l,...updates}:l));}
-  function updateLayerEffect(id,key,value){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l);pushHistory(nl);return nl;});}
+  function updateLayerEffect(id,key,value){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l);pushHistory(nl);return nl;});requestDebouncedSaveRef.current();}
   function updateLayerEffectSilent(id,key,value){setLayers(prev=>prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l));}
-  function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};});pushHistory(nl);return nl;});}
+  function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};});pushHistory(nl);return nl;});requestDebouncedSaveRef.current();}
   function updateLayerEffectNestedSilent(id,ek,sk,value){setLayers(prev=>prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};}));}
   function deleteLayer(id){
     const layer=layers.find(l=>l.id===id);
@@ -1404,11 +1407,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     if(layer.type==='background'){
       if(layers.length<=1) return; // can't delete if only layer
     }
-    setLayers(prev=>{const nl=prev.filter(l=>l.id!==id);pushHistory(nl);return nl;});setSelectedId(null);
+    setLayers(prev=>{const nl=prev.filter(l=>l.id!==id);pushHistory(nl);return nl;});setSelectedId(null);requestDebouncedSaveRef.current();
   }
-  function moveLayerUp(id){const idx=layers.findIndex(l=>l.id===id);if(idx>=layers.length-1)return;const nl=[...layers];[nl[idx],nl[idx+1]]=[nl[idx+1],nl[idx]];setLayers(nl);pushHistory(nl);}
-  function moveLayerDown(id){const idx=layers.findIndex(l=>l.id===id);if(idx<=0)return;const nl=[...layers];[nl[idx],nl[idx-1]]=[nl[idx-1],nl[idx]];setLayers(nl);pushHistory(nl);}
-  function duplicateLayerFromObj(layer){const nl2={...layer,id:newId(),x:layer.x+16,y:layer.y+16};setLayers(prev=>{const nl=[...prev,nl2];pushHistory(nl);return nl;});setSelectedId(nl2.id);}
+  function moveLayerUp(id){const idx=layers.findIndex(l=>l.id===id);if(idx>=layers.length-1)return;const nl=[...layers];[nl[idx],nl[idx+1]]=[nl[idx+1],nl[idx]];setLayers(nl);pushHistory(nl);requestDebouncedSaveRef.current();}
+  function moveLayerDown(id){const idx=layers.findIndex(l=>l.id===id);if(idx<=0)return;const nl=[...layers];[nl[idx],nl[idx-1]]=[nl[idx-1],nl[idx]];setLayers(nl);pushHistory(nl);requestDebouncedSaveRef.current();}
+  function duplicateLayerFromObj(layer){const nl2={...layer,id:newId(),x:layer.x+16,y:layer.y+16};setLayers(prev=>{const nl=[...prev,nl2];pushHistory(nl);return nl;});setSelectedId(nl2.id);requestDebouncedSaveRef.current();}
   function duplicateLayer(id){const layer=layers.find(l=>l.id===id);if(!layer||layer.type==='background')return;duplicateLayerFromObj(layer);}
   function updateBg(updates){const bgL=layers.find(l=>l.type==='background');if(bgL)updateLayer(bgL.id,updates);}
   function getLayerSrc(layer){
@@ -2179,6 +2182,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     setAbSelected(null);
     setCmdLog(`Applied: ${variant.label}`);
     setActiveTool('select');
+    requestDebouncedSaveRef.current();
   }
 
   function saveDesign(name){
@@ -4344,6 +4348,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     rimPaintingRef.current=false;
                     return;
                   }
+                  requestDebouncedSaveRef.current();
+                }}
+                onTouchEnd={()=>{
+                  requestDebouncedSaveRef.current();
                 }}
                 onMouseLeave={(e)=>{
                   if(activeTool==='rimlight'){
