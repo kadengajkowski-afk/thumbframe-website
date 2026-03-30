@@ -656,10 +656,13 @@ app.post('/designs/save', async (req,res)=>{
       user_email:   user.email,
       name:         jsonData.name || body.name || 'Untitled',
       platform:     jsonData.platform || body.platform || 'youtube',
-      thumbnail:    body.thumbnail || null,
       json_data:    jsonData,
       last_edited:  new Date().toISOString(),
     };
+
+    if(typeof body.thumbnail === 'string'){
+      upsertRow.thumbnail = body.thumbnail;
+    }
 
     console.log('[STORAGE] Upserting row for user:', user.email, '| id:', upsertRow.id || '(new)', '| name:', upsertRow.name, '| thumbnail:', upsertRow.thumbnail ? `present (${String(upsertRow.thumbnail).length} chars)` : 'NULL');
 

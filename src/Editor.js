@@ -601,6 +601,7 @@ function debounce(fn, wait){
 
 export default function Editor({onExit, user, token, apiUrl, brandKit: initialBrandKit}){
   const resolvedApiUrl = (apiUrl || process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
+  const [layers,setLayersRaw]              = useState([]);
   const canvasRef       = useRef(null);
   const brushOverlayRef = useRef(null);
   const cmdInputRef     = useRef(null);
@@ -611,7 +612,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const dragOffsetRef   = useRef({x:0,y:0});
   const resizeStartRef  = useRef(null);
   const zoomRef         = useRef(1);
-  const layersRef       = useRef([]);
+  const layersRef       = useRef(layers);
   const mountedRef = useRef(true);
   const currentDesignIdRef = useRef(null);
   const lastSavedSignatureRef = useRef('');
@@ -640,7 +641,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [activeTool,setActiveTool]         = useState('select');
   const [activeCategory,setActiveCategory] = useState('Gaming');
   const [darkMode,setDarkMode]             = useState(true);
-  const [layers,setLayersRaw]              = useState([]);
   const [selectedId,setSelectedId]         = useState(null);
   const [zoom,setZoom]                     = useState(1);
   const [panOffset,setPanOffset]           = useState({x:0,y:0});
@@ -771,6 +771,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
   }
 
+  useEffect(()=>{
+    layersRef.current = layers;
+  },[layers]);
+
   const p  = PLATFORMS[platform];
 
   saveMetaRef.current = {
@@ -855,7 +859,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     });
   }
 
-  const generateDesignThumbnail = useCallback(async (layerSnapshot)=>{
+  const generateDesignThumbnail = useCallback(async (layerSnapshot, quality=0.6)=>{
     try{
       const tmpCanvas = document.createElement('canvas');
       tmpCanvas.width = 320;
@@ -900,7 +904,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
       let dataUrl;
       try{
-        dataUrl = tmpCanvas.toDataURL('image/jpeg',0.6);
+        dataUrl = tmpCanvas.toDataURL('image/jpeg',quality);
       }catch(err){
         console.error('[THUMBNAIL] toDataURL failed:', {
           name: err?.name,
@@ -2265,7 +2269,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     // NO return statements inside try — every path falls through to finally.
     try{
       // Thumbnail: only generate for manual saves — keeps auto-saves fast.
-      const thumbnail = silent ? null : await generateDesignThumbnail(snapshot.layers);
+      const freshestLayers = JSON.parse(JSON.stringify(layersRef.current));
+      const thumbnail = silent
+        ? await generateDesignThumbnail(freshestLayers,0.1)
+        : await generateDesignThumbnail(freshestLayers,0.6);
       console.log('[SAVE] thumbnail result:', thumbnail ? `data URL (${thumbnail.length} chars)` : 'NULL/falsy');
 
       const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save', {
@@ -2280,7 +2287,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           json_data: {
             name: nextName,
             platform: resolvedPlatform,
-            layers: snapshot.layers,
+            layers: freshestLayers,
             brightness: snapshot.brightness,
             contrast: snapshot.contrast,
             saturation: snapshot.saturation,
@@ -2321,7 +2328,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         name: nextName,
         created: new Date().toLocaleString(),
         platform: resolvedPlatform,
-        layers: snapshot.layers,
+        layers: freshestLayers,
         brightness: snapshot.brightness,
         contrast: snapshot.contrast,
         saturation: snapshot.saturation,
@@ -2330,7 +2337,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         json_data: {
           name: nextName,
           platform: resolvedPlatform,
-          layers: snapshot.layers,
+          layers: freshestLayers,
           brightness: snapshot.brightness,
           contrast: snapshot.contrast,
           saturation: snapshot.saturation,
