@@ -859,8 +859,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     });
   }
 
-  const generateDesignThumbnail = useCallback(async (layerSnapshot, quality=0.6)=>{
+  const generateDesignThumbnail = useCallback(async (quality=1.0)=>{
     try{
+      const layerSnapshot = JSON.parse(JSON.stringify(layersRef.current));
       const tmpCanvas = document.createElement('canvas');
       tmpCanvas.width = 320;
       tmpCanvas.height = Math.round(320 * p.preview.h / p.preview.w);
@@ -2241,43 +2242,40 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       return null;
     }
 
-    // Session — get auth token before locking.
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    const email = session?.user?.email;
-    const userId = session?.user?.id;
-    const resolvedPlatform = snapshot.platform || 'youtube';
-
-    console.log('[DEBUG] Sending token to backend:', token ? token.substring(0, 10) + '...' : 'NO TOKEN – session is null');
-    console.log('[DEBUG] user_id:', userId || 'NULL – session.user.id missing');
-    if(!token){
-      console.error('[STORAGE] Cannot save: no active session token.');
-      if(!silent){
-        clearTimeout(saveStatusTimerRef.current);
-        setSaveStatus('Error');
-        setCmdLog('Save failed: not logged in');
-      }
-      return null;
-    }
-
     // ── Step 4: Engage lock — right before any network activity ──────────────
     isSavingRef.current = true;
-
-    let persistedId = currentDesignIdRef.current;
-    let persistedEditedAt = new Date().toISOString();
-    let saveResult = null;
-
-    // ── Step 5: Ironclad try / catch / finally ────────────────────────────────
-    // generateDesignThumbnail is inside the try block so a failure here is
-    // caught and the finally block always releases isSavingRef.
-    // NO return statements inside try — every path falls through to finally.
     try{
-      // Thumbnail: only generate for manual saves — keeps auto-saves fast.
+      // Session and auth checks are inside the lock-protected try block.
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const email = session?.user?.email;
+      const userId = session?.user?.id;
+      const resolvedPlatform = snapshot.platform || 'youtube';
+
+      console.log('[DEBUG] Sending token to backend:', token ? token.substring(0, 10) + '...' : 'NO TOKEN – session is null');
+      console.log('[DEBUG] user_id:', userId || 'NULL – session.user.id missing');
+      if(!token){
+        console.error('[STORAGE] Cannot save: no active session token.');
+        if(!silent){
+          clearTimeout(saveStatusTimerRef.current);
+          setSaveStatus('Error');
+          setCmdLog('Save failed: not logged in');
+        }
+        return null;
+      }
+
+      let thumbnailData = null;
+      try{
+        const quality = silent ? 0.1 : 1.0;
+        thumbnailData = await generateDesignThumbnail(quality);
+      }catch(imgErr){
+        console.warn('[STORAGE] Thumbnail generation failed, continuing without preview:', imgErr);
+      }
+      console.log('[SAVE] thumbnail result:', thumbnailData ? `data URL (${thumbnailData.length} chars)` : 'NULL/falsy');
+
       const freshestLayers = JSON.parse(JSON.stringify(layersRef.current));
-      const thumbnail = silent
-        ? await generateDesignThumbnail(freshestLayers,0.1)
-        : await generateDesignThumbnail(freshestLayers,0.6);
-      console.log('[SAVE] thumbnail result:', thumbnail ? `data URL (${thumbnail.length} chars)` : 'NULL/falsy');
+      let persistedId = currentDesignIdRef.current;
+      let persistedEditedAt = new Date().toISOString();
 
       const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save', {
         method: 'POST',
@@ -2297,7 +2295,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             saturation: snapshot.saturation,
             hue: snapshot.hue,
           },
-          thumbnail,
+          thumbnail: thumbnailData,
         }),
       });
 
@@ -2347,7 +2345,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           saturation: snapshot.saturation,
           hue: snapshot.hue,
         },
-        thumbnail,
+        thumbnail: thumbnailData,
       };
 
       lastSavedSignatureRef.current = signature;
@@ -2363,7 +2361,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         setCmdLog(`✓ Saved: ${nextName}`);
       }
 
-      saveResult = { id: persistedId || null, design: savedDesign };
+      return { id: persistedId || null, design: savedDesign };
     }catch(err){
       console.error('[STORAGE] Save failed:', err);
       if(!silent){
@@ -2371,12 +2369,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         setSaveStatus('Error');
         setCmdLog('Save failed');
       }
+      return null;
     }finally{
       // THIS MUST EXECUTE NO MATTER WHAT — releases the lock unconditionally.
       isSavingRef.current = false;
     }
-
-    return saveResult;
   },[buildSaveSignature, generateDesignThumbnail, setCurrentProjectId]);
 
   const debouncedSave = useMemo(
