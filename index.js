@@ -840,6 +840,56 @@ app.post('/checkout', async(req,res)=>{
   }
 });
 
+app.post('/billing/portal', authMiddleware, async (req, res) => {
+  try {
+    const userEmail = req.user.email;
+    console.log('[billing/portal] request for:', userEmail);
+
+    // 1. Try to find stripe_customer_id in the profiles table
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('stripe_customer_id')
+      .eq('email', userEmail)
+      .single();
+
+    let customerId = profile?.stripe_customer_id || null;
+
+    // 2. If no stored customer ID, search Stripe by email (or create)
+    if (!customerId) {
+      console.log('[billing/portal] No stored customer ID — searching Stripe by email:', userEmail);
+      const existing = await stripe.customers.list({ email: userEmail, limit: 1 });
+
+      if (existing.data.length > 0) {
+        customerId = existing.data[0].id;
+        console.log('[billing/portal] Found existing Stripe customer:', customerId);
+      } else {
+        const newCustomer = await stripe.customers.create({ email: userEmail });
+        customerId = newCustomer.id;
+        console.log('[billing/portal] Created new Stripe customer:', customerId);
+      }
+
+      // Persist customer ID back to profile if the column exists
+      await supabase
+        .from('profiles')
+        .update({ stripe_customer_id: customerId })
+        .eq('email', userEmail);
+    }
+
+    const returnUrl = `${(process.env.FRONTEND_URL || 'https://thumbframe.com').replace(/\/$/, '')}/dashboard`;
+
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: returnUrl,
+    });
+
+    console.log('[billing/portal] Portal session created:', portalSession.id);
+    res.json({ url: portalSession.url });
+  } catch (err) {
+    console.error('[billing/portal] error:', err);
+    res.status(500).json({ error: err.message || 'Failed to create billing portal session' });
+  }
+});
+
 app.post('/webhook', express.raw({type:'application/json'}), async (req,res)=>{
   try{
     const sig=req.headers['stripe-signature'];
