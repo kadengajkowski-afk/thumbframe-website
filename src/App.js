@@ -954,9 +954,12 @@ function AuthPage({ mode, setPage, onAuth }) {
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 function Dashboard({ setPage, user }) {
-  const [designs, setDesigns] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [designs,   setDesigns]   = useState([]);
+  const [loading,   setLoading]   = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [deletingId, setDeletingId] = useState(null);
+
+  const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
 
   useEffect(() => {
     const userEmail = user?.email;
@@ -967,50 +970,31 @@ function Dashboard({ setPage, user }) {
       return;
     }
 
-    const apiBase = (process.env.REACT_APP_API_URL || '').replace(/\/$/, '');
-    const listPath = `/designs/list?email=${encodeURIComponent(userEmail)}`;
-    const listUrl = apiBase ? `${apiBase}${listPath}` : listPath;
     const controller = new AbortController();
-
     setLoading(true);
     setLoadError('');
 
-    fetch(listUrl, { signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed to fetch designs list'))))
+    fetch(`${API_URL}/designs/list?email=${encodeURIComponent(userEmail)}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((payload) => {
-        const list = Array.isArray(payload)
-          ? payload
-          : (Array.isArray(payload?.data) ? payload.data : []);
+        const list = Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
         setDesigns(list);
         setLoading(false);
       })
-      .catch((error) => {
-        if (error.name === 'AbortError') return;
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
         setDesigns([]);
         setLoadError('Could not load saved designs right now.');
         setLoading(false);
       });
 
     return () => controller.abort();
-  }, [user?.email]);
-
-  function parseCanvasData(canvasData) {
-    if (!canvasData) return null;
-    if (typeof canvasData === 'object') return canvasData;
-    if (typeof canvasData !== 'string') return null;
-
-    try {
-      return JSON.parse(canvasData);
-    } catch {
-      return null;
-    }
-  }
+  }, [user?.email, API_URL]);
 
   function getProjectName(design) {
-    const parsed = parseCanvasData(design.canvas_data);
-    const fromCanvas = parsed?.name || parsed?.title || parsed?.projectName;
-    if (typeof fromCanvas === 'string' && fromCanvas.trim()) return fromCanvas.trim();
-
+    if (design?.name && design.name.trim()) return design.name.trim();
+    const fromJson = design?.json_data?.name;
+    if (fromJson && typeof fromJson === 'string' && fromJson.trim()) return fromJson.trim();
     if (design?.id) return `Project ${String(design.id).slice(-6)}`;
     return 'Untitled project';
   }
@@ -1022,9 +1006,47 @@ function Dashboard({ setPage, user }) {
     return `Last edited: ${date.toLocaleString()}`;
   }
 
+  function openDesign(id) {
+    window.history.replaceState(null, '', `/editor?project=${encodeURIComponent(id)}`);
+    setPage('editor');
+  }
+
+  async function handleDelete(e, id) {
+    e.stopPropagation();
+    if (!id) { console.error('[Dashboard] Cannot delete: Project ID is missing.'); return; }
+    if (deletingId) return;
+
+    setDeletingId(id);
+    try {
+      const { data: { session } } = await import('./supabaseClient').then(m => m.default.auth.getSession());
+      const token = session?.access_token;
+      if (!token) throw new Error('No auth token');
+
+      const res = await fetch(`${API_URL}/designs/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Delete failed (${res.status}): ${body}`);
+      }
+
+      // Instant UI update — remove the card without a page refresh.
+      setDesigns(prev => prev.filter(d => d.id !== id));
+    } catch (err) {
+      console.error('[Dashboard] Delete error:', err.message);
+      alert(`Could not delete design: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', paddingTop: 80 }}>
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '48px 24px' }}>
+
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 36, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ fontSize: 28, fontWeight: '800', letterSpacing: '-0.5px', marginBottom: 4, color: C.text }}>Your designs</h1>
@@ -1035,6 +1057,7 @@ function Dashboard({ setPage, user }) {
           </button>
         </div>
 
+        {/* States */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: C.muted, fontSize: 14 }}>Loading designs…</div>
         ) : loadError ? (
@@ -1047,31 +1070,72 @@ function Dashboard({ setPage, user }) {
             <div style={{ fontSize: 40, marginBottom: 14 }}>🎨</div>
             <div style={{ fontSize: 16, fontWeight: '700', marginBottom: 8, color: C.text }}>No saved designs yet</div>
             <div style={{ fontSize: 13, color: C.muted, marginBottom: 24, lineHeight: 1.6 }}>
-              Open the editor, create a thumbnail, and save it with Ctrl+S.<br/>It'll appear here.
+              Open the editor, create a thumbnail, and it'll appear here automatically.
             </div>
             <button onClick={() => setPage('editor')} style={{ padding: '10px 22px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: '600' }}>
               Open editor →
             </button>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
-            {designs.map((d) => (
-              <div key={d.id || `${d.user_email || 'design'}-${d.last_edited || 'unknown'}`} onClick={() => setPage('editor')}
-                style={{ borderRadius: 10, border: `1px solid ${C.border}`, background: C.panel, cursor: 'pointer', overflow: 'hidden', transition: 'transform 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
-                <div style={{ aspectRatio: '16/9', background: `linear-gradient(135deg, ${C.bg3}, ${C.bg2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                  <div style={{ textAlign: 'center', color: C.muted }}>
-                    <div style={{ fontSize: 24, marginBottom: 6 }}>🗂️</div>
-                    <div style={{ fontSize: 11, fontWeight: '600', letterSpacing: '0.2px' }}>Saved canvas data</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+            {designs.map((d) => {
+              const name = getProjectName(d);
+              const isDeleting = deletingId === d.id;
+              return (
+                <div
+                  key={d.id}
+                  style={{ borderRadius: 10, border: `1px solid ${C.border}`, background: C.panel, overflow: 'hidden', transition: 'transform 0.15s, opacity 0.15s', opacity: isDeleting ? 0.5 : 1, display: 'flex', flexDirection: 'column' }}
+                  onMouseEnter={e => { if (!isDeleting) e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}
+                >
+                  {/* Thumbnail — clickable */}
+                  <div
+                    onClick={() => openDesign(d.id)}
+                    style={{ aspectRatio: '16/9', background: C.bg3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    {d.thumbnail ? (
+                      <img
+                        src={d.thumbnail}
+                        alt={name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                    ) : (
+                      <div style={{ textAlign: 'center', color: C.muted }}>
+                        <div style={{ fontSize: 22, marginBottom: 4 }}>🖼</div>
+                        <div style={{ fontSize: 11, fontWeight: '600' }}>No Preview</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info + actions */}
+                  <div style={{ padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                    <div
+                      onClick={() => openDesign(d.id)}
+                      style={{ fontSize: 13, fontWeight: '600', color: C.text, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      title={name}
+                    >
+                      {name}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.muted }}>{formatEditedDate(d.last_edited)}</div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                      <button
+                        onClick={() => openDesign(d.id)}
+                        style={{ flex: 1, padding: '6px 0', borderRadius: 5, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text2, fontSize: 11, fontWeight: '600', cursor: 'pointer' }}
+                      >
+                        Open
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(e, d.id)}
+                        disabled={isDeleting}
+                        style={{ padding: '6px 10px', borderRadius: 5, border: `1px solid ${C.border}`, background: 'transparent', color: isDeleting ? C.muted : '#c0392b', fontSize: 11, fontWeight: '600', cursor: isDeleting ? 'not-allowed' : 'pointer' }}
+                      >
+                        {isDeleting ? '…' : 'Delete'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div style={{ padding: '12px 14px' }}>
-                  <div style={{ fontSize: 13, fontWeight: '600', color: C.text, marginBottom: 3 }}>{getProjectName(d)}</div>
-                  <div style={{ fontSize: 11, color: C.muted }}>{formatEditedDate(d.last_edited)}</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
