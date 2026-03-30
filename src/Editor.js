@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 import BrandKitSetupModal from './BrandKit';
@@ -620,7 +620,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const isSavingRef = useRef(false);
   const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
-  const saveProjectRef = useRef(null);
+  const saveMetaRef = useRef({});
   const requestDebouncedSaveRef = useRef(()=>{});
   // Performance: Mouse tracking refs to avoid re-renders
   const mouseRef        = useRef({x:0,y:0});
@@ -772,6 +772,22 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   const p  = PLATFORMS[platform];
+
+  saveMetaRef.current = {
+    aiPrompt,
+    brandKitColors,
+    brightness,
+    contrast,
+    designName,
+    fillColor,
+    hue,
+    lastGeneratedImageUrl,
+    platform,
+    projectId,
+    saturation,
+    strokeColor,
+    textColor,
+  };
 
   const buildProjectSnapshot = useCallback((layerSnapshot = layersRef.current)=>(
     {
@@ -2165,7 +2181,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     saveProject({nameOverride:name, silent:false}).catch(()=>{});
   }
 
-  const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false} = {})=>{
+  const saveProject = useCallback(async ({nameOverride, silent=true} = {})=>{
     // Keep silent saves in the background to avoid interrupting canvas interactions.
     if(!silent){
       clearTimeout(saveStatusTimerRef.current);
@@ -2184,8 +2200,24 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
 
     // ── Step 3: All pre-flight checks — UNLOCKED ─────────────────────────────
-    const nextName = (nameOverride||designName||'Untitled Project').trim()||'Untitled Project';
-    const snapshot = buildProjectSnapshot();
+    const nextName = (nameOverride||saveMetaRef.current.designName||'Untitled Project').trim()||'Untitled Project';
+    const snapshot = {
+      projectId: saveMetaRef.current.projectId,
+      currentDesignId: currentDesignIdRef.current,
+      platform: saveMetaRef.current.platform,
+      layers: JSON.parse(JSON.stringify(layersRef.current)),
+      brightness: saveMetaRef.current.brightness,
+      contrast: saveMetaRef.current.contrast,
+      saturation: saveMetaRef.current.saturation,
+      hue: saveMetaRef.current.hue,
+      designName: saveMetaRef.current.designName,
+      aiPrompt: saveMetaRef.current.aiPrompt,
+      lastGeneratedImageUrl: saveMetaRef.current.lastGeneratedImageUrl,
+      textColor: saveMetaRef.current.textColor,
+      strokeColor: saveMetaRef.current.strokeColor,
+      fillColor: saveMetaRef.current.fillColor,
+      brandKitColors: saveMetaRef.current.brandKitColors,
+    };
     const signature = buildSaveSignature({...snapshot, designName: nextName});
 
     // Resurrection guard — synchronous, immune to React state lag.
@@ -2206,7 +2238,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const token = session?.access_token;
     const email = session?.user?.email;
     const userId = session?.user?.id;
-    const resolvedPlatform = platform || 'youtube';
+    const resolvedPlatform = snapshot.platform || 'youtube';
 
     console.log('[DEBUG] Sending token to backend:', token ? token.substring(0, 10) + '...' : 'NO TOKEN – session is null');
     console.log('[DEBUG] user_id:', userId || 'NULL – session.user.id missing');
@@ -2249,10 +2281,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             name: nextName,
             platform: resolvedPlatform,
             layers: snapshot.layers,
-            brightness,
-            contrast,
-            saturation,
-            hue,
+            brightness: snapshot.brightness,
+            contrast: snapshot.contrast,
+            saturation: snapshot.saturation,
+            hue: snapshot.hue,
           },
           thumbnail,
         }),
@@ -2283,26 +2315,26 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       persistedId = returnedId || persistedId;
 
       const savedDesign = {
-        id: persistedId || projectId || Date.now(),
-        projectId,
+        id: persistedId || snapshot.projectId || Date.now(),
+        projectId: snapshot.projectId,
         currentDesignId: persistedId || null,
         name: nextName,
         created: new Date().toLocaleString(),
-        platform,
+        platform: resolvedPlatform,
         layers: snapshot.layers,
-        brightness,
-        contrast,
-        saturation,
-        hue,
+        brightness: snapshot.brightness,
+        contrast: snapshot.contrast,
+        saturation: snapshot.saturation,
+        hue: snapshot.hue,
         last_edited: persistedEditedAt,
         json_data: {
           name: nextName,
-          platform,
+          platform: resolvedPlatform,
           layers: snapshot.layers,
-          brightness,
-          contrast,
-          saturation,
-          hue,
+          brightness: snapshot.brightness,
+          contrast: snapshot.contrast,
+          saturation: snapshot.saturation,
+          hue: snapshot.hue,
         },
         thumbnail,
       };
@@ -2315,11 +2347,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         saveStatusTimerRef.current = setTimeout(() => setSaveStatus(''), 3000);
       }
 
-      if(backgroundExistingSave){
-        // Keep silent background saves out of main UI state updates.
-      } else {
+      if(!silent){
         persistSavedDesigns(savedDesign);
-        if(!silent) setCmdLog(`✓ Saved: ${nextName}`);
+        setCmdLog(`✓ Saved: ${nextName}`);
       }
 
       saveResult = { id: persistedId || null, design: savedDesign };
@@ -2336,25 +2366,22 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
 
     return saveResult;
-  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, saturation, setCurrentProjectId]);
+  },[buildSaveSignature, generateDesignThumbnail, setCurrentProjectId]);
 
-  useEffect(()=>{
-    saveProjectRef.current = saveProject;
-  },[saveProject]);
-
-  const debouncedSave = useCallback(debounce(() => {
-    if(typeof saveProjectRef.current==='function'){
-      saveProjectRef.current({ silent:true, backgroundExistingSave:true }).catch((error)=>{
-        console.error('[AutoSave] Debounced save failed:', error);
-      });
-    }
-  },1500), []);
+  const debouncedSave = useMemo(
+    () => debounce(() => saveProject({ silent:true }), 1500),
+    [saveProject]
+  );
 
   useEffect(()=>{
     requestDebouncedSaveRef.current = debouncedSave;
   },[debouncedSave]);
 
-  useEffect(()=>()=>debouncedSave.cancel(),[debouncedSave]);
+  useEffect(() => {
+    return () => {
+      debouncedSave.cancel();
+    };
+  }, [debouncedSave]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
