@@ -726,6 +726,36 @@ app.get('/designs/:id', authMiddleware,(req,res)=>{
   res.json({design});
 });
 
+// Body-based delete alias — accepts { id } in the request body.
+// Must be registered BEFORE /designs/:id so Express doesn't swallow 'delete' as a param.
+app.delete('/designs/delete', authMiddleware, async (req,res)=>{
+  try{
+    const designId = ((req.body && req.body.id) || '').toString().trim();
+    if(!designId){
+      return res.status(400).json({error:'Missing design ID'});
+    }
+
+    console.log('[DELETE] /designs/delete — ID:', designId, 'for user:', req.user.email);
+
+    const { error } = await supabase
+      .from('thumbnails')
+      .delete()
+      .eq('id', designId)
+      .eq('user_email', req.user.email);
+
+    if(error){
+      console.error('[DELETE] Supabase delete error:', error.message);
+      return res.status(500).json({error:`Delete failed: ${error.message}`});
+    }
+
+    console.log('[DELETE] Successfully deleted design:', designId);
+    res.json({success:true});
+  }catch(err){
+    console.error('[DELETE] Unhandled error:', err.message);
+    res.status(500).json({error:`Server error: ${err.message}`});
+  }
+});
+
 app.delete('/designs/:id', authMiddleware, async (req,res)=>{
   try{
     const designId = (req.params.id || '').toString().trim();
@@ -739,7 +769,8 @@ app.delete('/designs/:id', authMiddleware, async (req,res)=>{
       .from('thumbnails')
       .delete()
       .eq('id', designId)
-      .eq('user_id', req.userId);
+      .eq('user_id', req.userId)
+      .eq('user_email', req.user.email);
 
     if(error){
       console.error('[DELETE] Supabase delete error:', error.message);
