@@ -2109,8 +2109,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       persistedEditedAt = payload?.data?.last_edited || payload?.last_edited || payload?.design?.last_edited || persistedEditedAt;
       console.log('[STORAGE] Save succeeded. ID:', returnedId, '| Name:', nextName, '| Platform:', resolvedPlatform);
       if(returnedId && returnedId !== currentDesignIdRef.current){
+        const isFirstSave = !currentDesignIdRef.current;
         currentDesignIdRef.current=returnedId;
         setCurrentProjectId(returnedId);
+        if(isFirstSave){
+          syncProjectIdToUrl(returnedId);
+        }
       }
       persistedId = returnedId || persistedId;
 
