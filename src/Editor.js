@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 import BrandKitSetupModal from './BrandKit';
@@ -622,7 +622,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
   const saveMetaRef = useRef({});
-  const requestDebouncedSaveRef = useRef(()=>{});
   // Performance: Mouse tracking refs to avoid re-renders
   const mouseRef        = useRef({x:0,y:0});
   const lastRimLightRef = useRef(0);
@@ -1321,7 +1320,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       draggingRef.current=null;
       resizingRef.current=null;
       resizeStartRef.current=null;
-      requestDebouncedSaveRef.current();
+      triggerAutoSave();
     }
     window.addEventListener('pointermove',onMove);
     window.addEventListener('pointerup',onUp);
@@ -1376,13 +1375,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const ni=historyIndexRef.current-1;if(ni<0)return;
     historyIndexRef.current=ni;setHistoryIndex(ni);
     setLayers(JSON.parse(JSON.stringify(historyRef.current[ni])));
-    requestDebouncedSaveRef.current();
+    triggerAutoSave();
   }
   function redo(){
     const ni=historyIndexRef.current+1;if(ni>=historyRef.current.length)return;
     historyIndexRef.current=ni;setHistoryIndex(ni);
     setLayers(JSON.parse(JSON.stringify(historyRef.current[ni])));
-    requestDebouncedSaveRef.current();
+    triggerAutoSave();
   }
 
   function addLayer(obj){
@@ -1392,14 +1391,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const layer={...obj,id,x:sx,y:sy,opacity:100,hidden:false,locked:false,blendMode:'normal',flipH:false,flipV:false,rotation:0,effects:defaultEffects()};
     setLayers(prev=>{const nl=[...prev,layer];pushHistory(nl);return nl;});
     setSelectedId(id);
-    requestDebouncedSaveRef.current();
+    triggerAutoSave();
   }
 
-  function updateLayer(id,updates){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,...updates}:l);pushHistoryDebounced(nl);return nl;});requestDebouncedSaveRef.current();}
+  function updateLayer(id,updates){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,...updates}:l);pushHistoryDebounced(nl);return nl;});triggerAutoSave();}
   function updateLayerSilent(id,updates){setLayers(prev=>prev.map(l=>l.id===id?{...l,...updates}:l));}
-  function updateLayerEffect(id,key,value){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l);pushHistory(nl);return nl;});requestDebouncedSaveRef.current();}
+  function updateLayerEffect(id,key,value){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l);pushHistory(nl);return nl;});triggerAutoSave();}
   function updateLayerEffectSilent(id,key,value){setLayers(prev=>prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l));}
-  function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};});pushHistory(nl);return nl;});requestDebouncedSaveRef.current();}
+  function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};});pushHistory(nl);return nl;});triggerAutoSave();}
   function updateLayerEffectNestedSilent(id,ek,sk,value){setLayers(prev=>prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};}));}
   function deleteLayer(id){
     const layer=layers.find(l=>l.id===id);
@@ -1408,11 +1407,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     if(layer.type==='background'){
       if(layers.length<=1) return; // can't delete if only layer
     }
-    setLayers(prev=>{const nl=prev.filter(l=>l.id!==id);pushHistory(nl);return nl;});setSelectedId(null);requestDebouncedSaveRef.current();
+    setLayers(prev=>{const nl=prev.filter(l=>l.id!==id);pushHistory(nl);return nl;});setSelectedId(null);triggerAutoSave();
   }
-  function moveLayerUp(id){const idx=layers.findIndex(l=>l.id===id);if(idx>=layers.length-1)return;const nl=[...layers];[nl[idx],nl[idx+1]]=[nl[idx+1],nl[idx]];setLayers(nl);pushHistory(nl);requestDebouncedSaveRef.current();}
-  function moveLayerDown(id){const idx=layers.findIndex(l=>l.id===id);if(idx<=0)return;const nl=[...layers];[nl[idx],nl[idx-1]]=[nl[idx-1],nl[idx]];setLayers(nl);pushHistory(nl);requestDebouncedSaveRef.current();}
-  function duplicateLayerFromObj(layer){const nl2={...layer,id:newId(),x:layer.x+16,y:layer.y+16};setLayers(prev=>{const nl=[...prev,nl2];pushHistory(nl);return nl;});setSelectedId(nl2.id);requestDebouncedSaveRef.current();}
+  function moveLayerUp(id){const idx=layers.findIndex(l=>l.id===id);if(idx>=layers.length-1)return;const nl=[...layers];[nl[idx],nl[idx+1]]=[nl[idx+1],nl[idx]];setLayers(nl);pushHistory(nl);triggerAutoSave();}
+  function moveLayerDown(id){const idx=layers.findIndex(l=>l.id===id);if(idx<=0)return;const nl=[...layers];[nl[idx],nl[idx-1]]=[nl[idx-1],nl[idx]];setLayers(nl);pushHistory(nl);triggerAutoSave();}
+  function duplicateLayerFromObj(layer){const nl2={...layer,id:newId(),x:layer.x+16,y:layer.y+16};setLayers(prev=>{const nl=[...prev,nl2];pushHistory(nl);return nl;});setSelectedId(nl2.id);triggerAutoSave();}
   function duplicateLayer(id){const layer=layers.find(l=>l.id===id);if(!layer||layer.type==='background')return;duplicateLayerFromObj(layer);}
   function updateBg(updates){const bgL=layers.find(l=>l.type==='background');if(bgL)updateLayer(bgL.id,updates);}
   function getLayerSrc(layer){
@@ -2183,7 +2182,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     setAbSelected(null);
     setCmdLog(`Applied: ${variant.label}`);
     setActiveTool('select');
-    requestDebouncedSaveRef.current();
+    triggerAutoSave();
   }
 
   function saveDesign(name){
@@ -2376,20 +2375,26 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
   },[buildSaveSignature, generateDesignThumbnail, setCurrentProjectId]);
 
-  const debouncedSave = useMemo(
-    () => debounce(() => saveProject({ silent:true }), 1500),
-    [saveProject]
+  const saveProjectRef = useRef(saveProject);
+  useEffect(()=>{
+    saveProjectRef.current = saveProject;
+  },[saveProject]);
+
+  const debouncedSaveRef = useRef(
+    debounce(() => {
+      saveProjectRef.current({ silent: true });
+    }, 1500)
   );
 
-  useEffect(()=>{
-    requestDebouncedSaveRef.current = debouncedSave;
-  },[debouncedSave]);
+  const triggerAutoSave = useCallback(()=>{
+    debouncedSaveRef.current();
+  },[]);
 
   useEffect(() => {
     return () => {
-      debouncedSave.cancel();
+      debouncedSaveRef.current.cancel();
     };
-  }, [debouncedSave]);
+  }, []);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
@@ -3710,7 +3715,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                   letterSpacing:'0.8px',textTransform:'uppercase',marginBottom:6}}>
                   Save
                 </div>
-                <input value={designName} onChange={e=>setDesignName(e.target.value)} onBlur={debouncedSave}
+                <input value={designName} onChange={e=>setDesignName(e.target.value)} onBlur={triggerAutoSave}
                   style={css.input} placeholder="Design name..."/>
                 <button onClick={()=>saveProject({ silent: false, nameOverride: designName })}
                   style={{...css.addBtn,marginTop:6}}>
@@ -4345,10 +4350,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     rimPaintingRef.current=false;
                     return;
                   }
-                  requestDebouncedSaveRef.current();
+                  triggerAutoSave();
                 }}
                 onTouchEnd={()=>{
-                  requestDebouncedSaveRef.current();
+                  triggerAutoSave();
                 }}
                 onMouseLeave={(e)=>{
                   if(activeTool==='rimlight'){
@@ -4588,15 +4593,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                   <div style={css.section}>
                     <div style={css.row}>
                       <span style={{fontSize:10,color:T.muted,width:10}}>X</span>
-                      <input type="number" value={Math.round(selectedLayer.x)} onChange={e=>updateLayer(selectedId,{x:Number(e.target.value)})} onBlur={debouncedSave} style={{...css.input,width:'50%'}}/>
+                      <input type="number" value={Math.round(selectedLayer.x)} onChange={e=>updateLayer(selectedId,{x:Number(e.target.value)})} onBlur={triggerAutoSave} style={{...css.input,width:'50%'}}/>
                       <span style={{fontSize:10,color:T.muted,width:10}}>Y</span>
-                      <input type="number" value={Math.round(selectedLayer.y)} onChange={e=>updateLayer(selectedId,{y:Number(e.target.value)})} onBlur={debouncedSave} style={{...css.input,width:'50%'}}/>
+                      <input type="number" value={Math.round(selectedLayer.y)} onChange={e=>updateLayer(selectedId,{y:Number(e.target.value)})} onBlur={triggerAutoSave} style={{...css.input,width:'50%'}}/>
                     </div>
                     {selectedLayer.width&&(<div style={{...css.row,marginTop:6}}>
                       <span style={{fontSize:10,color:T.muted,width:10}}>W</span>
-                      <input type="number" value={Math.round(selectedLayer.width||0)} onChange={e=>updateLayer(selectedId,{width:Number(e.target.value)})} onBlur={debouncedSave} style={{...css.input,width:'50%'}}/>
+                      <input type="number" value={Math.round(selectedLayer.width||0)} onChange={e=>updateLayer(selectedId,{width:Number(e.target.value)})} onBlur={triggerAutoSave} style={{...css.input,width:'50%'}}/>
                       <span style={{fontSize:10,color:T.muted,width:10}}>H</span>
-                      <input type="number" value={Math.round(selectedLayer.height||0)} onChange={e=>updateLayer(selectedId,{height:Number(e.target.value)})} onBlur={debouncedSave} style={{...css.input,width:'50%'}}/>
+                      <input type="number" value={Math.round(selectedLayer.height||0)} onChange={e=>updateLayer(selectedId,{height:Number(e.target.value)})} onBlur={triggerAutoSave} style={{...css.input,width:'50%'}}/>
                     </div>)}
                     <span style={{...css.label,marginTop:8}}>Opacity — {selectedLayer.opacity??100}%</span>
                     <Slider min={0} max={100} value={selectedLayer.opacity??100}
@@ -4620,21 +4625,21 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     {selectedLayer?.type==='shape'&&(<>
                       <span style={{...css.label,marginTop:8}}>Fill color</span>
                       <input type="color" value={selectedLayer.fillColor||'#FF4500'}
-                        onChange={e=>{updateLayer(selectedId,{fillColor:e.target.value});debouncedSave();}}
+                        onChange={e=>{updateLayer(selectedId,{fillColor:e.target.value});triggerAutoSave();}}
                         style={css.color}/>
                       <span style={css.label}>Border color</span>
                       <input type="color" value={selectedLayer.strokeColor||'#000000'}
-                        onChange={e=>{updateLayer(selectedId,{strokeColor:e.target.value});debouncedSave();}}
+                        onChange={e=>{updateLayer(selectedId,{strokeColor:e.target.value});triggerAutoSave();}}
                         style={css.color}/>
                     </>)}
                     {selectedLayer?.type==='text'&&(<>
                       <span style={{...css.label,marginTop:8}}>Text color</span>
                       <input type="color" value={selectedLayer.textColor||'#ffffff'}
-                        onChange={e=>{updateLayer(selectedId,{textColor:e.target.value});debouncedSave();}}
+                        onChange={e=>{updateLayer(selectedId,{textColor:e.target.value});triggerAutoSave();}}
                         style={css.color}/>
                       <span style={css.label}>Outline color</span>
                       <input type="color" value={selectedLayer.strokeColor||'#000000'}
-                        onChange={e=>{updateLayer(selectedId,{strokeColor:e.target.value});debouncedSave();}}
+                        onChange={e=>{updateLayer(selectedId,{strokeColor:e.target.value});triggerAutoSave();}}
                         style={css.color}/>
                       <span style={css.label}>Font size — {selectedLayer.fontSize}px</span>
                       <Slider min={8} max={120} value={selectedLayer.fontSize||48}
@@ -4728,20 +4733,20 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     <button onClick={()=>flipLayer(selectedId,'v')} style={{...css.addBtn,flex:1,marginTop:0,background:T.input,color:T.text,border:`1px solid ${T.border}`,fontSize:11}}>↕ V</button>
                   </div>
                   <span style={css.label}>Blend mode</span>
-                  <select value={selectedLayer.blendMode||'normal'} onChange={e=>{updateLayer(selectedId,{blendMode:e.target.value});debouncedSave();}} style={css.input}>{BLEND_MODES.map(m=><option key={m} value={m}>{m.charAt(0).toUpperCase()+m.slice(1)}</option>)}</select>
+                  <select value={selectedLayer.blendMode||'normal'} onChange={e=>{updateLayer(selectedId,{blendMode:e.target.value});triggerAutoSave();}} style={css.input}>{BLEND_MODES.map(m=><option key={m} value={m}>{m.charAt(0).toUpperCase()+m.slice(1)}</option>)}</select>
                   <span style={css.label}>Position</span>
                   <div style={css.section}>
                     <div style={css.row}>
                       <span style={{fontSize:10,color:T.muted,width:10}}>X</span>
-                      <input type="number" value={Math.round(selectedLayer.x)} onChange={e=>updateLayer(selectedId,{x:Number(e.target.value)})} onBlur={debouncedSave} style={{...css.input,width:'50%'}}/>
+                      <input type="number" value={Math.round(selectedLayer.x)} onChange={e=>updateLayer(selectedId,{x:Number(e.target.value)})} onBlur={triggerAutoSave} style={{...css.input,width:'50%'}}/>
                       <span style={{fontSize:10,color:T.muted,width:10}}>Y</span>
-                      <input type="number" value={Math.round(selectedLayer.y)} onChange={e=>updateLayer(selectedId,{y:Number(e.target.value)})} onBlur={debouncedSave} style={{...css.input,width:'50%'}}/>
+                      <input type="number" value={Math.round(selectedLayer.y)} onChange={e=>updateLayer(selectedId,{y:Number(e.target.value)})} onBlur={triggerAutoSave} style={{...css.input,width:'50%'}}/>
                     </div>
                     {selectedLayer.width&&(<div style={{...css.row,marginTop:6}}>
                       <span style={{fontSize:10,color:T.muted,width:10}}>W</span>
-                      <input type="number" value={Math.round(selectedLayer.width||0)} onChange={e=>updateLayer(selectedId,{width:Number(e.target.value)})} onBlur={debouncedSave} style={{...css.input,width:'50%'}}/>
+                      <input type="number" value={Math.round(selectedLayer.width||0)} onChange={e=>updateLayer(selectedId,{width:Number(e.target.value)})} onBlur={triggerAutoSave} style={{...css.input,width:'50%'}}/>
                       <span style={{fontSize:10,color:T.muted,width:10}}>H</span>
-                      <input type="number" value={Math.round(selectedLayer.height||0)} onChange={e=>updateLayer(selectedId,{height:Number(e.target.value)})} onBlur={debouncedSave} style={{...css.input,width:'50%'}}/>
+                      <input type="number" value={Math.round(selectedLayer.height||0)} onChange={e=>updateLayer(selectedId,{height:Number(e.target.value)})} onBlur={triggerAutoSave} style={{...css.input,width:'50%'}}/>
                     </div>)}
                     <span style={{...css.label,marginTop:8}}>Opacity — {selectedLayer.opacity??100}%</span>
                     <Slider min={0} max={100} value={selectedLayer.opacity??100}
@@ -4889,54 +4894,54 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 <span style={css.label}>Content</span>
                 <input value={textInput} onChange={e=>setTextInput(e.target.value)} style={css.input} placeholder="Enter text..."/>
                 <span style={css.label}>Font family</span>
-                <select value={fontFamily} onChange={e=>{setFontFamily(e.target.value);debouncedSave();}} style={css.input}>{FONTS.map(f=><option key={f}>{f}</option>)}</select>
+                <select value={fontFamily} onChange={e=>{setFontFamily(e.target.value);triggerAutoSave();}} style={css.input}>{FONTS.map(f=><option key={f}>{f}</option>)}</select>
                 <span style={css.label}>Font weight</span>
                 <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
-                  {FONT_WEIGHTS.map(fw=>(<button key={fw.value} onClick={()=>{setFontWeight(fw.value);debouncedSave();}} style={{padding:'4px 7px',borderRadius:4,border:`1px solid ${fontWeight===fw.value?T.accent:T.border}`,background:fontWeight===fw.value?T.accent:'transparent',color:fontWeight===fw.value?'#fff':T.text,fontSize:10,cursor:'pointer',fontWeight:fw.value}}>{fw.label}</button>))}
+                  {FONT_WEIGHTS.map(fw=>(<button key={fw.value} onClick={()=>{setFontWeight(fw.value);triggerAutoSave();}} style={{padding:'4px 7px',borderRadius:4,border:`1px solid ${fontWeight===fw.value?T.accent:T.border}`,background:fontWeight===fw.value?T.accent:'transparent',color:fontWeight===fw.value?'#fff':T.text,fontSize:10,cursor:'pointer',fontWeight:fw.value}}>{fw.label}</button>))}
                 </div>
                 <span style={css.label}>Size — {fontSize}px</span>
                 <div style={css.row}>
-                  <Slider min={8} max={120} value={fontSize} onChange={v=>setFontSize(v)} onCommit={debouncedSave} style={{flex:1}}/>
-                  <input type="number" value={fontSize} onChange={e=>setFontSize(Number(e.target.value))} onBlur={debouncedSave} style={{...css.input,width:50,padding:'5px 6px',textAlign:'center'}}/>
+                  <Slider min={8} max={120} value={fontSize} onChange={v=>setFontSize(v)} onCommit={triggerAutoSave} style={{flex:1}}/>
+                  <input type="number" value={fontSize} onChange={e=>setFontSize(Number(e.target.value))} onBlur={triggerAutoSave} style={{...css.input,width:50,padding:'5px 6px',textAlign:'center'}}/>
                 </div>
                 <span style={css.label}>Letter spacing — {letterSpacing}px</span>
-                <Slider min={-5} max={30} value={letterSpacing} onChange={v=>setLetterSpacing(v)} onCommit={debouncedSave} style={{width:'100%'}}/>
+                <Slider min={-5} max={30} value={letterSpacing} onChange={v=>setLetterSpacing(v)} onCommit={triggerAutoSave} style={{width:'100%'}}/>
                 <span style={css.label}>Line height — {lineHeight}</span>
-                <Slider min={0.8} max={3} step={0.1} value={lineHeight} onChange={v=>setLineHeight(v)} onCommit={debouncedSave} style={{width:'100%'}}/>
+                <Slider min={0.8} max={3} step={0.1} value={lineHeight} onChange={v=>setLineHeight(v)} onCommit={triggerAutoSave} style={{width:'100%'}}/>
                 <span style={css.label}>Alignment</span>
                 <div style={{display:'flex',gap:4}}>
-                  {[['left','Left'],['center','Center'],['right','Right']].map(([val,label])=>(<button key={val} onClick={()=>{setTextAlign(val);debouncedSave();}} style={{...css.iconBtn(textAlign===val),flex:1,textAlign:'center',fontSize:11}}>{label}</button>))}
+                  {[['left','Left'],['center','Center'],['right','Right']].map(([val,label])=>(<button key={val} onClick={()=>{setTextAlign(val);triggerAutoSave();}} style={{...css.iconBtn(textAlign===val),flex:1,textAlign:'center',fontSize:11}}>{label}</button>))}
                 </div>
                 <span style={css.label}>Style</span>
-                <button onClick={()=>{setFontItalic(!fontItalic);debouncedSave();}} style={{...css.iconBtn(fontItalic),width:'100%',textAlign:'center',fontStyle:'italic'}}>Italic</button>
+                <button onClick={()=>{setFontItalic(!fontItalic);triggerAutoSave();}} style={{...css.iconBtn(fontItalic),width:'100%',textAlign:'center',fontStyle:'italic'}}>Italic</button>
                 <span style={css.label}>Text color</span>
-                <input type="color" value={textColor} onChange={e=>{setTextColor(e.target.value);addRecentColor(e.target.value);debouncedSave();}} style={css.color}/>
+                <input type="color" value={textColor} onChange={e=>{setTextColor(e.target.value);addRecentColor(e.target.value);triggerAutoSave();}} style={css.color}/>
                 <span style={css.label}>Outline</span>
                 <div style={css.row}>
-                  <input type="color" value={strokeColor} onChange={e=>{setStrokeColor(e.target.value);debouncedSave();}} style={{...css.color,width:44,flexShrink:0}}/>
-                  <Slider min={0} max={20} value={strokeWidth} onChange={v=>setStrokeWidth(v)} onCommit={debouncedSave} style={{flex:1}}/>
+                  <input type="color" value={strokeColor} onChange={e=>{setStrokeColor(e.target.value);triggerAutoSave();}} style={{...css.color,width:44,flexShrink:0}}/>
+                  <Slider min={0} max={20} value={strokeWidth} onChange={v=>setStrokeWidth(v)} onCommit={triggerAutoSave} style={{flex:1}}/>
                   <span style={{fontSize:10,color:T.muted,minWidth:24}}>{strokeWidth}px</span>
                 </div>
                 <span style={css.label}>Drop shadow</span>
                 <div style={css.section}>
-                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setShadowEnabled(!shadowEnabled);debouncedSave();}} style={css.iconBtn(shadowEnabled)}>{shadowEnabled?'On':'Off'}</button></div>
+                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setShadowEnabled(!shadowEnabled);triggerAutoSave();}} style={css.iconBtn(shadowEnabled)}>{shadowEnabled?'On':'Off'}</button></div>
                   {shadowEnabled&&<>
-                    <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={shadowColor} onChange={e=>{setShadowColor(e.target.value);debouncedSave();}} style={{...css.color,height:28}}/></div>
-                    {[['Blur',shadowBlur,setShadowBlur,0,40],['X',shadowX,setShadowX,-20,20],['Y',shadowY,setShadowY,-20,20]].map(([l,v,sv,mn,mx])=>(<div key={l} style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:28}}>{l}</span><Slider min={mn} max={mx} value={v} onChange={sv} onCommit={debouncedSave} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:20,textAlign:'right'}}>{v}</span></div>))}
+                    <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={shadowColor} onChange={e=>{setShadowColor(e.target.value);triggerAutoSave();}} style={{...css.color,height:28}}/></div>
+                    {[['Blur',shadowBlur,setShadowBlur,0,40],['X',shadowX,setShadowX,-20,20],['Y',shadowY,setShadowY,-20,20]].map(([l,v,sv,mn,mx])=>(<div key={l} style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:28}}>{l}</span><Slider min={mn} max={mx} value={v} onChange={sv} onCommit={triggerAutoSave} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:20,textAlign:'right'}}>{v}</span></div>))}
                   </>}
                 </div>
                 <span style={css.label}>Glow</span>
                 <div style={css.section}>
-                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setGlowEnabled(!glowEnabled);debouncedSave();}} style={css.iconBtn(glowEnabled)}>{glowEnabled?'On':'Off'}</button></div>
-                  {glowEnabled&&<div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={glowColor} onChange={e=>{setGlowColor(e.target.value);debouncedSave();}} style={{...css.color,height:28}}/></div>}
+                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setGlowEnabled(!glowEnabled);triggerAutoSave();}} style={css.iconBtn(glowEnabled)}>{glowEnabled?'On':'Off'}</button></div>
+                  {glowEnabled&&<div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={glowColor} onChange={e=>{setGlowColor(e.target.value);triggerAutoSave();}} style={{...css.color,height:28}}/></div>}
                 </div>
                 <span style={css.label}>Text on arc</span>
                 <div style={css.section}>
-                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setArcEnabled(!arcEnabled);debouncedSave();}} style={css.iconBtn(arcEnabled)}>{arcEnabled?'On':'Off'}</button></div>
-                  {arcEnabled&&<><span style={{...css.label,marginTop:8}}>Radius — {arcRadius}px</span><Slider min={60} max={300} value={arcRadius} onChange={v=>setArcRadius(v)} onCommit={debouncedSave} style={{width:'100%'}}/></>}
+                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setArcEnabled(!arcEnabled);triggerAutoSave();}} style={css.iconBtn(arcEnabled)}>{arcEnabled?'On':'Off'}</button></div>
+                  {arcEnabled&&<><span style={{...css.label,marginTop:8}}>Radius — {arcRadius}px</span><Slider min={60} max={300} value={arcRadius} onChange={v=>setArcRadius(v)} onCommit={triggerAutoSave} style={{width:'100%'}}/></>}
                 </div>
                 <span style={css.label}>Recent colors</span>
-                <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{recentColors.map((c,i)=>(<div key={i} onClick={()=>{setTextColor(c);debouncedSave();}} style={{width:20,height:20,borderRadius:4,background:c,cursor:'pointer',border:`1px solid ${T.border}`}}/>))}</div>
+                <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{recentColors.map((c,i)=>(<div key={i} onClick={()=>{setTextColor(c);triggerAutoSave();}} style={{width:20,height:20,borderRadius:4,background:c,cursor:'pointer',border:`1px solid ${T.border}`}}/>))}</div>
                 {selectedLayer?.type==='text'&&(<>
                   <span style={css.label}>Opacity — {selectedLayer.opacity??100}%</span>
                   <Slider min={0} max={100} value={selectedLayer.opacity??100}
@@ -4944,7 +4949,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     onCommit={v=>updateLayer(selectedId,{opacity:v})}
                     style={{width:'100%'}}/>
                   <span style={css.label}>Live edit text</span>
-                  <input value={selectedLayer.text} onChange={e=>updateLayer(selectedId,{text:e.target.value})} onBlur={debouncedSave} style={css.input} placeholder="Edit text..."/>
+                  <input value={selectedLayer.text} onChange={e=>updateLayer(selectedId,{text:e.target.value})} onBlur={triggerAutoSave} style={css.input} placeholder="Edit text..."/>
                   <span style={css.label}>Letter spacing</span>
                   <Slider min={-5} max={30} value={selectedLayer.letterSpacing||0}
                     onChange={v=>updateLayerSilent(selectedId,{letterSpacing:v})}
@@ -5135,7 +5140,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 <input type="color" value={bg?.bgColor||'#f97316'} onChange={e=>{updateBg({bgColor:e.target.value,bgGradient:null});addRecentColor(e.target.value);}} style={css.color}/>
                 <span style={css.label}>RGB mixer</span>
                 <div style={css.section}>
-                  {[['R',rgbR,setRgbR,'#f87171'],['G',rgbG,setRgbG,'#4ade80'],['B',rgbB,setRgbB,'#60a5fa']].map(([l,v,sv,c])=>(<div key={l} style={{...css.row,marginBottom:6}}><span style={{fontSize:11,color:c,fontWeight:'700',width:12}}>{l}</span><Slider min={0} max={255} value={v} onChange={sv} onCommit={debouncedSave} style={{flex:1}}/><span style={{fontSize:10,color:T.text,width:26,textAlign:'right'}}>{Math.round(v)}</span></div>))}
+                  {[['R',rgbR,setRgbR,'#f87171'],['G',rgbG,setRgbG,'#4ade80'],['B',rgbB,setRgbB,'#60a5fa']].map(([l,v,sv,c])=>(<div key={l} style={{...css.row,marginBottom:6}}><span style={{fontSize:11,color:c,fontWeight:'700',width:12}}>{l}</span><Slider min={0} max={255} value={v} onChange={sv} onCommit={triggerAutoSave} style={{flex:1}}/><span style={{fontSize:10,color:T.text,width:26,textAlign:'right'}}>{Math.round(v)}</span></div>))}
                   <div style={{width:'100%',height:28,borderRadius:6,background:`rgb(${Math.round(rgbR)},${Math.round(rgbG)},${Math.round(rgbB)})`,margin:'4px 0 8px',border:`1px solid ${T.border}`}}/>
                   <button onClick={()=>{const hex='#'+[rgbR,rgbG,rgbB].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');updateBg({bgColor:hex,bgGradient:null});addRecentColor(hex);}} style={{...css.addBtn,marginTop:0}}>Apply</button>
                 </div>
@@ -5216,7 +5221,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             {activeTool==='adjust'&&(
               <div>
                 <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Canvas-wide adjustments affect everything.</div>
-                {[['Brightness',brightness,setBrightness,50,200,'%'],['Contrast',contrast,setContrast,50,300,'%'],['Saturation',saturation,setSaturation,0,300,'%'],['Hue',hue,setHue,0,360,'°']].map(([l,v,sv,mn,mx,u])=>(<div key={l}><span style={css.label}>{l} — {Math.round(v)}{u}</span><Slider min={mn} max={mx} value={v} onChange={sv} onCommit={debouncedSave} style={{width:'100%'}}/></div>))}
+                {[['Brightness',brightness,setBrightness,50,200,'%'],['Contrast',contrast,setContrast,50,300,'%'],['Saturation',saturation,setSaturation,0,300,'%'],['Hue',hue,setHue,0,360,'°']].map(([l,v,sv,mn,mx,u])=>(<div key={l}><span style={css.label}>{l} — {Math.round(v)}{u}</span><Slider min={mn} max={mx} value={v} onChange={sv} onCommit={triggerAutoSave} style={{width:'100%'}}/></div>))}
                 {selectedLayer?.type==='image'&&(<>
                   <div style={css.divider}/>
                   <div style={{fontSize:11,color:T.accent,fontWeight:'600',marginBottom:4}}>Per-image filters</div>
@@ -5224,7 +5229,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                   <button onClick={()=>updateLayer(selectedId,{imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0})} style={{...css.addBtn,background:'transparent',color:T.muted,border:`1px solid ${T.border}`,marginTop:6}}>Reset image</button>
                 </>)}
                 {selectedLayer&&selectedLayer.type!=='background'&&(<><div style={css.divider}/><span style={css.label}>Layer opacity — {selectedLayer.opacity??100}%</span><Slider min={0} max={100} value={selectedLayer.opacity??100} onChange={v=>updateLayerSilent(selectedId,{opacity:v})} onCommit={v=>updateLayer(selectedId,{opacity:v})} style={{width:'100%'}}/></>)}
-                <button onClick={()=>{setBrightness(100);setContrast(100);setSaturation(100);setHue(0);debouncedSave();}} style={{...css.addBtn,background:'transparent',color:T.muted,border:`1px solid ${T.border}`}}>Reset canvas</button>
+                <button onClick={()=>{setBrightness(100);setContrast(100);setSaturation(100);setHue(0);triggerAutoSave();}} style={{...css.addBtn,background:'transparent',color:T.muted,border:`1px solid ${T.border}`}}>Reset canvas</button>
               </div>
             )}
 
