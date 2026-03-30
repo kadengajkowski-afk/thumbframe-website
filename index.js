@@ -673,15 +673,16 @@ app.post('/designs/save', async (req,res)=>{
       .single();
 
     if(saveError){
-      console.error('[STORAGE] Supabase upsert error:', saveError.message, '| code:', saveError.code, '| details:', saveError.details);
-      return res.status(500).json({ error: `Database save failed: ${saveError.message}`, code: saveError.code, details: saveError.details });
+      console.error('[Supabase Error]:', saveError.message);
+      return res.status(500).json({ error: saveError.message });
     }
 
     console.log('[STORAGE] Design successfully saved:', data?.id, 'for user:', user.email);
-    res.json({success:true,data});
+    const savedId = Array.isArray(data) ? data?.[0]?.id : data?.id;
+    return res.status(200).json({ success: true, message: 'Saved successfully', id: savedId });
   }catch(err){
     console.error('[STORAGE] Unhandled error in /designs/save route:', err.message, err.stack);
-    res.status(500).json({error: `Server error: ${err.message}`});
+    return res.status(500).json({error: `Server error: ${err.message}`});
   }
 });
 
