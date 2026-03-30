@@ -604,6 +604,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const lastSavedSignatureRef = useRef('');
   const saveStatusTimerRef = useRef(null);
   const deletedIdsRef = useRef(new Set());
+  const isSavingRef = useRef(false);
   const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
   // Performance: Mouse tracking refs to avoid re-renders
@@ -2062,6 +2063,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false} = {})=>{
+    // Concurrency lock — if a save is already in-flight, abort immediately.
+    // This prevents the upload race condition where two auto-saves fire back-to-back
+    // before the first one returns the new UUID, causing duplicate rows.
+    if(isSavingRef.current){
+      console.warn('[STORAGE] Save skipped — a save is already in progress.');
+      return null;
+    }
+    isSavingRef.current = true;
+
     // Immediate UI feedback — don't wait for the network
     clearTimeout(saveStatusTimerRef.current);
     setSaveStatus('Saving...');
@@ -2193,6 +2203,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       setSaveStatus('Error');
       if(!silent) setCmdLog('Save failed');
       throw err;
+    } finally {
+      isSavingRef.current = false;
     }
   },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, saturation, savedDesigns, setCurrentProjectId]);
 
@@ -2357,26 +2369,55 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     });
   }
 
-  function deleteDesign(id){
-    // Rule 1 — Flag the ID immediately so the resurrection guard blocks any
-    // in-flight or pending auto-save before React state even propagates.
-    deletedIdsRef.current.add(id);
+  async function deleteDesign(id){
+    // Validate: never send a DELETE without a real ID.
+    if(!id){
+      console.error('[DELETE] Cannot delete: Project ID is missing.');
+      return;
+    }
 
-    const updated=savedDesigns.filter(d=>d.id!==id && d.currentDesignId!==id);
-    setSavedDesigns(updated);
+    // Step 1 — Flag the ID synchronously before anything async so the
+    // resurrection guard fires immediately on any queued auto-save.
+    deletedIdsRef.current.add(id);
 
     const isActive = currentDesignIdRef.current === id;
 
     if(isActive){
-      // Rule 1 — Clear the ref and wipe the save signature so a queued debounce
-      // timer cannot fire with this stale ID.
+      // Clear the ref + signature before the await so no in-flight save can
+      // sneak through with the stale ID while we wait for the network.
       currentDesignIdRef.current = null;
       lastSavedSignatureRef.current = '';
-
-      // Rule 1 — Remove the ?project= param from the URL.
       clearProjectIdFromUrl();
+    }
 
-      // Rule 3 — Redirect to a clean editor so the auto-saver has no target.
+    // Step 2 — Call the backend DELETE, with auth, uuid-validated.
+    try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if(token){
+        const res = await fetch(`${resolvedApiUrl}/designs/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+        if(!res.ok){
+          const errText = await res.text().catch(()=>'');
+          console.error('[DELETE] Backend DELETE failed:', res.status, errText);
+        } else {
+          console.log('[DELETE] Backend confirmed deletion of ID:', id);
+        }
+      } else {
+        console.warn('[DELETE] No session token — skipping backend DELETE for ID:', id);
+      }
+    }catch(err){
+      console.error('[DELETE] Network error during DELETE:', err);
+    }
+
+    // Step 3 — Update local React state regardless of backend outcome so the
+    // UI reflects the deletion immediately without requiring a page refresh.
+    setSavedDesigns(prev => prev.filter(d => d.id !== id && d.currentDesignId !== id));
+
+    // Step 4 — Redirect if the deleted project was the one being edited.
+    if(isActive){
       window.location.replace('/editor');
     }
   }

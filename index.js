@@ -726,12 +726,32 @@ app.get('/designs/:id', authMiddleware,(req,res)=>{
   res.json({design});
 });
 
-app.delete('/designs/:id', authMiddleware,(req,res)=>{
-  const designs=loadDesigns();
-  if(!designs[req.user.email]) return res.status(404).json({error:'No designs'});
-  designs[req.user.email]=designs[req.user.email].filter(d=>d.id!==req.params.id);
-  saveDesigns(designs);
-  res.json({success:true});
+app.delete('/designs/:id', authMiddleware, async (req,res)=>{
+  try{
+    const designId = (req.params.id || '').toString().trim();
+    if(!designId){
+      return res.status(400).json({error:'Missing design ID'});
+    }
+
+    console.log('[DELETE] Deleting design ID:', designId, 'for user:', req.user.email);
+
+    const { error } = await supabase
+      .from('thumbnails')
+      .delete()
+      .eq('id', designId)
+      .eq('user_id', req.userId);
+
+    if(error){
+      console.error('[DELETE] Supabase delete error:', error.message);
+      return res.status(500).json({error:`Delete failed: ${error.message}`});
+    }
+
+    console.log('[DELETE] Successfully deleted design:', designId);
+    res.json({success:true});
+  }catch(err){
+    console.error('[DELETE] Unhandled error:', err.message);
+    res.status(500).json({error:`Server error: ${err.message}`});
+  }
 });
 
 // ── Stripe checkout ────────────────────────────────────────────────────────────
