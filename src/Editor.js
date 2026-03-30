@@ -2137,22 +2137,26 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   const saveProject = useCallback(async ({nameOverride, silent=true, backgroundExistingSave=false} = {})=>{
-    // ── Step 1: Check lock ────────────────────────────────────────────────────
-    // If a save is already in-flight, bail before doing any work.
+    // ── Step 1: Instant UI feedback — happens before EVERYTHING else ──────────
+    // User sees feedback the moment they click Save or auto-save fires.
+    clearTimeout(saveStatusTimerRef.current);
+    setSaveStatus(silent ? 'Saving...' : 'Saving...');
+    setCmdLog(silent ? 'Auto-saving...' : 'Saving project...');
+
+    // ── Step 2: Check lock ────────────────────────────────────────────────────
     if(isSavingRef.current){
       console.warn('[STORAGE] Save skipped — a save is already in progress.');
+      clearTimeout(saveStatusTimerRef.current);
+      setSaveStatus('Unsaved');
       return null;
     }
 
-    // ── Step 2: All pre-flight checks & async prep — UNLOCKED ────────────────
-    // If any of these fail or return early, the lock was never engaged so
-    // there is no deadlock to worry about.
-
+    // ── Step 3: All pre-flight checks — UNLOCKED ─────────────────────────────
     const nextName = (nameOverride||designName||'Untitled Project').trim()||'Untitled Project';
     const snapshot = buildProjectSnapshot();
     const signature = buildSaveSignature({...snapshot, designName: nextName});
 
-    // Resurrection guard — synchronous, ref-based, immune to React state lag.
+    // Resurrection guard — synchronous, immune to React state lag.
     const targetId = currentDesignIdRef.current;
     if(targetId && deletedIdsRef.current.has(targetId)){
       console.warn('[STORAGE] Resurrection guard: save aborted — ID', targetId, 'was deleted.');
@@ -2162,9 +2166,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       setSaveStatus('');
       return null;
     }
-
-    // Thumbnail: only generate for manual saves — skipping it keeps auto-saves fast.
-    const thumbnail = silent ? null : await generateDesignThumbnail(snapshot.layers);
 
     // Session — get auth token before locking.
     const { data: { session } } = await supabase.auth.getSession();
@@ -2177,25 +2178,27 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     console.log('[DEBUG] user_id:', userId || 'NULL – session.user.id missing');
     if(!token){
       console.error('[STORAGE] Cannot save: no active session token.');
+      clearTimeout(saveStatusTimerRef.current);
       setSaveStatus('Error');
+      setCmdLog('Save failed: not logged in');
       return null;
     }
 
-    // Immediate UI feedback — after pre-flight passes, right before we lock.
-    clearTimeout(saveStatusTimerRef.current);
-    setSaveStatus('Saving...');
-
-    // ── Step 3: Engage lock — right before the fetch call ────────────────────
+    // ── Step 4: Engage lock — right before any network activity ──────────────
     isSavingRef.current = true;
 
     let persistedId = currentDesignIdRef.current;
     let persistedEditedAt = new Date().toISOString();
     let saveResult = null;
 
-    // ── Step 4: Ironclad try / catch / finally ────────────────────────────────
-    // NO return statements inside this try block — every path falls through
-    // to finally so the lock is guaranteed to release.
+    // ── Step 5: Ironclad try / catch / finally ────────────────────────────────
+    // generateDesignThumbnail is inside the try block so a failure here is
+    // caught and the finally block always releases isSavingRef.
+    // NO return statements inside try — every path falls through to finally.
     try{
+      // Thumbnail: only generate for manual saves — keeps auto-saves fast.
+      const thumbnail = silent ? null : await generateDesignThumbnail(snapshot.layers);
+
       const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
@@ -3655,7 +3658,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 </div>
                 <input value={designName} onChange={e=>setDesignName(e.target.value)}
                   style={css.input} placeholder="Design name..."/>
-                <button onClick={()=>saveDesign(designName)}
+                <button onClick={()=>saveProject({ silent: false, nameOverride: designName })}
                   style={{...css.addBtn,marginTop:6}}>
                   💾 Save design
                 </button>
