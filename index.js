@@ -857,7 +857,7 @@ app.post('/billing/portal', authMiddleware, async (req, res) => {
     // 2. If no stored customer ID, search Stripe by email (or create)
     if (!customerId) {
       console.log('[billing/portal] No stored customer ID — searching Stripe by email:', userEmail);
-      const existing = await stripe.customers.list({ email: userEmail, limit: 1 });
+      const existing = await stripe.customers.search({ query: `email:'${userEmail}'` });
 
       if (existing.data.length > 0) {
         customerId = existing.data[0].id;
