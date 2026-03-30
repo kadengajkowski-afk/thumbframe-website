@@ -984,19 +984,47 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       try{
         await fetchSavedDesigns();
 
-        const resolvedProjectId = getProjectIdFromUrl() || generateProjectId();
+        const urlDesignId = getProjectIdFromUrl();
+        const resolvedProjectId = urlDesignId || generateProjectId();
         if(!cancelled){
           setProjectId(resolvedProjectId);
-          syncProjectIdToUrl(resolvedProjectId);
+          if(!urlDesignId) syncProjectIdToUrl(resolvedProjectId);
+        }
+
+        // If a ?project=ID is in the URL, fetch that design from Supabase first.
+        // This is the primary path when navigating from the Dashboard.
+        let remoteDesign = null;
+        if(urlDesignId){
+          try{
+            console.log('[BOOTSTRAP] URL has project ID:', urlDesignId, '— fetching from Supabase...');
+            const { data: remoteData, error: remoteError } = await supabase
+              .from('thumbnails')
+              .select('*')
+              .eq('id', urlDesignId)
+              .single();
+            if(remoteError){
+              console.error('[BOOTSTRAP] Failed to load remote design:', remoteError.message);
+            }else if(remoteData){
+              console.log('[BOOTSTRAP] Remote design loaded:', remoteData.name);
+              remoteDesign = remoteData;
+            }
+          }catch(remoteErr){
+            console.error('[BOOTSTRAP] Exception loading remote design:', remoteErr);
+          }
         }
 
         let restoredDraft = null;
-        try{
-          const rawDraft = localStorage.getItem(getProjectStorageKey(resolvedProjectId));
-          if(rawDraft) restoredDraft = JSON.parse(rawDraft);
-        }catch(e){
-          console.error('Draft restore failed:', e);
-          localStorage.removeItem(getProjectStorageKey(resolvedProjectId));
+        // Only use localStorage draft if it belongs to the same design as the URL
+        // (i.e. the user was editing this design before and a local draft exists).
+        // If a remote design was just fetched, prefer the remote data which is authoritative.
+        if(!remoteDesign){
+          try{
+            const rawDraft = localStorage.getItem(getProjectStorageKey(resolvedProjectId));
+            if(rawDraft) restoredDraft = JSON.parse(rawDraft);
+          }catch(e){
+            console.error('Draft restore failed:', e);
+            localStorage.removeItem(getProjectStorageKey(resolvedProjectId));
+          }
         }
 
         try{
@@ -1057,7 +1085,53 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
         const stateToRestore = restoredDraft;
 
-        if(stateToRestore){
+        if(remoteDesign){
+          // ── Path A: Hydrate from Supabase remote design (Dashboard → Editor nav) ──
+          const jsonData = remoteDesign.json_data || {};
+          const remoteLayers = Array.isArray(jsonData.layers) && jsonData.layers.length > 0
+            ? jsonData.layers
+            : [makeBg(PLATFORMS[jsonData.platform || 'youtube'] || p)];
+          const remotePlatform = jsonData.platform || remoteDesign.platform || 'youtube';
+          const remoteBrightness = jsonData.brightness ?? 100;
+          const remoteContrast   = jsonData.contrast   ?? 100;
+          const remoteSaturation = jsonData.saturation ?? 100;
+          const remoteHue        = jsonData.hue        ?? 0;
+          const remoteName       = remoteDesign.name   || jsonData.name || 'My Design';
+
+          const maxRemoteId = remoteLayers.reduce((m,l)=>Math.max(m,typeof l.id==='number'?l.id:0),0);
+          if(maxRemoteId>=idCounter) idCounter=maxRemoteId+1;
+
+          setPlatform(remotePlatform);
+          setLayers(remoteLayers);
+          layersRef.current=remoteLayers;
+          setBrightness(remoteBrightness);
+          setContrast(remoteContrast);
+          setSaturation(remoteSaturation);
+          setHue(remoteHue);
+          setDesignName(remoteName);
+          setProjectId(resolvedProjectId);
+          currentDesignIdRef.current=remoteDesign.id;
+          setCurrentDesignId(remoteDesign.id);
+          syncProjectIdToUrl(remoteDesign.id);
+
+          const snapshot = JSON.parse(JSON.stringify(remoteLayers));
+          historyRef.current=[snapshot];
+          historyIndexRef.current=0;
+          setHistory([snapshot]);
+          setHistoryIndex(0);
+          lastSavedSignatureRef.current=buildSaveSignature({
+            projectId:resolvedProjectId,
+            platform:remotePlatform,
+            layers:remoteLayers,
+            brightness:remoteBrightness,
+            contrast:remoteContrast,
+            saturation:remoteSaturation,
+            hue:remoteHue,
+            designName:remoteName,
+            aiPrompt:'',
+            lastGeneratedImageUrl:'',
+          });
+        }else if(stateToRestore){
           const restoredPlatform = stateToRestore.platform||'youtube';
           const restoredLayers = Array.isArray(stateToRestore.layers) && stateToRestore.layers.length>0
             ? stateToRestore.layers
