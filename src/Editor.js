@@ -2206,7 +2206,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     } finally {
       isSavingRef.current = false;
     }
-  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, saturation, savedDesigns, setCurrentProjectId]);
+  },[brightness, buildProjectSnapshot, buildSaveSignature, contrast, designName, generateDesignThumbnail, hue, platform, projectId, saturation, setCurrentProjectId]);
 
   useEffect(()=>{
     if(isLoading || !draftHydratedRef.current)return;
