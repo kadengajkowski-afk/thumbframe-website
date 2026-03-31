@@ -67,6 +67,13 @@ const TEXT_FLIP_HOOKS = [
   ['SIMPLE',              'COMPLEX'],
   ['WRONG',               'DISASTER'],
   ['STORY',               'SECRET'],
+  ['I SURVIVED',          'GONE WRONG!'],
+  ['SURVIVED',            'TOTAL FAILURE'],
+  ['I FAILED',            'THEY LAUGHED'],
+  ['CHALLENGE',           'DISASTER CHALLENGE'],
+  ['24 HOURS',            'OVERNIGHT FAIL'],
+  ['LAST TO LEAVE',       'FIRST TO QUIT'],
+  ['I TRIED',             'IT BACKFIRED'],
 ];
 
 const TEXT_DRAMA_HOOKS = [
@@ -93,6 +100,13 @@ const TEXT_DRAMA_HOOKS = [
   ['SIMPLE',              'REVOLUTIONARY'],
   ['WRONG',               'EVERYTHING CHANGED'],
   ['STORY',               'TRUTH'],
+  ['I SURVIVED',          'NOTHING WILL PREPARE YOU'],
+  ['SURVIVED',            'CHANGED ME FOREVER'],
+  ['I FAILED',            'THE MOMENT EVERYTHING CHANGED'],
+  ['CHALLENGE',           'THE ULTIMATE TEST'],
+  ['24 HOURS',            'THE LONGEST NIGHT'],
+  ['LAST TO LEAVE',       'PUSHED TO THE LIMIT'],
+  ['I TRIED',             'THE EXPERIMENT THAT CHANGED EVERYTHING'],
 ];
 
 function getProjectIdFromUrl(){
@@ -2119,6 +2133,25 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     const bg = layers.find(l=>l.type==='background');
 
+    // Detect if a hex colour is 'warm' (reds/oranges/yellows dominate)
+    function isWarm(hex){
+      try{
+        const h=hex.replace('#','');
+        const r=parseInt(h.slice(0,2),16);
+        const b=parseInt(h.slice(4,6),16);
+        return r>160&&b<120; // high red, low blue
+      }catch(e){ return false; }
+    }
+
+    // Warm palette (Reds/Oranges/Yellows)
+    const WARM_PALETTE = { bg:['#FF6B35','#F7C59F'], text:'#FFE500', accent:'#FF2D2D' };
+    // Cold palette (Blues/Purples)
+    const COLD_PALETTE = { bg:['#0d1b4b','#3a006f'], text:'#00CFFF', accent:'#9400FF' };
+
+    // Determine Variant B palette: opposite of the current bg
+    const bgBaseColor = bg?.bgGradient?.[0] || bg?.bgColor || '#f97316';
+    const bPalette = isWarm(bgBaseColor) ? COLD_PALETTE : WARM_PALETTE;
+
     function swapText(text, map){
       const upper=(text||'').toUpperCase().trim();
       for(const [a,b] of map){
@@ -2136,6 +2169,32 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           ...defaultEffects(),
           ...(l.effects||{}),
           glow:{enabled:true, color:'#ffffff', blur:18},
+        },
+      };
+    }
+
+    // Apply 'Reaction Face' zoom to subject image layers:
+    // +20% size, re-center crop so the face stays centred, add tight subject glow outline
+    function applySubjectZoom(l){
+      if(l.type!=='image') return applySubjectGlow(l);
+      const zoomFactor = 1.2;
+      const newW = Math.round((l.width||200)*zoomFactor);
+      const newH = Math.round((l.height||200)*zoomFactor);
+      // Offset position so the visual centre stays in the same place
+      const dx = Math.round((newW-(l.width||200))/2);
+      const dy = Math.round((newH-(l.height||200))/2);
+      // Tighten crop proportionally to simulate a closer face zoom
+      const cropExtra = Math.round((l.height||200)*0.06);
+      return {
+        ...l, id:newId(),
+        width:newW, height:newH,
+        x:(l.x||0)-dx, y:(l.y||0)-dy,
+        cropTop:Math.round(((l.cropTop||0)+cropExtra)),
+        effects:{
+          ...defaultEffects(),
+          ...(l.effects||{}),
+          glow:{enabled:true, color:'#ffffff', blur:18},
+          subjectOutline:{enabled:true, color:'#ffffff', width:5},
         },
       };
     }
@@ -2172,12 +2231,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       return applySubjectGlow(l);
     });
 
-    // Variant B — Flip Hook: perspective-swap text, warm palette, Anton font
+    // Variant B — Hook Swap + Reaction Zoom + Palette Inversion
     const variantB = layers.map(l=>{
       if(l.type==='background') return{
         ...l,id:newId(),
-        bgGradient:['#FF6B35','#F7C59F'],
-        bgColor:'#FF6B35',
+        bgGradient:bPalette.bg,
+        bgColor:bPalette.bg[0],
       };
       if(l.type==='text') return{
         ...l,id:newId(),
@@ -2186,7 +2245,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         fontWeight:900,
         strokeWidth:5,
         strokeColor:'#000000',
-        textColor:'#ffffff',
+        textColor:bPalette.text,
         shadowEnabled:true,
         shadowColor:'#000000',
         shadowBlur:18,
@@ -2196,10 +2255,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       };
       if(l.type==='shape') return{
         ...l,id:newId(),
-        fillColor:'#FF6B35',
-        strokeColor:'#FFD700',
+        fillColor:bPalette.accent,
+        strokeColor:bPalette.text,
       };
-      return applySubjectGlow(l);
+      return applySubjectZoom(l);
     });
 
     // Variant C — Dark Drama: alternate text hook, dark bg, glow text, subject isolation
@@ -2234,9 +2293,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     setTimeout(()=>{
       setAbVariants([
-        { id:'a', label:'A — Anton Power',  desc:'High-impact font, fat stroke, bold contrast',  layers:variantA },
-        { id:'b', label:'B — Flip Hook',    desc:'Text perspective swap, warm energy palette',    layers:variantB },
-        { id:'c', label:'C — Dark Drama',   desc:'Alternate hook, dark moody, glow + subject glow', layers:variantC },
+        { id:'a', label:'A — Anton Power',      desc:'High-impact font, fat stroke, bold contrast',                    layers:variantA },
+        { id:'b', label:'B — Hook Swap + Zoom', desc:'Text hook swap, reaction-face zoom, inverted colour palette',    layers:variantB },
+        { id:'c', label:'C — Dark Drama',       desc:'Alternate hook, dark moody, glow + subject glow',               layers:variantC },
       ]);
       setAbLoading(false);
     },600);
