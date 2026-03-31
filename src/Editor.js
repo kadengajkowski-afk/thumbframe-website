@@ -1167,7 +1167,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     fetchBrandKitForUser();
     return()=>{cancelled=true;};
-  },[user?.id]);
+  },[user]);
 
   useEffect(()=>{
     let cancelled=false;
