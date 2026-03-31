@@ -65,7 +65,7 @@ export default function BrandKitSetupModal({
   }
 
   async function autoSaveBrandKit() {
-    if (!user?.email) return;
+    if (!user?.id) return;
     
     setSaveStatus('saving');
     try {
@@ -80,13 +80,11 @@ export default function BrandKitSetupModal({
         .from('brand_kits')
         .upsert({
           user_id: authUser.id,
-          user_email: authUser.email,
           primary_color: primaryColor,
           secondary_color: secondaryColor,
-          face_image_url: publicUrl,
-          updated_at: new Date().toISOString()
+          face_image_url: publicUrl
         }, {
-          on_conflict: 'user_email'
+          on_conflict: 'user_id'
         });
 
       if (error) throw error;
@@ -102,7 +100,7 @@ export default function BrandKitSetupModal({
   }
 
   async function saveBrandKit() {
-    if (!user?.email) {
+    if (!user?.id) {
       alert('Please log in to save your Brand Kit');
       return;
     }
@@ -120,13 +118,11 @@ export default function BrandKitSetupModal({
         .from('brand_kits')
         .upsert({
           user_id: authUser.id,
-          user_email: authUser.email,
           primary_color: primaryColor,
           secondary_color: secondaryColor,
-          face_image_url: publicUrl,
-          updated_at: new Date().toISOString()
+          face_image_url: publicUrl
         }, {
-          on_conflict: 'user_email'
+          on_conflict: 'user_id'
         });
 
       if (error) throw error;

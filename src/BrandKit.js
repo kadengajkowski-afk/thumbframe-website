@@ -30,7 +30,7 @@ export default function BrandKitSetupModal({
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
 
-  const resolvedApiUrl = (apiUrl || process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
+  const brandKitUpdateUrl = 'https://thumbframe-api-production.up.railway.app/brand-kit/update';
   const fontOptions = ['Anton', 'Burbank', 'Komika Axis', 'Bangers', 'Bebas Neue', 'Oswald'];
 
   useEffect(() => {
@@ -112,15 +112,21 @@ export default function BrandKitSetupModal({
       }
 
       const resolvedFaceUrl = await uploadCroppedFaceIfNeeded(authUser);
+      const requestUserId = user?.id || authUser?.id;
+      const bearerToken = user?.token || session?.access_token || token || '';
 
-      const response = await fetch(`${resolvedApiUrl}/brand-kit/update`, {
+      if (!requestUserId) {
+        throw new Error('Missing user_id for Brand Kit save');
+      }
+
+      const response = await fetch(brandKitUpdateUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token || token || user?.token || ''}`,
+          ...(bearerToken ? { 'Authorization': `Bearer ${bearerToken}` } : {}),
         },
         body: JSON.stringify({
-          user_id: authUser.id,
+          user_id: requestUserId,
           primary_color: primary,
           secondary_color: secondary,
           primary_font: primaryFont,
