@@ -7,6 +7,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+:root {
+  --font-anton: 'Anton', sans-serif;
+  --font-burbank: 'Bangers', 'Anton', sans-serif;
+  --font-komika-axis: 'Comic Neue', 'Bangers', cursive;
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;

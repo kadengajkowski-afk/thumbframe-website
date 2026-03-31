@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 import BrandKitSetupModal from './BrandKit';
+import SidebarBrandKit from './SidebarBrandKit';
 import supabase from './supabaseClient';
 import html2canvas from 'html2canvas';
 
@@ -14,13 +15,20 @@ const PLATFORMS = {
 };
 
 const FONTS = [
-  'Anton','Bangers','Bebas Neue','Oswald',
+  'Anton','Burbank','Komika Axis','Bangers','Bebas Neue','Oswald',
   'Impact','Arial Black','Arial','Georgia','Courier New','Verdana',
   'Trebuchet MS','Times New Roman','Comic Sans MS','Palatino',
   'Garamond','Tahoma','Lucida Console','Century Gothic','Candara',
   'Franklin Gothic Medium','Rockwell','Copperplate','Papyrus',
   'Helvetica','Segoe UI','Calibri','Cambria','Brush Script MT',
 ];
+
+function resolveFontFamily(fontFamily){
+  if(fontFamily==='Burbank') return 'Bangers, Anton, sans-serif';
+  if(fontFamily==='Komika Axis') return 'Comic Neue, Bangers, cursive';
+  if(fontFamily==='Anton') return 'Anton, sans-serif';
+  return fontFamily;
+}
 
 const FONT_WEIGHTS = [
   {label:'Thin',value:100},{label:'Light',value:300},{label:'Regular',value:400},
@@ -641,7 +649,7 @@ class CanvasErrorBoundary extends React.Component {
 
 function ArcText({obj}){
   const ts=(()=>{const p=[];if(obj.shadowEnabled)p.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)p.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return p.length?p.join(','):'none';})();
-  const base={fontFamily:obj.fontFamily,fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`};
+  const base={fontFamily:resolveFontFamily(obj.fontFamily),fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`};
   if(!obj.arcEnabled||!obj.text)return<span style={base}>{obj.text}</span>;
   const radius=obj.arcRadius||120,chars=obj.text.split(''),step=(obj.fontSize||48)/radius*1.1,start=-(chars.length-1)*step/2;
   return(<div style={{position:'relative',width:radius*2+60,height:radius+60}}>{chars.map((ch,i)=>{const angle=start+i*step-Math.PI/2,x=radius+Math.cos(angle)*radius,y=radius+Math.sin(angle)*radius+30,rot=(angle+Math.PI/2)*180/Math.PI;return<span key={i} style={{position:'absolute',left:x,top:y,transform:`translate(-50%,-50%) rotate(${rot}deg)`,...base,lineHeight:1}}>{ch}</span>;})}</div>);
@@ -1215,7 +1223,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 secondary:data?.secondary_color||'#f97316',
               });
             }
-            setBrandKitFace(data?.face_image_url||null);
+            setBrandKitFace(data?.subject_url||data?.face_image_url||null);
           }else{
             throw brandKitResult.reason;
           }
@@ -1520,6 +1528,40 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     return null;
   }
   function addRecentColor(color){setRecentColors(prev=>[color,...prev.filter(c=>c!==color)].slice(0,12));}
+
+  function applyBrandColorToSelected(color){
+    if(!color) return;
+    addRecentColor(color);
+    if(!selectedLayer){
+      setTextColor(color);
+      setCmdLog('Brand color selected for the next layer');
+      return;
+    }
+    if(selectedLayer.type==='background'){
+      updateBg({bgColor:color,bgGradient:null});
+      setCmdLog('Applied brand color to background');
+      return;
+    }
+    if(selectedLayer.type==='text'){
+      updateLayer(selectedLayer.id,{textColor:color});
+      setTextColor(color);
+      setCmdLog('Applied brand color to text');
+      return;
+    }
+    if(selectedLayer.type==='shape'){
+      updateLayer(selectedLayer.id,{fillColor:color});
+      setFillColor(color);
+      setCmdLog('Applied brand color to shape');
+      return;
+    }
+    if(selectedLayer.type==='image'){
+      updateLayer(selectedLayer.id,{effects:{...(selectedLayer.effects||defaultEffects()),subjectOutline:{enabled:true,color,width:selectedLayer.effects?.subjectOutline?.width||brandKit?.outline_width||5}}});
+      setCmdLog('Applied brand color to subject outline');
+      return;
+    }
+    setTextColor(color);
+    setCmdLog('Brand color selected');
+  }
 
   function loadTemplate(template){
     if(!window.confirm(`Load template "${template.label}"? This will replace your current canvas.`)) return;
@@ -2048,7 +2090,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           const scale=Math.min(scaleX,scaleY);
           ctx.translate(obj.x*scaleX,obj.y*scaleY);
           const fs=(obj.fontSize||48)*scale;
-          ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${obj.fontFamily}`;
+          ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${resolveFontFamily(obj.fontFamily)}`;
           if(obj.shadowEnabled){
             ctx.shadowColor=obj.shadowColor||'rgba(0,0,0,0.95)';
             ctx.shadowBlur=(obj.shadowBlur||14)*scale;
@@ -3190,15 +3232,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     };
     img.src=subjectUrl;
   }
-  function addBrandFaceToCanvas(url){
-    injectBrandSubject({
-      ...(brandKit||{}),
-      face_image_url:url,
-      subject_url:url,
-      outline_color:brandKit?.outline_color||'#ffffff',
-      outline_width:brandKit?.outline_width||5,
-    });
-  }
 
   function readBlobAsDataUrl(blob){
     return new Promise((resolve,reject)=>{
@@ -3489,7 +3522,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         ctx.translate(obj.x*scaleX, obj.y*scaleY);
         if(obj.flipH||obj.flipV) ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
         const fs = (obj.fontSize||48)*scale;
-        ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${obj.fontFamily}`;
+        ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${resolveFontFamily(obj.fontFamily)}`;
         if(obj.shadowEnabled){
           ctx.shadowColor   = obj.shadowColor||'rgba(0,0,0,0.95)';
           ctx.shadowBlur    = (obj.shadowBlur||14)*scale;
@@ -3771,7 +3804,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     );
     if(obj.type==='text'){
       const ts=(()=>{const pts=[];if(obj.shadowEnabled)pts.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)pts.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return pts.length?pts.join(','):'none';})();
-      return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,userSelect:'none',...selStyle,...blendStyle,...flipStyle,...effectsStyle}}><span style={{fontFamily:obj.fontFamily,fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`,lineHeight:obj.lineHeight||1.2,display:'block'}}>{obj.arcEnabled?<ArcText obj={obj}/>:obj.text}</span>{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
+      return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,userSelect:'none',...selStyle,...blendStyle,...flipStyle,...effectsStyle}}><span style={{fontFamily:resolveFontFamily(obj.fontFamily),fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`,lineHeight:obj.lineHeight||1.2,display:'block'}}>{obj.arcEnabled?<ArcText obj={obj}/>:obj.text}</span>{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
     }
     if(obj.type==='shape')return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,...selStyle,...blendStyle,...flipStyle,...effectsStyle}}>{renderShapeSVG(obj.shape,obj.fillColor,obj.strokeColor,obj.width,obj.height)}{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
     if(obj.type==='svg')return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,width:obj.width,height:obj.height,...selStyle,...blendStyle,...flipStyle,...effectsStyle}}><div style={{width:'100%',height:'100%'}} dangerouslySetInnerHTML={{__html:obj.svg}}/>{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
@@ -3898,7 +3931,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     if(obj.hidden||obj.type==='background')return null;
     if(obj.type==='text'){
       const ts=(()=>{const pts=[];if(obj.shadowEnabled)pts.push(`${(obj.shadowX||2)*scale}px ${(obj.shadowY||2)*scale}px ${(obj.shadowBlur||14)*scale}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);return pts.length?pts.join(','):'none';})();
-      return<div style={{position:'absolute',left:obj.x*scale,top:obj.y*scale,fontSize:obj.fontSize*scale,fontFamily:obj.fontFamily,fontWeight:obj.fontWeight||700,color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth*scale}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',pointerEvents:'none',opacity:(obj.opacity||100)/100}}>{obj.text}</div>;
+      return<div style={{position:'absolute',left:obj.x*scale,top:obj.y*scale,fontSize:obj.fontSize*scale,fontFamily:resolveFontFamily(obj.fontFamily),fontWeight:obj.fontWeight||700,color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth*scale}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',pointerEvents:'none',opacity:(obj.opacity||100)/100}}>{obj.text}</div>;
     }
     if(obj.type==='image'){
       const cropW=(obj.width-(obj.cropLeft||0)-(obj.cropRight||0))*scale;
@@ -5121,7 +5154,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
               <div>
                 <span style={css.label}>Templates</span>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:5,marginBottom:4}}>
-                  {TEXT_TEMPLATES.map((t,i)=>(<button key={i} onClick={()=>applyTextTemplate(t)} style={{padding:'7px 6px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:10,cursor:'pointer',fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,textAlign:'center'}}>{t.label}</button>))}
+                  {TEXT_TEMPLATES.map((t,i)=>(<button key={i} onClick={()=>applyTextTemplate(t)} style={{padding:'7px 6px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:10,cursor:'pointer',fontFamily:resolveFontFamily(t.fontFamily),fontWeight:t.fontWeight||700,textAlign:'center'}}>{t.label}</button>))}
                 </div>
                 <span style={css.label}>Content</span>
                 <input value={textInput} onChange={e=>setTextInput(e.target.value)} style={css.input} placeholder="Enter text..."/>
@@ -5396,67 +5429,18 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             )}
 
             {activeTool==='brandkit'&&(
-              <div>
-                <div style={{...css.section,marginTop:0}}>
-                  <div style={{fontSize:13,fontWeight:'700',color:T.text,marginBottom:6}}>◐ Your Brand Kit</div>
-                  <div style={{fontSize:11,color:T.muted,lineHeight:1.6,marginBottom:12}}>
-                    Save your brand colors and face image. They'll be auto-injected into AI-generated thumbnails.
-                  </div>
-                  {brandKitLoading&&(
-                    <div style={{fontSize:11,color:T.muted,marginBottom:10}}>Loading Brand Assets...</div>
-                  )}
-                  {user ? (
-                    <button onClick={()=>setShowBrandKitSetup(true)} style={{...css.addBtn,marginTop:0}}>
-                      {brandKit ? '✓ Edit Brand Kit' : '+ Setup Brand Kit'}
-                    </button>
-                  ) : (
-                    <div style={{fontSize:11,color:T.warning,padding:12,background:'rgba(245,158,11,0.1)',borderRadius:6,border:`1px solid rgba(245,158,11,0.3)`,textAlign:'center'}}>
-                      Log in to save your Brand Kit
-                    </div>
-                  )}
-                </div>
-                {brandKit && (
-                  <div style={{...css.section}}>
-                    <div style={{fontSize:11,fontWeight:'600',color:T.text,marginBottom:8}}>Current Brand Kit</div>
-                    <div style={{display:'flex',gap:8,marginBottom:8}}>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:9,color:T.muted,marginBottom:3}}>Primary</div>
-                        <div style={{width:'100%',height:32,borderRadius:6,background:brandKit.primary_color,border:`1px solid ${T.border}`}}/>
-                      </div>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:9,color:T.muted,marginBottom:3}}>Secondary</div>
-                        <div style={{width:'100%',height:32,borderRadius:6,background:brandKit.secondary_color,border:`1px solid ${T.border}`}}/>
-                      </div>
-                    </div>
-                    {brandKit.face_image_url && (
-                      <div>
-                        <div style={{fontSize:9,color:T.muted,marginBottom:3}}>Face Image</div>
-                        <img src={brandKit.face_image_url} alt="Face" style={{width:80,height:80,borderRadius:8,objectFit:'cover',border:`1px solid ${T.border}`}}/>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div style={{...css.section}}>
-                  <div style={{fontSize:11,fontWeight:'600',color:T.text,marginBottom:8}}>Brand Assets</div>
-                  {brandKitFace&&(
-                    <div style={{marginBottom:10}}>
-                      <div style={{fontSize:9,color:T.muted,marginBottom:4}}>Face Thumbnail (click to add)</div>
-                      <img
-                        src={brandKitFace}
-                        alt="Brand face"
-                        onClick={()=>addBrandFaceToCanvas(brandKitFace)}
-                        style={{width:80,height:80,borderRadius:8,objectFit:'cover',border:`1px solid ${T.border}`,cursor:'pointer'}}
-                      />
-                    </div>
-                  )}
-                  <div style={{fontSize:9,color:T.muted,marginBottom:4}}>Quick Select Colors</div>
-                  <div style={{display:'flex',gap:8}}>
-                    <button onClick={()=>{updateBg({bgColor:brandKitColors.primary,bgGradient:null});addRecentColor(brandKitColors.primary);}} style={{width:34,height:34,borderRadius:6,border:`1px solid ${T.border}`,background:brandKitColors.primary,cursor:'pointer'}} title="Apply primary to background"/>
-                    <button onClick={()=>{setTextColor(brandKitColors.secondary);addRecentColor(brandKitColors.secondary);}} style={{width:34,height:34,borderRadius:6,border:`1px solid ${T.border}`,background:brandKitColors.secondary,cursor:'pointer'}} title="Apply secondary to text"/>
-                  </div>
-                </div>
-              </div>
+              <SidebarBrandKit
+                T={T}
+                user={user}
+                brandKit={brandKit}
+                brandKitLoading={brandKitLoading}
+                brandKitFace={brandKitFace}
+                brandKitColors={brandKitColors}
+                selectedLayer={selectedLayer}
+                onOpenSetup={()=>setShowBrandKitSetup(true)}
+                onInjectSubject={()=>injectBrandSubject(brandKit||{face_image_url:brandKitFace,subject_url:brandKitFace})}
+                onApplyColor={applyBrandColorToSelected}
+              />
             )}
 
             {activeTool==='adjust'&&(
@@ -6373,7 +6357,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         <BrandKitSetupModal
           T={T}
           token={token}
+          apiUrl={resolvedApiUrl}
           user={user}
+          brandKit={brandKit}
+          setBrandKit={setBrandKit}
           brandKitColors={brandKitColors}
           setBrandKitColors={setBrandKitColors}
           brandKitFace={brandKitFace}
