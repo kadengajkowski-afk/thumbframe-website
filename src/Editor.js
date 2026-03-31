@@ -4,7 +4,6 @@ import BrushTool, { BrushOverlay } from './Brush';
 import BrandKitSetupModal from './BrandKit';
 import supabase from './supabaseClient';
 import html2canvas from 'html2canvas';
-import Cropper from 'react-easy-crop';
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
@@ -732,12 +731,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [maskPaintColor,setMaskPaintColor] = useState('#000000'); // eslint-disable-line no-unused-vars
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
-  const [editorCropOpen,setEditorCropOpen]             = useState(false);
-  const [editorCrop,setEditorCrop]                     = useState({x:0,y:0});
-  const [editorCropZoom,setEditorCropZoom]             = useState(1);
-  const [editorCropAspect,setEditorCropAspect]         = useState(16/9);
-  const [editorCroppedAreaPixels,setEditorCroppedAreaPixels] = useState(null);
-  const [editorCropNaturalSize,setEditorCropNaturalSize] = useState({width:0,height:0});
 
   const [showBrandKitSetup,setShowBrandKitSetup]       = useState(false);
   const [brandKit,setBrandKit]                         = useState(initialBrandKit||null);
@@ -1437,47 +1430,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     return null;
   }
   function addRecentColor(color){setRecentColors(prev=>[color,...prev.filter(c=>c!==color)].slice(0,12));}
-
-  function openEditorCropper(aspect){
-    if(!selectedLayer || selectedLayer.type!=='image') return;
-    setEditorCrop({x:0,y:0});
-    setEditorCropZoom(1);
-    setEditorCropAspect(aspect);
-    setEditorCroppedAreaPixels(null);
-    setEditorCropNaturalSize({
-      width:selectedLayer.originalWidth||0,
-      height:selectedLayer.originalHeight||0,
-    });
-    setEditorCropOpen(true);
-  }
-
-  function applyEditorCrop(){
-    if(!selectedLayer || selectedLayer.type!=='image' || !editorCroppedAreaPixels) return;
-
-    const naturalWidth = selectedLayer.originalWidth || editorCropNaturalSize.width || selectedLayer.width;
-    const naturalHeight = selectedLayer.originalHeight || editorCropNaturalSize.height || selectedLayer.height;
-    const scaleX = selectedLayer.width / naturalWidth;
-    const scaleY = selectedLayer.height / naturalHeight;
-
-    const cropLeft = Math.max(0, Math.round(editorCroppedAreaPixels.x * scaleX));
-    const cropTop = Math.max(0, Math.round(editorCroppedAreaPixels.y * scaleY));
-    const croppedDisplayWidth = Math.max(1, Math.round(editorCroppedAreaPixels.width * scaleX));
-    const croppedDisplayHeight = Math.max(1, Math.round(editorCroppedAreaPixels.height * scaleY));
-    const cropRight = Math.max(0, selectedLayer.width - cropLeft - croppedDisplayWidth);
-    const cropBottom = Math.max(0, selectedLayer.height - cropTop - croppedDisplayHeight);
-
-    updateLayer(selectedId,{
-      cropTop,
-      cropBottom,
-      cropLeft,
-      cropRight,
-      originalWidth:naturalWidth,
-      originalHeight:naturalHeight,
-    });
-
-    setEditorCropOpen(false);
-    setCmdLog('✓ Crop applied');
-  }
 
   function loadTemplate(template){
     if(!window.confirm(`Load template "${template.label}"? This will replace your current canvas.`)) return;
@@ -3452,7 +3404,60 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
 
   function renderCropHandles(obj){
-    return null;
+    if(activeTool!=='crop') return null;
+    const hs={
+      position:'absolute',
+      width:10,height:10,
+      background:'#fff',
+      border:`2px solid ${T.accent}`,
+      borderRadius:2,
+      zIndex:1002,
+      pointerEvents:'all',
+    };
+    function clamp(v,mn,mx){return Math.max(mn,Math.min(mx,Math.round(v)));}
+    function makeDragHandle(onDrag){
+      return (e)=>{
+        e.stopPropagation();e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        const sx=e.clientX,sy=e.clientY;
+        const sc={
+          cropLeft:obj.cropLeft||0,cropTop:obj.cropTop||0,
+          cropRight:obj.cropRight||0,cropBottom:obj.cropBottom||0,
+        };
+        function onMove(mv){
+          const dx=(mv.clientX-sx)/zoomRef.current;
+          const dy=(mv.clientY-sy)/zoomRef.current;
+          updateLayerSilent(obj.id,onDrag(dx,dy,sc,obj));
+        }
+        function onUp(uev){
+          const dx=(uev.clientX-sx)/zoomRef.current;
+          const dy=(uev.clientY-sy)/zoomRef.current;
+          updateLayer(obj.id,onDrag(dx,dy,sc,obj));
+          window.removeEventListener('pointermove',onMove);
+          window.removeEventListener('pointerup',onUp);
+        }
+        window.addEventListener('pointermove',onMove);
+        window.addEventListener('pointerup',onUp);
+      };
+    }
+    const handles=[
+      {s:{top:-5,left:-5,cursor:'nw-resize'},   fn:(dx,dy,s,o)=>({cropLeft:clamp(s.cropLeft+dx,0,o.width-s.cropRight-1),  cropTop:clamp(s.cropTop+dy,0,o.height-s.cropBottom-1)})},
+      {s:{top:-5,left:'50%',transform:'translateX(-50%)',cursor:'n-resize'},  fn:(dx,dy,s,o)=>({cropTop:clamp(s.cropTop+dy,0,o.height-s.cropBottom-1)})},
+      {s:{top:-5,right:-5,cursor:'ne-resize'},  fn:(dx,dy,s,o)=>({cropRight:clamp(s.cropRight-dx,0,o.width-s.cropLeft-1), cropTop:clamp(s.cropTop+dy,0,o.height-s.cropBottom-1)})},
+      {s:{top:'50%',left:-5,transform:'translateY(-50%)',cursor:'w-resize'},  fn:(dx,dy,s,o)=>({cropLeft:clamp(s.cropLeft+dx,0,o.width-s.cropRight-1)})},
+      {s:{top:'50%',right:-5,transform:'translateY(-50%)',cursor:'e-resize'}, fn:(dx,dy,s,o)=>({cropRight:clamp(s.cropRight-dx,0,o.width-s.cropLeft-1)})},
+      {s:{bottom:-5,left:-5,cursor:'sw-resize'},  fn:(dx,dy,s,o)=>({cropLeft:clamp(s.cropLeft+dx,0,o.width-s.cropRight-1),   cropBottom:clamp(s.cropBottom-dy,0,o.height-s.cropTop-1)})},
+      {s:{bottom:-5,left:'50%',transform:'translateX(-50%)',cursor:'s-resize'},fn:(dx,dy,s,o)=>({cropBottom:clamp(s.cropBottom-dy,0,o.height-s.cropTop-1)})},
+      {s:{bottom:-5,right:-5,cursor:'se-resize'}, fn:(dx,dy,s,o)=>({cropRight:clamp(s.cropRight-dx,0,o.width-s.cropLeft-1),  cropBottom:clamp(s.cropBottom-dy,0,o.height-s.cropTop-1)})},
+    ];
+    return(
+      <div style={{position:'absolute',inset:0,pointerEvents:'none',zIndex:1002}}>
+        <div style={{position:'absolute',inset:0,border:`1.5px dashed ${T.accent}`,pointerEvents:'none'}}/>
+        {handles.map((h,i)=>(
+          <div key={i} onPointerDown={makeDragHandle(h.fn)} style={{...hs,...h.s}}/>
+        ))}
+      </div>
+    );
   }
 
   function renderResizeHandles(obj){
@@ -3910,49 +3915,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         </div>
       )}
 
-      {editorCropOpen&&selectedLayer?.type==='image'&&(
-        <div style={{position:'fixed',inset:0,zIndex:1200,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)'}} onClick={e=>{if(e.target===e.currentTarget)setEditorCropOpen(false);}}>
-          <div style={{width:760,maxWidth:'92vw',background:T.panel,borderRadius:14,border:`1px solid ${T.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.8)',padding:16}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-              <div style={{fontSize:14,fontWeight:'700'}}>Professional Cropper</div>
-              <div style={{display:'flex',gap:6}}>
-                <button onClick={()=>setEditorCropAspect(16/9)} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${Math.abs(editorCropAspect-(16/9))<0.001?T.accent:T.border}`,background:Math.abs(editorCropAspect-(16/9))<0.001?`${T.accent}18`:'transparent',color:Math.abs(editorCropAspect-(16/9))<0.001?T.accent:T.text,cursor:'pointer',fontSize:10}}>16:9</button>
-                <button onClick={()=>setEditorCropAspect(1)} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${Math.abs(editorCropAspect-1)<0.001?T.accent:T.border}`,background:Math.abs(editorCropAspect-1)<0.001?`${T.accent}18`:'transparent',color:Math.abs(editorCropAspect-1)<0.001?T.accent:T.text,cursor:'pointer',fontSize:10}}>1:1</button>
-                <button onClick={()=>setEditorCropAspect(4/3)} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${Math.abs(editorCropAspect-(4/3))<0.001?T.accent:T.border}`,background:Math.abs(editorCropAspect-(4/3))<0.001?`${T.accent}18`:'transparent',color:Math.abs(editorCropAspect-(4/3))<0.001?T.accent:T.text,cursor:'pointer',fontSize:10}}>4:3</button>
-                <button onClick={()=>setEditorCropAspect(9/16)} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${Math.abs(editorCropAspect-(9/16))<0.001?T.accent:T.border}`,background:Math.abs(editorCropAspect-(9/16))<0.001?`${T.accent}18`:'transparent',color:Math.abs(editorCropAspect-(9/16))<0.001?T.accent:T.text,cursor:'pointer',fontSize:10}}>9:16</button>
-              </div>
-            </div>
 
-            <div style={{position:'relative',width:'100%',height:420,borderRadius:10,overflow:'hidden',background:'#111',border:`1px solid ${T.border}`}}>
-              <Cropper
-                image={selectedLayer.paintSrc||selectedLayer.src}
-                crop={editorCrop}
-                zoom={editorCropZoom}
-                aspect={editorCropAspect}
-                objectFit="contain"
-                showGrid
-                onCropChange={setEditorCrop}
-                onZoomChange={setEditorCropZoom}
-                onCropComplete={(_, croppedAreaPx)=>setEditorCroppedAreaPixels(croppedAreaPx)}
-                onMediaLoaded={(media)=>{
-                  setEditorCropNaturalSize({width:media.naturalWidth||media.width||0,height:media.naturalHeight||media.height||0});
-                }}
-              />
-            </div>
-
-            <div style={{display:'flex',alignItems:'center',gap:8,marginTop:10}}>
-              <span style={{fontSize:11,color:T.muted,fontWeight:'600'}}>Zoom</span>
-              <input type="range" min={1} max={3} step={0.01} value={editorCropZoom} onChange={e=>setEditorCropZoom(Number(e.target.value))} style={{flex:1}}/>
-              <span style={{fontSize:11,color:T.muted,width:36,textAlign:'right'}}>{editorCropZoom.toFixed(2)}x</span>
-            </div>
-
-            <div style={{display:'flex',gap:8,marginTop:12}}>
-              <button onClick={()=>setEditorCropOpen(false)} style={{flex:1,padding:9,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.text,cursor:'pointer',fontSize:12,fontWeight:'600'}}>Cancel</button>
-              <button onClick={applyEditorCrop} disabled={!editorCroppedAreaPixels} style={{flex:1,padding:9,borderRadius:7,border:'none',background:T.accent,color:'#fff',cursor:editorCroppedAreaPixels?'pointer':'not-allowed',fontSize:12,fontWeight:'700',opacity:editorCroppedAreaPixels?1:0.6}}>Apply crop</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {cmdOpen&&(
         <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:80,background:'rgba(0,0,0,0.6)',backdropFilter:'blur(4px)'}} onClick={e=>{if(e.target===e.currentTarget){setCmdOpen(false);setCmdSuggestions([]);}}}>
@@ -4819,33 +4782,16 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             {activeTool==='crop'&&(
               <div>
                 <span style={css.label}>Crop tool</span>
-                <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Use the professional cropper with fixed aspect ratios.</div>
+                <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted,lineHeight:1.7}}>
+                  Drag the handles on the image to crop directly.<br/>
+                  <span style={{color:T.text,fontWeight:'600'}}>Other layers stay interactive.</span>
+                </div>
                 {!selectedLayer||selectedLayer.type!=='image'?(
                   <div style={{...css.section,marginTop:8,fontSize:12,color:T.muted,textAlign:'center',padding:20}}><div style={{fontSize:24,marginBottom:8}}>⊡</div>Click an image to begin cropping</div>
                 ):(
-                  <>
-                    <div style={{...css.section,marginTop:8,padding:12}}>
-                      <div style={{fontSize:10,color:T.muted,marginBottom:10,fontWeight:'600',textTransform:'uppercase'}}>Launch cropper</div>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:5}}>
-                        <button onClick={()=>openEditorCropper(16/9)} style={{padding:'8px 4px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:11,cursor:'pointer',textAlign:'center'}}>
-                          Thumbnail<br/><span style={{fontSize:9,color:T.muted}}>16:9</span>
-                        </button>
-                        <button onClick={()=>openEditorCropper(1)} style={{padding:'8px 4px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:11,cursor:'pointer',textAlign:'center'}}>
-                          Square<br/><span style={{fontSize:9,color:T.muted}}>1:1</span>
-                        </button>
-                        <button onClick={()=>openEditorCropper(4/3)} style={{padding:'8px 4px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:11,cursor:'pointer',textAlign:'center'}}>
-                          Classic<br/><span style={{fontSize:9,color:T.muted}}>4:3</span>
-                        </button>
-                        <button onClick={()=>openEditorCropper(9/16)} style={{padding:'8px 4px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:11,cursor:'pointer',textAlign:'center'}}>
-                          Portrait<br/><span style={{fontSize:9,color:T.muted}}>9:16</span>
-                        </button>
-                      </div>
-                      <button onClick={()=>updateLayer(selectedId,{cropTop:0,cropBottom:0,cropLeft:0,cropRight:0})} style={{...css.addBtn,marginTop:8,background:'transparent',color:T.muted,border:`1px solid ${T.border}`}}>Reset crop</button>
-                    </div>
-                    <div style={{...css.section,marginTop:8,fontSize:11,color:T.muted,lineHeight:1.6}}>
-                      Cropper movement and zoom are handled by react-easy-crop to avoid inverted edge math.
-                    </div>
-                  </>
+                  <div style={{...css.section,marginTop:8,padding:12}}>
+                    <button onClick={()=>updateLayer(selectedId,{cropTop:0,cropBottom:0,cropLeft:0,cropRight:0})} style={{...css.addBtn,marginTop:0,background:'transparent',color:T.muted,border:`1px solid ${T.border}`}}>Reset crop</button>
+                  </div>
                 )}
               </div>
             )}
