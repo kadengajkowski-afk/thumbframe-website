@@ -545,19 +545,8 @@ function getEffectsStyle(effects){
     const blur=Math.max(0,Math.round(Number(effects.dropShadow.blur||0)));
     const x=Math.round(Number(effects.dropShadow.x||0));
     const y=Math.round(Number(effects.dropShadow.y||0));
-    if(spread>0){
-      const diag=Math.max(1,Math.round(spread*0.707));
-      filters.push(`drop-shadow(${x+spread}px ${y}px ${blur}px ${rgba})`);
-      filters.push(`drop-shadow(${x-spread}px ${y}px ${blur}px ${rgba})`);
-      filters.push(`drop-shadow(${x}px ${y+spread}px ${blur}px ${rgba})`);
-      filters.push(`drop-shadow(${x}px ${y-spread}px ${blur}px ${rgba})`);
-      filters.push(`drop-shadow(${x+diag}px ${y+diag}px ${blur}px ${rgba})`);
-      filters.push(`drop-shadow(${x-diag}px ${y-diag}px ${blur}px ${rgba})`);
-      filters.push(`drop-shadow(${x+diag}px ${y-diag}px ${blur}px ${rgba})`);
-      filters.push(`drop-shadow(${x-diag}px ${y+diag}px ${blur}px ${rgba})`);
-    }else{
-      filters.push(`drop-shadow(${x}px ${y}px ${blur}px ${rgba})`);
-    }
+    const singleBlur=Math.max(blur, spread*2);
+    filters.push(`drop-shadow(${x}px ${y}px ${singleBlur}px ${rgba})`);
   }
   if(effects.glow?.enabled){
     shadows.push(`0 0 ${effects.glow.blur}px ${effects.glow.color}`);
@@ -573,21 +562,9 @@ function getEffectsStyle(effects){
   }
   if(effects.subjectOutline?.enabled&&effects.subjectOutline.width>0){
     const sc=effects.subjectOutline.color||'#ffffff';
-    const sw=effects.subjectOutline.width||5;
-    // Stacked drop-shadow in 8 directions to create a solid contour outline
-    // that follows the alpha mask of a PNG subject (unlike CSS outline which boxes the element)
-    const diag=Math.round(sw*0.707);
-    const outlineFilters=[
-      `drop-shadow(${sw}px 0 0 ${sc})`,
-      `drop-shadow(-${sw}px 0 0 ${sc})`,
-      `drop-shadow(0 ${sw}px 0 ${sc})`,
-      `drop-shadow(0 -${sw}px 0 ${sc})`,
-      `drop-shadow(${diag}px ${diag}px 0 ${sc})`,
-      `drop-shadow(-${diag}px -${diag}px 0 ${sc})`,
-      `drop-shadow(${diag}px -${diag}px 0 ${sc})`,
-      `drop-shadow(-${diag}px ${diag}px 0 ${sc})`,
-    ].join(' ');
-    style.filter = style.filter ? `${outlineFilters} ${style.filter}` : outlineFilters;
+    const glowBlur=Math.max(20, (effects.subjectOutline.width||5)*2);
+    const outlineFilter=`drop-shadow(0 0 ${glowBlur}px ${sc})`;
+    style.filter = style.filter ? `${outlineFilter} ${style.filter}` : outlineFilter;
   }
   return style;
 }
@@ -3153,8 +3130,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       setLayers(prev=>{
         const hasTarget=prev.some(item=>item.id===targetId&&item.type==='image');
         if(!hasTarget) return prev;
+        const subjectShadowColor=brandKit?.outline_color||'#FFFFFF';
         const nl=prev.map(item=>item.id===targetId&&item.type==='image'
-          ? {...item,src:safeDataUrl,paintSrc:null,isSubject:true,effects:{...(item.effects||defaultEffects()),subjectOutline:{enabled:true,color:brandKit?.outline_color||'#ffffff',width:Math.max(1,Math.round(Number(brandKit?.outline_width||5)))}}}
+          ? {...item,src:safeDataUrl,paintSrc:null,isSubject:true,effects:{...(item.effects||defaultEffects()),shadow:{enabled:true,x:0,y:0,blur:20,color:subjectShadowColor,opacity:100},dropShadow:{enabled:false,x:0,y:0,blur:0,color:subjectShadowColor,opacity:100,spread:0},subjectOutline:{enabled:false,color:subjectShadowColor,width:0}}}
           : item);
         pushHistoryDebounced(nl);
         return nl;
@@ -3295,7 +3273,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const subjectUrl=kit?.subject_image_url||kit?.subject_url||kit?.face_image_url||brandKitFace;
     if(!subjectUrl)return;
     const outlineColor=kit?.outline_color||'#FFFFFF';
-    const outlineWidth=Math.max(1,Math.round(Number(kit?.outline_width||8)));
     const img=new Image();
     img.crossOrigin='Anonymous';
     img.onload=()=>{
@@ -3311,8 +3288,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         isSubject:true,
         effects:{
           ...defaultEffects(),
-          dropShadow:{enabled:true,x:0,y:0,blur:0,color:outlineColor,opacity:100,spread:outlineWidth},
-          subjectOutline:{enabled:true,color:outlineColor,width:outlineWidth},
+          shadow:{enabled:true,x:0,y:0,blur:20,color:outlineColor,opacity:100},
+          dropShadow:{enabled:false,x:0,y:0,blur:0,color:outlineColor,opacity:100,spread:0},
+          subjectOutline:{enabled:false,color:outlineColor,width:0},
         },
       });
     };
