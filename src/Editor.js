@@ -3541,7 +3541,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     }
     const handles=[
       {s:{top:-5,left:-5,cursor:'nw-resize'},   fn:(dx,dy,s,o)=>({cropLeft:clamp(s.cropLeft+dx,0,o.width-s.cropRight-1),  cropTop:clamp(s.cropTop+dy,0,o.height-s.cropBottom-1)})},
-      {s:{top:-5,left:'50%',transform:'translateX(-50%)',cursor:'n-resize'},  fn:(dx,dy,s,o)=>({cropTop:clamp(s.cropTop+dy,0,o.height-s.cropBottom-1)})},
+      {s:{top:-5,left:'50%',transform:'translateX(-50%)',cursor:'n-resize'},  fn:(dx,dy,s,o)=>{const minH=20;const newCropTop=clamp(s.cropTop+dy,0,o.height-s.cropBottom-minH);const actualDy=newCropTop-s.cropTop;return{cropTop:newCropTop,y:o.y+actualDy};}},
       {s:{top:-5,right:-5,cursor:'ne-resize'},  fn:(dx,dy,s,o)=>({cropRight:clamp(s.cropRight-dx,0,o.width-s.cropLeft-1), cropTop:clamp(s.cropTop+dy,0,o.height-s.cropBottom-1)})},
       {s:{top:'50%',left:-5,transform:'translateY(-50%)',cursor:'w-resize'},  fn:(dx,dy,s,o)=>({cropLeft:clamp(s.cropLeft+dx,0,o.width-s.cropRight-1)})},
       {s:{top:'50%',right:-5,transform:'translateY(-50%)',cursor:'e-resize'}, fn:(dx,dy,s,o)=>({cropRight:clamp(s.cropRight-dx,0,o.width-s.cropLeft-1)})},
