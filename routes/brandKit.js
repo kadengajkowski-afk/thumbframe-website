@@ -60,16 +60,21 @@ module.exports = function createBrandKitRouter({ supabase, authMiddleware }) {
 
   router.post('/update', authMiddleware, async (req, res) => {
     try {
-      const payload = normalizeBrandKitPayload(req.body || {}, req.user);
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+      const payload = normalizeBrandKitPayload(req.body || {}, req.user);
       const { data, error } = await supabase
         .from('brand_kits')
-        .upsert(payload, { onConflict: 'user_id' })
-        .select('*')
-        .single();
+        .upsert({ user_id: userId, ...payload }, { onConflict: 'user_id' })
+        .select();
 
-      if (error) throw error;
-      return res.json({ brandKit: data });
+      if (error) {
+        console.error('Supabase Error:', error);
+        return res.status(500).json(error);
+      }
+
+      return res.json(data);
     } catch (err) {
       console.error('[BRAND KIT] Upsert failed:', err);
       return res.status(500).json({ error: 'Failed to save brand kit' });

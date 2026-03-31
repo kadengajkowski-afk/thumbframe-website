@@ -133,7 +133,9 @@ export default function BrandKitSetupModal({
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error || 'Failed to save Brand Kit');
 
-      const savedKit = result?.brandKit || null;
+      const savedKit = Array.isArray(result)
+        ? (result[0] || null)
+        : (result?.brandKit || result || null);
       setBrandKit(savedKit);
       setBrandKitColors({
         primary: savedKit?.primary_color || primary,
