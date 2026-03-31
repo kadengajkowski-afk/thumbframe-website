@@ -84,6 +84,8 @@ module.exports = function createBrandKitRouter({ supabase, authMiddleware }) {
         subject_image_url: req.body.subject_image_url,
         outline_color: req.body.outline_color,
         outline_width: safeOutlineWidth,
+      }, {
+        onConflict: 'user_id',
       })
       .select();
 
