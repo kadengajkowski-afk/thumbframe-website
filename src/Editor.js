@@ -1181,7 +1181,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             supabase
               .from('brand_kits')
               .select('*')
-              .eq('user_email', user.email)
+              .eq('user_id', user.id)
               .single(),
             user?.email
               ? supabase.from('profiles').select('is_pro').eq('email', user.email).maybeSingle()
