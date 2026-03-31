@@ -4485,32 +4485,46 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                   if(activeTool==='brush') return;
                   if(activeTool==='zoom'){
                     e.stopPropagation();
-                    const rect=canvasRef.current.getBoundingClientRect();
-                    // Click position in canvas coordinates (accounting for current zoom+pan)
-                    const clickX=(e.clientX-rect.left)/zoom - panOffset.x;
-                    const clickY=(e.clientY-rect.top)/zoom - panOffset.y;
-                    const centerX=p.preview.w/2;
-                    const centerY=p.preview.h/2;
-                    if(e.shiftKey||e.altKey){
-                      const newZoom=Math.max(0.25,Math.round((zoom-0.5)*10)/10);
-                      if(newZoom<=1){setPanOffset({x:0,y:0});}
-                      else{
-                        // Keep clicked point centered while zooming out
-                        const scale=newZoom/zoom;
-                        setPanOffset(prev=>({
-                          x:(centerX-clickX)*(1-scale)+prev.x*scale,
-                          y:(centerY-clickY)*(1-scale)+prev.y*scale,
-                        }));
-                      }
+                    // Same DOM-based coordinate system as the wheel handler:
+                    // container = flex scroll div that wraps the transform wrapper.
+                    const canvasRect    = canvasRef.current.getBoundingClientRect();
+                    const containerElem = canvasRef.current.parentElement.parentElement;
+                    const containerRect = containerElem.getBoundingClientRect();
+                    const curZoom       = zoomRef.current;
+
+                    // Mouse position relative to the scroll container
+                    const mouseX = e.clientX - containerRect.left;
+                    const mouseY = e.clientY - containerRect.top;
+
+                    // Canvas top-left relative to container (already encodes current pan+zoom)
+                    const panX = canvasRect.left - containerRect.left;
+                    const panY = canvasRect.top  - containerRect.top;
+
+                    // World coordinate (canvas pixel) under the cursor
+                    const worldX = (mouseX - panX) / curZoom;
+                    const worldY = (mouseY - panY) / curZoom;
+
+                    const newZoom = (e.shiftKey||e.altKey)
+                      ? Math.max(0.25, Math.round((curZoom - 0.5) * 10) / 10)
+                      : Math.min(8,    Math.round((curZoom + 0.5) * 10) / 10);
+
+                    if(newZoom <= 1){
                       setZoom(newZoom);
+                      setPanOffset({x:0,y:0});
                     } else {
-                      const newZoom=Math.min(8,Math.round((zoom+0.5)*10)/10);
-                      // Pan so the clicked point moves to center of viewport
-                      setPanOffset({
-                        x:centerX-clickX,
-                        y:centerY-clickY,
-                      });
+                      // New canvas-origin position that keeps worldX/Y pinned under cursor
+                      const newPanX = mouseX - worldX * newZoom;
+                      const newPanY = mouseY - worldY * newZoom;
+                      // Convert viewport-relative origin → panOffset coord system:
+                      //   canvasOriginX = cw2 + newZoom*(panOffset.x - canvasW/2)
+                      //   => panOffset.x = (newPanX - cw2) / newZoom + canvasW/2
+                      const cw2 = containerRect.width  / 2;
+                      const ch2 = containerRect.height / 2;
                       setZoom(newZoom);
+                      setPanOffset({
+                        x: (newPanX - cw2) / newZoom + p.preview.w / 2,
+                        y: (newPanY - ch2) / newZoom + p.preview.h / 2,
+                      });
                     }
                     return;
                   }
