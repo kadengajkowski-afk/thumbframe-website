@@ -1182,7 +1182,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
               .from('brand_kits')
               .select('*')
               .eq('user_id', user.id)
-              .single(),
+              .limit(1),
             user?.email
               ? supabase.from('profiles').select('is_pro').eq('email', user.email).maybeSingle()
               : Promise.resolve({ data: null, error: null }),
@@ -1216,14 +1216,18 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             const { data, error } = brandKitResult.value;
             if(error)throw error;
 
-            setBrandKit(data||null);
-            if(data?.primary_color||data?.secondary_color){
+            const fallbackBrandKit = { primary_font: 'Anton', brand_colors: ['#FF0000'] };
+            const firstBrandKit = Array.isArray(data) ? (data[0] || null) : (data || null);
+            const normalizedBrandKit = firstBrandKit || fallbackBrandKit;
+
+            setBrandKit(normalizedBrandKit);
+            if(firstBrandKit?.primary_color||firstBrandKit?.secondary_color){
               setBrandKitColors({
-                primary:data?.primary_color||'#c45c2e',
-                secondary:data?.secondary_color||'#f97316',
+                primary:firstBrandKit?.primary_color||'#c45c2e',
+                secondary:firstBrandKit?.secondary_color||'#f97316',
               });
             }
-            setBrandKitFace(data?.subject_url||data?.face_image_url||null);
+            setBrandKitFace(firstBrandKit?.subject_url||firstBrandKit?.face_image_url||null);
           }else{
             throw brandKitResult.reason;
           }
