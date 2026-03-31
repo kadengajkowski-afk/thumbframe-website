@@ -15,6 +15,7 @@ const OpenAI     = require('openai');
 const Anthropic  = require('@anthropic-ai/sdk');
 const { Resend } = require('resend');
 const supabase   = require('./supabaseAdminClient');
+const createBrandKitRouter = require('./routes/brandKit');
 
 const app        = express();
 const PORT       = process.env.PORT || 5000;
@@ -151,6 +152,8 @@ async function authMiddleware(req,res,next){
 
 // ── Health ─────────────────────────────────────────────────────────────────────
 app.get('/',(req,res)=>res.json({status:'ThumbFrame API running',version:'3.0'}));
+
+app.use('/brand-kit', createBrandKitRouter({ supabase, authMiddleware }));
 
 // ── Proxy image (CORS fix) ─────────────────────────────────────────────────────
 app.get('/proxy-image', async(req,res)=>{
@@ -517,51 +520,6 @@ app.get('/auth/me', authMiddleware,(req,res)=>{
   const user=users[req.user.email];
   if(!user) return res.status(404).json({error:'User not found'});
   res.json({email:user.email,name:user.name,plan:user.plan||'free'});
-});
-
-// ── Brand Kit ──────────────────────────────────────────────────────────────
-app.get('/brand-kit', authMiddleware, async(req,res)=>{
-  try{
-    const {data,error}=await supabase
-      .from('brand_kits')
-      .select('*')
-      .eq('user_id',req.user.email)
-      .single();
-    
-    if(error&&error.code!=='PGRST116') throw error;
-    res.json({brandKit:data||null});
-  }catch(err){
-    console.error('Brand kit fetch error:',err);
-    res.status(500).json({error:'Failed to fetch brand kit'});
-  }
-});
-
-app.post('/brand-kit', authMiddleware, async(req,res)=>{
-  try{
-    const {primaryColor,secondaryColor,faceImageUrl}=req.body;
-    
-    if(!primaryColor||!secondaryColor){
-      return res.status(400).json({error:'Primary and secondary colors required'});
-    }
-
-    const {data,error}=await supabase
-      .from('brand_kits')
-      .upsert({
-        user_email:req.user.email,
-        primary_color:primaryColor,
-        secondary_color:secondaryColor,
-        face_image_url:faceImageUrl||null,
-        updated_at:new Date().toISOString(),
-      },{onConflict:'user_email'})
-      .select()
-      .single();
-
-    if(error) throw error;
-    res.json({brandKit:data});
-  }catch(err){
-    console.error('Brand kit save error:',err);
-    res.status(500).json({error:'Failed to save brand kit'});
-  }
 });
 
 app.post('/brand-kit/upload-face', authMiddleware, async(req,res)=>{

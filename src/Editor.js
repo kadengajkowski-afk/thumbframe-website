@@ -1480,7 +1480,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const id=newId();
     const sx=snapToGrid?Math.round((obj.x??40)/10)*10:(obj.x??40);
     const sy=snapToGrid?Math.round((obj.y??40)/10)*10:(obj.y??40);
-    const layer={...obj,id,x:sx,y:sy,opacity:100,hidden:false,locked:false,blendMode:'normal',flipH:false,flipV:false,rotation:0,effects:defaultEffects()};
+    const layer={...obj,id,x:sx,y:sy,opacity:100,hidden:false,locked:false,blendMode:'normal',flipH:false,flipV:false,rotation:0,effects:{...defaultEffects(),...(obj.effects||{})}};
     setLayers(prev=>{const nl=[...prev,layer];pushHistory(nl);return nl;});
     setSelectedId(id);
     triggerAutoSave();
@@ -3029,7 +3029,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         const hasTarget=prev.some(item=>item.id===targetId&&item.type==='image');
         if(!hasTarget) return prev;
         const nl=prev.map(item=>item.id===targetId&&item.type==='image'
-          ? {...item,src:safeDataUrl,paintSrc:null}
+          ? {...item,src:safeDataUrl,paintSrc:null,isSubject:true,effects:{...(item.effects||defaultEffects()),subjectOutline:{enabled:true,color:brandKit?.outline_color||'#ffffff',width:Math.max(1,Math.round(Number(brandKit?.outline_width||5)))}}}
           : item);
         pushHistoryDebounced(nl);
         return nl;
@@ -3112,7 +3112,26 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     setLetterSpacing(t.letterSpacing||0);setLineHeight(t.lineHeight||1.2);setTextAlign(t.textAlign||'left');
     addLayer({type:'text',text:t.text,fontSize:t.fontSize,fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,fontItalic:false,textColor:t.textColor,strokeColor:t.strokeColor,strokeWidth:t.strokeWidth,shadowEnabled:t.shadowEnabled,shadowColor:'#000000',shadowBlur:14,shadowX:2,shadowY:2,glowEnabled:false,glowColor:'#f97316',arcEnabled:false,arcRadius:120,letterSpacing:t.letterSpacing||0,lineHeight:t.lineHeight||1.2,textAlign:t.textAlign||'left'});
   }
-  function addText(){addRecentColor(textColor);addLayer({type:'text',text:textInput||'MY THUMBNAIL',fontSize,fontFamily,fontWeight,fontItalic,textColor,strokeColor,strokeWidth,shadowEnabled,shadowColor,shadowBlur,shadowX,shadowY,glowEnabled,glowColor,arcEnabled,arcRadius,letterSpacing,lineHeight,textAlign});}
+  function addText(){
+    const nextFontFamily=brandKit?.primary_font||fontFamily;
+    const nextStrokeColor='#000000';
+    const nextStrokeWidth=10;
+    const nextShadowColor='#000000';
+    const nextShadowBlur=15;
+    const nextShadowX=5;
+    const nextShadowY=5;
+    addRecentColor(textColor);
+    addLayer({type:'text',text:textInput||'MY THUMBNAIL',fontSize,fontFamily:nextFontFamily,fontWeight:900,fontItalic,textColor,strokeColor:nextStrokeColor,strokeWidth:nextStrokeWidth,shadowEnabled:true,shadowColor:nextShadowColor,shadowBlur:nextShadowBlur,shadowX:nextShadowX,shadowY:nextShadowY,glowEnabled,glowColor,arcEnabled,arcRadius,letterSpacing,lineHeight,textAlign});
+    setFontFamily(nextFontFamily);
+    setFontWeight(900);
+    setStrokeColor(nextStrokeColor);
+    setStrokeWidth(nextStrokeWidth);
+    setShadowEnabled(true);
+    setShadowColor(nextShadowColor);
+    setShadowBlur(nextShadowBlur);
+    setShadowX(nextShadowX);
+    setShadowY(nextShadowY);
+  }
   function addShape(type){
     addRecentColor(fillColor);
     const id=newId();
@@ -3145,8 +3164,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     setSelectedId(id);
   }
   function addSvgSticker(svg,label){addLayer({type:'svg',svg,label,width:64,height:64});}
-  function addBrandFaceToCanvas(url){
-    if(!url)return;
+  function injectBrandSubject(kit){
+    const subjectUrl=kit?.subject_url||kit?.face_image_url||brandKitFace;
+    if(!subjectUrl)return;
+    const outlineColor=kit?.outline_color||'#ffffff';
+    const outlineWidth=Math.max(1,Math.round(Number(kit?.outline_width||5)));
     const img=new Image();
     img.crossOrigin='Anonymous';
     img.onload=()=>{
@@ -3154,14 +3176,28 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       let w,h;
       if(aspect>ca){w=cW*0.5;h=w/aspect;}else{h=cH*0.5;w=h*aspect;}
       addLayer({
-        type:'image',src:url,width:Math.round(w),height:Math.round(h),
+        type:'image',src:subjectUrl,width:Math.round(w),height:Math.round(h),
         originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,
         x:Math.round((cW-w)/2),y:Math.round((cH-h)/2),
         cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
         imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+        isSubject:true,
+        effects:{
+          ...defaultEffects(),
+          subjectOutline:{enabled:true,color:outlineColor,width:outlineWidth},
+        },
       });
     };
-    img.src=url;
+    img.src=subjectUrl;
+  }
+  function addBrandFaceToCanvas(url){
+    injectBrandSubject({
+      ...(brandKit||{}),
+      face_image_url:url,
+      subject_url:url,
+      outline_color:brandKit?.outline_color||'#ffffff',
+      outline_width:brandKit?.outline_width||5,
+    });
   }
 
   function readBlobAsDataUrl(blob){
