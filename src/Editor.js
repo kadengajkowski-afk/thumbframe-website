@@ -14,7 +14,7 @@ const PLATFORMS = {
 };
 
 const FONTS = [
-  'Anton','Bebas Neue','Oswald',
+  'Anton','Bangers','Bebas Neue','Oswald',
   'Impact','Arial Black','Arial','Georgia','Courier New','Verdana',
   'Trebuchet MS','Times New Roman','Comic Sans MS','Palatino',
   'Garamond','Tahoma','Lucida Console','Century Gothic','Candara',
@@ -127,7 +127,7 @@ const TEXT_TEMPLATES = [
   { label:'Clean',        text:'My Title',          fontSize:44, fontFamily:'Oswald',     fontWeight:700, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:2, shadowEnabled:true,  shadowBlur:12, shadowX:2, shadowY:2, shadowColor:'#000000', letterSpacing:0, lineHeight:1.3, textAlign:'left'   },
   { label:'Business',     text:'RESULTS',           fontSize:48, fontFamily:'Bebas Neue', fontWeight:900, textColor:'#ffffff', strokeColor:'#1a1a2e', strokeWidth:5, shadowEnabled:true,  shadowBlur:16, shadowX:2, shadowY:2, shadowColor:'#000000', letterSpacing:4, lineHeight:1.2, textAlign:'center' },
   { label:'Viral',        text:"YOU WON'T BELIEVE", fontSize:38, fontFamily:'Anton',      fontWeight:900, textColor:'#FF4444', strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,  shadowBlur:22, shadowX:3, shadowY:3, shadowColor:'#000000', letterSpacing:1, lineHeight:1.2, textAlign:'center' },
-  { label:'Minimal',      text:'Simple & Clean',    fontSize:36, fontFamily:'Oswald',     fontWeight:400, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:2, shadowEnabled:false, letterSpacing:8, lineHeight:1.5, textAlign:'center' },
+  { label:'Minimal',      text:'Simple & Clean',    fontSize:36, fontFamily:'Oswald',     fontWeight:900, textColor:'#FFE500', strokeColor:'#000000', strokeWidth:5, shadowEnabled:true, shadowBlur:15, shadowX:3, shadowY:3, shadowColor:'#000000', letterSpacing:8, lineHeight:1.5, textAlign:'center' },
 ];
 
 const SHAPES_BASIC = [
@@ -716,24 +716,24 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [transparentExport,setTransparentExport] = useState(false);
   const [textInput,setTextInput]           = useState('MY THUMBNAIL');
   const [fontSize,setFontSize]             = useState(48);
-  const [fontFamily,setFontFamily]         = useState('Impact');
-  const [fontWeight,setFontWeight]         = useState(700);
+  const [fontFamily,setFontFamily]         = useState('Anton');
+  const [fontWeight,setFontWeight]         = useState(900);
   const [fontItalic,setFontItalic]         = useState(false);
   const [letterSpacing,setLetterSpacing]   = useState(0);
   const [lineHeight,setLineHeight]         = useState(1.2);
   const [textAlign,setTextAlign]           = useState('left');
   const [shadowEnabled,setShadowEnabled]   = useState(true);
   const [shadowColor,setShadowColor]       = useState('#000000');
-  const [shadowBlur,setShadowBlur]         = useState(14);
-  const [shadowX,setShadowX]               = useState(2);
-  const [shadowY,setShadowY]               = useState(2);
+  const [shadowBlur,setShadowBlur]         = useState(15);
+  const [shadowX,setShadowX]               = useState(3);
+  const [shadowY,setShadowY]               = useState(3);
   const [glowEnabled,setGlowEnabled]       = useState(false);
   const [glowColor,setGlowColor]           = useState('#f97316');
   const [arcEnabled,setArcEnabled]         = useState(false);
   const [arcRadius,setArcRadius]           = useState(120);
   const [textColor,setTextColor]           = useState('#ffffff');
   const [strokeColor,setStrokeColor]       = useState('#000000');
-  const [strokeWidth,setStrokeWidth]       = useState(3);
+  const [strokeWidth,setStrokeWidth]       = useState(5);
   const [fillColor,setFillColor]           = useState('#FF4500');
   const [brightness,setBrightness]         = useState(100);
   const [contrast,setContrast]             = useState(100);
