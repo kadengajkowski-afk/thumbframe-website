@@ -3631,7 +3631,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       <div style={{position:'absolute',inset:0,pointerEvents:'none',zIndex:1002}}>
         <div style={{position:'absolute',inset:0,border:`1.5px dashed ${T.accent}`,pointerEvents:'none'}}/>
         {handles.map((h,i)=>(
-          <div key={i} onPointerDown={makeDragHandle(h.fn)} style={{...hs,...h.s}}/>
+          <div
+            key={i}
+            onMouseDown={e=>e.stopPropagation()}
+            onPointerDown={makeDragHandle(h.fn)}
+            style={{...hs,...h.s}}
+          />
         ))}
       </div>
     );
@@ -3753,7 +3758,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             maskRepeat:'no-repeat',
           }}>
           {imageSrc ? (
-            <img src={imageSrc} alt="" draggable={false} style={{
+            <img src={imageSrc} alt="" style={{
               width:obj.width,height:obj.height,display:'block',
               pointerEvents:'none',userSelect:'none',WebkitUserSelect:'none',
               marginLeft:-(obj.cropLeft||0),marginTop:-(obj.cropTop||0),
