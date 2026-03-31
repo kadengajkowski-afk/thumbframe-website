@@ -626,6 +626,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const mouseRef        = useRef({x:0,y:0});
   const lastRimLightRef = useRef(0);
   const rafIdRef        = useRef(null);
+  const wheelRafRef     = useRef(null);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -4232,13 +4233,58 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             if(e.target===e.currentTarget) setSelectedId(null);
           }}
           onWheel={(e)=>{
-            if(activeTool==='zoom'||e.ctrlKey||e.metaKey){
-              e.preventDefault();
-              const delta=e.deltaY>0?-0.15:0.15;
-              const newZoom=Math.max(0.25,Math.min(8,Math.round((zoom+delta)*100)/100));
-              if(newZoom<=1)setPanOffset({x:0,y:0});
+            if(!(activeTool==='zoom'||e.ctrlKey||e.metaKey)) return;
+            e.preventDefault();
+
+            // Capture all values synchronously from the DOM — zoomRef gives the
+            // latest zoom even when multiple wheel events fire in the same frame.
+            const curZoom = zoomRef.current;
+            const containerRect = e.currentTarget.getBoundingClientRect();
+            const canvasRect    = canvasRef.current.getBoundingClientRect();
+
+            // Mouse position relative to the scroll container.
+            const mouseX = e.clientX - containerRect.left;
+            const mouseY = e.clientY - containerRect.top;
+
+            // Container-relative position of the canvas top-left corner
+            // (the "pan" origin in world-coordinate terms).
+            const panX = canvasRect.left - containerRect.left;
+            const panY = canvasRect.top  - containerRect.top;
+
+            // World coordinates: the canvas pixel that sits under the cursor.
+            const worldX = (mouseX - panX) / curZoom;
+            const worldY = (mouseY - panY) / curZoom;
+
+            const factor  = e.deltaY > 0 ? -0.15 : 0.15;
+            const newZoom = Math.max(0.1, Math.min(5,
+              Math.round((curZoom + factor) * 100) / 100));
+
+            // New canvas-origin position that keeps worldX/Y pinned under cursor.
+            const newPanX = mouseX - worldX * newZoom;
+            const newPanY = mouseY - worldY * newZoom;
+
+            // Convert back to the panOffset coordinate system the rest of the app
+            // uses.  The transform is scale(z) translate(panOffset, …) with
+            // transformOrigin:center, so:
+            //   canvasOriginX = containerW/2 + z*(panOffset.x − canvasW/2)
+            // Solving for newPanOffset:
+            //   newPanOffset.x = (newPanX − containerW/2) / newZoom + canvasW/2
+            const cw2 = containerRect.width  / 2;
+            const ch2 = containerRect.height / 2;
+            const newPanOffsetX = (newPanX - cw2) / newZoom + p.preview.w / 2;
+            const newPanOffsetY = (newPanY - ch2) / newZoom + p.preview.h / 2;
+
+            // Cancel any pending frame so rapid scrolling doesn't stack stale updates.
+            if(wheelRafRef.current) cancelAnimationFrame(wheelRafRef.current);
+            wheelRafRef.current = requestAnimationFrame(()=>{
+              wheelRafRef.current = null;
+              if(newZoom <= 1){
+                setPanOffset({x:0,y:0});
+              } else {
+                setPanOffset({x:newPanOffsetX, y:newPanOffsetY});
+              }
               setZoom(newZoom);
-            }
+            });
           }}>
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
             <CanvasErrorBoundary>
