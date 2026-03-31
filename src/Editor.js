@@ -490,6 +490,7 @@ function defaultEffects(){
     shadow:{enabled:false,x:4,y:4,blur:12,color:'#000000',opacity:60},
     glow:{enabled:false,color:'#f97316',blur:20},
     outline:{enabled:false,color:'#ffffff',width:2},
+    subjectOutline:{enabled:false,color:'#ffffff',width:5},
     mask:{enabled:false,inverted:false,data:null},
   };
 }
@@ -521,6 +522,24 @@ function getEffectsStyle(effects){
   if(effects.outline?.enabled&&effects.outline.width>0){
     style.outline=`${effects.outline.width}px solid ${effects.outline.color}`;
     style.outlineOffset='2px';
+  }
+  if(effects.subjectOutline?.enabled&&effects.subjectOutline.width>0){
+    const sc=effects.subjectOutline.color||'#ffffff';
+    const sw=effects.subjectOutline.width||5;
+    // Stacked drop-shadow in 8 directions to create a solid contour outline
+    // that follows the alpha mask of a PNG subject (unlike CSS outline which boxes the element)
+    const diag=Math.round(sw*0.707);
+    const outlineFilters=[
+      `drop-shadow(${sw}px 0 0 ${sc})`,
+      `drop-shadow(-${sw}px 0 0 ${sc})`,
+      `drop-shadow(0 ${sw}px 0 ${sc})`,
+      `drop-shadow(0 -${sw}px 0 ${sc})`,
+      `drop-shadow(${diag}px ${diag}px 0 ${sc})`,
+      `drop-shadow(-${diag}px -${diag}px 0 ${sc})`,
+      `drop-shadow(${diag}px -${diag}px 0 ${sc})`,
+      `drop-shadow(-${diag}px ${diag}px 0 ${sc})`,
+    ].join(' ');
+    style.filter = style.filter ? `${outlineFilters} ${style.filter}` : outlineFilters;
   }
   return style;
 }
@@ -5212,6 +5231,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                       {selectedLayer.effects?.outline?.enabled&&<>
                         <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:40}}>Color</span><input type="color" value={selectedLayer.effects.outline.color||'#ffffff'} onChange={e=>updateLayerEffectNested(selectedId,'outline','color',e.target.value)} style={{...css.color,height:28}}/></div>
                         <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:40}}>Width</span><Slider min={0} max={20} value={selectedLayer.effects.outline.width||2} onChange={v=>updateLayerEffectNestedSilent(selectedId,'outline','width',v)} onCommit={v=>updateLayerEffectNested(selectedId,'outline','width',v)} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:24,textAlign:'right'}}>{selectedLayer.effects.outline.width||2}px</span></div>
+                      </>}
+                    </div>
+                    <span style={css.label}>Subject Glow Outline</span>
+                    <div style={css.section}>
+                      <div style={{fontSize:10,color:T.muted,marginBottom:6,lineHeight:1.5}}>Contour outline using stacked drop-shadows — works on PNG cutouts &amp; removed backgrounds.</div>
+                      <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>updateLayerEffectNested(selectedId,'subjectOutline','enabled',!(selectedLayer.effects?.subjectOutline?.enabled))} style={css.iconBtn(selectedLayer.effects?.subjectOutline?.enabled)}>{selectedLayer.effects?.subjectOutline?.enabled?'On':'Off'}</button></div>
+                      {selectedLayer.effects?.subjectOutline?.enabled&&<>
+                        <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:40}}>Color</span><input type="color" value={selectedLayer.effects?.subjectOutline?.color||'#ffffff'} onChange={e=>updateLayerEffectNested(selectedId,'subjectOutline','color',e.target.value)} style={{...css.color,height:28}}/></div>
+                        <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:40}}>Width</span><Slider min={1} max={20} value={selectedLayer.effects?.subjectOutline?.width||5} onChange={v=>updateLayerEffectNestedSilent(selectedId,'subjectOutline','width',v)} onCommit={v=>updateLayerEffectNested(selectedId,'subjectOutline','width',v)} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:24,textAlign:'right'}}>{selectedLayer.effects?.subjectOutline?.width||5}px</span></div>
                       </>}
                     </div>
                     <span style={css.label}>Layer mask</span>
