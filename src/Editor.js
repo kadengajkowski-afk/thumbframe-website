@@ -1150,7 +1150,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     let cancelled=false;
 
     async function bootstrapEditor(){
-      if(!user?.id)return;
+      if (!user || !user.id) return;
 
       setIsLoading(true);
       setBrandKitLoading(true);
@@ -1247,13 +1247,19 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             const normalizedBrandKit = firstBrandKit || fallbackBrandKit;
 
             setBrandKit(normalizedBrandKit);
+            if(Array.isArray(firstBrandKit?.brand_colors) && firstBrandKit.brand_colors.length>0){
+              setBrandKitColors({
+                primary:firstBrandKit.brand_colors[0] || '#c45c2e',
+                secondary:firstBrandKit.brand_colors[1] || firstBrandKit.brand_colors[0] || '#f97316',
+              });
+            }
             if(firstBrandKit?.primary_color||firstBrandKit?.secondary_color){
               setBrandKitColors({
                 primary:firstBrandKit?.primary_color||'#c45c2e',
                 secondary:firstBrandKit?.secondary_color||'#f97316',
               });
             }
-            setBrandKitFace(firstBrandKit?.subject_url||firstBrandKit?.face_image_url||null);
+            setBrandKitFace(firstBrandKit?.subject_image_url||firstBrandKit?.subject_url||firstBrandKit?.face_image_url||null);
           }else{
             throw brandKitResult.reason;
           }
@@ -1404,8 +1410,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     bootstrapEditor();
     return()=>{cancelled=true;};
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[fetchSavedDesigns, resolvedApiUrl, user?.id]);
+  },[user?.id]);
 
   useEffect(()=>{
     if(!showFileTab)return;
