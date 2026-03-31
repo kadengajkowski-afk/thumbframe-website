@@ -3159,15 +3159,17 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     addLayer({type:'text',text:t.text,fontSize:t.fontSize,fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,fontItalic:false,textColor:t.textColor,strokeColor:t.strokeColor,strokeWidth:t.strokeWidth,shadowEnabled:t.shadowEnabled,shadowColor:'#000000',shadowBlur:14,shadowX:2,shadowY:2,glowEnabled:false,glowColor:'#f97316',arcEnabled:false,arcRadius:120,letterSpacing:t.letterSpacing||0,lineHeight:t.lineHeight||1.2,textAlign:t.textAlign||'left'});
   }
   function addText(){
-    const nextFontFamily=brandKit?.primary_font||fontFamily;
+    const nextFontFamily=brandKit?.primary_font||'Anton';
+    const nextTextColor=brandKit?.brand_colors?.[0]||'#FFFFFF';
     const nextStrokeColor='#000000';
     const nextStrokeWidth=10;
     const nextShadowColor='#000000';
-    const nextShadowBlur=15;
+    const nextShadowBlur=22;
     const nextShadowX=5;
     const nextShadowY=5;
-    addRecentColor(textColor);
-    addLayer({type:'text',text:textInput||'MY THUMBNAIL',fontSize,fontFamily:nextFontFamily,fontWeight:900,fontItalic,textColor,strokeColor:nextStrokeColor,strokeWidth:nextStrokeWidth,shadowEnabled:true,shadowColor:nextShadowColor,shadowBlur:nextShadowBlur,shadowX:nextShadowX,shadowY:nextShadowY,glowEnabled,glowColor,arcEnabled,arcRadius,letterSpacing,lineHeight,textAlign});
+    addRecentColor(nextTextColor);
+    addLayer({type:'text',text:textInput||'MY THUMBNAIL',fontSize,fontFamily:nextFontFamily,fontWeight:900,fontItalic,textColor:nextTextColor,strokeColor:nextStrokeColor,strokeWidth:nextStrokeWidth,shadowEnabled:true,shadowColor:nextShadowColor,shadowBlur:nextShadowBlur,shadowX:nextShadowX,shadowY:nextShadowY,glowEnabled,glowColor,arcEnabled,arcRadius,letterSpacing,lineHeight,textAlign});
+    setTextColor(nextTextColor);
     setFontFamily(nextFontFamily);
     setFontWeight(900);
     setStrokeColor(nextStrokeColor);
