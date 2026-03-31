@@ -4,7 +4,6 @@ function normalizeBrandKitPayload(body, user) {
   const payload = {
     user_id: user.id,
     user_email: user.email,
-    updated_at: new Date().toISOString(),
   };
 
   const fieldMap = {
@@ -73,6 +72,7 @@ module.exports = function createBrandKitRouter({ supabase, authMiddleware }) {
 
     // Ensure integers are actually integers
     const safeOutlineWidth = parseInt(req.body.outline_width, 10) || 8;
+    console.log("Incoming Brand Kit Payload:", req.body);
 
     const { data, error } = await supabase
       .from('brand_kits')
@@ -84,7 +84,6 @@ module.exports = function createBrandKitRouter({ supabase, authMiddleware }) {
         subject_image_url: req.body.subject_image_url,
         outline_color: req.body.outline_color,
         outline_width: safeOutlineWidth,
-        updated_at: new Date()
       })
       .select();
 
