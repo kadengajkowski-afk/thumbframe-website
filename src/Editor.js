@@ -1056,7 +1056,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const selectedLayer   = layers.find(l=>l.id===selectedId);
   const bg              = layers.find(l=>l.type==='background');
   const canvasFilter    = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
-  const canDrag         = activeTool==='move' || activeTool==='select' || activeTool==='shapes' || activeTool==='stickers';
+  const canDrag         = activeTool!=='brush' && activeTool!=='rimlight' && activeTool!=='zoom';
   // ✅ When brush active on image — that image is ONLY shown in brush overlay, nowhere else
   const brushingImageId = activeTool==='brush'&&(selectedLayer?.type==='image'||selectedLayer?.type==='background')&&!selectedLayer?.isRimLight ? selectedId : null;
 
@@ -3624,7 +3624,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         title="Rotate (drag to rotate)">↻</div>
     </>);
   }
-  function getLayerCursor(obj){if(activeTool==='brush')return'crosshair';if(canDrag&&!obj.locked)return'grab';return'pointer';}
+  function getLayerCursor(obj){if(activeTool==='brush'||activeTool==='rimlight')return'crosshair';if(canDrag&&!obj.locked)return'grab';return'pointer';}
 
   function renderLayerElement(obj){
     if(obj.hidden)return null;
