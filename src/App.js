@@ -1305,6 +1305,9 @@ export default function App() {
         if (!mounted) return;
 
         if (session?.user) {
+          setToken(session.access_token || null);
+          if (session.access_token) localStorage.setItem('sf_token', session.access_token);
+          else localStorage.removeItem('sf_token');
           setUser({
             id: session.user.id,
             email: session.user.email,
@@ -1312,11 +1315,15 @@ export default function App() {
             is_pro: session.user.user_metadata?.is_pro === true,
           });
         } else {
+          setToken(null);
+          localStorage.removeItem('sf_token');
           setUser(null);
         }
       } catch (error) {
         if (mounted) {
           console.error('Session bootstrap failed:', error);
+          setToken(null);
+          localStorage.removeItem('sf_token');
           setUser(null);
         }
       } finally {
@@ -1330,6 +1337,9 @@ export default function App() {
       if (!mounted) return;
 
       if (session?.user) {
+        setToken(session.access_token || null);
+        if (session.access_token) localStorage.setItem('sf_token', session.access_token);
+        else localStorage.removeItem('sf_token');
         setUser({
           id: session.user.id,
           email: session.user.email,
@@ -1337,6 +1347,8 @@ export default function App() {
           is_pro: session.user.user_metadata?.is_pro === true,
         });
       } else {
+        setToken(null);
+        localStorage.removeItem('sf_token');
         setUser(null);
       }
 

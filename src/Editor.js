@@ -1149,6 +1149,52 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   useEffect(()=>{
     let cancelled=false;
 
+    async function fetchBrandKitForUser(){
+      if (!user || !user.id) return;
+
+      setBrandKitLoading(true);
+      try{
+        const { data, error } = await supabase
+          .from('brand_kits')
+          .select('*')
+          .eq('user_id', user.id)
+          .limit(1);
+
+        if(cancelled) return;
+        if(error) throw error;
+
+        const fallbackBrandKit = { primary_font: 'Anton', brand_colors: ['#FF0000'] };
+        const firstBrandKit = Array.isArray(data) ? (data[0] || null) : (data || null);
+        const normalizedBrandKit = firstBrandKit || fallbackBrandKit;
+
+        setBrandKit(normalizedBrandKit);
+        if(Array.isArray(firstBrandKit?.brand_colors) && firstBrandKit.brand_colors.length>0){
+          setBrandKitColors({
+            primary:firstBrandKit.brand_colors[0] || '#c45c2e',
+            secondary:firstBrandKit.brand_colors[1] || firstBrandKit.brand_colors[0] || '#f97316',
+          });
+        }
+        if(firstBrandKit?.primary_color || firstBrandKit?.secondary_color){
+          setBrandKitColors({
+            primary:firstBrandKit.primary_color || '#c45c2e',
+            secondary:firstBrandKit.secondary_color || '#f97316',
+          });
+        }
+        setBrandKitFace(firstBrandKit?.subject_image_url || firstBrandKit?.subject_url || firstBrandKit?.face_image_url || null);
+      }catch(err){
+        if(!cancelled) console.error('Brand Kit fetch failed:', err);
+      }finally{
+        if(!cancelled) setBrandKitLoading(false);
+      }
+    }
+
+    fetchBrandKitForUser();
+    return()=>{cancelled=true;};
+  },[user?.id]);
+
+  useEffect(()=>{
+    let cancelled=false;
+
     async function bootstrapEditor(){
       const safeUser = user;
       const safeToken = token || '';
