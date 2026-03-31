@@ -510,6 +510,7 @@ function defaultEffects(){
   return{
     layerBlur:0,brightness:100,contrast:100,saturation:100,
     shadow:{enabled:false,x:4,y:4,blur:12,color:'#000000',opacity:60},
+    dropShadow:{enabled:false,x:0,y:0,blur:0,color:'#ffffff',opacity:100,spread:0},
     glow:{enabled:false,color:'#f97316',blur:20},
     outline:{enabled:false,color:'#ffffff',width:2},
     subjectOutline:{enabled:false,color:'#ffffff',width:5},
@@ -532,6 +533,31 @@ function getEffectsStyle(effects){
     const rgba=`rgba(${r},${g},${b},${(effects.shadow.opacity||60)/100})`;
     shadows.push(`${effects.shadow.x}px ${effects.shadow.y}px ${effects.shadow.blur}px ${rgba}`);
     filters.push(`drop-shadow(${effects.shadow.x||0}px ${effects.shadow.y||0}px ${effects.shadow.blur||12}px ${rgba})`);
+  }
+  if(effects.dropShadow?.enabled){
+    const dsColor=effects.dropShadow.color||'#ffffff';
+    const dsOpacity=(effects.dropShadow.opacity??100)/100;
+    const r=parseInt(dsColor.slice(1,3),16)||255;
+    const g=parseInt(dsColor.slice(3,5),16)||255;
+    const b=parseInt(dsColor.slice(5,7),16)||255;
+    const rgba=`rgba(${r},${g},${b},${dsOpacity})`;
+    const spread=Math.max(0,Math.round(Number(effects.dropShadow.spread||0)));
+    const blur=Math.max(0,Math.round(Number(effects.dropShadow.blur||0)));
+    const x=Math.round(Number(effects.dropShadow.x||0));
+    const y=Math.round(Number(effects.dropShadow.y||0));
+    if(spread>0){
+      const diag=Math.max(1,Math.round(spread*0.707));
+      filters.push(`drop-shadow(${x+spread}px ${y}px ${blur}px ${rgba})`);
+      filters.push(`drop-shadow(${x-spread}px ${y}px ${blur}px ${rgba})`);
+      filters.push(`drop-shadow(${x}px ${y+spread}px ${blur}px ${rgba})`);
+      filters.push(`drop-shadow(${x}px ${y-spread}px ${blur}px ${rgba})`);
+      filters.push(`drop-shadow(${x+diag}px ${y+diag}px ${blur}px ${rgba})`);
+      filters.push(`drop-shadow(${x-diag}px ${y-diag}px ${blur}px ${rgba})`);
+      filters.push(`drop-shadow(${x+diag}px ${y-diag}px ${blur}px ${rgba})`);
+      filters.push(`drop-shadow(${x-diag}px ${y+diag}px ${blur}px ${rgba})`);
+    }else{
+      filters.push(`drop-shadow(${x}px ${y}px ${blur}px ${rgba})`);
+    }
   }
   if(effects.glow?.enabled){
     shadows.push(`0 0 ${effects.glow.blur}px ${effects.glow.color}`);
@@ -3213,10 +3239,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   }
   function addSvgSticker(svg,label){addLayer({type:'svg',svg,label,width:64,height:64});}
   function injectBrandSubject(kit){
-    const subjectUrl=kit?.subject_url||kit?.face_image_url||brandKitFace;
+    const subjectUrl=kit?.subject_image_url||kit?.subject_url||kit?.face_image_url||brandKitFace;
     if(!subjectUrl)return;
-    const outlineColor=kit?.outline_color||'#ffffff';
-    const outlineWidth=Math.max(1,Math.round(Number(kit?.outline_width||5)));
+    const outlineColor=kit?.outline_color||'#FFFFFF';
+    const outlineWidth=Math.max(1,Math.round(Number(kit?.outline_width||8)));
     const img=new Image();
     img.crossOrigin='Anonymous';
     img.onload=()=>{
@@ -3232,6 +3258,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         isSubject:true,
         effects:{
           ...defaultEffects(),
+          dropShadow:{enabled:true,x:0,y:0,blur:0,color:outlineColor,opacity:100,spread:outlineWidth},
           subjectOutline:{enabled:true,color:outlineColor,width:outlineWidth},
         },
       });
@@ -5444,7 +5471,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 brandKitColors={brandKitColors}
                 selectedLayer={selectedLayer}
                 onOpenSetup={()=>setShowBrandKitSetup(true)}
-                onInjectSubject={()=>injectBrandSubject(brandKit||{face_image_url:brandKitFace,subject_url:brandKitFace})}
+                onInjectSubject={()=>injectBrandSubject(brandKit||{face_image_url:brandKitFace,subject_url:brandKitFace,subject_image_url:brandKitFace})}
                 onApplyColor={applyBrandColorToSelected}
               />
             )}

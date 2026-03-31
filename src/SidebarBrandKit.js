@@ -12,7 +12,7 @@ export default function SidebarBrandKit({
   onInjectSubject,
   onApplyColor,
 }) {
-  const subjectSrc = brandKit?.subject_url || brandKit?.face_image_url || brandKitFace;
+  const subjectSrc = brandKit?.subject_image_url || brandKit?.subject_url || brandKit?.face_image_url || brandKitFace;
   const colors = [
     { label: 'Primary', color: brandKit?.primary_color || brandKitColors.primary },
     { label: 'Secondary', color: brandKit?.secondary_color || brandKitColors.secondary },
