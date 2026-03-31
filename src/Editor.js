@@ -1150,7 +1150,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     let cancelled=false;
 
     async function bootstrapEditor(){
-      if (!user || !user.id) return;
+      const safeUser = user;
+      const safeToken = token || '';
+      if (!safeUser || !safeUser.id) return;
 
       setIsLoading(true);
       setBrandKitLoading(true);
@@ -1202,27 +1204,27 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         }
 
         try{
-          const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
+          const isAdmin = safeUser?.is_admin || safeUser?.email === 'kadengajkowski@gmail.com';
           const [brandKitResult, profileResult] = await Promise.allSettled([
             supabase
               .from('brand_kits')
               .select('*')
-              .eq('user_id', user.id)
+              .eq('user_id', safeUser.id)
               .limit(1),
-            user?.email
-              ? supabase.from('profiles').select('is_pro').eq('email', user.email).maybeSingle()
+            safeUser?.email
+              ? supabase.from('profiles').select('is_pro').eq('email', safeUser.email).maybeSingle()
               : Promise.resolve({ data: null, error: null }),
           ]);
 
           if(cancelled)return;
 
-          if(token==='test-key-123' || isAdmin){
+          if(safeToken==='test-key-123' || isAdmin){
             setIsProUser(true);
           }else if(profileResult.status==='fulfilled'){
             const { data: profileData, error: profileError } = profileResult.value;
             if(profileError){
               console.error('[PRO PROFILE] Failed to fetch profiles.is_pro:', {
-                email:user?.email,
+                email:safeUser?.email,
                 message:profileError?.message,
                 details:profileError?.details,
                 hint:profileError?.hint,
@@ -1410,7 +1412,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     bootstrapEditor();
     return()=>{cancelled=true;};
-  },[user?.id]);
+  },[buildSaveSignature, fetchSavedDesigns, p, platform, token, user]);
 
   useEffect(()=>{
     if(!showFileTab)return;
