@@ -117,9 +117,10 @@ export default function BrandKitSetupModal({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token || token}`,
+          'Authorization': `Bearer ${session.access_token || token || user?.token || ''}`,
         },
         body: JSON.stringify({
+          user_id: authUser.id,
           primary_color: primary,
           secondary_color: secondary,
           primary_font: primaryFont,
