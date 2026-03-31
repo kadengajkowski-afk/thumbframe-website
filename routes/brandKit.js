@@ -58,27 +58,44 @@ module.exports = function createBrandKitRouter({ supabase, authMiddleware }) {
     }
   });
 
-  router.post('/update', authMiddleware, async (req, res) => {
-    try {
-      const userId = req.user?.id;
-      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  router.post('/update', async (req, res) => {
+    console.log("=== BRAND KIT UPSERT TRIGGERED ===");
+    console.log("1. Incoming Body:", req.body);
 
-      const payload = normalizeBrandKitPayload(req.body || {}, req.user);
-      const { data, error } = await supabase
-        .from('brand_kits')
-        .upsert({ user_id: userId, ...payload }, { onConflict: 'user_id' })
-        .select();
+    // Trap 1: Is the user authenticated?
+    const userId = req.user?.id || req.body.user_id;
+    console.log("2. Target User ID:", userId);
 
-      if (error) {
-        console.error('Supabase Error:', error);
-        return res.status(500).json(error);
-      }
-
-      return res.json(data);
-    } catch (err) {
-      console.error('[BRAND KIT] Upsert failed:', err);
-      return res.status(500).json({ error: 'Failed to save brand kit' });
+    if (!userId) {
+      console.error("❌ ERROR: No User ID found. Request blocked.");
+      return res.status(401).json({ error: 'Unauthorized: Missing User ID' });
     }
+
+    // Ensure integers are actually integers
+    const safeOutlineWidth = parseInt(req.body.outline_width, 10) || 8;
+
+    const { data, error } = await supabase
+      .from('brand_kits')
+      .upsert({
+        user_id: userId,
+        primary_font: req.body.primary_font,
+        secondary_font: req.body.secondary_font,
+        brand_colors: req.body.brand_colors,
+        subject_image_url: req.body.subject_image_url,
+        outline_color: req.body.outline_color,
+        outline_width: safeOutlineWidth,
+        updated_at: new Date()
+      })
+      .select();
+
+    // Trap 2: Did Supabase reject it?
+    if (error) {
+      console.error("❌ SUPABASE REJECTED THE UPSERT:", error);
+      return res.status(500).json({ error: error.message, details: error });
+    }
+
+    console.log("✅ SUCCESS: Brand Kit Saved");
+    res.json(data);
   });
 
   return router;
