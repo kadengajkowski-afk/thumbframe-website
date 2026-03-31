@@ -1099,6 +1099,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
   const selectedLayer   = layers.find(l=>l.id===selectedId);
   const bg              = layers.find(l=>l.type==='background');
+  const currentUserId   = user?.id;
   const canvasFilter    = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
   const canDrag         = activeTool!=='brush' && activeTool!=='rimlight' && activeTool!=='zoom';
   // ✅ When brush active on image — that image is ONLY shown in brush overlay, nowhere else
@@ -1127,14 +1128,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     let cancelled=false;
 
     async function fetchBrandKitForUser(){
-      if (!user || !user.id) return;
+      if (!currentUserId) return;
 
       setBrandKitLoading(true);
       try{
         const { data, error } = await supabase
           .from('brand_kits')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', currentUserId)
           .limit(1);
 
         if(cancelled) return;
@@ -1167,7 +1168,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     fetchBrandKitForUser();
     return()=>{cancelled=true;};
-  },[user]);
+  },[currentUserId]);
 
   useEffect(()=>{
     let cancelled=false;
