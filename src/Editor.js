@@ -14,6 +14,7 @@ const PLATFORMS = {
 };
 
 const FONTS = [
+  'Anton','Bebas Neue','Oswald',
   'Impact','Arial Black','Arial','Georgia','Courier New','Verdana',
   'Trebuchet MS','Times New Roman','Comic Sans MS','Palatino',
   'Garamond','Tahoma','Lucida Console','Century Gothic','Candara',
@@ -39,6 +40,59 @@ const GRADIENTS = [
 const BLEND_MODES = [
   'normal','multiply','screen','overlay','darken','lighten',
   'color-dodge','color-burn','hard-light','soft-light','difference','exclusion',
+];
+
+// Text hook swap tables for A/B variant generator
+const TEXT_FLIP_HOOKS = [
+  ['I WON',               'THEY LOST'],
+  ['I WIN',               'THEY LOSE'],
+  ['WE WON',              'THEY FAILED'],
+  ["YOU WON'T BELIEVE",   'NOBODY EXPECTED'],
+  ["YOU WON'T",           'NOBODY'],
+  ['BELIEVE THIS',        'EXPECTED THIS'],
+  ['EPIC',                'INSANE'],
+  ['EPIC MOMENT',         'UNREAL CLIP'],
+  ['MOMENT',              'CLIP'],
+  ['GONE WRONG',          'BACKFIRED'],
+  ['GONE',                'BACKFIRED'],
+  ['DO THIS',             'NEVER DO THIS'],
+  ['HOW I MADE',          'HOW THEY LOST'],
+  ['HOW TO',              'WHY NOT TO'],
+  ['THE TRUTH',           'THE REAL STORY'],
+  ['WAIT...',             'IMPOSSIBLE.'],
+  ['WHAT?!',              'NO WAY!'],
+  ['WATCH THIS',          'THEY DID WHAT'],
+  ['RESULTS',             'THE PROOF'],
+  ['MY STORY',            'THEIR SECRET'],
+  ['SIMPLE',              'COMPLEX'],
+  ['WRONG',               'DISASTER'],
+  ['STORY',               'SECRET'],
+];
+
+const TEXT_DRAMA_HOOKS = [
+  ['I WON',               'WE ALL WON'],
+  ['I WIN',               'UNSTOPPABLE'],
+  ['WE WON',              'LEGENDARY'],
+  ["YOU WON'T BELIEVE",   'THEY HID THIS'],
+  ["YOU WON'T",           'THEY HID'],
+  ['BELIEVE THIS',        'SEE THIS NOW'],
+  ['EPIC',                'LEGENDARY'],
+  ['EPIC MOMENT',         'GAME CHANGED'],
+  ['MOMENT',              'TURNING POINT'],
+  ['GONE WRONG',          'CHANGED EVERYTHING'],
+  ['GONE',                'OVER'],
+  ['DO THIS',             'THIS CHANGES EVERYTHING'],
+  ['HOW I MADE',          'THE FORMULA'],
+  ['HOW TO',              'THE SECRET TO'],
+  ['THE TRUTH',           'THEY LIED'],
+  ['WAIT...',             'BREAKING.'],
+  ['WHAT?!',              'IT HAPPENED.'],
+  ['WATCH THIS',          'YOU NEED THIS'],
+  ['RESULTS',             'TRANSFORMATION'],
+  ['MY STORY',            'THE TRUTH'],
+  ['SIMPLE',              'REVOLUTIONARY'],
+  ['WRONG',               'EVERYTHING CHANGED'],
+  ['STORY',               'TRUTH'],
 ];
 
 function getProjectIdFromUrl(){
@@ -68,12 +122,12 @@ function generateProjectId(){
 }
 
 const TEXT_TEMPLATES = [
-  { label:'YouTube Bold', text:'WATCH THIS',        fontSize:56, fontFamily:'Impact',     fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:4, shadowEnabled:true,  letterSpacing:2, lineHeight:1.2, textAlign:'center' },
-  { label:'Gaming',       text:'EPIC MOMENT',       fontSize:52, fontFamily:'Arial Black', fontWeight:800, textColor:'#FFD700', strokeColor:'#000000', strokeWidth:3, shadowEnabled:true,  letterSpacing:1, lineHeight:1.2, textAlign:'center' },
-  { label:'Clean',        text:'My Title',          fontSize:44, fontFamily:'Helvetica',   fontWeight:700, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:0, shadowEnabled:false, letterSpacing:0, lineHeight:1.3, textAlign:'left'   },
-  { label:'Business',     text:'RESULTS',           fontSize:48, fontFamily:'Arial Black', fontWeight:800, textColor:'#ffffff', strokeColor:'#1a1a2e', strokeWidth:2, shadowEnabled:true,  letterSpacing:4, lineHeight:1.2, textAlign:'center' },
-  { label:'Viral',        text:"YOU WON'T BELIEVE", fontSize:38, fontFamily:'Impact',      fontWeight:900, textColor:'#FF4444', strokeColor:'#000000', strokeWidth:3, shadowEnabled:true,  letterSpacing:1, lineHeight:1.2, textAlign:'center' },
-  { label:'Minimal',      text:'Simple & Clean',    fontSize:36, fontFamily:'Segoe UI',    fontWeight:300, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:0, shadowEnabled:false, letterSpacing:8, lineHeight:1.5, textAlign:'center' },
+  { label:'YouTube Bold', text:'WATCH THIS',        fontSize:56, fontFamily:'Anton',      fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,  shadowBlur:22, shadowX:3, shadowY:3, shadowColor:'#000000', letterSpacing:2, lineHeight:1.2, textAlign:'center' },
+  { label:'Gaming',       text:'EPIC MOMENT',       fontSize:52, fontFamily:'Anton',      fontWeight:900, textColor:'#FFD700', strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,  shadowBlur:18, shadowX:2, shadowY:2, shadowColor:'#000000', letterSpacing:1, lineHeight:1.2, textAlign:'center' },
+  { label:'Clean',        text:'My Title',          fontSize:44, fontFamily:'Oswald',     fontWeight:700, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:2, shadowEnabled:true,  shadowBlur:12, shadowX:2, shadowY:2, shadowColor:'#000000', letterSpacing:0, lineHeight:1.3, textAlign:'left'   },
+  { label:'Business',     text:'RESULTS',           fontSize:48, fontFamily:'Bebas Neue', fontWeight:900, textColor:'#ffffff', strokeColor:'#1a1a2e', strokeWidth:5, shadowEnabled:true,  shadowBlur:16, shadowX:2, shadowY:2, shadowColor:'#000000', letterSpacing:4, lineHeight:1.2, textAlign:'center' },
+  { label:'Viral',        text:"YOU WON'T BELIEVE", fontSize:38, fontFamily:'Anton',      fontWeight:900, textColor:'#FF4444', strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,  shadowBlur:22, shadowX:3, shadowY:3, shadowColor:'#000000', letterSpacing:1, lineHeight:1.2, textAlign:'center' },
+  { label:'Minimal',      text:'Simple & Clean',    fontSize:36, fontFamily:'Oswald',     fontWeight:400, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:2, shadowEnabled:false, letterSpacing:8, lineHeight:1.5, textAlign:'center' },
 ];
 
 const SHAPES_BASIC = [
@@ -103,16 +157,16 @@ const VIRAL_TEMPLATES = [
     preview:{ bg:'linear-gradient(135deg,#FFD700,#FF6B00)', text:'WATCH THIS' },
     layers:[
       { type:'background', bgColor:'#1a1a1a', bgGradient:null },
-      { type:'text', text:'YOU WON\'T', fontSize:72, fontFamily:'Impact',
+      { type:'text', text:'YOU WON\'T', fontSize:72, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#FFD700',
         strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
+        shadowColor:'#000000', shadowBlur:22, shadowX:3, shadowY:3,
         glowEnabled:false, glowColor:'#FFD700', arcEnabled:false, arcRadius:120,
         letterSpacing:2, lineHeight:1.2, textAlign:'center', x:60, y:80 },
-      { type:'text', text:'BELIEVE THIS', fontSize:72, fontFamily:'Impact',
+      { type:'text', text:'BELIEVE THIS', fontSize:72, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
         strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
+        shadowColor:'#000000', shadowBlur:22, shadowX:3, shadowY:3,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:2, lineHeight:1.2, textAlign:'center', x:60, y:170 },
       { type:'shape', shape:'star', fillColor:'#FFD700',
@@ -130,16 +184,16 @@ const VIRAL_TEMPLATES = [
       { type:'background', bgColor:'#000000', bgGradient:null },
       { type:'shape', shape:'rect', fillColor:'#FF0000',
         strokeColor:'#FF0000', width:8, height:200, x:40, y:60 },
-      { type:'text', text:'THE TRUTH', fontSize:64, fontFamily:'Arial Black',
+      { type:'text', text:'THE TRUTH', fontSize:64, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
-        shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
+        strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
+        shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:6, lineHeight:1.2, textAlign:'left', x:70, y:110 },
-      { type:'text', text:'ABOUT THIS', fontSize:32, fontFamily:'Arial',
-        fontWeight:400, fontItalic:false, textColor:'#888888',
-        strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
-        shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
+      { type:'text', text:'ABOUT THIS', fontSize:32, fontFamily:'Oswald',
+        fontWeight:700, fontItalic:false, textColor:'#888888',
+        strokeColor:'#000000', strokeWidth:2, shadowEnabled:true,
+        shadowColor:'#000000', shadowBlur:10, shadowX:2, shadowY:2,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'left', x:70, y:160 },
     ],
@@ -154,15 +208,15 @@ const VIRAL_TEMPLATES = [
         bgGradient:['#0d0d1a','#1a1a3e'] },
       { type:'shape', shape:'star6', fillColor:'#FFD700',
         strokeColor:'#FF6B00', width:80, height:80, x:30, y:30 },
-      { type:'text', text:'EPIC', fontSize:96, fontFamily:'Impact',
+      { type:'text', text:'EPIC', fontSize:96, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#FFD700',
-        strokeColor:'#FF6B00', strokeWidth:4, shadowEnabled:true,
+        strokeColor:'#FF6B00', strokeWidth:5, shadowEnabled:true,
         shadowColor:'#000000', shadowBlur:30, shadowX:4, shadowY:4,
         glowEnabled:true, glowColor:'#FFD700', arcEnabled:false, arcRadius:120,
         letterSpacing:8, lineHeight:1.2, textAlign:'center', x:100, y:80 },
-      { type:'text', text:'MOMENT', fontSize:56, fontFamily:'Impact',
+      { type:'text', text:'MOMENT', fontSize:56, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#000000', strokeWidth:3, shadowEnabled:true,
+        strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
         shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'center', x:120, y:190 },
@@ -178,16 +232,16 @@ const VIRAL_TEMPLATES = [
         bgGradient:['#0a1628','#1a3a2a'] },
       { type:'shape', shape:'rect', fillColor:'rgba(0,150,255,0.15)',
         strokeColor:'rgba(0,150,255,0.4)', width:400, height:120, x:40, y:180 },
-      { type:'text', text:'MINECRAFT', fontSize:68, fontFamily:'Arial Black',
+      { type:'text', text:'MINECRAFT', fontSize:68, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#00ff88', strokeWidth:3, shadowEnabled:true,
+        strokeColor:'#00ff88', strokeWidth:5, shadowEnabled:true,
         shadowColor:'#00ff88', shadowBlur:30, shadowX:0, shadowY:0,
         glowEnabled:true, glowColor:'#00ff88', arcEnabled:false, arcRadius:120,
         letterSpacing:3, lineHeight:1.2, textAlign:'center', x:40, y:80 },
       { type:'text', text:'BUT EVERYTHING IS DIFFERENT', fontSize:28,
-        fontFamily:'Arial Black', fontWeight:700, fontItalic:false,
-        textColor:'#88ddff', strokeColor:'#000000', strokeWidth:1,
-        shadowEnabled:true, shadowColor:'#000000', shadowBlur:10,
+        fontFamily:'Oswald', fontWeight:700, fontItalic:false,
+        textColor:'#88ddff', strokeColor:'#000000', strokeWidth:2,
+        shadowEnabled:true, shadowColor:'#000000', shadowBlur:12,
         shadowX:2, shadowY:2, glowEnabled:false, glowColor:'#f97316',
         arcEnabled:false, arcRadius:120, letterSpacing:1, lineHeight:1.2,
         textAlign:'center', x:60, y:180 },
@@ -201,16 +255,16 @@ const VIRAL_TEMPLATES = [
     layers:[
       { type:'background', bgColor:'#FF4B2B',
         bgGradient:['#FF416C','#FF4B2B'] },
-      { type:'text', text:'WAIT...', fontSize:88, fontFamily:'Impact',
+      { type:'text', text:'WAIT...', fontSize:88, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
         strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:4, shadowY:4,
+        shadowColor:'#000000', shadowBlur:24, shadowX:4, shadowY:4,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'center', x:100, y:60 },
-      { type:'text', text:'WHAT?!', fontSize:88, fontFamily:'Impact',
+      { type:'text', text:'WHAT?!', fontSize:88, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#FFD700',
         strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:4, shadowY:4,
+        shadowColor:'#000000', shadowBlur:24, shadowX:4, shadowY:4,
         glowEnabled:false, glowColor:'#FFD700', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'center', x:110, y:170 },
       { type:'shape', shape:'arrow', fillColor:'#FFD700',
@@ -227,22 +281,22 @@ const VIRAL_TEMPLATES = [
         bgGradient:['#0a1628','#0f2027'] },
       { type:'shape', shape:'rect', fillColor:'#00C853',
         strokeColor:'#00C853', width:300, height:4, x:80, y:155 },
-      { type:'text', text:'HOW I MADE', fontSize:36, fontFamily:'Arial Black',
+      { type:'text', text:'HOW I MADE', fontSize:36, fontFamily:'Oswald',
         fontWeight:700, fontItalic:false, textColor:'#88bbdd',
-        strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
-        shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
+        strokeColor:'#000000', strokeWidth:2, shadowEnabled:true,
+        shadowColor:'#000000', shadowBlur:12, shadowX:2, shadowY:2,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'center', x:120, y:60 },
-      { type:'text', text:'$1,000,000', fontSize:76, fontFamily:'Arial Black',
+      { type:'text', text:'$1,000,000', fontSize:76, fontFamily:'Bebas Neue',
         fontWeight:900, fontItalic:false, textColor:'#00C853',
-        strokeColor:'#000000', strokeWidth:0, shadowEnabled:true,
+        strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
         shadowColor:'#00C853', shadowBlur:20, shadowX:0, shadowY:0,
         glowEnabled:true, glowColor:'#00C853', arcEnabled:false, arcRadius:120,
         letterSpacing:2, lineHeight:1.2, textAlign:'center', x:60, y:100 },
-      { type:'text', text:'IN 30 DAYS', fontSize:36, fontFamily:'Arial Black',
+      { type:'text', text:'IN 30 DAYS', fontSize:36, fontFamily:'Oswald',
         fontWeight:700, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
-        shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
+        strokeColor:'#000000', strokeWidth:2, shadowEnabled:true,
+        shadowColor:'#000000', shadowBlur:12, shadowX:2, shadowY:2,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'center', x:130, y:180 },
     ],
@@ -257,16 +311,16 @@ const VIRAL_TEMPLATES = [
         bgGradient:['#2d1600','#1a0a00'] },
       { type:'shape', shape:'roundrect', fillColor:'#FF6B00',
         strokeColor:'#FF6B00', width:6, height:160, x:40, y:50 },
-      { type:'text', text:'my honest', fontSize:40, fontFamily:'Georgia',
+      { type:'text', text:'my honest', fontSize:40, fontFamily:'Oswald',
         fontWeight:400, fontItalic:true, textColor:'#FFD700',
-        strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
-        shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
+        strokeColor:'#000000', strokeWidth:2, shadowEnabled:true,
+        shadowColor:'#000000', shadowBlur:12, shadowX:2, shadowY:2,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:2, lineHeight:1.2, textAlign:'left', x:60, y:80 },
-      { type:'text', text:'STORY', fontSize:80, fontFamily:'Impact',
+      { type:'text', text:'STORY', fontSize:80, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#FF6B00', strokeWidth:2, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:15, shadowX:3, shadowY:3,
+        strokeColor:'#FF6B00', strokeWidth:5, shadowEnabled:true,
+        shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'left', x:60, y:130 },
     ],
@@ -281,16 +335,16 @@ const VIRAL_TEMPLATES = [
         bgGradient:['#1a0000','#0d0000'] },
       { type:'shape', shape:'badge', fillColor:'#FF0000',
         strokeColor:'#FFD700', width:100, height:100, x:20, y:30 },
-      { type:'text', text:'GONE', fontSize:88, fontFamily:'Impact',
+      { type:'text', text:'GONE', fontSize:88, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#FF0000',
-        strokeColor:'#000000', strokeWidth:4, shadowEnabled:true,
-        shadowColor:'#FF0000', shadowBlur:20, shadowX:0, shadowY:0,
+        strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
+        shadowColor:'#FF0000', shadowBlur:24, shadowX:0, shadowY:0,
         glowEnabled:true, glowColor:'#FF0000', arcEnabled:false, arcRadius:120,
         letterSpacing:6, lineHeight:1.2, textAlign:'center', x:80, y:60 },
-      { type:'text', text:'WRONG', fontSize:88, fontFamily:'Impact',
+      { type:'text', text:'WRONG', fontSize:88, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#FF0000', strokeWidth:4, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:4, shadowY:4,
+        strokeColor:'#FF0000', strokeWidth:5, shadowEnabled:true,
+        shadowColor:'#000000', shadowBlur:24, shadowX:4, shadowY:4,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:6, lineHeight:1.2, textAlign:'center', x:80, y:170 },
     ],
@@ -305,23 +359,23 @@ const VIRAL_TEMPLATES = [
         bgGradient:['#0a0a2e','#1a1a4e'] },
       { type:'shape', shape:'roundrect', fillColor:'#4776E6',
         strokeColor:'#8E54E9', width:380, height:70, x:40, y:50 },
-      { type:'text', text:'HOW TO', fontSize:48, fontFamily:'Arial Black',
+      { type:'text', text:'HOW TO', fontSize:48, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#ffffff',
-        strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
-        shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
+        strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
+        shadowColor:'#000000', shadowBlur:16, shadowX:2, shadowY:2,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:6, lineHeight:1.2, textAlign:'center', x:140, y:60 },
-      { type:'text', text:'DO THIS', fontSize:80, fontFamily:'Impact',
+      { type:'text', text:'DO THIS', fontSize:80, fontFamily:'Anton',
         fontWeight:900, fontItalic:false, textColor:'#FFD700',
-        strokeColor:'#000000', strokeWidth:3, shadowEnabled:true,
-        shadowColor:'#000000', shadowBlur:20, shadowX:3, shadowY:3,
+        strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,
+        shadowColor:'#000000', shadowBlur:22, shadowX:3, shadowY:3,
         glowEnabled:false, glowColor:'#FFD700', arcEnabled:false, arcRadius:120,
         letterSpacing:4, lineHeight:1.2, textAlign:'center', x:100, y:150 },
       { type:'text', text:'(step by step)', fontSize:24,
-        fontFamily:'Arial', fontWeight:400, fontItalic:true,
-        textColor:'#aaaaff', strokeColor:'#000000', strokeWidth:0,
-        shadowEnabled:false, shadowColor:'#000000', shadowBlur:0,
-        shadowX:0, shadowY:0, glowEnabled:false, glowColor:'#f97316',
+        fontFamily:'Oswald', fontWeight:400, fontItalic:true,
+        textColor:'#aaaaff', strokeColor:'#000000', strokeWidth:2,
+        shadowEnabled:true, shadowColor:'#000000', shadowBlur:10,
+        shadowX:2, shadowY:2, glowEnabled:false, glowColor:'#f97316',
         arcEnabled:false, arcRadius:120, letterSpacing:1, lineHeight:1.2,
         textAlign:'center', x:160, y:240 },
     ],
@@ -335,13 +389,13 @@ const VIRAL_TEMPLATES = [
       { type:'background', bgColor:'#f5f0e8', bgGradient:null },
       { type:'shape', shape:'line', fillColor:'#c45c2e',
         strokeColor:'#c45c2e', width:60, height:4, x:60, y:120 },
-      { type:'text', text:'SIMPLE', fontSize:72, fontFamily:'Helvetica',
-        fontWeight:300, fontItalic:false, textColor:'#1a1612',
-        strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
+      { type:'text', text:'SIMPLE', fontSize:72, fontFamily:'Oswald',
+        fontWeight:700, fontItalic:false, textColor:'#1a1612',
+        strokeColor:'#c45c2e', strokeWidth:2, shadowEnabled:false,
         shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
         glowEnabled:false, glowColor:'#f97316', arcEnabled:false, arcRadius:120,
         letterSpacing:16, lineHeight:1.2, textAlign:'left', x:60, y:60 },
-      { type:'text', text:'& effective', fontSize:32, fontFamily:'Georgia',
+      { type:'text', text:'& effective', fontSize:32, fontFamily:'Oswald',
         fontWeight:400, fontItalic:true, textColor:'#c45c2e',
         strokeColor:'#000000', strokeWidth:0, shadowEnabled:false,
         shadowColor:'#000000', shadowBlur:0, shadowX:0, shadowY:0,
@@ -452,11 +506,14 @@ function getEffectsStyle(effects){
     const r=parseInt(effects.shadow.color.slice(1,3),16)||0;
     const g=parseInt(effects.shadow.color.slice(3,5),16)||0;
     const b=parseInt(effects.shadow.color.slice(5,7),16)||0;
-    shadows.push(`${effects.shadow.x}px ${effects.shadow.y}px ${effects.shadow.blur}px rgba(${r},${g},${b},${(effects.shadow.opacity||60)/100})`);
+    const rgba=`rgba(${r},${g},${b},${(effects.shadow.opacity||60)/100})`;
+    shadows.push(`${effects.shadow.x}px ${effects.shadow.y}px ${effects.shadow.blur}px ${rgba}`);
+    filters.push(`drop-shadow(${effects.shadow.x||0}px ${effects.shadow.y||0}px ${effects.shadow.blur||12}px ${rgba})`);
   }
   if(effects.glow?.enabled){
     shadows.push(`0 0 ${effects.glow.blur}px ${effects.glow.color}`);
     shadows.push(`0 0 ${effects.glow.blur*2}px ${effects.glow.color}`);
+    filters.push(`drop-shadow(0 0 ${Math.ceil((effects.glow.blur||20)/3)}px ${effects.glow.color})`);
   }
   const style={};
   if(filters.length)style.filter=filters.join(' ');
@@ -2043,7 +2100,28 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     const bg = layers.find(l=>l.type==='background');
 
-    // Variant A — Bold high contrast
+    function swapText(text, map){
+      const upper=(text||'').toUpperCase().trim();
+      for(const [a,b] of map){
+        if(upper===a.toUpperCase()) return b;
+        if(upper===b.toUpperCase()) return a;
+      }
+      return text;
+    }
+
+    function applySubjectGlow(l){
+      if(l.type!=='image') return {...l,id:newId()};
+      return {
+        ...l, id:newId(),
+        effects:{
+          ...defaultEffects(),
+          ...(l.effects||{}),
+          glow:{enabled:true, color:'#ffffff', blur:18},
+        },
+      };
+    }
+
+    // Variant A — Anton Power: high-impact font, fat stroke, strong shadow, original text
     const variantA = layers.map(l=>{
       if(l.type==='background') return{
         ...l,id:newId(),
@@ -2055,22 +2133,27 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       };
       if(l.type==='text') return{
         ...l,id:newId(),
-        fontSize:Math.round((l.fontSize||48)*1.15),
+        fontFamily:'Anton',
+        fontSize:Math.round((l.fontSize||48)*1.12),
         fontWeight:900,
-        strokeWidth:Math.max(l.strokeWidth||0,3),
+        strokeWidth:5,
+        strokeColor:l.strokeColor||'#000000',
         shadowEnabled:true,
-        shadowBlur:20,
-        letterSpacing:(l.letterSpacing||0)+2,
+        shadowColor:'#000000',
+        shadowBlur:22,
+        shadowX:3,
+        shadowY:3,
+        letterSpacing:(l.letterSpacing||0)+1,
       };
       if(l.type==='shape') return{
         ...l,id:newId(),
-        width:Math.round((l.width||100)*1.1),
-        height:Math.round((l.height||100)*1.1),
+        width:Math.round((l.width||100)*1.08),
+        height:Math.round((l.height||100)*1.08),
       };
-      return{...l,id:newId()};
+      return applySubjectGlow(l);
     });
 
-    // Variant B — Color shift warm
+    // Variant B — Flip Hook: perspective-swap text, warm palette, Anton font
     const variantB = layers.map(l=>{
       if(l.type==='background') return{
         ...l,id:newId(),
@@ -2079,9 +2162,17 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       };
       if(l.type==='text') return{
         ...l,id:newId(),
-        textColor: l.textColor==='#ffffff'?'#FFD700':l.textColor,
+        text:swapText(l.text, TEXT_FLIP_HOOKS),
+        fontFamily:'Anton',
+        fontWeight:900,
+        strokeWidth:5,
         strokeColor:'#000000',
-        strokeWidth:Math.max(l.strokeWidth||0,2),
+        textColor:'#ffffff',
+        shadowEnabled:true,
+        shadowColor:'#000000',
+        shadowBlur:18,
+        shadowX:2,
+        shadowY:2,
         glowEnabled:false,
       };
       if(l.type==='shape') return{
@@ -2089,10 +2180,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         fillColor:'#FF6B35',
         strokeColor:'#FFD700',
       };
-      return{...l,id:newId()};
+      return applySubjectGlow(l);
     });
 
-    // Variant C — Dark dramatic
+    // Variant C — Dark Drama: alternate text hook, dark bg, glow text, subject isolation
     const variantC = layers.map(l=>{
       if(l.type==='background') return{
         ...l,id:newId(),
@@ -2101,24 +2192,32 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       };
       if(l.type==='text') return{
         ...l,id:newId(),
+        text:swapText(l.text, TEXT_DRAMA_HOOKS),
+        fontFamily:'Anton',
+        fontWeight:900,
+        strokeWidth:4,
+        strokeColor:'#000000',
         textColor: l.textColor==='#000000'?'#ffffff':l.textColor,
+        shadowEnabled:true,
+        shadowColor:l.textColor||'#f97316',
+        shadowBlur:28,
+        shadowX:0,
+        shadowY:0,
         glowEnabled:true,
         glowColor:l.textColor||'#f97316',
-        shadowEnabled:true,
-        shadowBlur:30,
       };
       if(l.type==='shape') return{
         ...l,id:newId(),
         fillColor:shiftColor(l.fillColor||'#FF4500',40),
       };
-      return{...l,id:newId()};
+      return applySubjectGlow(l);
     });
 
     setTimeout(()=>{
       setAbVariants([
-        { id:'a', label:'A — Bold',     desc:'Larger text, higher contrast', layers:variantA },
-        { id:'b', label:'B — Warm',     desc:'Warm orange tones, energetic',  layers:variantB },
-        { id:'c', label:'C — Dramatic', desc:'Dark moody, glowing text',      layers:variantC },
+        { id:'a', label:'A — Anton Power',  desc:'High-impact font, fat stroke, bold contrast',  layers:variantA },
+        { id:'b', label:'B — Flip Hook',    desc:'Text perspective swap, warm energy palette',    layers:variantB },
+        { id:'c', label:'C — Dark Drama',   desc:'Alternate hook, dark moody, glow + subject glow', layers:variantC },
       ]);
       setAbLoading(false);
     },600);
