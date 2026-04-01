@@ -965,8 +965,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     try{
       const layerSnapshot = JSON.parse(JSON.stringify(layersRef.current));
       const tmpCanvas = document.createElement('canvas');
-      tmpCanvas.width = 320;
-      tmpCanvas.height = Math.round(320 * p.preview.h / p.preview.w);
+      tmpCanvas.width = 640;
+      tmpCanvas.height = Math.round(640 * p.preview.h / p.preview.w);
       const tctx = tmpCanvas.getContext('2d');
       if(!tctx)return null;
 
@@ -1889,6 +1889,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       for(const obj of imageLayers){
         await new Promise(resolve=>{
           const img=new Image();
+          img.crossOrigin='Anonymous';
           img.onload=()=>{
             ctx.save();
             ctx.globalAlpha=(obj.opacity??100)/100;
@@ -2170,6 +2171,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         else if(obj.type==='image'){
           await new Promise(resolve=>{
             const img=new Image();
+            img.crossOrigin='Anonymous';
             img.onload=()=>{
               const x=obj.x*scaleX,y=obj.y*scaleY;
               const w=obj.width*scaleX,h=obj.height*scaleY;
@@ -2506,7 +2508,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
       let thumbnailData = null;
       try{
-        const quality = silent ? 0.1 : 1.0;
+        const quality = silent ? 0.7 : 1.0;
         thumbnailData = await generateDesignThumbnail(quality);
       }catch(imgErr){
         console.warn('[STORAGE] Thumbnail generation failed, continuing without preview:', imgErr);
@@ -3619,6 +3621,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             ctx.save();
             if(obj.mask?.enabled&&obj.mask?.data){
               const maskImg=new Image();
+              maskImg.crossOrigin='Anonymous';
               maskImg.onload=()=>{
                 ctx.beginPath();
                 ctx.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);

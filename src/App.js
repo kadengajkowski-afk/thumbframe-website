@@ -693,7 +693,7 @@ function Dashboard({ setPage, user }) {
                       <img
                         src={d.thumbnail}
                         alt={name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageRendering: 'auto' }}
                       />
                     ) : (
                       <div style={{ textAlign: 'center', color: C.muted }}>

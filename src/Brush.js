@@ -71,6 +71,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       loadImg(originalImg.current);
     } else {
       const img = new Image();
+      img.crossOrigin = 'Anonymous';
       img.onload = () => loadImg(img);
       img.src = layer.src;
     }
