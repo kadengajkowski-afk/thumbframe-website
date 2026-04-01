@@ -2,21 +2,21 @@ import { useState } from 'react';
 import supabase from './supabaseClient';
 
 const C = {
-  bg:       '#f5f0e8',
-  bg2:      '#ede8dc',
-  bg3:      '#e4ddd0',
-  panel:    '#faf7f2',
-  border:   '#d9d0c0',
-  border2:  '#c9bfaa',
-  text:     '#1a1612',
-  text2:    '#3d3530',
-  muted:    '#8a7d6e',
-  accent:   '#c45c2e',
-  accent2:  '#a34a22',
-  accent3:  '#e8784a',
-  success:  '#4a7c59',
-  warning:  '#c4882e',
-  error:    '#c23c2a',
+  bg:       '#0a0a0a',
+  bg2:      '#0f0f0f',
+  bg3:      '#1c1c1c',
+  panel:    '#141414',
+  border:   '#202020',
+  border2:  '#2d2d2d',
+  text:     '#f4f4f5',
+  text2:    '#a1a1aa',
+  muted:    '#52525b',
+  accent:   '#f97316',
+  accent2:  '#ea580c',
+  accent3:  '#fb923c',
+  success:  '#22c55e',
+  warning:  '#f59e0b',
+  error:    '#ef4444',
 };
 
 const API_BASE = process.env.NODE_ENV === 'development'

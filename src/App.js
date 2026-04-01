@@ -11,21 +11,21 @@ console.log("--- SYSTEM BOOT V2.1 ---");
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 const C = {
-  bg:       '#f5f0e8',
-  bg2:      '#ede8dc',
-  bg3:      '#e4ddd0',
-  panel:    '#faf7f2',
-  border:   '#d9d0c0',
-  border2:  '#c9bfaa',
-  text:     '#1a1612',
-  text2:    '#3d3530',
-  muted:    '#8a7d6e',
-  accent:   '#c45c2e',
-  accent2:  '#a34a22',
-  accent3:  '#e8784a',
-  success:  '#4a7c59',
-  warning:  '#c4882e',
-  cream:    '#fdf9f4',
+  bg:       '#0a0a0a',
+  bg2:      '#0f0f0f',
+  bg3:      '#1c1c1c',
+  panel:    '#141414',
+  border:   '#202020',
+  border2:  '#2d2d2d',
+  text:     '#f4f4f5',
+  text2:    '#a1a1aa',
+  muted:    '#52525b',
+  accent:   '#f97316',
+  accent2:  '#ea580c',
+  accent3:  '#fb923c',
+  success:  '#22c55e',
+  warning:  '#f59e0b',
+  cream:    '#0f0f0f',
 };
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
@@ -515,7 +515,7 @@ function AuthPage({ mode, setPage, onAuth }) {
           </div>
 
           {error && (
-            <div style={{ padding: '10px 14px', borderRadius: 7, background: '#fef2f2', border: '1px solid #fecaca', fontSize: 13, color: '#b91c1c' }}>
+            <div style={{ padding: '10px 14px', borderRadius: 7, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)', fontSize: 13, color: '#f87171' }}>
               {error}
             </div>
           )}
@@ -723,7 +723,7 @@ function Dashboard({ setPage, user }) {
                       <button
                         onClick={(e) => handleDelete(e, d.id)}
                         disabled={isDeleting}
-                        style={{ padding: '6px 10px', borderRadius: 5, border: `1px solid ${C.border}`, background: 'transparent', color: isDeleting ? C.muted : '#c0392b', fontSize: 11, fontWeight: '600', cursor: isDeleting ? 'not-allowed' : 'pointer' }}
+                        style={{ padding: '6px 10px', borderRadius: 5, border: `1px solid ${C.border}`, background: 'transparent', color: isDeleting ? C.muted : '#f87171', fontSize: 11, fontWeight: '600', cursor: isDeleting ? 'not-allowed' : 'pointer' }}
                       >
                         {isDeleting ? '…' : 'Delete'}
                       </button>

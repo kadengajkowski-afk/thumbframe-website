@@ -2,17 +2,17 @@ import { useState } from 'react';
 import supabase from './supabaseClient';
 
 const C = {
-  bg:       '#f5f0e8',
-  bg2:      '#ede8dc',
-  panel:    '#faf7f2',
-  border:   '#d9d0c0',
-  border2:  '#c9bfaa',
-  text:     '#1a1612',
-  text2:    '#3d3530',
-  muted:    '#8a7d6e',
-  accent:   '#c45c2e',
-  accent2:  '#a34a22',
-  success:  '#4a7c59',
+  bg:       '#0a0a0a',
+  bg2:      '#0f0f0f',
+  panel:    '#141414',
+  border:   '#202020',
+  border2:  '#2d2d2d',
+  text:     '#f4f4f5',
+  text2:    '#a1a1aa',
+  muted:    '#52525b',
+  accent:   '#f97316',
+  accent2:  '#ea580c',
+  success:  '#22c55e',
 };
 
 export default function ForgotPassword({ setPage }) {
@@ -54,7 +54,7 @@ export default function ForgotPassword({ setPage }) {
     border: `1.5px solid ${C.border2}`,
     fontSize: 14,
     fontFamily: 'inherit',
-    background: '#fff',
+    background: C.bg2,
     color: C.text,
     outline: 'none',
     transition: 'border-color 0.2s',
@@ -63,7 +63,7 @@ export default function ForgotPassword({ setPage }) {
   if (success) {
     return (
       <div style={{ background: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ maxWidth: 420, width: '100%', background: C.panel, borderRadius: 12, padding: 40, border: `1px solid ${C.border}`, boxShadow: '0 8px 32px rgba(0,0,0,0.08)' }}>
+        <div style={{ maxWidth: 420, width: '100%', background: C.panel, borderRadius: 12, padding: 40, border: `1px solid ${C.border}`, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
           <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 28, height: 28, borderRadius: 7, background: C.success, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ fontSize: 16, color: '#fff' }}>✓</span>
@@ -96,7 +96,7 @@ export default function ForgotPassword({ setPage }) {
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
-      <div style={{ maxWidth: 420, width: '100%', background: C.panel, borderRadius: 12, padding: 40, border: `1px solid ${C.border}`, boxShadow: '0 8px 32px rgba(0,0,0,0.08)' }}>
+      <div style={{ maxWidth: 420, width: '100%', background: C.panel, borderRadius: 12, padding: 40, border: `1px solid ${C.border}`, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
         <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 28, height: 28, borderRadius: 7, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: 13, color: '#fff', fontWeight: '800' }}>S</span>
@@ -126,7 +126,7 @@ export default function ForgotPassword({ setPage }) {
           </div>
 
           {error && (
-            <div style={{ padding: '10px 14px', borderRadius: 7, background: '#fef2f2', border: '1px solid #fecaca', fontSize: 13, color: '#b91c1c' }}>
+            <div style={{ padding: '10px 14px', borderRadius: 7, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)', fontSize: 13, color: '#f87171' }}>
               {error}
             </div>
           )}
