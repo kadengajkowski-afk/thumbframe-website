@@ -851,8 +851,11 @@ function getInitialPage() {
 
 function syncPath(page) {
   const nextPath = page === 'home' ? '/' : `/${page}`;
+  // Preserve query params (e.g. ?engine=fabric, ?project=xxx)
+  const search = window.location.search || '';
+  const fullPath = nextPath + search;
   if (window.location.pathname !== nextPath) {
-    window.history.replaceState(null, '', nextPath);
+    window.history.replaceState(null, '', fullPath);
   }
 }
 
