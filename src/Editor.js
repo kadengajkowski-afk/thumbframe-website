@@ -32,6 +32,85 @@ function resolveFontFamily(fontFamily){
   return fontFamily;
 }
 
+// ── Pro Rendering Utilities ────────────────────────────────────────────────
+
+/**
+ * drawProText — Professional outer-stroke text rendering.
+ * Standard ctx.strokeText() bleeds inward, destroying font weight.
+ * This draws 12 circular offset fills for the stroke, then one clean fill on top.
+ */
+function drawProText(ctx, text, x, y, opts={}){
+  const {fill='#ffffff', stroke='#000000', strokeWidth=0, glowColor, glowBlur=0} = opts;
+
+  ctx.save();
+
+  // Pass 1: Multi-pass glow (if enabled)
+  if(glowColor && glowBlur>0){
+    ctx.fillStyle = glowColor;
+    for(let pass=0; pass<3; pass++){
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur  = glowBlur * (pass+1)/3;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.fillText(text, x, y);
+    }
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur  = 0;
+  }
+
+  // Pass 2: Circular offset stroke (12 directions)
+  if(strokeWidth > 0){
+    ctx.fillStyle = stroke;
+    const steps = 12;
+    for(let i=0; i<steps; i++){
+      const angle = (i/steps) * Math.PI * 2;
+      const dx = Math.cos(angle) * strokeWidth;
+      const dy = Math.sin(angle) * strokeWidth;
+      ctx.fillText(text, x + dx, y + dy);
+    }
+  }
+
+  // Pass 3: Clean fill on top
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur  = 0;
+  ctx.fillStyle = fill;
+  ctx.fillText(text, x, y);
+
+  ctx.restore();
+}
+
+/**
+ * ensureFontLoaded — Wait for a Google Font to be ready before rendering.
+ * Uses the native FontFace API. Falls back silently if the font isn't available.
+ */
+async function ensureFontLoaded(fontFamily, weight=900){
+  try{
+    const resolved = resolveFontFamily(fontFamily).split(',')[0].trim().replace(/['"]/g,'');
+    await document.fonts.load(`${weight} 48px "${resolved}"`);
+  }catch(e){
+    // Font may not be available — render will use fallback
+  }
+}
+
+/**
+ * drawGlowImage — Multi-pass glow for image layers (subject isolation).
+ * Draws the image 3 times with increasing shadowBlur for density,
+ * then one clean pass with no blur for the sharp final image.
+ */
+function drawGlowImage(ctx, img, x, y, w, h, glowColor='#ffffff', glowBlur=20){
+  for(let pass=0; pass<3; pass++){
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur  = glowBlur * (pass+1) / 3;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.drawImage(img, x, y, w, h);
+  }
+  // Final clean pass
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur  = 0;
+  ctx.drawImage(img, x, y, w, h);
+}
+
 const FONT_WEIGHTS = [
   {label:'Thin',value:100},{label:'Light',value:300},{label:'Regular',value:400},
   {label:'Medium',value:500},{label:'SemiBold',value:600},{label:'Bold',value:700},
@@ -126,6 +205,8 @@ const TEXT_TEMPLATES = [
   { label:'🌸 Retro Pop',     text:'NEW VIDEO',           fontSize:48, fontFamily:'Anton',      fontWeight:900, textColor:'#FF69B4', strokeColor:'#000000', strokeWidth:5,  shadowEnabled:true,  shadowBlur:0,  shadowX:4, shadowY:4, shadowColor:'#4400FF', glowEnabled:false, glowColor:'#FF69B4', letterSpacing:2,  lineHeight:1.2, textAlign:'center' },
   { label:'🚨 Breaking',      text:'BREAKING',            fontSize:58, fontFamily:'Anton',      fontWeight:900, textColor:'#FF0000', strokeColor:'#FFD700', strokeWidth:6,  shadowEnabled:true,  shadowBlur:24, shadowX:0, shadowY:0, shadowColor:'#FF0000', glowEnabled:true,  glowColor:'#FF0000', letterSpacing:4,  lineHeight:1.1, textAlign:'center' },
   { label:'💰 Gold Luxury',   text:'$10,000',             fontSize:54, fontFamily:'Bebas Neue', fontWeight:900, textColor:'#FFD700', strokeColor:'#8B6914', strokeWidth:4,  shadowEnabled:true,  shadowBlur:20, shadowX:0, shadowY:0, shadowColor:'#FFD700', glowEnabled:true,  glowColor:'#FFD700', letterSpacing:3,  lineHeight:1.2, textAlign:'center' },
+  { label:'🦠 Viral',         text:'GONE WRONG',           fontSize:64, fontFamily:'Anton',      fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:12, shadowEnabled:false, shadowBlur:0,  shadowX:0, shadowY:0, shadowColor:'#000000', glowEnabled:false, glowColor:'#ffffff', letterSpacing:2,  lineHeight:1.0, textAlign:'left' },
+  { label:'💀 Exposed',       text:'THE TRUTH ABOUT',      fontSize:46, fontFamily:'Anton',      fontWeight:900, textColor:'#FF0000', strokeColor:'#ffffff', strokeWidth:8,  shadowEnabled:false, shadowBlur:0,  shadowX:0, shadowY:0, shadowColor:'#000000', glowEnabled:true,  glowColor:'#FF0000', letterSpacing:3,  lineHeight:1.1, textAlign:'center' },
 ];
 
 const SHAPES_BASIC = [
@@ -2134,20 +2215,23 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         ctx.translate(obj.x*scaleX,obj.y*scaleY);
         if(obj.flipH||obj.flipV) ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
         const fs=(obj.fontSize||48)*scale;
+        await ensureFontLoaded(obj.fontFamily, obj.fontWeight||700);
         ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${resolveFontFamily(obj.fontFamily)}`;
+        // Drop shadow (applied via canvas state, before drawProText)
         if(obj.shadowEnabled){
           ctx.shadowColor=obj.shadowColor||'rgba(0,0,0,0.95)';
           ctx.shadowBlur=(obj.shadowBlur||14)*scale;
           ctx.shadowOffsetX=(obj.shadowX||2)*scale;
           ctx.shadowOffsetY=(obj.shadowY||2)*scale;
         }
-        if(obj.strokeWidth>0){
-          ctx.strokeStyle=obj.strokeColor;
-          ctx.lineWidth=obj.strokeWidth*scale*2;
-          ctx.strokeText(obj.text,0,fs);
-        }
-        ctx.fillStyle=obj.textColor;
-        ctx.fillText(obj.text,0,fs);
+        // Pro text: circular offset stroke + glow + clean fill
+        drawProText(ctx, obj.text, 0, fs, {
+          fill:        obj.textColor||'#ffffff',
+          stroke:      obj.strokeColor||'#000000',
+          strokeWidth: (obj.strokeWidth||0)*scale,
+          glowColor:   obj.glowEnabled ? (obj.glowColor||'#f97316') : null,
+          glowBlur:    obj.glowEnabled ? 24*scale : 0,
+        });
       }
 
       else if(obj.type==='image'){
@@ -2178,7 +2262,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                   ctx.translate(-(x+w/2),-(y+h/2));
                 }
                 ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
-                ctx.drawImage(img,x-cl,y-ct,w,h);
+                if(obj.effects?.glow?.enabled){
+                  drawGlowImage(ctx,img,x-cl,y-ct,w,h,obj.effects.glow.color||'#ffffff',obj.effects.glow.blur||20);
+                } else {
+                  ctx.drawImage(img,x-cl,y-ct,w,h);
+                }
                 ctx.restore();
                 resolve();
               };
@@ -2200,7 +2288,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 ctx.translate(-(x+w/2),-(y+h/2));
               }
               ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
-              ctx.drawImage(img,x-cl,y-ct,w,h);
+              if(obj.effects?.glow?.enabled){
+                drawGlowImage(ctx,img,x-cl,y-ct,w,h,obj.effects.glow.color||'#ffffff',(obj.effects.glow.blur||20)*Math.min(scaleX,scaleY));
+              } else {
+                ctx.drawImage(img,x-cl,y-ct,w,h);
+              }
               ctx.restore();
               resolve();
             }
@@ -2296,10 +2388,16 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     // ── Variant A — Control (exact current state, no modifications) ──
     const variantA = layers.map(l=>({...l, id:newId()}));
 
+    // ── Rule-of-thirds grid (1280×720 base) ──
+    const pw=p.preview.w, ph=p.preview.h;
+    const thirdX=Math.round(pw*2/3);  // right-third anchor for subjects
+    const centerY=Math.round(ph/2);  // vertical center
+
     // ── Variant B — Panic Hook ──
-    // Subject: +12% scale, thick cyan glow, white subject outline
+    // Subject: right-third, +12% scale, multi-pass cyan glow via drawGlowImage
     // Background: darken 25%
-    // Text: gold fill (#FFD700), heavy black outline, no shadow (outline IS the contrast)
+    // Text: left-third, -5° tilt, gold (#FFD700), 15px stroke via drawProText
+    let textIdx=0;
     const variantB = layers.map(l=>{
       if(l.type==='background') return{
         ...l,id:newId(),
@@ -2309,40 +2407,45 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           shiftColor(bg.bgGradient[1],-50),
         ]:null,
       };
-      if(l.type==='text') return{
-        ...l,id:newId(),
-        text:swapText(l.text, TEXT_FLIP_HOOKS),
-        fontFamily:'Anton',
-        fontWeight:900,
-        textColor:'#FFD700',
-        strokeWidth:6,
-        strokeColor:'#000000',
-        shadowEnabled:false,
-        shadowBlur:0,
-        shadowX:0,
-        shadowY:0,
-      };
+      if(l.type==='text'){
+        const isFirst=textIdx===0;
+        textIdx++;
+        return{
+          ...l,id:newId(),
+          text:swapText(l.text, TEXT_FLIP_HOOKS),
+          fontFamily:'Anton',
+          fontWeight:900,
+          fontSize:isFirst?Math.round((l.fontSize||48)*1.15):(l.fontSize||48),
+          textColor:'#FFD700',
+          strokeWidth:isFirst?15:8,
+          strokeColor:'#000000',
+          shadowEnabled:false,
+          glowEnabled:false,
+          // Rule of thirds: primary text → left third, slight tilt
+          x:isFirst?30:(l.x||0),
+          y:isFirst?centerY-Math.round((l.fontSize||48)*0.6):(l.y||0),
+          rotation:isFirst?-5:(l.rotation||0),
+        };
+      }
       if(l.type==='shape') return{
         ...l,id:newId(),
         fillColor:'#FFD700',
         strokeColor:'#000000',
       };
       if(l.type==='image'){
-        // Darken non-subject image layers (background images)
         if(l.id!==subjectId) return{
           ...l,id:newId(),
           imgBrightness:75,
         };
-        // Subject: +12% scale, cyan glow, white outline
+        // Subject: right-third anchor, +12% scale, multi-pass glow
         const zf=1.12;
         const nw=Math.round((l.width||200)*zf);
         const nh=Math.round((l.height||200)*zf);
-        const dx=Math.round((nw-(l.width||200))/2);
-        const dy=Math.round((nh-(l.height||200))/2);
         return{
           ...l,id:newId(),
           width:nw, height:nh,
-          x:(l.x||0)-dx, y:(l.y||0)-dy,
+          x:thirdX-Math.round(nw*0.3),
+          y:Math.round(centerY-nh/2),
           effects:{
             ...defaultEffects(),
             ...(l.effects||{}),
@@ -2355,9 +2458,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     });
 
     // ── Variant C — Curiosity Gap ──
-    // Background image: heavy blur (DSLR depth-of-field), darken
-    // Subject: boost contrast +15%, saturate +20% (pop against blur)
-    // Text: completely hidden
+    // Background: heavy Gaussian blur (DSLR depth-of-field), desaturate, darken
+    // Subject: right-third anchor, contrast +15%, saturate +20%, white glow isolation
+    // Text + shapes: completely hidden — pure visual intrigue
     const variantC = layers.map(l=>{
       if(l.type==='background') return{
         ...l,id:newId(),
@@ -2376,23 +2479,26 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         hidden:true,
       };
       if(l.type==='image'){
-        // Background image layers: heavy blur + darken (depth-of-field)
         if(l.id!==subjectId) return{
           ...l,id:newId(),
-          imgBlur:8,
-          imgBrightness:80,
-          imgSaturate:70,
+          imgBlur:10,
+          imgBrightness:70,
+          imgSaturate:60,
+          imgContrast:110,
         };
-        // Subject: boost contrast + saturation to pop against blurred bg
+        // Subject: right-third, boosted contrast/sat, white glow isolation
+        const nw=l.width||200, nh=l.height||200;
         return{
           ...l,id:newId(),
-          imgContrast:115,
-          imgSaturate:120,
+          x:thirdX-Math.round(nw*0.3),
+          y:Math.round(centerY-nh/2),
+          imgContrast:120,
+          imgSaturate:125,
           effects:{
             ...defaultEffects(),
             ...(l.effects||{}),
-            glow:{enabled:true, color:'#ffffff', blur:12},
-            subjectOutline:{enabled:true, color:'#ffffff', width:3},
+            glow:{enabled:true, color:'#ffffff', blur:18},
+            subjectOutline:{enabled:true, color:'#ffffff', width:4},
           },
         };
       }
