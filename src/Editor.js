@@ -916,6 +916,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const aiCmdInputRef              = useRef(null);
   const [maskingLayerId,setMaskingLayerId] = useState(null); // eslint-disable-line no-unused-vars
   const [maskPaintColor,setMaskPaintColor] = useState('#000000'); // eslint-disable-line no-unused-vars
+  const [isLassoMode,setIsLassoMode]       = useState(false);
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
 
@@ -4052,6 +4053,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     {key:'brush',     label:'Brush',        icon:'⌀',  group:'Paint'},
     {key:'rimlight',  label:'Rim Light',    icon:'☀',  group:'Paint'},
     {key:'removebg',  label:'Remove BG',    icon:'✂',  group:'Paint'},
+    {key:'lasso',     label:'Lasso Mask',   icon:'✂️', group:'Paint'},
     null,
     {key:'background',label:'Background',   icon:'▨',   group:'Design'},
     {key:'effects',   label:'Effects',      icon:'✦',   group:'Design'},
@@ -4534,13 +4536,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
               if(!isExpanded) return null;
               
               return(
-                <button key={t.key} onClick={()=>setActiveTool(t.key)} title={t.label}
-                  style={css.toolBtn(activeTool===t.key)}>
+                <button key={t.key} onClick={()=>{setActiveTool(t.key);if(t.key!=='lasso')setIsLassoMode(false);}} title={t.label}
+                  style={t.key==='lasso'&&isLassoMode
+                    ? {...css.toolBtn(true),background:T.accent,color:'#fff'}
+                    : css.toolBtn(activeTool===t.key)}>
                   <span style={{fontSize:13,width:16,textAlign:'center',
-                    flexShrink:0,color:activeTool===t.key?T.accent:T.muted}}>
+                    flexShrink:0,color:t.key==='lasso'&&isLassoMode?'#fff':activeTool===t.key?T.accent:T.muted}}>
                     {t.icon}
                   </span>
-                  <span style={{fontSize:11,flex:1,color:'#e5e5e5'}}>{t.label}</span>
+                  <span style={{fontSize:11,flex:1,color:t.key==='lasso'&&isLassoMode?'#fff':'#e5e5e5'}}>{t.label}</span>
                   {t.pro&&<span style={{
                     fontSize:7,
                     background:'linear-gradient(135deg,#f59e0b,#ef4444)',
@@ -6466,6 +6470,39 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       )}
     </div>
 
+  </div>
+)}
+
+            {activeTool==='lasso'&&(
+  <div>
+    <span style={css.label}>Lasso Mask</span>
+    <div style={{...css.section,marginTop:0}}>
+      <div style={{fontSize:13,color:T.text,fontWeight:'700',marginBottom:4}}>✂️ Lasso Mask Tool</div>
+      <div style={{fontSize:11,color:T.muted,marginBottom:10,lineHeight:1.6}}>
+        {isLassoMode
+          ? 'Drawing — drag to trace around the area to keep. Release to apply the mask.'
+          : 'Select an image layer, then click Start Lasso to draw a freeform mask.'}
+      </div>
+      {isLassoMode&&(
+        <div style={{padding:'6px 10px',background:`${T.accent}18`,border:`1px solid ${T.accent}44`,borderRadius:6,fontSize:11,color:T.accent,fontWeight:'600',textAlign:'center',marginBottom:8}}>
+          ● Drawing active — trace your selection
+        </div>
+      )}
+      {selectedLayer?.type==='image'?(
+        <div>
+          <button
+            onClick={()=>setIsLassoMode(v=>!v)}
+            style={{width:'100%',padding:10,borderRadius:7,background:isLassoMode?T.accent:T.input,color:isLassoMode?'#fff':T.text,border:`1px solid ${isLassoMode?T.accent:T.border}`,fontSize:12,cursor:'pointer',fontWeight:'700',transition:'all 0.2s'}}>
+            {isLassoMode?'✂️ Cancel Lasso':'✂️ Start Lasso'}
+          </button>
+        </div>
+      ):(
+        <div style={{...css.section,fontSize:11,color:T.muted,textAlign:'center',padding:16}}>
+          <div style={{fontSize:20,marginBottom:6}}>✂️</div>
+          Click an image on the canvas first
+        </div>
+      )}
+    </div>
   </div>
 )}
 
