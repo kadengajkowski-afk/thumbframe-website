@@ -199,9 +199,7 @@ function Nav({ page, setPage, user, onLogout }) {
 
           {/* Logo */}
           <div onClick={() => setPage('home')} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 22, height: 22, borderRadius: 5, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 11, color: '#fff', fontWeight: '800' }}>S</span>
-            </div>
+            <img src="/logo.jpg" alt="ThumbFrame" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'cover' }} />
             <span style={{ fontSize: 15, fontWeight: '700', color: C.text, letterSpacing: '-0.2px' }}>ThumbFrame</span>
           </div>
 

@@ -86,7 +86,7 @@ function LandingNav({ setPage, user }) {
       }}>
         {/* Logo */}
         <button onClick={() => setPage('home')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9, padding: 0 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 7, background: OG, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#fff', fontFamily: FH, boxShadow: GLOW }}>T</div>
+          <img src="/logo.jpg" alt="ThumbFrame" style={{ width: 30, height: 30, borderRadius: 7, objectFit: 'cover', boxShadow: GLOW }} />
           <span style={{ fontFamily: FH, fontWeight: 700, fontSize: 18, color: C.text, letterSpacing: '-.3px' }}>
             Thumb<span style={{ color: C.acc }}>Frame</span>
           </span>
@@ -580,7 +580,7 @@ function FooterSection({ setPage }) {
           {/* Brand */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 6, background: OG, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: '#fff', fontFamily: FH }}>T</div>
+              <img src="/logo.jpg" alt="ThumbFrame" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover' }} />
               <span style={{ fontFamily: FH, fontWeight: 700, fontSize: 17, color: C.text }}>Thumb<span style={{ color: C.acc }}>Frame</span></span>
             </div>
             <p style={{ fontFamily: FB, fontSize: 13, color: C.muted, lineHeight: 1.65, maxWidth: 230, margin: '0 0 16px' }}>The professional thumbnail editor for creators who take their channel seriously.</p>
