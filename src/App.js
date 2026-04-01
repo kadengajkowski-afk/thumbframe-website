@@ -1020,17 +1020,7 @@ export default function App() {
     // Feature flag: ?engine=fabric switches to the new fabric.js V2 canvas
     const useFabric = new URLSearchParams(window.location.search).get('engine') === 'fabric';
     if (useFabric) {
-      return (
-        <div style={{ minHeight: '100vh', background: '#0a0a0a', padding: '20px 0' }}>
-          <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <button onClick={() => setPage('home')} style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: 13 }}>← Back to home</button>
-              <span style={{ fontSize: 11, color: '#52525b' }}>V2 Engine (fabric.js) · Beta</span>
-            </div>
-            <FabricCanvas user={user} darkMode={true} />
-          </div>
-        </div>
-      );
+      return <FabricCanvas user={user} darkMode={true} />;
     }
     return <Editor onExit={() => setPage('home')} user={user} token={token} brandKit={brandKit} />;
   }
