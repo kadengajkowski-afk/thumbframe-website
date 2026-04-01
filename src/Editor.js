@@ -40,25 +40,48 @@ function resolveFontFamily(fontFamily){
  * This draws 12 circular offset fills for the stroke, then one clean fill on top.
  */
 function drawProText(ctx, text, x, y, opts={}){
-  const {fill='#ffffff', stroke='#000000', strokeWidth=0, glowColor, glowBlur=0} = opts;
+  const {fill='#ffffff', stroke='#000000', strokeWidth=0,
+         glowColor, glowBlur=0,
+         shadowColor, shadowBlur=0, shadowX=0, shadowY=0} = opts;
 
   ctx.save();
 
-  // Pass 1: Multi-pass glow (if enabled)
-  if(glowColor && glowBlur>0){
-    ctx.fillStyle = glowColor;
-    for(let pass=0; pass<3; pass++){
-      ctx.shadowColor = glowColor;
-      ctx.shadowBlur  = glowBlur * (pass+1)/3;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-      ctx.fillText(text, x, y);
-    }
+  // CRITICAL: Clear any inherited shadow state first — stroke passes must be shadow-free
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur  = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+
+  // Pass 1: Drop shadow (single dedicated pass, not applied to strokes)
+  if(shadowColor && shadowBlur>0){
+    ctx.save();
+    ctx.shadowColor   = shadowColor;
+    ctx.shadowBlur    = shadowBlur;
+    ctx.shadowOffsetX = shadowX;
+    ctx.shadowOffsetY = shadowY;
+    ctx.fillStyle     = fill;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+    // Shadow is now rendered — clear for remaining passes
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur  = 0;
   }
 
-  // Pass 2: Circular offset stroke (12 directions)
+  // Pass 2: Multi-pass glow (if enabled)
+  if(glowColor && glowBlur>0){
+    for(let pass=0; pass<3; pass++){
+      ctx.save();
+      ctx.shadowColor   = glowColor;
+      ctx.shadowBlur    = glowBlur * (pass+1)/3;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.fillStyle     = glowColor;
+      ctx.fillText(text, x, y);
+      ctx.restore();
+    }
+  }
+
+  // Pass 3: Circular offset stroke (12 directions) — NO shadow, NO glow
   if(strokeWidth > 0){
     ctx.fillStyle = stroke;
     const steps = 12;
@@ -70,9 +93,7 @@ function drawProText(ctx, text, x, y, opts={}){
     }
   }
 
-  // Pass 3: Clean fill on top
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur  = 0;
+  // Pass 4: Clean fill on top — crisp, no bleed
   ctx.fillStyle = fill;
   ctx.fillText(text, x, y);
 
@@ -709,7 +730,7 @@ class CanvasErrorBoundary extends React.Component {
 
 function ArcText({obj}){
   const ts=(()=>{const p=[];if(obj.shadowEnabled)p.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)p.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return p.length?p.join(','):'none';})();
-  const base={fontFamily:resolveFontFamily(obj.fontFamily),fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`};
+  const base={fontFamily:resolveFontFamily(obj.fontFamily),fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',paintOrder:'stroke fill',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`};
   if(!obj.arcEnabled||!obj.text)return<span style={base}>{obj.text}</span>;
   const radius=obj.arcRadius||120,chars=obj.text.split(''),step=(obj.fontSize||48)/radius*1.1,start=-(chars.length-1)*step/2;
   return(<div style={{position:'relative',width:radius*2+60,height:radius+60}}>{chars.map((ch,i)=>{const angle=start+i*step-Math.PI/2,x=radius+Math.cos(angle)*radius,y=radius+Math.sin(angle)*radius+30,rot=(angle+Math.PI/2)*180/Math.PI;return<span key={i} style={{position:'absolute',left:x,top:y,transform:`translate(-50%,-50%) rotate(${rot}deg)`,...base,lineHeight:1}}>{ch}</span>;})}</div>);
@@ -2217,20 +2238,17 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         const fs=(obj.fontSize||48)*scale;
         await ensureFontLoaded(obj.fontFamily, obj.fontWeight||700);
         ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${resolveFontFamily(obj.fontFamily)}`;
-        // Drop shadow (applied via canvas state, before drawProText)
-        if(obj.shadowEnabled){
-          ctx.shadowColor=obj.shadowColor||'rgba(0,0,0,0.95)';
-          ctx.shadowBlur=(obj.shadowBlur||14)*scale;
-          ctx.shadowOffsetX=(obj.shadowX||2)*scale;
-          ctx.shadowOffsetY=(obj.shadowY||2)*scale;
-        }
-        // Pro text: circular offset stroke + glow + clean fill
+        // All text rendering via drawProText — shadow, glow, stroke, fill
         drawProText(ctx, obj.text, 0, fs, {
           fill:        obj.textColor||'#ffffff',
           stroke:      obj.strokeColor||'#000000',
           strokeWidth: (obj.strokeWidth||0)*scale,
           glowColor:   obj.glowEnabled ? (obj.glowColor||'#f97316') : null,
           glowBlur:    obj.glowEnabled ? 24*scale : 0,
+          shadowColor: obj.shadowEnabled ? (obj.shadowColor||'rgba(0,0,0,0.95)') : null,
+          shadowBlur:  obj.shadowEnabled ? (obj.shadowBlur||14)*scale : 0,
+          shadowX:     obj.shadowEnabled ? (obj.shadowX||2)*scale : 0,
+          shadowY:     obj.shadowEnabled ? (obj.shadowY||2)*scale : 0,
         });
       }
 
@@ -2388,16 +2406,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     // ── Variant A — Control (exact current state, no modifications) ──
     const variantA = layers.map(l=>({...l, id:newId()}));
 
-    // ── Rule-of-thirds grid (1280×720 base) ──
-    const pw=p.preview.w, ph=p.preview.h;
-    const thirdX=Math.round(pw*2/3);  // right-third anchor for subjects
-    const centerY=Math.round(ph/2);  // vertical center
-
     // ── Variant B — Panic Hook ──
-    // Subject: right-third, +12% scale, multi-pass cyan glow via drawGlowImage
+    // Subject: +12% scale (centered), multi-pass cyan glow
     // Background: darken 25%
-    // Text: left-third, -5° tilt, gold (#FFD700), 15px stroke via drawProText
-    let textIdx=0;
+    // Text: gold (#FFD700), thick black stroke, hook swap
     const variantB = layers.map(l=>{
       if(l.type==='background') return{
         ...l,id:newId(),
@@ -2407,26 +2419,17 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           shiftColor(bg.bgGradient[1],-50),
         ]:null,
       };
-      if(l.type==='text'){
-        const isFirst=textIdx===0;
-        textIdx++;
-        return{
-          ...l,id:newId(),
-          text:swapText(l.text, TEXT_FLIP_HOOKS),
-          fontFamily:'Anton',
-          fontWeight:900,
-          fontSize:isFirst?Math.round((l.fontSize||48)*1.15):(l.fontSize||48),
-          textColor:'#FFD700',
-          strokeWidth:isFirst?15:8,
-          strokeColor:'#000000',
-          shadowEnabled:false,
-          glowEnabled:false,
-          // Rule of thirds: primary text → left third, slight tilt
-          x:isFirst?30:(l.x||0),
-          y:isFirst?centerY-Math.round((l.fontSize||48)*0.6):(l.y||0),
-          rotation:isFirst?-5:(l.rotation||0),
-        };
-      }
+      if(l.type==='text') return{
+        ...l,id:newId(),
+        text:swapText(l.text, TEXT_FLIP_HOOKS),
+        fontFamily:'Anton',
+        fontWeight:900,
+        textColor:'#FFD700',
+        strokeWidth:Math.max(l.strokeWidth||0, 6),
+        strokeColor:'#000000',
+        shadowEnabled:false,
+        glowEnabled:false,
+      };
       if(l.type==='shape') return{
         ...l,id:newId(),
         fillColor:'#FFD700',
@@ -2437,20 +2440,20 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           ...l,id:newId(),
           imgBrightness:75,
         };
-        // Subject: right-third anchor, +12% scale, multi-pass glow
+        // Subject: +12% scale centered on original position, cyan glow
         const zf=1.12;
         const nw=Math.round((l.width||200)*zf);
         const nh=Math.round((l.height||200)*zf);
+        const dx=Math.round((nw-(l.width||200))/2);
+        const dy=Math.round((nh-(l.height||200))/2);
         return{
           ...l,id:newId(),
           width:nw, height:nh,
-          x:thirdX-Math.round(nw*0.3),
-          y:Math.round(centerY-nh/2),
+          x:(l.x||0)-dx, y:(l.y||0)-dy,
           effects:{
             ...defaultEffects(),
             ...(l.effects||{}),
-            glow:{enabled:true, color:'#00FFFF', blur:35},
-            subjectOutline:{enabled:true, color:'#ffffff', width:6},
+            glow:{enabled:true, color:'#00FFFF', blur:25},
           },
         };
       }
@@ -2481,17 +2484,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       if(l.type==='image'){
         if(l.id!==subjectId) return{
           ...l,id:newId(),
-          imgBlur:10,
+          imgBlur:8,
           imgBrightness:70,
           imgSaturate:60,
           imgContrast:110,
         };
-        // Subject: right-third, boosted contrast/sat, white glow isolation
-        const nw=l.width||200, nh=l.height||200;
+        // Subject: boosted contrast/sat, white glow — stays in original position
         return{
           ...l,id:newId(),
-          x:thirdX-Math.round(nw*0.3),
-          y:Math.round(centerY-nh/2),
           imgContrast:120,
           imgSaturate:125,
           effects:{
@@ -3943,7 +3943,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     );
     if(obj.type==='text'){
       const ts=(()=>{const pts=[];if(obj.shadowEnabled)pts.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)pts.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return pts.length?pts.join(','):'none';})();
-      return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,userSelect:'none',...selStyle,...blendStyle,...flipStyle,...effectsStyle}}><span style={{fontFamily:resolveFontFamily(obj.fontFamily),fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`,lineHeight:obj.lineHeight||1.2,display:'block'}}>{obj.arcEnabled?<ArcText obj={obj}/>:obj.text}</span>{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
+      return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,userSelect:'none',...selStyle,...blendStyle,...flipStyle,...effectsStyle}}><span style={{fontFamily:resolveFontFamily(obj.fontFamily),fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',paintOrder:'stroke fill',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`,lineHeight:obj.lineHeight||1.2,display:'block'}}>{obj.arcEnabled?<ArcText obj={obj}/>:obj.text}</span>{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
     }
     if(obj.type==='shape')return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,...selStyle,...blendStyle,...flipStyle,...effectsStyle}}>{renderShapeSVG(obj.shape,obj.fillColor,obj.strokeColor,obj.width,obj.height)}{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
     if(obj.type==='svg')return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,width:obj.width,height:obj.height,...selStyle,...blendStyle,...flipStyle,...effectsStyle}}><div style={{width:'100%',height:'100%'}} dangerouslySetInnerHTML={{__html:obj.svg}}/>{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
@@ -4071,7 +4071,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     if(obj.hidden||obj.type==='background')return null;
     if(obj.type==='text'){
       const ts=(()=>{const pts=[];if(obj.shadowEnabled)pts.push(`${(obj.shadowX||2)*scale}px ${(obj.shadowY||2)*scale}px ${(obj.shadowBlur||14)*scale}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);return pts.length?pts.join(','):'none';})();
-      return<div style={{position:'absolute',left:obj.x*scale,top:obj.y*scale,fontSize:obj.fontSize*scale,fontFamily:resolveFontFamily(obj.fontFamily),fontWeight:obj.fontWeight||700,color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth*scale}px ${obj.strokeColor}`:'none',textShadow:ts,whiteSpace:'nowrap',pointerEvents:'none',opacity:(obj.opacity||100)/100}}>{obj.text}</div>;
+      return<div style={{position:'absolute',left:obj.x*scale,top:obj.y*scale,fontSize:obj.fontSize*scale,fontFamily:resolveFontFamily(obj.fontFamily),fontWeight:obj.fontWeight||700,color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth*scale}px ${obj.strokeColor}`:'none',paintOrder:'stroke fill',textShadow:ts,whiteSpace:'nowrap',pointerEvents:'none',opacity:(obj.opacity||100)/100}}>{obj.text}</div>;
     }
     if(obj.type==='image'){
       const cropW=(obj.width-(obj.cropLeft||0)-(obj.cropRight||0))*scale;
