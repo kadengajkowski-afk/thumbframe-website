@@ -5,6 +5,8 @@ import BrandKitSetupModal from './BrandKit';
 import SidebarBrandKit from './SidebarBrandKit';
 import supabase from './supabaseClient';
 import html2canvas from 'html2canvas';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
@@ -2426,6 +2428,123 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     setCmdLog(`Applied: ${variant.label}`);
     setActiveTool('select');
     triggerAutoSave();
+  }
+
+  // ── A/B Variant ZIP Export ────────────────────────────────────────────────
+  async function downloadVariantsAsZip(){
+    if(abVariants.length===0) return;
+    setAbLoading(true);
+
+    async function renderVariantToDataURL(variantLayers){
+      const canvas = document.createElement('canvas');
+      canvas.width  = p.width;
+      canvas.height = p.height;
+      const ctx = canvas.getContext('2d');
+      const scaleX = p.width  / p.preview.w;
+      const scaleY = p.height / p.preview.h;
+
+      ctx.filter=`brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
+
+      for(const obj of variantLayers){
+        if(obj.hidden) continue;
+        ctx.save();
+        ctx.globalAlpha=(obj.opacity??100)/100;
+        ctx.globalCompositeOperation=obj.blendMode||'normal';
+
+        if(obj.type==='background'){
+          ctx.filter='none';
+          if(obj.bgGradient){
+            const g=ctx.createLinearGradient(0,0,0,canvas.height);
+            g.addColorStop(0,obj.bgGradient[0]);
+            g.addColorStop(1,obj.bgGradient[1]);
+            ctx.fillStyle=g;
+          } else ctx.fillStyle=obj.bgColor||'#f97316';
+          ctx.fillRect(0,0,canvas.width,canvas.height);
+        }
+
+        else if(obj.type==='text'){
+          const scale=Math.min(scaleX,scaleY);
+          ctx.translate(obj.x*scaleX,obj.y*scaleY);
+          const fs=(obj.fontSize||48)*scale;
+          ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${resolveFontFamily(obj.fontFamily)}`;
+          if(obj.shadowEnabled){
+            ctx.shadowColor=obj.shadowColor||'rgba(0,0,0,0.95)';
+            ctx.shadowBlur=(obj.shadowBlur||14)*scale;
+            ctx.shadowOffsetX=(obj.shadowX||2)*scale;
+            ctx.shadowOffsetY=(obj.shadowY||2)*scale;
+          }
+          if(obj.strokeWidth>0){
+            ctx.strokeStyle=obj.strokeColor;
+            ctx.lineWidth=obj.strokeWidth*scale*2;
+            ctx.strokeText(obj.text,0,fs);
+          }
+          ctx.fillStyle=obj.textColor;
+          ctx.fillText(obj.text,0,fs);
+        }
+
+        else if(obj.type==='image'){
+          await new Promise(resolve=>{
+            const img=new Image();
+            img.crossOrigin='Anonymous';
+            img.onload=()=>{
+              const x=obj.x*scaleX,y=obj.y*scaleY;
+              const w=obj.width*scaleX,h=obj.height*scaleY;
+              const cl=(obj.cropLeft||0)*scaleX,ct=(obj.cropTop||0)*scaleY;
+              const cr=(obj.cropRight||0)*scaleX,cb=(obj.cropBottom||0)*scaleY;
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);
+              ctx.clip();
+              if(obj.flipH||obj.flipV){
+                ctx.translate(x+w/2,y+h/2);
+                ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
+                ctx.translate(-(x+w/2),-(y+h/2));
+              }
+              ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%)`;
+              ctx.drawImage(img,x-cl,y-ct,w,h);
+              ctx.restore();
+              resolve();
+            };
+            img.onerror=()=>resolve();
+            img.src=obj.paintSrc||obj.src;
+          });
+        }
+
+        else if(obj.type==='shape'){
+          ctx.translate(obj.x*scaleX,obj.y*scaleY);
+          const sw=obj.width*scaleX,sh=obj.height*scaleY;
+          ctx.fillStyle=obj.fillColor||'#FF4500';
+          ctx.strokeStyle=obj.strokeColor||'#000';
+          ctx.lineWidth=2*Math.min(scaleX,scaleY);
+          ctx.beginPath();
+          if(obj.shape==='circle') ctx.ellipse(sw/2,sh/2,sw/2,sh/2,0,0,Math.PI*2);
+          else ctx.rect(0,0,sw,sh);
+          ctx.fill();ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+      ctx.filter='none';
+      return canvas.toDataURL('image/png',1.0);
+    }
+
+    try{
+      const zip = new JSZip();
+      for(const variant of abVariants){
+        const dataUrl = await renderVariantToDataURL(variant.layers);
+        const base64  = dataUrl.split(',')[1];
+        const safeName = variant.label.replace(/[^a-zA-Z0-9-_ ]/g,'').trim();
+        zip.file(`${safeName}.png`, base64, {base64:true});
+      }
+      const blob = await zip.generateAsync({type:'blob'});
+      saveAs(blob, 'ThumbFrame-Variants.zip');
+      setCmdLog('Downloaded A/B variants as ZIP');
+    }catch(err){
+      console.error('[AB ZIP] Export failed:', err);
+      setCmdLog('ZIP export failed — check console');
+    }finally{
+      setAbLoading(false);
+    }
   }
 
   function saveDesign(name){
@@ -5874,6 +5993,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                       Each run creates different combinations.
                     </div>
 
+                    <button onClick={downloadVariantsAsZip} disabled={abLoading}
+                      style={{...css.addBtn,marginTop:8,
+                        background:abLoading?T.muted:'linear-gradient(135deg,#f97316,#ea580c)',
+                        color:'#fff',fontWeight:'700',fontSize:12,
+                        boxShadow:abLoading?'none':'0 0 20px rgba(249,115,22,0.3)',
+                        opacity:abLoading?0.6:1}}>
+                      {abLoading?'Exporting...':'⬇ Download All as ZIP'}
+                    </button>
                     <button onClick={()=>{setAbVariants([]);setAbSelected(null);}}
                       style={{...css.addBtn,marginTop:8,background:'transparent',
                         color:T.muted,border:`1px solid ${T.border}`}}>
