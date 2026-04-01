@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import supabase from './supabaseClient';
 import Editor from './Editor';
-import LandingPage from './LandingPage';
 import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
 import BillingTab from './BillingTab';
@@ -1429,7 +1428,7 @@ export default function App() {
   return (
     <div>
       <Nav page={page} setPage={setPage} user={user} onLogout={handleLogout} />
-      {page === 'home'       && <LandingPage   setPage={setPage} onCheckout={handleCheckout} />}
+      {page === 'home'       && <Home         setPage={setPage} />}
       {page === 'howitworks' && <HowItWorks   setPage={setPage} />}
       {page === 'pricing'    && <Pricing      setPage={setPage} onCheckout={handleCheckout}/>}
       {page === 'examples'   && <Examples     setPage={setPage} />}
