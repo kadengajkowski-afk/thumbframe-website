@@ -86,38 +86,7 @@ const TEXT_FLIP_HOOKS = [
   ['I TRIED',             'IT BACKFIRED'],
 ];
 
-const TEXT_DRAMA_HOOKS = [
-  ['I WON',               'WE ALL WON'],
-  ['I WIN',               'UNSTOPPABLE'],
-  ['WE WON',              'LEGENDARY'],
-  ["YOU WON'T BELIEVE",   'THEY HID THIS'],
-  ["YOU WON'T",           'THEY HID'],
-  ['BELIEVE THIS',        'SEE THIS NOW'],
-  ['EPIC',                'LEGENDARY'],
-  ['EPIC MOMENT',         'GAME CHANGED'],
-  ['MOMENT',              'TURNING POINT'],
-  ['GONE WRONG',          'CHANGED EVERYTHING'],
-  ['GONE',                'OVER'],
-  ['DO THIS',             'THIS CHANGES EVERYTHING'],
-  ['HOW I MADE',          'THE FORMULA'],
-  ['HOW TO',              'THE SECRET TO'],
-  ['THE TRUTH',           'THEY LIED'],
-  ['WAIT...',             'BREAKING.'],
-  ['WHAT?!',              'IT HAPPENED.'],
-  ['WATCH THIS',          'YOU NEED THIS'],
-  ['RESULTS',             'TRANSFORMATION'],
-  ['MY STORY',            'THE TRUTH'],
-  ['SIMPLE',              'REVOLUTIONARY'],
-  ['WRONG',               'EVERYTHING CHANGED'],
-  ['STORY',               'TRUTH'],
-  ['I SURVIVED',          'NOTHING WILL PREPARE YOU'],
-  ['SURVIVED',            'CHANGED ME FOREVER'],
-  ['I FAILED',            'THE MOMENT EVERYTHING CHANGED'],
-  ['CHALLENGE',           'THE ULTIMATE TEST'],
-  ['24 HOURS',            'THE LONGEST NIGHT'],
-  ['LAST TO LEAVE',       'PUSHED TO THE LIMIT'],
-  ['I TRIED',             'THE EXPERIMENT THAT CHANGED EVERYTHING'],
-];
+// (TEXT_DRAMA_HOOKS removed — variant C now uses text hiding instead of hook swaps)
 
 function getProjectIdFromUrl(){
   return new URLSearchParams(window.location.search).get('project');
@@ -2297,25 +2266,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
     const bg = layers.find(l=>l.type==='background');
 
-    // Detect if a hex colour is 'warm' (reds/oranges/yellows dominate)
-    function isWarm(hex){
-      try{
-        const h=hex.replace('#','');
-        const r=parseInt(h.slice(0,2),16);
-        const b=parseInt(h.slice(4,6),16);
-        return r>160&&b<120; // high red, low blue
-      }catch(e){ return false; }
-    }
-
-    // Warm palette (Reds/Oranges/Yellows)
-    const WARM_PALETTE = { bg:['#FF6B35','#F7C59F'], text:'#FFE500', accent:'#FF2D2D' };
-    // Cold palette (Blues/Purples)
-    const COLD_PALETTE = { bg:['#0d1b4b','#3a006f'], text:'#00CFFF', accent:'#9400FF' };
-
-    // Determine Variant B palette: opposite of the current bg
-    const bgBaseColor = bg?.bgGradient?.[0] || bg?.bgColor || '#f97316';
-    const bPalette = isWarm(bgBaseColor) ? COLD_PALETTE : WARM_PALETTE;
-
     function swapText(text, map){
       const upper=(text||'').toUpperCase().trim();
       for(const [a,b] of map){
@@ -2325,141 +2275,122 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       return text;
     }
 
-    function applySubjectGlow(l){
-      if(l.type!=='image') return {...l,id:newId()};
-      return {
-        ...l, id:newId(),
-        effects:{
-          ...defaultEffects(),
-          ...(l.effects||{}),
-          glow:{enabled:true, color:'#ffffff', blur:18},
-        },
-      };
-    }
+    // Detect subject layer (isSubject flag, or fallback to topmost image)
+    const subjectLayer = layers.find(l=>l.isSubject&&l.type==='image')
+      || [...layers].reverse().find(l=>l.type==='image'&&!l.hidden);
+    const subjectId = subjectLayer?.id;
 
-    // Apply 'Reaction Face' zoom to subject image layers:
-    // +20% size, re-center crop so the face stays centred, add tight subject glow outline
-    function applySubjectZoom(l){
-      if(l.type!=='image') return applySubjectGlow(l);
-      const zoomFactor = 1.2;
-      const newW = Math.round((l.width||200)*zoomFactor);
-      const newH = Math.round((l.height||200)*zoomFactor);
-      // Offset position so the visual centre stays in the same place
-      const dx = Math.round((newW-(l.width||200))/2);
-      const dy = Math.round((newH-(l.height||200))/2);
-      // Tighten crop proportionally to simulate a closer face zoom
-      const cropExtra = Math.round((l.height||200)*0.06);
-      return {
-        ...l, id:newId(),
-        width:newW, height:newH,
-        x:(l.x||0)-dx, y:(l.y||0)-dy,
-        cropTop:Math.round(((l.cropTop||0)+cropExtra)),
-        effects:{
-          ...defaultEffects(),
-          ...(l.effects||{}),
-          glow:{enabled:true, color:'#ffffff', blur:18},
-          subjectOutline:{enabled:true, color:'#ffffff', width:5},
-        },
-      };
-    }
+    // ── Variant A — Control (exact current state, no modifications) ──
+    const variantA = layers.map(l=>({...l, id:newId()}));
 
-    // Variant A — Anton Power: high-impact font, fat stroke, strong shadow, original text
-    const variantA = layers.map(l=>{
-      if(l.type==='background') return{
-        ...l,id:newId(),
-        bgColor:bg?.bgGradient?null:shiftColor(bg?.bgColor||'#f97316',-20),
-        bgGradient:bg?.bgGradient?[
-          shiftColor(bg.bgGradient[0],-20),
-          shiftColor(bg.bgGradient[1],-20),
-        ]:null,
-      };
-      if(l.type==='text') return{
-        ...l,id:newId(),
-        fontFamily:'Anton',
-        fontSize:Math.round((l.fontSize||48)*1.12),
-        fontWeight:900,
-        strokeWidth:5,
-        strokeColor:l.strokeColor||'#000000',
-        shadowEnabled:true,
-        shadowColor:'#000000',
-        shadowBlur:22,
-        shadowX:3,
-        shadowY:3,
-        letterSpacing:(l.letterSpacing||0)+1,
-      };
-      if(l.type==='shape') return{
-        ...l,id:newId(),
-        width:Math.round((l.width||100)*1.08),
-        height:Math.round((l.height||100)*1.08),
-      };
-      return applySubjectGlow(l);
-    });
-
-    // Variant B — Hook Swap + Reaction Zoom + Palette Inversion
+    // ── Variant B — Panic Hook ──
+    // Subject: +12% scale, thick cyan glow, white subject outline
+    // Background: darken 25%
+    // Text: gold fill (#FFD700), heavy black outline, no shadow (outline IS the contrast)
     const variantB = layers.map(l=>{
       if(l.type==='background') return{
         ...l,id:newId(),
-        bgGradient:bPalette.bg,
-        bgColor:bPalette.bg[0],
+        bgColor:bg?.bgGradient?null:shiftColor(bg?.bgColor||'#f97316',-50),
+        bgGradient:bg?.bgGradient?[
+          shiftColor(bg.bgGradient[0],-50),
+          shiftColor(bg.bgGradient[1],-50),
+        ]:null,
       };
       if(l.type==='text') return{
         ...l,id:newId(),
         text:swapText(l.text, TEXT_FLIP_HOOKS),
         fontFamily:'Anton',
         fontWeight:900,
-        strokeWidth:5,
+        textColor:'#FFD700',
+        strokeWidth:6,
         strokeColor:'#000000',
-        textColor:bPalette.text,
-        shadowEnabled:true,
-        shadowColor:'#000000',
-        shadowBlur:18,
-        shadowX:2,
-        shadowY:2,
-        glowEnabled:false,
+        shadowEnabled:false,
+        shadowBlur:0,
+        shadowX:0,
+        shadowY:0,
       };
       if(l.type==='shape') return{
         ...l,id:newId(),
-        fillColor:bPalette.accent,
-        strokeColor:bPalette.text,
+        fillColor:'#FFD700',
+        strokeColor:'#000000',
       };
-      return applySubjectZoom(l);
+      if(l.type==='image'){
+        // Darken non-subject image layers (background images)
+        if(l.id!==subjectId) return{
+          ...l,id:newId(),
+          imgBrightness:75,
+        };
+        // Subject: +12% scale, cyan glow, white outline
+        const zf=1.12;
+        const nw=Math.round((l.width||200)*zf);
+        const nh=Math.round((l.height||200)*zf);
+        const dx=Math.round((nw-(l.width||200))/2);
+        const dy=Math.round((nh-(l.height||200))/2);
+        return{
+          ...l,id:newId(),
+          width:nw, height:nh,
+          x:(l.x||0)-dx, y:(l.y||0)-dy,
+          effects:{
+            ...defaultEffects(),
+            ...(l.effects||{}),
+            glow:{enabled:true, color:'#00FFFF', blur:35},
+            subjectOutline:{enabled:true, color:'#ffffff', width:6},
+          },
+        };
+      }
+      return{...l,id:newId()};
     });
 
-    // Variant C — Dark Drama: alternate text hook, dark bg, glow text, subject isolation
+    // ── Variant C — Curiosity Gap ──
+    // Background image: heavy blur (DSLR depth-of-field), darken
+    // Subject: boost contrast +15%, saturate +20% (pop against blur)
+    // Text: completely hidden
     const variantC = layers.map(l=>{
       if(l.type==='background') return{
         ...l,id:newId(),
-        bgGradient:['#0a0a0a','#1a1a2e'],
-        bgColor:'#0a0a0a',
+        bgColor:bg?.bgGradient?null:shiftColor(bg?.bgColor||'#f97316',-40),
+        bgGradient:bg?.bgGradient?[
+          shiftColor(bg.bgGradient[0],-40),
+          shiftColor(bg.bgGradient[1],-40),
+        ]:null,
       };
       if(l.type==='text') return{
         ...l,id:newId(),
-        text:swapText(l.text, TEXT_DRAMA_HOOKS),
-        fontFamily:'Anton',
-        fontWeight:900,
-        strokeWidth:4,
-        strokeColor:'#000000',
-        textColor: l.textColor==='#000000'?'#ffffff':l.textColor,
-        shadowEnabled:true,
-        shadowColor:l.textColor||'#f97316',
-        shadowBlur:28,
-        shadowX:0,
-        shadowY:0,
-        glowEnabled:true,
-        glowColor:l.textColor||'#f97316',
+        hidden:true,
       };
       if(l.type==='shape') return{
         ...l,id:newId(),
-        fillColor:shiftColor(l.fillColor||'#FF4500',40),
+        hidden:true,
       };
-      return applySubjectGlow(l);
+      if(l.type==='image'){
+        // Background image layers: heavy blur + darken (depth-of-field)
+        if(l.id!==subjectId) return{
+          ...l,id:newId(),
+          imgBlur:8,
+          imgBrightness:80,
+          imgSaturate:70,
+        };
+        // Subject: boost contrast + saturation to pop against blurred bg
+        return{
+          ...l,id:newId(),
+          imgContrast:115,
+          imgSaturate:120,
+          effects:{
+            ...defaultEffects(),
+            ...(l.effects||{}),
+            glow:{enabled:true, color:'#ffffff', blur:12},
+            subjectOutline:{enabled:true, color:'#ffffff', width:3},
+          },
+        };
+      }
+      return{...l,id:newId()};
     });
 
     setTimeout(()=>{
       setAbVariants([
-        { id:'a', label:'A — Anton Power',      desc:'High-impact font, fat stroke, bold contrast',                    layers:variantA },
-        { id:'b', label:'B — Hook Swap + Zoom', desc:'Text hook swap, reaction-face zoom, inverted colour palette',    layers:variantB },
-        { id:'c', label:'C — Dark Drama',       desc:'Alternate hook, dark moody, glow + subject glow',               layers:variantC },
+        { id:'a', label:'A — Control',        desc:'Your current design, unmodified — the baseline',                             layers:variantA },
+        { id:'b', label:'B — Panic Hook',     desc:'Gold text, cyan subject glow, darkened background, +12% subject scale',      layers:variantB },
+        { id:'c', label:'C — Curiosity Gap',  desc:'Blurred background (depth-of-field), hidden text, subject isolation at 115% contrast', layers:variantC },
       ]);
       setAbLoading(false);
     },600);
