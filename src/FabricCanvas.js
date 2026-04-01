@@ -41,6 +41,12 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
   const [objects, setObjects] = useState([]);
   const [activeTool, setActiveTool] = useState('select');
 
+  // Lasso masking state
+  const [isLassoMode, setIsLassoMode] = useState(false);
+  const lassoPointsRef = useRef([]);
+  const lassoLineRef = useRef(null);
+  const lassoTargetRef = useRef(null);
+
   const T = {
     bg:      darkMode ? '#0a0a0a' : '#f2f2f2',
     panel:   darkMode ? '#141414' : '#ffffff',
@@ -92,7 +98,7 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
   const pushHistory = useCallback(() => {
     const c = fabricRef.current;
     if (!c || skipHistoryRef.current) return;
-    const json = JSON.stringify(c.toJSON(['id', 'name', 'crossOrigin', 'isSubject']));
+    const json = JSON.stringify(c.toJSON(['id', 'name', 'crossOrigin', 'isSubject', 'clipPath']));
     const h = historyRef.current;
     const idx = historyIdxRef.current;
     // Trim future states if we branched
@@ -154,7 +160,7 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
     if (!canvas || !user?.email) return;
     setSaving(true);
     try {
-      const jsonData = canvas.toJSON(['id', 'name', 'crossOrigin', 'isSubject']);
+      const jsonData = canvas.toJSON(['id', 'name', 'crossOrigin', 'isSubject', 'clipPath']);
       const thumbDataUrl = canvas.toDataURL({ format: 'jpeg', quality: 0.7, multiplier: 0.5 });
       const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
       const { data: { session } } = await supabase.auth.getSession();
@@ -175,6 +181,105 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => saveToSupabase(), 3000);
   }, [saveToSupabase]);
+
+  // ── Lasso Mask Engine ────────────────────────────────────────────────────
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || !isLassoMode) return;
+
+    canvas.selection = false;
+    canvas.defaultCursor = 'crosshair';
+    canvas.getObjects().forEach(o => { o.selectable = false; o.evented = false; });
+
+    let drawing = false;
+
+    function onMouseDown(opt) {
+      drawing = true;
+      lassoPointsRef.current = [];
+      const ptr = canvas.getScenePoint(opt.e);
+      lassoPointsRef.current.push({ x: ptr.x, y: ptr.y });
+      const line = new fabric.Polyline(lassoPointsRef.current, {
+        fill: 'rgba(249,115,22,0.08)', stroke: '#f97316', strokeWidth: 2,
+        strokeDashArray: [6, 4], selectable: false, evented: false, objectCaching: false,
+      });
+      lassoLineRef.current = line;
+      canvas.add(line);
+    }
+
+    function onMouseMove(opt) {
+      if (!drawing) return;
+      const ptr = canvas.getScenePoint(opt.e);
+      lassoPointsRef.current.push({ x: ptr.x, y: ptr.y });
+      if (lassoLineRef.current) canvas.remove(lassoLineRef.current);
+      const line = new fabric.Polyline([...lassoPointsRef.current], {
+        fill: 'rgba(249,115,22,0.08)', stroke: '#f97316', strokeWidth: 2,
+        strokeDashArray: [6, 4], selectable: false, evented: false, objectCaching: false,
+      });
+      lassoLineRef.current = line;
+      canvas.add(line);
+      canvas.renderAll();
+    }
+
+    function onMouseUp() {
+      if (!drawing) return;
+      drawing = false;
+      if (lassoLineRef.current) { canvas.remove(lassoLineRef.current); lassoLineRef.current = null; }
+
+      const points = lassoPointsRef.current;
+      const target = lassoTargetRef.current;
+      if (points.length < 3 || !target) { setIsLassoMode(false); return; }
+
+      // clipPath offset math: absolute canvas coords → object-relative coords
+      const objCenterX = target.left + (target.width * target.scaleX) / 2;
+      const objCenterY = target.top + (target.height * target.scaleY) / 2;
+      const relativePoints = points.map(p => ({
+        x: (p.x - objCenterX) / target.scaleX,
+        y: (p.y - objCenterY) / target.scaleY,
+      }));
+
+      const clipPoly = new fabric.Polygon(relativePoints, {
+        originX: 'center', originY: 'center', left: 0, top: 0, absolutePositioned: false,
+      });
+      target.set({ clipPath: clipPoly });
+      canvas.renderAll();
+      pushHistory();
+      triggerAutoSave();
+      setIsLassoMode(false);
+    }
+
+    canvas.on('mouse:down', onMouseDown);
+    canvas.on('mouse:move', onMouseMove);
+    canvas.on('mouse:up', onMouseUp);
+
+    return () => {
+      canvas.off('mouse:down', onMouseDown);
+      canvas.off('mouse:move', onMouseMove);
+      canvas.off('mouse:up', onMouseUp);
+      canvas.selection = true;
+      canvas.defaultCursor = 'default';
+      canvas.getObjects().forEach(o => { o.selectable = true; o.evented = true; });
+      if (lassoLineRef.current) { canvas.remove(lassoLineRef.current); lassoLineRef.current = null; }
+    };
+  }, [isLassoMode, pushHistory, triggerAutoSave]);
+
+  const startLasso = useCallback(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const active = canvas.getActiveObject();
+    if (!active || active.type !== 'image') return;
+    lassoTargetRef.current = active;
+    canvas.discardActiveObject();
+    setIsLassoMode(true);
+  }, []);
+
+  const clearMask = useCallback(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || !activeObj || activeObj.type !== 'image') return;
+    activeObj.set({ clipPath: null });
+    canvas.renderAll();
+    pushHistory();
+    triggerAutoSave();
+  }, [activeObj, pushHistory, triggerAutoSave]);
 
   // ── Tool actions ─────────────────────────────────────────────────────────
   const addText = useCallback((text = 'YOUR TEXT', opts = {}) => {
@@ -258,9 +363,9 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
   // Expose via ref
   useImperativeHandle(ref, () => ({
     addText, addImage, addShape, setBg, setBgGradient, deleteSelected,
-    exportPNG, saveToSupabase, undo, redo,
+    exportPNG, saveToSupabase, undo, redo, startLasso, clearMask,
     get fabricCanvas() { return fabricRef.current; },
-  }), [addText, addImage, addShape, setBg, setBgGradient, deleteSelected, exportPNG, saveToSupabase, undo, redo]);
+  }), [addText, addImage, addShape, setBg, setBgGradient, deleteSelected, exportPNG, saveToSupabase, undo, redo, startLasso, clearMask]);
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
   useEffect(() => {
@@ -299,6 +404,7 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
           { key: 'shapes', icon: '○', label: 'Shapes' },
           { key: 'image', icon: '🖼', label: 'Image' },
           { key: 'bg', icon: '▨', label: 'Background' },
+          { key: 'lasso', icon: '✂', label: 'Lasso Mask' },
         ].map(t => (
           <button key={t.key} onClick={() => setActiveTool(t.key)} style={sBtn(activeTool === t.key)}>
             <span style={{ marginRight: 8 }}>{t.icon}</span>{t.label}
@@ -412,6 +518,40 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
                 <div key={i} onClick={() => setBgGradient(g)} style={{ width: '100%', height: 28, borderRadius: 4, background: `linear-gradient(135deg,${g[0]},${g[1]})`, cursor: 'pointer', border: `1px solid ${T.border}` }} />
               ))}
             </div>
+          </div>
+        )}
+
+        {activeTool === 'lasso' && (
+          <div>
+            <div style={pLabel}>Lasso Mask Tool</div>
+            <div style={{ padding: 10, background: T.input, borderRadius: 7, border: `1px solid ${T.border}`, fontSize: 11, color: T.muted, lineHeight: 1.6, marginBottom: 10 }}>
+              {isLassoMode
+                ? 'Drawing — drag to trace around the area you want to keep. Release to apply the mask.'
+                : 'Select an image layer, then click "Start Lasso" to draw a freeform mask. Only the area inside your selection will be visible.'}
+            </div>
+
+            {isLassoMode ? (
+              <div>
+                <div style={{ padding: 8, background: `${T.accent}18`, border: `1px solid ${T.accent}44`, borderRadius: 7, fontSize: 11, color: T.accent, fontWeight: 600, textAlign: 'center', marginBottom: 8 }}>
+                  ✂ Drawing mask — drag to trace, release to apply
+                </div>
+                <button onClick={() => setIsLassoMode(false)} style={actionBtn(T.danger)}>Cancel</button>
+              </div>
+            ) : (
+              <div>
+                <button onClick={() => { setActiveTool('lasso'); startLasso(); }}
+                  disabled={!activeObj || activeObj.type !== 'image'}
+                  style={{ ...actionBtn((!activeObj || activeObj.type !== 'image') ? T.muted : T.accent), opacity: (!activeObj || activeObj.type !== 'image') ? 0.5 : 1, marginBottom: 6 }}>
+                  ✂ Start Lasso
+                </button>
+                {(!activeObj || activeObj.type !== 'image') && (
+                  <div style={{ fontSize: 10, color: T.muted, textAlign: 'center' }}>Select an image layer first</div>
+                )}
+                {activeObj?.type === 'image' && activeObj.clipPath && (
+                  <button onClick={clearMask} style={{ ...actionBtn(T.danger), marginTop: 6 }}>Remove Mask</button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
