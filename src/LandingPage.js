@@ -20,29 +20,6 @@ const D = {
 const grad    = 'linear-gradient(135deg, #c45c2e 0%, #f7a642 100%)';
 const gradBox = '0 4px 28px rgba(196,92,46,0.40)';
 
-// ── Logo mark — 3D bold "T" via CSS gradient + layered text-shadow ────────────
-function LogoMark({ size = 28 }) {
-  return (
-    <div style={{
-      width: size, height: size,
-      borderRadius: Math.round(size * 0.22),
-      background: grad,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      boxShadow: '0 2px 12px rgba(196,92,46,0.5)',
-      flexShrink: 0,
-    }}>
-      <span style={{
-        fontSize: Math.round(size * 0.55),
-        fontWeight: '900',
-        color: '#fff',
-        fontFamily: 'Georgia, serif',
-        letterSpacing: '-1px',
-        lineHeight: 1,
-        textShadow: '1px 1px 0 rgba(0,0,0,0.4)',
-      }}>T</span>
-    </div>
-  );
-}
 
 // ── [S1] Hero ─────────────────────────────────────────────────────────────────
 function Hero({ setPage }) {
