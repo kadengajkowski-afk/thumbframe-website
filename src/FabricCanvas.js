@@ -43,6 +43,7 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
 
   // Lasso masking state
   const [isLassoMode, setIsLassoMode] = useState(false);
+  const [removingBg, setRemovingBg] = useState(false);
   const lassoPointsRef = useRef([]);
   const lassoLineRef = useRef(null);
   const lassoTargetRef = useRef(null);
@@ -380,6 +381,47 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
     return () => window.removeEventListener('keydown', onKey);
   }, [deleteSelected, undo, redo, saveToSupabase]);
 
+  // ── Remove Background ────────────────────────────────────────────────────
+  const removeBackground = useCallback(async () => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'image') { alert('Select an image layer first.'); return; }
+    try {
+      setRemovingBg(true);
+      const el = obj.getElement();
+      const tmp = document.createElement('canvas');
+      tmp.width = el.naturalWidth || el.width;
+      tmp.height = el.naturalHeight || el.height;
+      tmp.getContext('2d').drawImage(el, 0, 0);
+      const base64Src = tmp.toDataURL('image/png');
+      const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
+      const res = await fetch(`${API_URL}/remove-bg`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64Src }),
+      });
+      if (!res.ok) throw new Error(`Remove background failed (${res.status})`);
+      const data = await res.json();
+      if (data?.error) throw new Error(data.error);
+      const resultSrc = typeof data?.image === 'string' ? data.image.trim() : '';
+      if (!resultSrc) throw new Error('Invalid result from remove-bg API');
+      const newImg = await loadFabricImage(resultSrc);
+      newImg.set({ left: obj.left, top: obj.top, scaleX: obj.scaleX, scaleY: obj.scaleY, angle: obj.angle, opacity: obj.opacity });
+      canvas.remove(obj);
+      canvas.add(newImg);
+      canvas.setActiveObject(newImg);
+      canvas.renderAll();
+      pushHistory();
+      triggerAutoSave();
+    } catch (err) {
+      console.error('[FabricV2] Remove BG error:', err);
+      alert('Failed to remove background. Check your connection and try again.');
+    } finally {
+      setRemovingBg(false);
+    }
+  }, [pushHistory, triggerAutoSave]);
+
   // ── Styles ───────────────────────────────────────────────────────────────
   const sBtn = (active) => ({
     padding: '7px 10px', borderRadius: 6, border: 'none', fontSize: 11, cursor: 'pointer',
@@ -390,10 +432,53 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
   const pInput = { width: '100%', padding: '6px 8px', borderRadius: 5, border: `1px solid ${T.border}`, background: T.input, color: T.text, fontSize: 12, outline: 'none', boxSizing: 'border-box' };
   const pColor = { width: '100%', height: 32, borderRadius: 5, border: `1px solid ${T.border}`, cursor: 'pointer', background: 'none', padding: 0 };
   const actionBtn = (bg) => ({ padding: '8px 12px', borderRadius: 7, border: 'none', background: bg || T.accent, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', width: '100%' });
+  const toolbarBtn = (active, disabled) => ({
+    padding: '7px 14px', borderRadius: 6, border: `1px solid ${active ? T.accent : T.border}`,
+    background: active ? T.accent : T.input,
+    color: active ? '#fff' : disabled ? T.muted : T.text,
+    fontSize: 12, fontWeight: active ? 700 : 500, cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.5 : 1, flexShrink: 0,
+  });
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 60px)', background: T.bg, fontFamily: '"Plus Jakarta Sans", -apple-system, sans-serif', color: T.text, fontSize: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)', background: T.bg, fontFamily: '"Plus Jakarta Sans", -apple-system, sans-serif', color: T.text, fontSize: 12 }}>
+
+      {/* ── Pro Toolbar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: T.sidebar, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: 1, textTransform: 'uppercase', marginRight: 4 }}>SnapFrame V2</span>
+        <button onClick={() => addText('YOUR TEXT')} style={toolbarBtn(false, false)}>T Add Text</button>
+        <button onClick={() => {
+          const input = document.createElement('input');
+          input.type = 'file'; input.accept = 'image/*';
+          input.onchange = (e) => {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => addImage(ev.target.result);
+            reader.readAsDataURL(file);
+          };
+          input.click();
+        }} style={toolbarBtn(false, false)}>🖼 Add Image</button>
+        {(activeObj?.type === 'image' || removingBg) && (
+          <button onClick={removeBackground} disabled={removingBg} style={toolbarBtn(false, removingBg)}>
+            {removingBg ? '⏳ Removing…' : '✨ Remove BG'}
+          </button>
+        )}
+        <button
+          onClick={() => { if (isLassoMode) setIsLassoMode(false); else { setActiveTool('lasso'); startLasso(); } }}
+          disabled={!isLassoMode && (!activeObj || activeObj.type !== 'image')}
+          title={!isLassoMode && (!activeObj || activeObj.type !== 'image') ? 'Select an image layer first' : ''}
+          style={toolbarBtn(isLassoMode, !isLassoMode && (!activeObj || activeObj.type !== 'image'))}
+        >
+          ✂️ {isLassoMode ? 'Cancel Lasso' : 'Lasso Mask'}
+        </button>
+        {isLassoMode && (
+          <span style={{ fontSize: 11, color: T.accent, fontWeight: 600 }}>● Drawing — drag to trace, release to apply</span>
+        )}
+      </div>
+
+      {/* ── Editor Row ── */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
       {/* ── Left Sidebar: Tools ── */}
       <div style={{ width: 180, background: T.sidebar, borderRight: `1px solid ${T.border}`, padding: '12px 8px', overflowY: 'auto', flexShrink: 0 }}>
@@ -616,6 +701,8 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true },
           </div>
         )}
       </div>
+
+      </div>{/* end Editor Row */}
     </div>
   );
 });
