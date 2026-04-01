@@ -2108,6 +2108,150 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     setFaceLoading(false);
   }
 
+  // ── Shared canvas renderer (single source of truth) ──────────────────────
+  // Used by: exportAllPlatforms, exportCanvas, downloadVariantsAsZip
+  async function renderLayersToCanvas(canvas, layerArray, opts={}){
+    const ctx = canvas.getContext('2d');
+    const previewW = opts.previewW || p.preview.w;
+    const previewH = opts.previewH || p.preview.h;
+    const scaleX = canvas.width  / previewW;
+    const scaleY = canvas.height / previewH;
+    const transparent = opts.transparent || false;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
+
+    for(const obj of layerArray){
+      if(obj.hidden) continue;
+      if(transparent && obj.type==='background') continue;
+      ctx.save();
+      ctx.globalAlpha = (obj.opacity??100)/100;
+      ctx.globalCompositeOperation = obj.blendMode||'normal';
+
+      if(obj.type==='background'){
+        ctx.filter='none';
+        if(obj.bgGradient){
+          const g=ctx.createLinearGradient(0,0,0,canvas.height);
+          g.addColorStop(0,obj.bgGradient[0]);
+          g.addColorStop(1,obj.bgGradient[1]);
+          ctx.fillStyle=g;
+        } else {
+          ctx.fillStyle=obj.bgColor||'#f97316';
+        }
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+      }
+
+      else if(obj.type==='text'){
+        const scale=Math.min(scaleX,scaleY);
+        const centerX=(obj.x+(obj.width||100)/2)*scaleX;
+        const centerY=(obj.y+(obj.fontSize||48)/2)*scaleY;
+        ctx.translate(centerX,centerY);
+        if(obj.rotation) ctx.rotate((obj.rotation||0)*Math.PI/180);
+        ctx.translate(-centerX,-centerY);
+        ctx.translate(obj.x*scaleX,obj.y*scaleY);
+        if(obj.flipH||obj.flipV) ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
+        const fs=(obj.fontSize||48)*scale;
+        ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${resolveFontFamily(obj.fontFamily)}`;
+        if(obj.shadowEnabled){
+          ctx.shadowColor=obj.shadowColor||'rgba(0,0,0,0.95)';
+          ctx.shadowBlur=(obj.shadowBlur||14)*scale;
+          ctx.shadowOffsetX=(obj.shadowX||2)*scale;
+          ctx.shadowOffsetY=(obj.shadowY||2)*scale;
+        }
+        if(obj.strokeWidth>0){
+          ctx.strokeStyle=obj.strokeColor;
+          ctx.lineWidth=obj.strokeWidth*scale*2;
+          ctx.strokeText(obj.text,0,fs);
+        }
+        ctx.fillStyle=obj.textColor;
+        ctx.fillText(obj.text,0,fs);
+      }
+
+      else if(obj.type==='image'){
+        await new Promise(resolve=>{
+          const img=new Image();
+          img.crossOrigin='Anonymous';
+          img.onload=()=>{
+            const x=obj.x*scaleX;
+            const y=obj.y*scaleY;
+            const w=obj.width*scaleX;
+            const h=obj.height*scaleY;
+            const cl=(obj.cropLeft||0)*scaleX;
+            const ct=(obj.cropTop||0)*scaleY;
+            const cr=(obj.cropRight||0)*scaleX;
+            const cb=(obj.cropBottom||0)*scaleY;
+
+            ctx.save();
+            if(obj.mask?.enabled&&obj.mask?.data){
+              const maskImg=new Image();
+              maskImg.crossOrigin='Anonymous';
+              maskImg.onload=()=>{
+                ctx.beginPath();
+                ctx.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);
+                ctx.clip();
+                if(obj.flipH||obj.flipV){
+                  ctx.translate(x+w/2,y+h/2);
+                  ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
+                  ctx.translate(-(x+w/2),-(y+h/2));
+                }
+                ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
+                ctx.drawImage(img,x-cl,y-ct,w,h);
+                ctx.restore();
+                resolve();
+              };
+              maskImg.src=obj.mask.data;
+            } else {
+              ctx.save();
+              if(obj.rotation){
+                const cx2=x+w/2,cy2=y+h/2;
+                ctx.translate(cx2,cy2);
+                ctx.rotate((obj.rotation||0)*Math.PI/180);
+                ctx.translate(-cx2,-cy2);
+              }
+              ctx.beginPath();
+              ctx.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);
+              ctx.clip();
+              if(obj.flipH||obj.flipV){
+                ctx.translate(x+w/2,y+h/2);
+                ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
+                ctx.translate(-(x+w/2),-(y+h/2));
+              }
+              ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
+              ctx.drawImage(img,x-cl,y-ct,w,h);
+              ctx.restore();
+              resolve();
+            }
+          };
+          img.onerror=()=>resolve();
+          img.src=obj.paintSrc||obj.src;
+        });
+      }
+
+      else if(obj.type==='shape'){
+        ctx.translate(obj.x*scaleX,obj.y*scaleY);
+        if(obj.flipH||obj.flipV) ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
+        const sw=obj.width*scaleX,sh=obj.height*scaleY;
+        ctx.fillStyle=obj.fillColor||'#FF4500';
+        ctx.strokeStyle=obj.strokeColor||'#000';
+        ctx.lineWidth=2*Math.min(scaleX,scaleY);
+        ctx.beginPath();
+        if(obj.shape==='circle'){
+          ctx.ellipse(sw/2,sh/2,sw/2,sh/2,0,0,Math.PI*2);
+        } else if(obj.shape==='rect'||obj.shape==='roundrect'){
+          const rad=obj.shape==='roundrect'?Math.min(sw,sh)*0.2:0;
+          ctx.roundRect(0,0,sw,sh,rad);
+        } else {
+          ctx.rect(0,0,sw,sh);
+        }
+        ctx.fill();ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+    ctx.filter='none';
+  }
+
   async function exportAllPlatforms(){
     setResizeExporting(true);
 
@@ -2125,95 +2269,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const canvas  = document.createElement('canvas');
       canvas.width  = plat.width;
       canvas.height = plat.height;
-      const ctx     = canvas.getContext('2d');
 
-      // Scale factors from current platform to target
-      const scaleX = plat.width  / p.preview.w;
-      const scaleY = plat.height / p.preview.h;
-
-      ctx.filter=`brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
-
-      for(const obj of layers){
-        if(obj.hidden) continue;
-        ctx.save();
-        ctx.globalAlpha=(obj.opacity??100)/100;
-        ctx.globalCompositeOperation=obj.blendMode||'normal';
-
-        if(obj.type==='background'){
-          ctx.filter='none';
-          if(obj.bgGradient){
-            const g=ctx.createLinearGradient(0,0,0,canvas.height);
-            g.addColorStop(0,obj.bgGradient[0]);
-            g.addColorStop(1,obj.bgGradient[1]);
-            ctx.fillStyle=g;
-          } else ctx.fillStyle=obj.bgColor||'#f97316';
-          ctx.fillRect(0,0,canvas.width,canvas.height);
-        }
-
-        else if(obj.type==='text'){
-          const scale=Math.min(scaleX,scaleY);
-          ctx.translate(obj.x*scaleX,obj.y*scaleY);
-          const fs=(obj.fontSize||48)*scale;
-          ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${resolveFontFamily(obj.fontFamily)}`;
-          if(obj.shadowEnabled){
-            ctx.shadowColor=obj.shadowColor||'rgba(0,0,0,0.95)';
-            ctx.shadowBlur=(obj.shadowBlur||14)*scale;
-            ctx.shadowOffsetX=(obj.shadowX||2)*scale;
-            ctx.shadowOffsetY=(obj.shadowY||2)*scale;
-          }
-          if(obj.strokeWidth>0){
-            ctx.strokeStyle=obj.strokeColor;
-            ctx.lineWidth=obj.strokeWidth*scale*2;
-            ctx.strokeText(obj.text,0,fs);
-          }
-          ctx.fillStyle=obj.textColor;
-          ctx.fillText(obj.text,0,fs);
-        }
-
-        else if(obj.type==='image'){
-          await new Promise(resolve=>{
-            const img=new Image();
-            img.crossOrigin='Anonymous';
-            img.onload=()=>{
-              const x=obj.x*scaleX,y=obj.y*scaleY;
-              const w=obj.width*scaleX,h=obj.height*scaleY;
-              const cl=(obj.cropLeft||0)*scaleX,ct=(obj.cropTop||0)*scaleY;
-              const cr=(obj.cropRight||0)*scaleX,cb=(obj.cropBottom||0)*scaleY;
-              ctx.save();
-              ctx.beginPath();
-              ctx.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);
-              ctx.clip();
-              if(obj.flipH||obj.flipV){
-                ctx.translate(x+w/2,y+h/2);
-                ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
-                ctx.translate(-(x+w/2),-(y+h/2));
-              }
-              ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%)`;
-              ctx.drawImage(img,x-cl,y-ct,w,h);
-              ctx.restore();
-              resolve();
-            };
-            img.onerror=()=>resolve();
-            img.src=obj.paintSrc||obj.src;
-          });
-        }
-
-        else if(obj.type==='shape'){
-          ctx.translate(obj.x*scaleX,obj.y*scaleY);
-          const sw=obj.width*scaleX,sh=obj.height*scaleY;
-          ctx.fillStyle=obj.fillColor||'#FF4500';
-          ctx.strokeStyle=obj.strokeColor||'#000';
-          ctx.lineWidth=2*Math.min(scaleX,scaleY);
-          ctx.beginPath();
-          if(obj.shape==='circle') ctx.ellipse(sw/2,sh/2,sw/2,sh/2,0,0,Math.PI*2);
-          else ctx.rect(0,0,sw,sh);
-          ctx.fill();ctx.stroke();
-        }
-
-        ctx.restore();
-      }
-
-      ctx.filter='none';
+      await renderLayersToCanvas(canvas, layers);
 
       // Download this platform
       const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));
@@ -2439,92 +2496,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const canvas = document.createElement('canvas');
       canvas.width  = p.width;
       canvas.height = p.height;
-      const ctx = canvas.getContext('2d');
-      const scaleX = p.width  / p.preview.w;
-      const scaleY = p.height / p.preview.h;
-
-      ctx.filter=`brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
-
-      for(const obj of variantLayers){
-        if(obj.hidden) continue;
-        ctx.save();
-        ctx.globalAlpha=(obj.opacity??100)/100;
-        ctx.globalCompositeOperation=obj.blendMode||'normal';
-
-        if(obj.type==='background'){
-          ctx.filter='none';
-          if(obj.bgGradient){
-            const g=ctx.createLinearGradient(0,0,0,canvas.height);
-            g.addColorStop(0,obj.bgGradient[0]);
-            g.addColorStop(1,obj.bgGradient[1]);
-            ctx.fillStyle=g;
-          } else ctx.fillStyle=obj.bgColor||'#f97316';
-          ctx.fillRect(0,0,canvas.width,canvas.height);
-        }
-
-        else if(obj.type==='text'){
-          const scale=Math.min(scaleX,scaleY);
-          ctx.translate(obj.x*scaleX,obj.y*scaleY);
-          const fs=(obj.fontSize||48)*scale;
-          ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${resolveFontFamily(obj.fontFamily)}`;
-          if(obj.shadowEnabled){
-            ctx.shadowColor=obj.shadowColor||'rgba(0,0,0,0.95)';
-            ctx.shadowBlur=(obj.shadowBlur||14)*scale;
-            ctx.shadowOffsetX=(obj.shadowX||2)*scale;
-            ctx.shadowOffsetY=(obj.shadowY||2)*scale;
-          }
-          if(obj.strokeWidth>0){
-            ctx.strokeStyle=obj.strokeColor;
-            ctx.lineWidth=obj.strokeWidth*scale*2;
-            ctx.strokeText(obj.text,0,fs);
-          }
-          ctx.fillStyle=obj.textColor;
-          ctx.fillText(obj.text,0,fs);
-        }
-
-        else if(obj.type==='image'){
-          await new Promise(resolve=>{
-            const img=new Image();
-            img.crossOrigin='Anonymous';
-            img.onload=()=>{
-              const x=obj.x*scaleX,y=obj.y*scaleY;
-              const w=obj.width*scaleX,h=obj.height*scaleY;
-              const cl=(obj.cropLeft||0)*scaleX,ct=(obj.cropTop||0)*scaleY;
-              const cr=(obj.cropRight||0)*scaleX,cb=(obj.cropBottom||0)*scaleY;
-              ctx.save();
-              ctx.beginPath();
-              ctx.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);
-              ctx.clip();
-              if(obj.flipH||obj.flipV){
-                ctx.translate(x+w/2,y+h/2);
-                ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
-                ctx.translate(-(x+w/2),-(y+h/2));
-              }
-              ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%)`;
-              ctx.drawImage(img,x-cl,y-ct,w,h);
-              ctx.restore();
-              resolve();
-            };
-            img.onerror=()=>resolve();
-            img.src=obj.paintSrc||obj.src;
-          });
-        }
-
-        else if(obj.type==='shape'){
-          ctx.translate(obj.x*scaleX,obj.y*scaleY);
-          const sw=obj.width*scaleX,sh=obj.height*scaleY;
-          ctx.fillStyle=obj.fillColor||'#FF4500';
-          ctx.strokeStyle=obj.strokeColor||'#000';
-          ctx.lineWidth=2*Math.min(scaleX,scaleY);
-          ctx.beginPath();
-          if(obj.shape==='circle') ctx.ellipse(sw/2,sh/2,sw/2,sh/2,0,0,Math.PI*2);
-          else ctx.rect(0,0,sw,sh);
-          ctx.fill();ctx.stroke();
-        }
-
-        ctx.restore();
-      }
-      ctx.filter='none';
+      await renderLayersToCanvas(canvas, variantLayers);
       return canvas.toDataURL('image/png',1.0);
     }
 
@@ -3668,144 +3640,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     const canvas  = document.createElement('canvas');
     canvas.width  = exportW;
     canvas.height = exportH;
-    const ctx     = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    const scaleX  = exportW / p.preview.w;
-    const scaleY  = exportH / p.preview.h;
 
-    // Apply canvas-wide adjustments
-    ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
-
-    // Draw each layer in order
-    for (const obj of layers) {
-      if (obj.hidden) continue;
-      if (transparent && obj.type==='background') continue;
-      ctx.save();
-      ctx.globalAlpha       = (obj.opacity??100)/100;
-      ctx.globalCompositeOperation = obj.blendMode||'normal';
-
-      if (obj.type==='background'){
-        ctx.filter='none';
-        if (obj.bgGradient){
-          const g=ctx.createLinearGradient(0,0,0,canvas.height);
-          g.addColorStop(0,obj.bgGradient[0]);
-          g.addColorStop(1,obj.bgGradient[1]);
-          ctx.fillStyle=g;
-        } else {
-          ctx.fillStyle=obj.bgColor||'#f97316';
-        }
-        ctx.fillRect(0,0,canvas.width,canvas.height);
-      }
-
-      else if (obj.type==='text'){
-        const scale = Math.min(scaleX,scaleY);
-        const centerX=(obj.x+(obj.width||100)/2)*scaleX;
-        const centerY=(obj.y+(obj.fontSize||48)/2)*scaleY;
-        ctx.translate(centerX,centerY);
-        if(obj.rotation) ctx.rotate((obj.rotation||0)*Math.PI/180);
-        ctx.translate(-centerX,-centerY);
-        ctx.translate(obj.x*scaleX, obj.y*scaleY);
-        if(obj.flipH||obj.flipV) ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
-        const fs = (obj.fontSize||48)*scale;
-        ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${resolveFontFamily(obj.fontFamily)}`;
-        if(obj.shadowEnabled){
-          ctx.shadowColor   = obj.shadowColor||'rgba(0,0,0,0.95)';
-          ctx.shadowBlur    = (obj.shadowBlur||14)*scale;
-          ctx.shadowOffsetX = (obj.shadowX||2)*scale;
-          ctx.shadowOffsetY = (obj.shadowY||2)*scale;
-        }
-        if(obj.strokeWidth>0){
-          ctx.strokeStyle = obj.strokeColor;
-          ctx.lineWidth   = obj.strokeWidth*scale*2;
-          ctx.strokeText(obj.text,0,fs);
-        }
-        ctx.fillStyle = obj.textColor;
-        ctx.fillText(obj.text,0,fs);
-      }
-
-      else if (obj.type==='image'){
-        await new Promise(resolve=>{
-          const img=new Image();
-          img.onload=()=>{
-            const x=obj.x*scaleX;
-            const y=obj.y*scaleY;
-            const w=obj.width*scaleX;
-            const h=obj.height*scaleY;
-            const cl=(obj.cropLeft||0)*scaleX;
-            const ct=(obj.cropTop||0)*scaleY;
-            const cr=(obj.cropRight||0)*scaleX;
-            const cb=(obj.cropBottom||0)*scaleY;
-
-            ctx.save();
-            if(obj.mask?.enabled&&obj.mask?.data){
-              const maskImg=new Image();
-              maskImg.crossOrigin='Anonymous';
-              maskImg.onload=()=>{
-                ctx.beginPath();
-                ctx.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);
-                ctx.clip();
-                if(obj.flipH||obj.flipV){
-                  ctx.translate(x+w/2,y+h/2);
-                  ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
-                  ctx.translate(-(x+w/2),-(y+h/2));
-                }
-                ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
-                ctx.drawImage(img,x-cl,y-ct,w,h);
-                ctx.restore();
-                resolve();
-              };
-              maskImg.src=obj.mask.data;
-            } else {
-              ctx.save();
-              if(obj.rotation){
-                const cx2=x+w/2, cy2=y+h/2;
-                ctx.translate(cx2,cy2);
-                ctx.rotate((obj.rotation||0)*Math.PI/180);
-                ctx.translate(-cx2,-cy2);
-              }
-              ctx.beginPath();
-              ctx.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);
-              ctx.clip();
-              if(obj.flipH||obj.flipV){
-                ctx.translate(x+w/2,y+h/2);
-                ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
-                ctx.translate(-(x+w/2),-(y+h/2));
-              }
-              ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
-              ctx.drawImage(img,x-cl,y-ct,w,h);
-              ctx.restore();
-              resolve();
-            }
-          };
-          img.onerror=()=>resolve();
-          img.src=obj.paintSrc||obj.src;
-        });
-      }
-
-      else if (obj.type==='shape'){
-        ctx.translate(obj.x*scaleX, obj.y*scaleY);
-        if(obj.flipH||obj.flipV) ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
-        const sw=obj.width*scaleX, sh=obj.height*scaleY;
-        ctx.fillStyle   = obj.fillColor||'#FF4500';
-        ctx.strokeStyle = obj.strokeColor||'#000';
-        ctx.lineWidth   = 2*Math.min(scaleX,scaleY);
-        ctx.beginPath();
-        if(obj.shape==='circle'){
-          ctx.ellipse(sw/2,sh/2,sw/2,sh/2,0,0,Math.PI*2);
-        } else if(obj.shape==='rect'||obj.shape==='roundrect'){
-          const rad=obj.shape==='roundrect'?Math.min(sw,sh)*0.2:0;
-          ctx.roundRect(0,0,sw,sh,rad);
-        } else {
-          ctx.rect(0,0,sw,sh);
-        }
-        ctx.fill(); ctx.stroke();
-      }
-
-      ctx.restore();
-    }
-
-    ctx.filter='none';
+    await renderLayersToCanvas(canvas, layers, { transparent });
 
     // Generate download
     const fname = `${designName.replace(/\s+/g,'-')}-${p.width}x${p.height}`;
