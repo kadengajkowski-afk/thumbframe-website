@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import supabase from './supabaseClient';
 
 // ── ThumbFrame Landing Page ────────────────────────────────────────────────────
 // Fonts: Syne (headings) + Plus Jakarta Sans (body)
@@ -51,7 +52,7 @@ function useStyles() {
 }
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
-function LandingNav({ setPage }) {
+function LandingNav({ setPage, user }) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 24);
@@ -65,7 +66,7 @@ function LandingNav({ setPage }) {
     { l: 'Home',      fn: () => setPage('home') },
     { l: 'Features',  fn: () => scroll('features') },
     { l: 'Templates', fn: () => scroll('templates') },
-    { l: 'Pricing',   fn: () => setPage('pricing') },
+    { l: 'Pricing',   fn: () => scroll('pricing-section') },
     { l: 'Blog',      fn: null },
     { l: 'About',     fn: null },
     { l: 'Support',   fn: null },
@@ -103,12 +104,27 @@ function LandingNav({ setPage }) {
           ))}
         </div>
 
-        {/* CTA */}
-        <button className="tf-btn" onClick={() => setPage('editor')} style={{
-          background: OG, border: 'none', cursor: 'pointer',
-          padding: '9px 20px', borderRadius: 9,
-          fontSize: 14, fontWeight: 700, fontFamily: FB, color: '#fff', boxShadow: GLOW,
-        }}>Get Started Free</button>
+        {/* Auth-aware CTA */}
+        {user ? (
+          <button className="tf-btn" onClick={() => setPage('editor')} style={{
+            background: OG, border: 'none', cursor: 'pointer',
+            padding: '9px 20px', borderRadius: 9,
+            fontSize: 14, fontWeight: 700, fontFamily: FB, color: '#fff', boxShadow: GLOW,
+          }}>Go to Editor</button>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button className="tf-btn" onClick={() => setPage('login')} style={{
+              background: 'transparent', border: `1px solid ${C.bdr2}`, cursor: 'pointer',
+              padding: '8px 18px', borderRadius: 9,
+              fontSize: 14, fontWeight: 600, fontFamily: FB, color: C.text2,
+            }}>Log In</button>
+            <button className="tf-btn" onClick={() => setPage('signup')} style={{
+              background: OG, border: 'none', cursor: 'pointer',
+              padding: '9px 20px', borderRadius: 9,
+              fontSize: 14, fontWeight: 700, fontFamily: FB, color: '#fff', boxShadow: GLOW,
+            }}>Sign Up</button>
+          </div>
+        )}
       </div>
     </nav>
   );
@@ -175,7 +191,7 @@ function EditorMockup() {
 
       {/* AB bar */}
       <div style={{ background: C.card2, borderTop: `1px solid ${C.bdr}`, padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 11, color: C.muted, fontFamily: FB }}>A/B Test active — <span style={{ color: '#4ade80' }}>Variant A leading +2.3%</span></div>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FB }}>A/B Test active — <span style={{ color: '#4ade80' }}>comparing variants</span></div>
         <div style={{ background: OG, borderRadius: 5, padding: '3px 11px', fontSize: 11, fontWeight: 600, fontFamily: FB, color: '#fff', cursor: 'pointer' }}>Publish</div>
       </div>
     </div>
@@ -183,7 +199,7 @@ function EditorMockup() {
 }
 
 // ── [S1] Hero ─────────────────────────────────────────────────────────────────
-function HeroSection({ setPage }) {
+function HeroSection({ setPage, user }) {
   const scroll = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   return (
     <section style={{ background: C.bg, paddingTop: 116, paddingBottom: 80, position: 'relative', overflow: 'hidden' }}>
@@ -195,7 +211,7 @@ function HeroSection({ setPage }) {
             <div className="tf-a1">
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 20, border: `1px solid ${C.bdr2}`, background: 'rgba(249,115,22,.07)', marginBottom: 26, fontSize: 12, color: C.muted, fontFamily: FB, fontWeight: 500 }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ade80', boxShadow: '0 0 6px #4ade80' }} />
-                Trusted by 50,000+ creators
+                Now in Beta — Free to start
               </div>
             </div>
             <h1 className="tf-a2" style={{ fontFamily: FH, fontWeight: 800, fontSize: 'clamp(36px,4vw,60px)', lineHeight: 1.05, color: C.text, margin: '0 0 20px', letterSpacing: '-1px' }}>
@@ -207,18 +223,18 @@ function HeroSection({ setPage }) {
               AI-powered editor with A/B testing, brand kits, and smart templates. Create click-worthy thumbnails in minutes — not hours.
             </p>
             <div className="tf-a4" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <button className="tf-btn" onClick={() => setPage('editor')} style={{ background: OG, border: 'none', cursor: 'pointer', padding: '13px 28px', borderRadius: 10, fontSize: 15, fontWeight: 700, fontFamily: FB, color: '#fff', boxShadow: GLOW }}>
-                Start Free — No card needed
+              <button className="tf-btn" onClick={() => setPage(user ? 'editor' : 'signup')} style={{ background: OG, border: 'none', cursor: 'pointer', padding: '13px 28px', borderRadius: 10, fontSize: 15, fontWeight: 700, fontFamily: FB, color: '#fff', boxShadow: GLOW }}>
+                {user ? 'Open Editor' : 'Sign Up Free'}
               </button>
               <button className="tf-btn" onClick={() => scroll('features')} style={{ background: 'transparent', border: `1px solid ${C.bdr2}`, cursor: 'pointer', padding: '13px 22px', borderRadius: 10, fontSize: 15, fontWeight: 600, fontFamily: FB, color: C.text2 }}>
                 See how it works →
               </button>
             </div>
-            <div className="tf-a5" style={{ marginTop: 28, display: 'flex', gap: 28 }}>
-              {[['50K+','Creators'],['2M+','Thumbnails'],['4.9★','Rating']].map(([n,l]) => (
-                <div key={l}>
-                  <div style={{ fontFamily: FH, fontWeight: 700, fontSize: 18, color: C.text }}>{n}</div>
-                  <div style={{ fontFamily: FB, fontSize: 12, color: C.muted }}>{l}</div>
+            <div className="tf-a5" style={{ marginTop: 28, display: 'flex', gap: 20 }}>
+              {[['Optimized for CTR','⚡'],['Instant A/B Testing','🔀'],['Cloud-Powered Assets','☁️']].map(([label, icon]) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 14 }}>{icon}</span>
+                  <span style={{ fontFamily: FB, fontSize: 12, fontWeight: 500, color: C.text2 }}>{label}</span>
                 </div>
               ))}
             </div>
@@ -232,15 +248,21 @@ function HeroSection({ setPage }) {
   );
 }
 
-// ── [S2] Social proof bar ─────────────────────────────────────────────────────
-function SocialProofBar() {
+// ── [S2] Feature highlights banner ────────────────────────────────────────────
+function FeatureBanner() {
+  const items = [
+    { icon: '🎯', label: 'Optimized for CTR' },
+    { icon: '🔀', label: 'Instant A/B Testing' },
+    { icon: '☁️', label: 'Cloud-Powered Assets' },
+    { icon: '🎨', label: 'Full Brand Kit' },
+  ];
   return (
-    <div style={{ background: C.bg2, borderTop: `1px solid ${C.bdr}`, borderBottom: `1px solid ${C.bdr}`, padding: '28px 32px' }}>
+    <div style={{ background: C.bg2, borderTop: `1px solid ${C.bdr}`, borderBottom: `1px solid ${C.bdr}`, padding: '24px 32px' }}>
       <div style={{ maxWidth: 1160, margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-around', gap: 24 }}>
-        {[['50,000+','Creators worldwide'],['2,000,000+','Thumbnails created'],['4.9 / 5.0','Average rating'],['#1','Thumbnail tool on PH']].map(([n,l]) => (
-          <div key={l} style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: FH, fontWeight: 700, fontSize: 26, color: C.acc }}>{n}</div>
-            <div style={{ fontFamily: FB, fontSize: 12, color: C.muted, marginTop: 2 }}>{l}</div>
+        {items.map(({ icon, label }) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 20 }}>{icon}</span>
+            <span style={{ fontFamily: FH, fontWeight: 600, fontSize: 15, color: C.text, letterSpacing: '-.2px' }}>{label}</span>
           </div>
         ))}
       </div>
@@ -252,20 +274,20 @@ function SocialProofBar() {
 function ABVisual() {
   return (
     <div style={{ padding: 24, background: C.bg2, borderRadius: 14, border: `1px solid ${C.bdr}` }}>
-      <div style={{ fontSize: 10, color: C.muted, fontFamily: FB, letterSpacing: 1, marginBottom: 18, textTransform: 'uppercase' }}>Live A/B Test</div>
-      {[['Variant A — 8.2% CTR', 82, true],['Variant B — 5.9% CTR', 59, false]].map(([label, pct, win], i) => (
+      <div style={{ fontSize: 10, color: C.muted, fontFamily: FB, letterSpacing: 1, marginBottom: 18, textTransform: 'uppercase' }}>A/B Variant Engine</div>
+      {[['Variant A', 70, true],['Variant B', 45, false]].map(([label, pct, lead], i) => (
         <div key={i} style={{ marginBottom: i === 0 ? 14 : 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
             <span style={{ fontFamily: FB, fontSize: 12, color: C.text2 }}>{label}</span>
-            {win && <span style={{ fontFamily: FB, fontSize: 11, color: '#4ade80', fontWeight: 600 }}>WINNING</span>}
+            {lead && <span style={{ fontFamily: FB, fontSize: 11, color: '#4ade80', fontWeight: 600 }}>LEADING</span>}
           </div>
           <div style={{ height: 8, background: C.bdr, borderRadius: 4, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${pct}%`, background: win ? OG : C.bdr2, borderRadius: 4, transition: 'width 1s ease' }} />
+            <div style={{ height: '100%', width: `${pct}%`, background: lead ? OG : C.bdr2, borderRadius: 4, transition: 'width 1s ease' }} />
           </div>
         </div>
       ))}
-      <div style={{ marginTop: 18, padding: '8px 12px', background: 'rgba(74,222,128,.07)', border: '1px solid rgba(74,222,128,.18)', borderRadius: 8 }}>
-        <div style={{ fontFamily: FB, fontSize: 11, color: '#4ade80' }}>🏆 Variant A is significantly better. Auto-switch in 2 days.</div>
+      <div style={{ marginTop: 18, padding: '8px 12px', background: 'rgba(249,115,22,.06)', border: '1px solid rgba(249,115,22,.15)', borderRadius: 8 }}>
+        <div style={{ fontFamily: FB, fontSize: 11, color: C.acc }}>Compare two thumbnails and see which one performs better.</div>
       </div>
     </div>
   );
@@ -312,10 +334,10 @@ function AnalyticsVisual() {
     <div style={{ padding: 22, background: C.bg2, borderRadius: 14, border: `1px solid ${C.bdr}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <div style={{ fontFamily: FH, fontWeight: 700, fontSize: 28, color: C.acc }}>7.4%</div>
-          <div style={{ fontFamily: FB, fontSize: 11, color: C.muted }}>Avg. CTR this month</div>
+          <div style={{ fontFamily: FH, fontWeight: 700, fontSize: 28, color: C.acc }}>CTR</div>
+          <div style={{ fontFamily: FB, fontSize: 11, color: C.muted }}>Track click-through rate</div>
         </div>
-        <div style={{ fontFamily: FB, fontSize: 12, color: '#4ade80' }}>↑ +1.2% vs last month</div>
+        <div style={{ fontFamily: FB, fontSize: 12, color: '#4ade80' }}>Real-time data</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 48, marginBottom: 6 }}>
         {bars.map((h, i) => (
@@ -332,10 +354,10 @@ function AnalyticsVisual() {
 }
 
 const FEATURES = [
-  { icon:'⚡', title:'A/B Testing Engine', desc:'Upload two thumbnail variants and run a live split test. Get real CTR data and let the algorithm auto-switch to the winner.', tags:['Live CTR tracking','Auto winner','Statistical significance'], Visual: ABVisual },
-  { icon:'🎨', title:'Smart Templates', desc:'100+ battle-tested templates built from the highest-performing thumbnails. One click to apply, seconds to customize.', tags:['100+ templates','Style categories','Mobile-optimized'], Visual: TemplatesVisual },
-  { icon:'🔖', title:'Brand Kit', desc:'Lock in your colors, fonts, and logo once. Every thumbnail auto-applies your brand — zero effort, total consistency.', tags:['Custom fonts','Color palette','Logo placement'], Visual: BrandVisual },
-  { icon:'📊', title:'Analytics Dashboard', desc:"See impressions, CTR, and click patterns across all your thumbnails. Understand what works and double down on it.", tags:['CTR graphs','Channel overview','Export reports'], Visual: AnalyticsVisual },
+  { icon:'⚡', title:'A/B Variant Engine', desc:'Upload two thumbnail variants and compare performance side by side. See which version drives more clicks on your videos.', tags:['Compare variants','Track performance','Pick winners'], Visual: ABVisual },
+  { icon:'🎨', title:'Smart Templates', desc:'Ready-made templates designed for YouTube thumbnails. Apply a style in one click, then customize text, colors, and layout.', tags:['Multiple styles','Quick customization','YouTube-optimized'], Visual: TemplatesVisual },
+  { icon:'🔖', title:'Brand Kit', desc:'Save your colors, fonts, and logo once. Every thumbnail you create stays on-brand automatically.', tags:['Custom fonts','Color palette','Logo placement'], Visual: BrandVisual },
+  { icon:'📊', title:'Analytics Dashboard', desc:'Track impressions and CTR across your thumbnails. See what works and iterate on your best-performing designs.', tags:['CTR tracking','Performance overview','Data-driven decisions'], Visual: AnalyticsVisual },
 ];
 
 function FeaturesSection() {
@@ -426,15 +448,15 @@ function TemplatesSection({ setPage }) {
 const PLANS = [
   {
     name: 'Starter', price: 'Free', period: 'forever', primary: false,
-    desc: 'Perfect for getting started.',
-    features: ['5 thumbnail exports / month','20 templates','Basic A/B testing','HD export (1280×720)','Community support'],
+    desc: 'Basic canvas to get started.',
+    features: ['Basic thumbnail canvas','Standard export quality','Community support'],
     cta: 'Get started free',
   },
   {
-    name: 'Pro', price: '$15', period: '/month', primary: true, badge: 'Most popular',
-    desc: 'For creators serious about CTR.',
-    features: ['Unlimited exports','All 100+ templates','Advanced A/B + auto-switch','Brand Kit (fonts, colors, logo)','Analytics dashboard','4K export quality','No watermarks','Priority support'],
-    cta: 'Start Pro — 7 day free trial',
+    name: 'Pro Creator', price: '$15', period: '/month', primary: true, badge: 'Most popular',
+    desc: 'Everything you need to grow your channel.',
+    features: ['A/B Variant Engine','Full Brand Kit (fonts, colors, logo)','Unlimited exports','All templates','No watermarks','Priority support'],
+    cta: 'Upgrade to Pro Creator',
   },
 ];
 
@@ -494,12 +516,12 @@ function PricingSection({ setPage, onCheckout }) {
 
 // ── [S6] FAQ ──────────────────────────────────────────────────────────────────
 const FAQS = [
-  ['Is ThumbFrame really free?', 'Yes — the Starter plan is free forever, no credit card required. You get 5 exports/month and 20 templates.'],
-  ['Can I use my own fonts and colors?', 'Absolutely. The Pro Brand Kit lets you upload custom fonts, define your palette, and add your logo. Applied to every thumbnail automatically.'],
-  ['Does A/B testing connect to YouTube Analytics?', "ThumbFrame uses YouTube's Data API to pull real impression and CTR data. You authorize once, we handle the rest."],
-  ['What file formats can I export?', 'PNG, JPEG, or WebP at up to 4K (3840×2160) on Pro. Starter exports HD (1280×720).'],
-  ['Can I cancel anytime?', 'Yes. No contracts. Cancel from your dashboard — Pro features stay active until the end of your billing period.'],
-  ['Do you offer refunds?', 'Full refund within 7 days of your first Pro charge, no questions asked. After that we review cases individually.'],
+  ['Is ThumbFrame free to use?', 'Yes — the Starter plan gives you a basic canvas at no cost. Sign up and start creating right away, no credit card needed.'],
+  ['Can I use my own fonts and colors?', 'With Pro Creator, you get a full Brand Kit — upload custom fonts, set your color palette, and add your logo.'],
+  ['How does A/B testing work?', 'Upload two thumbnail variants for the same video. ThumbFrame tracks which one gets more clicks so you can pick the winner.'],
+  ['What can I export?', 'You can export your thumbnails as PNG images, sized for YouTube (1280×720).'],
+  ['Can I cancel anytime?', 'Yes. No contracts, no cancellation fees. Cancel from your dashboard anytime.'],
+  ['How much is Pro Creator?', '$15/month. Includes the A/B Variant Engine, full Brand Kit, unlimited exports, and no watermarks.'],
 ];
 
 function FAQSection() {
@@ -581,11 +603,23 @@ function FooterSection({ setPage }) {
 // ── Export ────────────────────────────────────────────────────────────────────
 export default function LandingPage({ setPage, onCheckout }) {
   useStyles();
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   return (
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: FB }}>
-      <LandingNav setPage={setPage} />
-      <HeroSection setPage={setPage} />
-      <SocialProofBar />
+      <LandingNav setPage={setPage} user={user} />
+      <HeroSection setPage={setPage} user={user} />
+      <FeatureBanner />
       <FeaturesSection />
       <TemplatesSection setPage={setPage} />
       <PricingSection setPage={setPage} onCheckout={onCheckout} />
