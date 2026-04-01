@@ -1021,7 +1021,7 @@ export default function App() {
 
   return (
     <div>
-      <Nav page={page} setPage={setPage} user={user} onLogout={handleLogout} />
+      {page !== 'home' && <Nav page={page} setPage={setPage} user={user} onLogout={handleLogout} />}
       {page === 'home'       && <LandingPage   setPage={setPage} onCheckout={handleCheckout} />}
       {page === 'howitworks' && <HowItWorks   setPage={setPage} />}
       {page === 'pricing'    && <Pricing      setPage={setPage} onCheckout={handleCheckout}/>}
