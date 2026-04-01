@@ -115,12 +115,17 @@ function generateProjectId(){
 }
 
 const TEXT_TEMPLATES = [
-  { label:'YouTube Bold', text:'WATCH THIS',        fontSize:56, fontFamily:'Anton',      fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,  shadowBlur:22, shadowX:3, shadowY:3, shadowColor:'#000000', letterSpacing:2, lineHeight:1.2, textAlign:'center' },
-  { label:'Gaming',       text:'EPIC MOMENT',       fontSize:52, fontFamily:'Anton',      fontWeight:900, textColor:'#FFD700', strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,  shadowBlur:18, shadowX:2, shadowY:2, shadowColor:'#000000', letterSpacing:1, lineHeight:1.2, textAlign:'center' },
-  { label:'Clean',        text:'My Title',          fontSize:44, fontFamily:'Oswald',     fontWeight:700, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:2, shadowEnabled:true,  shadowBlur:12, shadowX:2, shadowY:2, shadowColor:'#000000', letterSpacing:0, lineHeight:1.3, textAlign:'left'   },
-  { label:'Business',     text:'RESULTS',           fontSize:48, fontFamily:'Bebas Neue', fontWeight:900, textColor:'#ffffff', strokeColor:'#1a1a2e', strokeWidth:5, shadowEnabled:true,  shadowBlur:16, shadowX:2, shadowY:2, shadowColor:'#000000', letterSpacing:4, lineHeight:1.2, textAlign:'center' },
-  { label:'Viral',        text:"YOU WON'T BELIEVE", fontSize:38, fontFamily:'Anton',      fontWeight:900, textColor:'#FF4444', strokeColor:'#000000', strokeWidth:5, shadowEnabled:true,  shadowBlur:22, shadowX:3, shadowY:3, shadowColor:'#000000', letterSpacing:1, lineHeight:1.2, textAlign:'center' },
-  { label:'Minimal',      text:'Simple & Clean',    fontSize:36, fontFamily:'Oswald',     fontWeight:900, textColor:'#FFE500', strokeColor:'#000000', strokeWidth:5, shadowEnabled:true, shadowBlur:15, shadowX:3, shadowY:3, shadowColor:'#000000', letterSpacing:8, lineHeight:1.5, textAlign:'center' },
+  // ── Premium Text Presets ────────────────────────────────────────────────
+  { label:'🔥 MrBeast Bold',  text:'WATCH THIS',        fontSize:62, fontFamily:'Anton',      fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:8,  shadowEnabled:true,  shadowBlur:28, shadowX:4, shadowY:4, shadowColor:'#000000', glowEnabled:false, glowColor:'#f97316', letterSpacing:3,  lineHeight:1.1, textAlign:'center' },
+  { label:'💎 Neon Glow',     text:'LIVE NOW',           fontSize:52, fontFamily:'Anton',      fontWeight:900, textColor:'#00FFFF', strokeColor:'#003333', strokeWidth:2,  shadowEnabled:false, shadowBlur:0,  shadowX:0, shadowY:0, shadowColor:'#000000', glowEnabled:true,  glowColor:'#00FFFF', letterSpacing:4,  lineHeight:1.2, textAlign:'center' },
+  { label:'🪙 Chrome',        text:'PREMIUM',            fontSize:54, fontFamily:'Bebas Neue', fontWeight:900, textColor:'#E8E8E8', strokeColor:'#666666', strokeWidth:3,  shadowEnabled:true,  shadowBlur:6,  shadowX:2, shadowY:3, shadowColor:'#333333', glowEnabled:false, glowColor:'#ffffff', letterSpacing:6,  lineHeight:1.2, textAlign:'center' },
+  { label:'🔴 Fire',          text:'GONE WRONG',         fontSize:56, fontFamily:'Anton',      fontWeight:900, textColor:'#FF4400', strokeColor:'#000000', strokeWidth:6,  shadowEnabled:false, shadowBlur:0,  shadowX:0, shadowY:0, shadowColor:'#000000', glowEnabled:true,  glowColor:'#FF6600', letterSpacing:2,  lineHeight:1.1, textAlign:'center' },
+  { label:'⚡ Glitch',        text:'ERROR 404',           fontSize:48, fontFamily:'Anton',      fontWeight:900, textColor:'#00FFFF', strokeColor:'#000000', strokeWidth:4,  shadowEnabled:true,  shadowBlur:0,  shadowX:3, shadowY:-2, shadowColor:'#FF0050', glowEnabled:false, glowColor:'#00FFFF', letterSpacing:2,  lineHeight:1.2, textAlign:'center' },
+  { label:'✨ Clean Pro',     text:'How I Did It',        fontSize:42, fontFamily:'Oswald',     fontWeight:700, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:0,  shadowEnabled:true,  shadowBlur:16, shadowX:0, shadowY:4, shadowColor:'rgba(0,0,0,0.8)', glowEnabled:false, glowColor:'#ffffff', letterSpacing:1,  lineHeight:1.3, textAlign:'left' },
+  { label:'🟣 Dark Drama',    text:'THE TRUTH',           fontSize:52, fontFamily:'Anton',      fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:7,  shadowEnabled:false, shadowBlur:0,  shadowX:0, shadowY:0, shadowColor:'#000000', glowEnabled:true,  glowColor:'#9333EA', letterSpacing:3,  lineHeight:1.1, textAlign:'center' },
+  { label:'🌸 Retro Pop',     text:'NEW VIDEO',           fontSize:48, fontFamily:'Anton',      fontWeight:900, textColor:'#FF69B4', strokeColor:'#000000', strokeWidth:5,  shadowEnabled:true,  shadowBlur:0,  shadowX:4, shadowY:4, shadowColor:'#4400FF', glowEnabled:false, glowColor:'#FF69B4', letterSpacing:2,  lineHeight:1.2, textAlign:'center' },
+  { label:'🚨 Breaking',      text:'BREAKING',            fontSize:58, fontFamily:'Anton',      fontWeight:900, textColor:'#FF0000', strokeColor:'#FFD700', strokeWidth:6,  shadowEnabled:true,  shadowBlur:24, shadowX:0, shadowY:0, shadowColor:'#FF0000', glowEnabled:true,  glowColor:'#FF0000', letterSpacing:4,  lineHeight:1.1, textAlign:'center' },
+  { label:'💰 Gold Luxury',   text:'$10,000',             fontSize:54, fontFamily:'Bebas Neue', fontWeight:900, textColor:'#FFD700', strokeColor:'#8B6914', strokeWidth:4,  shadowEnabled:true,  shadowBlur:20, shadowX:0, shadowY:0, shadowColor:'#FFD700', glowEnabled:true,  glowColor:'#FFD700', letterSpacing:3,  lineHeight:1.2, textAlign:'center' },
 ];
 
 const SHAPES_BASIC = [
@@ -791,6 +796,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [abLoading,setAbLoading]     = useState(false);
   const [abSelected,setAbSelected]   = useState(null);
   const [resizeExporting,setResizeExporting] = useState(false);
+  const [ytConnected,setYtConnected]       = useState(()=>{
+    // Check if we have a stored YouTube token from a previous OAuth flow
+    return !!localStorage.getItem('yt_access_token');
+  });
+  const [ytTests,setYtTests]               = useState([]);
+  const [ytVideoUrl,setYtVideoUrl]         = useState('');
+  const [ytTestDuration,setYtTestDuration] = useState('24h');
+  const [ytTestStatus,setYtTestStatus]     = useState(null);
   const [resizeProgress,setResizeProgress]   = useState('');
   const [faceAnalysis,setFaceAnalysis]   = useState(null);
   const [faceLoading,setFaceLoading]     = useState(false);
@@ -2835,42 +2848,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     setCtrBreakdown(null);
 
     try{
-      // Render the current canvas to analyze
+      // Render full canvas using the shared renderer (CORS-safe)
       const canvas  = document.createElement('canvas');
       canvas.width  = p.preview.w;
       canvas.height = p.preview.h;
-      const ctx     = canvas.getContext('2d');
-
-      // Draw background
-      const bg = layers.find(l=>l.type==='background');
-      if(bg){
-        if(bg.bgGradient){
-          const g=ctx.createLinearGradient(0,0,0,canvas.height);
-          g.addColorStop(0,bg.bgGradient[0]);
-          g.addColorStop(1,bg.bgGradient[1]);
-          ctx.fillStyle=g;
-        } else ctx.fillStyle=bg.bgColor||'#000';
-        ctx.fillRect(0,0,canvas.width,canvas.height);
-      }
-
-      // Draw image layers for analysis
-      for(const obj of layers){
-        if(obj.hidden||obj.type==='background') continue;
-        if(obj.type==='image'){
-          await new Promise(resolve=>{
-            const img=new Image();
-            img.onload=()=>{
-              ctx.save();
-              ctx.globalAlpha=(obj.opacity??100)/100;
-              ctx.drawImage(img,obj.x,obj.y,obj.width,obj.height);
-              ctx.restore();
-              resolve();
-            };
-            img.onerror=()=>resolve();
-            img.src=obj.paintSrc||obj.src;
-          });
-        }
-      }
+      await renderLayersToCanvas(canvas, layers);
+      const ctx = canvas.getContext('2d');
 
       // ── Analyze pixel data ──────────────────────────────────────────────────
       const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
@@ -2979,6 +2962,99 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       if(overall>=80)       tips.push({type:'good', text:'Strong thumbnail! This has the key ingredients for high CTR.'});
       if(overall>=90)       tips.push({type:'good', text:'Excellent! This thumbnail has everything a viral video needs.'});
 
+      // ── Generate attention heatmap ──────────────────────────────────────────
+      const heatW=canvas.width, heatH=canvas.height;
+      const heatCanvas=document.createElement('canvas');
+      heatCanvas.width=heatW; heatCanvas.height=heatH;
+      const hctx=heatCanvas.getContext('2d');
+
+      // Build attention map: higher values = more visual attention expected
+      const gridSize=8;
+      const cols=Math.ceil(heatW/gridSize), rows=Math.ceil(heatH/gridSize);
+      const attention=new Float32Array(cols*rows);
+
+      // Factor 1: Local contrast (edges/boundaries draw eyes)
+      for(let gy=0;gy<rows;gy++){
+        for(let gx=0;gx<cols;gx++){
+          const px=gx*gridSize, py=gy*gridSize;
+          const idx=((py*heatW)+px)*4;
+          const lum=0.299*data[idx]+0.587*data[idx+1]+0.114*data[idx+2];
+          // Compare to neighbors
+          let diff=0, count=0;
+          for(let dy=-1;dy<=1;dy++){
+            for(let dx=-1;dx<=1;dx++){
+              if(dx===0&&dy===0) continue;
+              const nx=gx+dx, ny=gy+dy;
+              if(nx<0||ny<0||nx>=cols||ny>=rows) continue;
+              const npx=nx*gridSize, npy=ny*gridSize;
+              const nidx=((npy*heatW)+npx)*4;
+              const nlum=0.299*data[nidx]+0.587*data[nidx+1]+0.114*data[nidx+2];
+              diff+=Math.abs(lum-nlum);
+              count++;
+            }
+          }
+          attention[gy*cols+gx]+=(count>0?diff/count:0)/255;
+        }
+      }
+
+      // Factor 2: Saturation hotspots (vivid colors attract)
+      for(let gy=0;gy<rows;gy++){
+        for(let gx=0;gx<cols;gx++){
+          const px=gx*gridSize, py=gy*gridSize;
+          const idx=((py*heatW)+px)*4;
+          const r=data[idx]/255, g=data[idx+1]/255, b=data[idx+2]/255;
+          const mx=Math.max(r,g,b), mn=Math.min(r,g,b);
+          const sat=(mx+mn>0)?(mx-mn)/(1-Math.abs(mx+mn-1)):0;
+          attention[gy*cols+gx]+=sat*0.3;
+        }
+      }
+
+      // Factor 3: Text/subject layer positions (known attention anchors)
+      for(const l of layers){
+        if(l.hidden) continue;
+        if(l.type==='text'||l.type==='image'){
+          const lx=Math.max(0,Math.floor((l.x||0)/gridSize));
+          const ly=Math.max(0,Math.floor((l.y||0)/gridSize));
+          const lw=Math.ceil((l.width||(l.type==='text'?200:100))/gridSize);
+          const lh=Math.ceil((l.height||(l.type==='text'?60:100))/gridSize);
+          const boost=l.type==='text'?0.6:0.4;
+          for(let gy=ly;gy<Math.min(ly+lh,rows);gy++){
+            for(let gx=lx;gx<Math.min(lx+lw,cols);gx++){
+              attention[gy*cols+gx]+=boost;
+            }
+          }
+        }
+      }
+
+      // Factor 4: Center bias (eyes land center-ish first)
+      const cx=cols/2, cy=rows/2, maxDist=Math.sqrt(cx*cx+cy*cy);
+      for(let gy=0;gy<rows;gy++){
+        for(let gx=0;gx<cols;gx++){
+          const dist=Math.sqrt((gx-cx)**2+(gy-cy)**2);
+          attention[gy*cols+gx]+=(1-dist/maxDist)*0.25;
+        }
+      }
+
+      // Normalize to 0-1
+      let maxAtt=0;
+      for(let i=0;i<attention.length;i++) if(attention[i]>maxAtt) maxAtt=attention[i];
+      if(maxAtt>0) for(let i=0;i<attention.length;i++) attention[i]/=maxAtt;
+
+      // Render heatmap with smooth interpolation
+      for(let gy=0;gy<rows;gy++){
+        for(let gx=0;gx<cols;gx++){
+          const v=attention[gy*cols+gx];
+          // Cold (blue) → Warm (green) → Hot (red)
+          const r=v<0.5?0:Math.round((v-0.5)*2*255);
+          const g=v<0.5?Math.round(v*2*255):Math.round((1-v)*2*255);
+          const b=v<0.5?Math.round((1-v*2)*255):0;
+          hctx.fillStyle=`rgba(${r},${g},${b},${0.35+v*0.25})`;
+          hctx.fillRect(gx*gridSize,gy*gridSize,gridSize,gridSize);
+        }
+      }
+
+      const heatmapDataUrl=heatCanvas.toDataURL('image/png');
+
       setCtrScore(overall);
       setCtrBreakdown({
         contrast:  contrastScore,
@@ -2988,6 +3064,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
         comp:      compScore,
         safe:      safeScore,
         tips,
+        heatmap:   heatmapDataUrl,
       });
     } catch(err){
       console.error('CTR analyze error:',err);
@@ -3237,8 +3314,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   function applyTextTemplate(t){
     setTextInput(t.text);setFontSize(t.fontSize);setFontFamily(t.fontFamily);setFontWeight(t.fontWeight||700);
     setTextColor(t.textColor);setStrokeColor(t.strokeColor);setStrokeWidth(t.strokeWidth);setShadowEnabled(t.shadowEnabled);
+    setShadowColor(t.shadowColor||'#000000');setShadowBlur(t.shadowBlur||14);setShadowX(t.shadowX||2);setShadowY(t.shadowY||2);
+    setGlowEnabled(t.glowEnabled||false);setGlowColor(t.glowColor||'#f97316');
     setLetterSpacing(t.letterSpacing||0);setLineHeight(t.lineHeight||1.2);setTextAlign(t.textAlign||'left');
-    addLayer({type:'text',text:t.text,fontSize:t.fontSize,fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,fontItalic:false,textColor:t.textColor,strokeColor:t.strokeColor,strokeWidth:t.strokeWidth,shadowEnabled:t.shadowEnabled,shadowColor:'#000000',shadowBlur:14,shadowX:2,shadowY:2,glowEnabled:false,glowColor:'#f97316',arcEnabled:false,arcRadius:120,letterSpacing:t.letterSpacing||0,lineHeight:t.lineHeight||1.2,textAlign:t.textAlign||'left'});
+    addLayer({type:'text',text:t.text,fontSize:t.fontSize,fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,fontItalic:false,textColor:t.textColor,strokeColor:t.strokeColor,strokeWidth:t.strokeWidth,shadowEnabled:t.shadowEnabled,shadowColor:t.shadowColor||'#000000',shadowBlur:t.shadowBlur||14,shadowX:t.shadowX||2,shadowY:t.shadowY||2,glowEnabled:t.glowEnabled||false,glowColor:t.glowColor||'#f97316',arcEnabled:false,arcRadius:120,letterSpacing:t.letterSpacing||0,lineHeight:t.lineHeight||1.2,textAlign:t.textAlign||'left'});
   }
   function addText(){
     const nextFontFamily=brandKit?.primary_font||'Anton';
@@ -3876,6 +3955,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     {key:'ctr',       label:'CTR Score',    icon:'◈',   group:'Analyze'},
     {key:'face',      label:'Face Score',   icon:'◉',   group:'Analyze'},
     {key:'ab',        label:'A/B Variants', icon:'⊟',   group:'Analyze'},
+    {key:'yttest',    label:'YouTube Test', icon:'▶',   group:'Analyze'},
     {key:'resize',    label:'All Sizes',    icon:'⊠',   group:'Analyze'},
     null,
     {key:'upload',    label:'Upload',       icon:'↑',   group:'File'},
@@ -5592,6 +5672,132 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
               </div>
             )}
 
+            {activeTool==='yttest'&&(
+              <div>
+                <span style={css.label}>YouTube A/B Testing</span>
+                <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted,lineHeight:1.6}}>
+                  Test different thumbnails on a live YouTube video. ThumbFrame rotates them automatically and measures which one gets the most clicks.
+                </div>
+
+                {!ytConnected?(
+                  <div>
+                    <div style={{...css.section,textAlign:'center',padding:'20px 14px'}}>
+                      <div style={{fontSize:32,marginBottom:10}}>▶</div>
+                      <div style={{fontSize:13,fontWeight:'700',color:T.text,marginBottom:6}}>Connect your YouTube channel</div>
+                      <div style={{fontSize:11,color:T.muted,lineHeight:1.6,marginBottom:14}}>
+                        Authorize ThumbFrame to swap thumbnails on your videos. We only request thumbnail upload permissions — nothing else.
+                      </div>
+                      <button onClick={()=>{
+                        // YouTube OAuth flow — opens Google consent screen
+                        // Requires REACT_APP_GOOGLE_CLIENT_ID in .env
+                        const clientId=process.env.REACT_APP_GOOGLE_CLIENT_ID;
+                        if(!clientId){
+                          setYtTestStatus('Set up Google OAuth credentials first. Add REACT_APP_GOOGLE_CLIENT_ID to your .env file.');
+                          setYtConnected(false);
+                          return;
+                        }
+                        const redirect=encodeURIComponent(window.location.origin+'/editor');
+                        const scope=encodeURIComponent('https://www.googleapis.com/auth/youtube');
+                        window.location.href=`https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirect}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
+                      }}
+                        style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#FF0000,#CC0000)',fontSize:13,fontWeight:'700'}}>
+                        Connect YouTube Channel
+                      </button>
+                      {ytTestStatus&&(
+                        <div style={{marginTop:10,padding:'8px 10px',borderRadius:7,fontSize:11,lineHeight:1.5,
+                          background:`${T.warning}18`,border:`1px solid ${T.warning}44`,color:T.text}}>
+                          {ytTestStatus}
+                        </div>
+                      )}
+                    </div>
+
+                    <span style={css.label}>How it works</span>
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      {[
+                        ['1. Connect','Authorize your YouTube channel via Google OAuth'],
+                        ['2. Pick a video','Paste a YouTube video URL to test'],
+                        ['3. Upload variants','Generate A/B variants or upload custom thumbnails'],
+                        ['4. Set duration','Choose 24h, 48h, or 7-day test rotation'],
+                        ['5. Get results','See real CTR data per thumbnail — auto-pick winner'],
+                      ].map(([title,desc])=>(
+                        <div key={title} style={{padding:'8px 10px',borderRadius:7,background:T.input,border:`1px solid ${T.border}`}}>
+                          <div style={{fontSize:11,fontWeight:'700',color:T.accent}}>{title}</div>
+                          <div style={{fontSize:10,color:T.muted,marginTop:2}}>{desc}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ):(
+                  <div>
+                    <div style={{padding:'8px 10px',borderRadius:7,background:`${T.success}18`,border:`1px solid ${T.success}44`,marginBottom:10}}>
+                      <div style={{fontSize:11,color:T.success,fontWeight:'600'}}>✓ YouTube connected</div>
+                    </div>
+
+                    <span style={css.label}>Video URL</span>
+                    <input value={ytVideoUrl} onChange={e=>setYtVideoUrl(e.target.value)}
+                      placeholder="https://youtube.com/watch?v=..."
+                      style={{...css.input,marginBottom:8}}/>
+
+                    <span style={css.label}>Test duration</span>
+                    <div style={{display:'flex',gap:4,marginBottom:10}}>
+                      {[['24h','24 hours'],['48h','48 hours'],['7d','7 days']].map(([val,label])=>(
+                        <button key={val} onClick={()=>setYtTestDuration(val)}
+                          style={css.pill(ytTestDuration===val)}>{label}</button>
+                      ))}
+                    </div>
+
+                    <span style={css.label}>Variants to test</span>
+                    <div style={{...css.section,fontSize:11,color:T.muted}}>
+                      {abVariants.length>0
+                        ? `${abVariants.length} variants ready from A/B engine`
+                        : 'Generate variants first using the A/B Variants tool, or upload custom thumbnails'}
+                    </div>
+
+                    <button onClick={()=>{
+                      if(!ytVideoUrl){setYtTestStatus('Enter a YouTube video URL');return;}
+                      if(abVariants.length===0){setYtTestStatus('Generate A/B variants first');return;}
+                      setYtTestStatus('Starting test... (YouTube API integration required)');
+                      setYtTests(prev=>[...prev,{
+                        id:Date.now(),
+                        videoUrl:ytVideoUrl,
+                        variants:abVariants.length,
+                        duration:ytTestDuration,
+                        startedAt:new Date().toISOString(),
+                        status:'pending',
+                      }]);
+                    }}
+                      style={{...css.addBtn,background:'linear-gradient(135deg,#f97316,#ea580c)',
+                        fontSize:13,fontWeight:'700',
+                        boxShadow:'0 0 20px rgba(249,115,22,0.3)'}}>
+                      ▶ Start A/B Test
+                    </button>
+
+                    {ytTestStatus&&(
+                      <div style={{marginTop:8,padding:'8px 10px',borderRadius:7,fontSize:11,
+                        background:`${T.warning}18`,border:`1px solid ${T.warning}44`,color:T.text}}>
+                        {ytTestStatus}
+                      </div>
+                    )}
+
+                    {ytTests.length>0&&(<>
+                      <span style={css.label}>Active tests</span>
+                      {ytTests.map(test=>(
+                        <div key={test.id} style={{...css.section,marginBottom:6}}>
+                          <div style={{fontSize:11,fontWeight:'600',color:T.text,marginBottom:4}}>
+                            {test.videoUrl.slice(0,40)}...
+                          </div>
+                          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:T.muted}}>
+                            <span>{test.variants} variants · {test.duration}</span>
+                            <span style={{color:T.warning,fontWeight:'600'}}>{test.status}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </>)}
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTool==='resize'&&(
               <div>
                 <span style={css.label}>Export all platforms</span>
@@ -5879,7 +6085,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                         color: ctrScore>=80?T.success:ctrScore>=60?T.warning:T.danger,
                         lineHeight:1,letterSpacing:'-2px',
                       }}>{ctrScore}</div>
-                      <div style={{fontSize:13,color:T.muted,marginTop:4}}>out of 100</div>
+                      <div style={{fontSize:13,color:T.muted,marginTop:4}}>
+                        {ctrScore>=90?'S':''}
+                        {ctrScore>=80&&ctrScore<90?'A':''}
+                        {ctrScore>=70&&ctrScore<80?'B':''}
+                        {ctrScore>=60&&ctrScore<70?'C':''}
+                        {ctrScore>=40&&ctrScore<60?'D':''}
+                        {ctrScore<40?'F':''}
+                        {' — '}out of 100
+                      </div>
                       <div style={{
                         fontSize:14,fontWeight:'700',marginTop:8,
                         color: ctrScore>=80?T.success:ctrScore>=60?T.warning:T.danger,
@@ -5929,6 +6143,19 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                         </div>
                       ))}
                     </div>
+
+                    {ctrBreakdown.heatmap&&(<>
+                      <span style={css.label}>Attention Heatmap</span>
+                      <div style={{...css.section,padding:0,overflow:'hidden',position:'relative'}}>
+                        <img src={ctrBreakdown.heatmap} alt="Attention heatmap"
+                          style={{width:'100%',display:'block',borderRadius:7}}/>
+                        <div style={{position:'absolute',bottom:6,right:6,display:'flex',gap:4,fontSize:8,color:'#fff'}}>
+                          <span style={{background:'rgba(0,0,255,0.7)',padding:'1px 5px',borderRadius:3}}>Cold</span>
+                          <span style={{background:'rgba(0,180,0,0.7)',padding:'1px 5px',borderRadius:3}}>Warm</span>
+                          <span style={{background:'rgba(255,0,0,0.7)',padding:'1px 5px',borderRadius:3}}>Hot</span>
+                        </div>
+                      </div>
+                    </>)}
 
                     {ctrBreakdown.tips.length>0&&(<>
                       <span style={css.label}>Suggestions</span>
