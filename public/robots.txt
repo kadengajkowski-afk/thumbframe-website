@@ -1,3 +1,7 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /editor
+Disallow: /dashboard
+Disallow: /settings
+
+Sitemap: https://www.thumbframe.com/sitemap.xml

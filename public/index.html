@@ -2,45 +2,74 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23c45c2e'/><text y='75' x='50' text-anchor='middle' font-size='65' font-family='Arial Black' font-weight='900' fill='white'>S</text></svg>" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23f97316'/><text y='75' x='50' text-anchor='middle' font-size='65' font-family='Arial Black' font-weight='900' fill='white'>T</text></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta
-      name="description"
-      content="Web site created using create-react-app"
-    />
+    <meta name="theme-color" content="#0a0a0a" />
+
+    <!-- SEO -->
+    <title>ThumbFrame — YouTube Thumbnail Editor with A/B Testing</title>
+    <meta name="description" content="Create click-worthy YouTube thumbnails in minutes. A/B test variants, apply brand kits, remove backgrounds, and track CTR — all in one editor. Free to start." />
+    <meta name="keywords" content="YouTube thumbnail maker, thumbnail editor, A/B test thumbnails, YouTube CTR, thumbnail creator, YouTube thumbnail generator, thumbnail design tool" />
+    <meta name="author" content="ThumbFrame" />
+    <link rel="canonical" href="https://www.thumbframe.com/" />
+
+    <!-- Open Graph (Facebook, Discord, LinkedIn) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.thumbframe.com/" />
+    <meta property="og:title" content="ThumbFrame — YouTube Thumbnail Editor with A/B Testing" />
+    <meta property="og:description" content="Create click-worthy YouTube thumbnails in minutes. A/B test variants, remove backgrounds, and track CTR — all in one editor." />
+    <meta property="og:site_name" content="ThumbFrame" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ThumbFrame — YouTube Thumbnail Editor with A/B Testing" />
+    <meta name="twitter:description" content="Create click-worthy YouTube thumbnails in minutes. A/B test variants, remove backgrounds, and track CTR." />
+
+    <!-- Robots -->
+    <meta name="robots" content="index, follow" />
+    <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large" />
+
+    <!-- PWA -->
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Bebas+Neue&family=Comic+Neue:wght@700&family=Oswald:wght@400;700&family=Syne:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
 
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>ThumbFrame V2.1</title>
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "ThumbFrame",
+      "url": "https://www.thumbframe.com",
+      "applicationCategory": "DesignApplication",
+      "operatingSystem": "Web",
+      "description": "YouTube thumbnail editor with A/B testing, brand kits, AI background removal, and CTR analytics.",
+      "offers": [
+        {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD",
+          "name": "Starter",
+          "description": "Free basic canvas with standard exports"
+        },
+        {
+          "@type": "Offer",
+          "price": "15",
+          "priceCurrency": "USD",
+          "name": "Pro Creator",
+          "description": "A/B Variant Engine, Full Brand Kit, unlimited exports, no watermarks"
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
-    <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
   </body>
 </html>
