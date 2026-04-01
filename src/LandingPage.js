@@ -104,13 +104,25 @@ function LandingNav({ setPage, user }) {
           ))}
         </div>
 
-        {/* Auth-aware CTA */}
+        {/* Auth-aware CTA group */}
         {user ? (
-          <button className="tf-btn" onClick={() => setPage('editor')} style={{
-            background: OG, border: 'none', cursor: 'pointer',
-            padding: '9px 20px', borderRadius: 9,
-            fontSize: 14, fontWeight: 700, fontFamily: FB, color: '#fff', boxShadow: GLOW,
-          }}>Go to Editor</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button className="tf-btn tf-nl" onClick={() => setPage('dashboard')} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: '8px 14px', borderRadius: 7,
+              fontSize: 14, fontWeight: 500, fontFamily: FB, color: C.text2,
+            }}>Dashboard</button>
+            <button className="tf-btn" onClick={() => { supabase.auth.signOut(); setPage('home'); }} style={{
+              background: 'transparent', border: `1px solid ${C.bdr2}`, cursor: 'pointer',
+              padding: '8px 16px', borderRadius: 9,
+              fontSize: 14, fontWeight: 600, fontFamily: FB, color: C.text2,
+            }}>Log Out</button>
+            <button className="tf-btn" onClick={() => setPage('editor')} style={{
+              background: OG, border: 'none', cursor: 'pointer',
+              padding: '9px 20px', borderRadius: 9,
+              fontSize: 14, fontWeight: 700, fontFamily: FB, color: '#fff', boxShadow: GLOW,
+            }}>Go to Editor</button>
+          </div>
         ) : (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button className="tf-btn" onClick={() => setPage('login')} style={{
