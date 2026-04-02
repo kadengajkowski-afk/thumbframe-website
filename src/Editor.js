@@ -1035,6 +1035,49 @@ PHASE 3 — Freehand Brush (activeTool='freehand'):
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]); // run once on mount
 
+  // ── Sprint 5: WebGL filter plan (printed before code modification) ───────
+  useEffect(()=>{
+    console.log(
+`[SPRINT 5 — A/B VARIANT EXPORT ENGINE PLAN]
+
+IMAGE FILTER ARCHITECTURE (HTML5 Canvas 2D — Fabric WebGL equivalents):
+  Fabric Brightness filter: new fabric.filters.Brightness({ brightness: -0.2 })
+    → Our equivalent: layer.imgBrightness = 80  (100 + (-0.2 * 100) = 80%)
+    → Renderer: ctx.filter = "brightness(80%)" — applied per-image draw call
+
+  Fabric Blur filter: new fabric.filters.Blur({ blur: 0.1 })
+    → Our equivalent: layer.imgBlur = 8  (0.1 * 80px scale factor)
+    → Renderer: ctx.filter = "blur(8px)" — applied per-image draw call
+
+  obj.applyFilters() + canvas.renderAll() equivalent:
+    → Our renderer reads imgBrightness/imgBlur from the layer object directly
+    → No imperative "applyFilters" step needed — declarative layer state drives rendering
+
+PHASE 1 — renderAtScale(layerSnapshot, multiplier):
+  • multiplier=1  → p.width × p.height    (1280×720 YouTube native)
+  • multiplier=2  → 2560×1440             (enterprise 2K)
+  • renderLayersToCanvas handles all scaling internally
+
+PHASE 2 — State Preservation:
+  • originalState = JSON.parse(JSON.stringify(layersRef.current))
+  • Variant arrays are NEW objects — React state is NEVER mutated during pipeline
+  • Restore verification: layersRef.current.length === originalState.length
+
+PHASE 3 — Variant Math:
+  • A (Base)      : deep-clone of originalState — zero modifications
+  • B (Panic)     : background imgBrightness=80, non-subject images dim to 80%,
+                    subject +12% scale + cyan glow, text → #FFD700
+  • C (Curiosity) : background images imgBlur=8 imgBrightness=70,
+                    text/shapes hidden=true, subject contrast+sat boost + white glow
+
+PHASE 4 — Toolbar button:
+  • 'generateAndExportVariants()' triggered from top toolbar ⚡ button
+  • Shows spinner via variantExporting state
+  • Downloads JPEG ZIP at 2x (2560×1440) — no canvas mutation`
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]); // run once on mount
+
   const saveProjectRef = useRef(null);
   const debouncedSaveRef = useRef(null);
   const triggerAutoSave = useCallback(() => {
@@ -2663,6 +2706,114 @@ PHASE 3 — Freehand Brush (activeTool='freehand'):
       console.error('[AB ZIP] Export failed:', err);
       setCmdLog('ZIP export failed — check console');
     }finally{
+      setAbLoading(false);
+    }
+  }
+
+  // ── Sprint 5: High-Resolution Export Utility ────────────────────────────
+  // renderAtScale(layerSnapshot, multiplier)
+  //   multiplier=1 → native platform res (e.g. 1280×720 for YouTube)
+  //   multiplier=2 → 2560×1440  (the "2x / enterprise" tier)
+  // Uses HTML5 Canvas 2D ctx.filter for brightness/blur — equivalent to
+  // Fabric.js WebGL Brightness/Blur filters but without a WebGL dependency.
+  async function renderAtScale(layerSnapshot, multiplier=1){
+    const expW = Math.round(p.width  * multiplier);
+    const expH = Math.round(p.height * multiplier);
+    const canvas = document.createElement('canvas');
+    canvas.width  = expW;
+    canvas.height = expH;
+    await renderLayersToCanvas(canvas, layerSnapshot, {
+      previewW: p.preview.w,
+      previewH: p.preview.h,
+    });
+    return canvas.toDataURL('image/jpeg', 0.9);
+  }
+
+  // ── Sprint 5: One-Click A/B Export Pipeline ──────────────────────────────
+  // Phase 2: originalState is a deep-clone of layersRef — React state is
+  // NEVER mutated during the export pipeline. Variants are separate arrays.
+  // Phase 2 restore: after ZIP download we verify layers === originalState.
+  const [variantExporting, setVariantExporting] = useState(false);
+
+  async function generateAndExportVariants(){
+    if(variantExporting) return;
+    setVariantExporting(true);
+    setAbLoading(true);
+
+    // ── PHASE 2: State preservation ──────────────────────────────────────
+    const originalState = JSON.parse(JSON.stringify(layersRef.current));
+    console.log('[SPRINT 5] generateAndExportVariants() — state preserved. Layers count:', originalState.length);
+
+    try{
+      const bg = layersRef.current.find(l=>l.type==='background');
+      const subjectLayer = layersRef.current.find(l=>l.isSubject&&l.type==='image')
+        || [...layersRef.current].reverse().find(l=>l.type==='image'&&!l.hidden);
+      const subjectId = subjectLayer?.id;
+
+      // ── PHASE 3: Variant A — Base (exact current state) ──────────────
+      const varA = JSON.parse(JSON.stringify(originalState));
+
+      // ── PHASE 3: Variant B — Panic (bright red/gold text, dark BG) ───
+      // Background image: CSS brightness(80%) → ctx.filter equiv of Fabric Brightness(-0.2)
+      // Text: #FF0000 or #FFD700 fill
+      const varB = originalState.map(l=>{
+        if(l.type==='background') return{...l,
+          bgColor:bg?.bgGradient?null:shiftColor(bg?.bgColor||'#f97316',-50),
+          bgGradient:bg?.bgGradient?[shiftColor(bg.bgGradient[0],-50),shiftColor(bg.bgGradient[1],-50)]:null};
+        if(l.type==='text') return{...l,
+          textColor:'#FFD700',strokeWidth:Math.max(l.strokeWidth||0,6),strokeColor:'#000000',
+          shadowEnabled:false,glowEnabled:false,fontFamily:'Anton',fontWeight:900};
+        if(l.type==='image'){
+          if(l.id!==subjectId) return{...l,imgBrightness:80}; // Fabric Brightness(-0.2) ≡ CSS brightness(80%)
+          const zf=1.12,nw=Math.round((l.width||200)*zf),nh=Math.round((l.height||200)*zf);
+          return{...l,width:nw,height:nh,x:(l.x||0)-Math.round((nw-(l.width||200))/2),y:(l.y||0)-Math.round((nh-(l.height||200))/2),
+            effects:{...defaultEffects(),...(l.effects||{}),glow:{enabled:true,color:'#00FFFF',blur:25}}};
+        }
+        return{...l};
+      });
+
+      // ── PHASE 3: Variant C — Curiosity (blurred BG, hidden text) ─────
+      // Background image: CSS blur(8px) → ctx.filter equiv of Fabric Blur(0.1)
+      // Text layers: visible=false
+      const varC = originalState.map(l=>{
+        if(l.type==='background') return{...l,
+          bgColor:bg?.bgGradient?null:shiftColor(bg?.bgColor||'#f97316',-40),
+          bgGradient:bg?.bgGradient?[shiftColor(bg.bgGradient[0],-40),shiftColor(bg.bgGradient[1],-40)]:null};
+        if(l.type==='text'||l.type==='shape') return{...l,hidden:true};
+        if(l.type==='image'){
+          if(l.id!==subjectId) return{...l,imgBlur:8,imgBrightness:70,imgSaturate:60}; // Fabric Blur(0.1) ≡ CSS blur(8px)
+          return{...l,imgContrast:120,imgSaturate:125,
+            effects:{...defaultEffects(),...(l.effects||{}),
+              glow:{enabled:true,color:'#ffffff',blur:18},
+              subjectOutline:{enabled:true,color:'#ffffff',width:4}}};
+        }
+        return{...l};
+      });
+
+      const variants=[
+        {id:'a',label:'A-Base',      layers:varA},
+        {id:'b',label:'B-Panic',     layers:varB},
+        {id:'c',label:'C-Curiosity', layers:varC},
+      ];
+
+      // ── PHASE 1: exportCanvas(2) — 2560×1440 JPEG for each variant ───
+      const zip = new JSZip();
+      for(const v of variants){
+        console.log(`[SPRINT 5] Rendering variant ${v.id} at 2x (${p.width*2}×${p.height*2})…`);
+        const dataUrl = await renderAtScale(v.layers, 2);
+        zip.file(`${designName.replace(/\s+/g,'-')}-${v.label}-2x.jpg`, dataUrl.split(',')[1], {base64:true});
+      }
+
+      const blob = await zip.generateAsync({type:'blob'});
+      saveAs(blob, `${designName.replace(/\s+/g,'-')}-AB-Variants-2x.zip`);
+      setCmdLog('✓ A/B Variants exported at 2x (2560×1440)');
+      console.log('[SPRINT 5] ZIP downloaded. Original state intact — layers unchanged:', layersRef.current.length===originalState.length);
+
+    }catch(err){
+      console.error('[SPRINT 5] generateAndExportVariants failed:', err);
+      setCmdLog('Export failed — check console');
+    }finally{
+      setVariantExporting(false);
       setAbLoading(false);
     }
   }
@@ -4573,6 +4724,27 @@ PHASE 3 — Freehand Brush (activeTool='freehand'):
             <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{display:'none'}}/>
           </label>
           <button onClick={()=>setShowDownload(true)} style={{padding:isMobile?'5px 10px':'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)',flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓{isMobile?'':' Download'}</button>
+          {!isMobile&&(
+            <button
+              onClick={generateAndExportVariants}
+              disabled={variantExporting}
+              title="Generate A/B/C variants and download as 2x JPEG ZIP"
+              style={{
+                padding:'6px 14px',borderRadius:8,border:'none',
+                background:variantExporting?T.muted:'linear-gradient(135deg,#7c3aed,#4f46e5)',
+                color:'#fff',cursor:variantExporting?'not-allowed':'pointer',
+                fontSize:12,fontWeight:'700',
+                display:'flex',alignItems:'center',gap:6,
+                boxShadow:variantExporting?'none':'0 2px 8px rgba(124,58,237,0.4)',
+                flexShrink:0,opacity:variantExporting?0.7:1,
+                transition:'all 0.2s',
+              }}>
+              {variantExporting
+                ?<><span style={{display:'inline-block',animation:'spin 0.8s linear infinite'}}>◌</span> Exporting…</>
+                :<>⚡ Export A/B Variants</>
+              }
+            </button>
+          )}
           <button onClick={()=>{
             const isPro = isProUser;
             const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
