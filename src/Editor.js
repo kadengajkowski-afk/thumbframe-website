@@ -835,7 +835,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [showSafeZones,setShowSafeZones]   = useState(false);
   const [showStampTest,setShowStampTest]   = useState(false);
   const [snapToGrid,setSnapToGrid]         = useState(false);
-  const [lockAspect,_setLockAspect]        = useState(false);
+  const lockAspect                         = false;
   const [recentColors,setRecentColors]     = useState(['#ffffff','#000000','#FF4500','#f97316','#FFD700','#00C853']);
   const [savedPalette,setSavedPalette]     = useState([]);
   const [clipboard,setClipboard]           = useState(null);
