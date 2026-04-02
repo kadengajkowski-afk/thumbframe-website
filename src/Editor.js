@@ -802,6 +802,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const lassoSvgRef     = useRef(null);
   const lassoFeatherRef = useRef(0);
   const lassoInvertRef  = useRef(false);
+  const freehandDrawingRef = useRef(false);
+  const freehandPointsRef  = useRef([]);
+  const freehandSvgRef     = useRef(null);
   const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
   const saveMetaRef = useRef({});
@@ -922,6 +925,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [maskingLayerId,setMaskingLayerId] = useState(null); // eslint-disable-line no-unused-vars
   const [maskPaintColor,setMaskPaintColor] = useState('#000000'); // eslint-disable-line no-unused-vars
   const [isLassoMode,setIsLassoMode]       = useState(false);
+  const [freeBrushColor,setFreeBrushColor] = useState('#ff4500');
+  const [freeBrushSize,setFreeBrushSize]   = useState(8);
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
 
@@ -991,6 +996,41 @@ PHASE 4 — Selection Hook:
 Guards:
   • Background layer: lock toggle + delete button are hidden
   • ▲ disabled at top of stack; ▼ disabled at bottom / for background layer`
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]); // run once on mount
+
+  // ── Sprint 4: Selected Object Specs panel + Freehand Brush plan ─────────
+  useEffect(()=>{
+    console.log(
+`[SPRINT 4 — SELECTED OBJECT SPECS + FREEHAND BRUSH PLAN]
+
+PHASE 1 — MrBeast Typography Defaults (addText()):
+  • fontFamily : Anton (or brandKit.primary_font)
+  • textColor  : #FFD700 (YouTube gold) — was #FFFFFF
+  • strokeWidth: 8, strokeColor: #000000 (strokeUniform = CSS paint-order: stroke fill)
+  • shadow     : color rgba(0,0,0,0.8), blur 15, offsetX 0, offsetY 10
+
+PHASE 2 — Selected Object Specs / Neon Glow (Sprint 3 Layers Panel):
+  • Renders when selectedLayer !== null
+  • Shows layer name, type badge, and quick-action buttons
+  • ⚡ Neon Glow button:
+      text layers  → updateLayer(id, { glowEnabled: true, glowColor: '#00ffff' })
+      image layers → updateLayerEffect(id, 'glow', { enabled: true, color: '#00ffff', blur: 30 })
+  • Acts as a toggle: second click turns glow off
+
+PHASE 3 — Freehand Brush (activeTool='freehand'):
+  • New tool entry in Paint group: key='freehand', icon='✏'
+  • State: freeBrushColor (#ff4500), freeBrushSize (8)
+  • Refs:  freehandDrawingRef, freehandPointsRef, freehandSvgRef
+  • onMouseDown  → start collecting points
+  • onMouseMove  → push points, update live SVG polyline preview
+  • onMouseUp    → render points to offscreen canvas (p.preview.w × p.preview.h)
+                   → addLayer({ type:'image', src: dataUrl, ... })
+                   → layer auto-appears in Sprint 3 panel (React state propagation)
+  • pointerEvents on layers div: 'none' when freehand active (same as brush/zoom/lasso)
+  • Layer sync: NO manual syncLayers() call needed — addLayer() calls setLayers() which
+    re-renders the Sprint 3 Layers Panel automatically`
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]); // run once on mount
@@ -3484,14 +3524,15 @@ Guards:
     addLayer({type:'text',text:t.text,fontSize:t.fontSize,fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,fontItalic:false,textColor:t.textColor,strokeColor:t.strokeColor,strokeWidth:t.strokeWidth,shadowEnabled:t.shadowEnabled,shadowColor:t.shadowColor||'#000000',shadowBlur:t.shadowBlur||14,shadowX:t.shadowX||2,shadowY:t.shadowY||2,glowEnabled:t.glowEnabled||false,glowColor:t.glowColor||'#f97316',arcEnabled:false,arcRadius:120,letterSpacing:t.letterSpacing||0,lineHeight:t.lineHeight||1.2,textAlign:t.textAlign||'left'});
   }
   function addText(){
+    // ── Sprint 4: MrBeast-style defaults ──────────────────────────────────
     const nextFontFamily=brandKit?.primary_font||'Anton';
-    const nextTextColor=brandKit?.brand_colors?.[0]||'#FFFFFF';
+    const nextTextColor=brandKit?.brand_colors?.[0]||'#FFD700'; // YouTube gold
     const nextStrokeColor='#000000';
-    const nextStrokeWidth=10;
-    const nextShadowColor='#000000';
-    const nextShadowBlur=22;
-    const nextShadowX=5;
-    const nextShadowY=5;
+    const nextStrokeWidth=8;                  // strokeUniform equivalent (CSS scales with element)
+    const nextShadowColor='rgba(0,0,0,0.8)';  // heavy drop shadow
+    const nextShadowBlur=15;
+    const nextShadowX=0;
+    const nextShadowY=10;
     addRecentColor(nextTextColor);
     addLayer({type:'text',text:textInput||'MY THUMBNAIL',fontSize,fontFamily:nextFontFamily,fontWeight:900,fontItalic,textColor:nextTextColor,strokeColor:nextStrokeColor,strokeWidth:nextStrokeWidth,shadowEnabled:true,shadowColor:nextShadowColor,shadowBlur:nextShadowBlur,shadowX:nextShadowX,shadowY:nextShadowY,glowEnabled,glowColor,arcEnabled,arcRadius,letterSpacing,lineHeight,textAlign});
     setTextColor(nextTextColor);
@@ -4120,6 +4161,7 @@ Guards:
     {key:'memes',     label:'Memes & GIFs', icon:'▣',   group:'Create'},
     null,
     {key:'brush',     label:'Brush',        icon:'⌀',  group:'Paint'},
+    {key:'freehand',  label:'Draw',         icon:'✏',  group:'Paint'},
     {key:'rimlight',  label:'Rim Light',    icon:'☀',  group:'Paint'},
     {key:'removebg',  label:'Remove BG',    icon:'✂',  group:'Paint'},
     {key:'lasso',     label:'Lasso Mask',   icon:'✂️', group:'Paint'},
@@ -4757,6 +4799,14 @@ Guards:
                     if(lassoSvgRef.current) lassoSvgRef.current.setAttribute('points', lassoPointsRef.current.map(p=>`${p.x},${p.y}`).join(' '));
                     return;
                   }
+                  if(activeTool==='freehand' && freehandDrawingRef.current){
+                    const rect=canvasRef.current.getBoundingClientRect();
+                    const x=(e.clientX-rect.left)/zoom;
+                    const y=(e.clientY-rect.top)/zoom;
+                    freehandPointsRef.current.push({x,y});
+                    if(freehandSvgRef.current) freehandSvgRef.current.setAttribute('points', freehandPointsRef.current.map(pt=>`${pt.x},${pt.y}`).join(' '));
+                    return;
+                  }
                 }}
                 onMouseDown={(e)=>{
                   if(activeTool==='rimlight'){
@@ -4844,6 +4894,17 @@ Guards:
                     if(lassoSvgRef.current) lassoSvgRef.current.setAttribute('points',`${x},${y}`);
                     return;
                   }
+                  if(activeTool==='freehand'){
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const rect=canvasRef.current.getBoundingClientRect();
+                    const x=(e.clientX-rect.left)/zoom;
+                    const y=(e.clientY-rect.top)/zoom;
+                    freehandDrawingRef.current=true;
+                    freehandPointsRef.current=[{x,y}];
+                    if(freehandSvgRef.current) freehandSvgRef.current.setAttribute('points',`${x},${y}`);
+                    return;
+                  }
                 }}
                 onMouseUp={(e)=>{
                   if(activeTool==='rimlight'){
@@ -4889,6 +4950,30 @@ Guards:
                     if(lassoSvgRef.current) lassoSvgRef.current.setAttribute('points','');
                     return;
                   }
+                  if(activeTool==='freehand' && freehandDrawingRef.current){
+                    freehandDrawingRef.current=false;
+                    const pts=freehandPointsRef.current.slice();
+                    freehandPointsRef.current=[];
+                    if(freehandSvgRef.current) freehandSvgRef.current.setAttribute('points','');
+                    if(pts.length>=2){
+                      const tmpCanvas=document.createElement('canvas');
+                      tmpCanvas.width=p.preview.w;
+                      tmpCanvas.height=p.preview.h;
+                      const ctx2=tmpCanvas.getContext('2d');
+                      ctx2.strokeStyle=freeBrushColor;
+                      ctx2.lineWidth=freeBrushSize;
+                      ctx2.lineCap='round';
+                      ctx2.lineJoin='round';
+                      ctx2.beginPath();
+                      ctx2.moveTo(pts[0].x,pts[0].y);
+                      for(let i=1;i<pts.length;i++) ctx2.lineTo(pts[i].x,pts[i].y);
+                      ctx2.stroke();
+                      const dataUrl=tmpCanvas.toDataURL('image/png');
+                      addLayer({type:'image',src:dataUrl,width:p.preview.w,height:p.preview.h,x:0,y:0,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0});
+                      console.log('[FREEHAND] Stroke committed as new image layer. Sprint 3 panel auto-syncs via setLayers().');
+                    }
+                    return;
+                  }
                   triggerAutoSave();
                 }}
                 onTouchEnd={()=>{
@@ -4905,6 +4990,12 @@ Guards:
                     lassoDrawingRef.current=false;
                     lassoPointsRef.current=[];
                     if(lassoSvgRef.current) lassoSvgRef.current.setAttribute('points','');
+                    return;
+                  }
+                  if(activeTool==='freehand' && freehandDrawingRef.current){
+                    freehandDrawingRef.current=false;
+                    freehandPointsRef.current=[];
+                    if(freehandSvgRef.current) freehandSvgRef.current.setAttribute('points','');
                     return;
                   }
                 }}
@@ -4968,7 +5059,7 @@ Guards:
 
                 <div style={{position:'absolute',inset:0,filter:canvasFilter,zIndex:0}}>
                   <div style={{position:'absolute',inset:0,
-                    pointerEvents: (activeTool==='brush'||activeTool==='zoom'||(activeTool==='lasso'&&isLassoMode)) ? 'none' : 'auto',
+                    pointerEvents: (activeTool==='brush'||activeTool==='zoom'||activeTool==='freehand'||(activeTool==='lasso'&&isLassoMode)) ? 'none' : 'auto',
                   }}>
                     <CanvasLayerRenderer layers={layers} renderLayerElement={renderLayerElement} />
                   </div>
@@ -5003,6 +5094,12 @@ Guards:
                 {isLassoMode&&(
                   <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:10000}}>
                     <polyline ref={lassoSvgRef} points="" fill="rgba(249,115,22,0.12)" stroke="#f97316" strokeWidth="2" strokeDasharray="6,4"/>
+                  </svg>
+                )}
+                {/* Freehand draw SVG overlay */}
+                {activeTool==='freehand'&&(
+                  <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:10000}}>
+                    <polyline ref={freehandSvgRef} points="" fill="none" stroke={freeBrushColor} strokeWidth={freeBrushSize} strokeLinecap="round" strokeLinejoin="round" opacity="0.85"/>
                   </svg>
                 )}
 
@@ -6687,6 +6784,44 @@ Guards:
   </div>
 )}
 
+            {activeTool==='freehand'&&(
+  <div>
+    <span style={css.label}>Freehand Draw</span>
+
+    <div style={{padding:'8px 10px',background:`${T.accent}12`,border:`1px solid ${T.accent}44`,borderRadius:8,fontSize:11,color:T.accent,fontWeight:'700',textAlign:'center',marginBottom:10}}>
+      ✏ Click &amp; drag on the canvas to draw
+    </div>
+
+    <div style={css.section}>
+      <span style={css.label}>Brush color</span>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <input type="color" value={freeBrushColor} onChange={e=>setFreeBrushColor(e.target.value)}
+          style={{...css.color,height:32,flex:1}}/>
+        <div style={{width:32,height:32,borderRadius:6,border:`1px solid ${T.border}`,background:freeBrushColor,flexShrink:0}}/>
+      </div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:5,marginTop:8}}>
+        {['#ffffff','#000000','#FFD700','#f97316','#ef4444','#22c55e','#3b82f6','#a855f7','#ec4899','#00ffff'].map(c=>(
+          <div key={c} onClick={()=>setFreeBrushColor(c)}
+            style={{width:22,height:22,borderRadius:4,background:c,cursor:'pointer',border:freeBrushColor===c?'2px solid #f97316':'1px solid #374151'}}/>
+        ))}
+      </div>
+    </div>
+
+    <div style={css.section}>
+      <span style={css.label}>Brush size — {freeBrushSize}px</span>
+      <Slider min={1} max={80} value={freeBrushSize}
+        onChange={v=>setFreeBrushSize(v)}
+        style={{width:'100%',accentColor:T.accent}}/>
+    </div>
+
+    <div style={css.section}>
+      <div style={{fontSize:11,color:T.muted,lineHeight:1.6}}>
+        Each stroke is saved as a new image layer — visible in the Layers Panel. Undo with Ctrl+Z.
+      </div>
+    </div>
+  </div>
+)}
+
             {activeTool==='ai'&&(
   <div>
     <span style={css.label}>AI features</span>
@@ -6947,6 +7082,63 @@ Guards:
                 );
               })}
             </div>
+
+            {/* Selected Object Specs */}
+            {selectedLayer&&(
+              <div style={{borderTop:'1px solid #1f2937',padding:'8px 10px',flexShrink:0}}>
+                <div style={{fontSize:9,color:'#6b7280',fontWeight:'700',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>
+                  Selected — {getLayerName(selectedLayer)}
+                </div>
+                {/* Neon Glow quick-toggle */}
+                {(()=>{
+                  const isText=selectedLayer.type==='text';
+                  const glowOn=isText
+                    ?(selectedLayer.glowEnabled&&selectedLayer.glowColor==='#00ffff')
+                    :(selectedLayer.effects?.glow?.enabled&&selectedLayer.effects?.glow?.color==='#00ffff');
+                  return(
+                    <button
+                      title="Toggle cyan neon glow on selected layer"
+                      onClick={()=>{
+                        if(isText){
+                          updateLayer(selectedLayer.id,{glowEnabled:!glowOn,glowColor:'#00ffff'});
+                        } else {
+                          updateLayerEffect(selectedLayer.id,'glow',{
+                            enabled:!glowOn,color:'#00ffff',blur:30,
+                          });
+                        }
+                      }}
+                      style={{
+                        width:'100%',padding:'6px 8px',borderRadius:6,
+                        border:`1px solid ${glowOn?'#00ffff':'#1f2937'}`,
+                        background:glowOn?'rgba(0,255,255,0.08)':'transparent',
+                        color:glowOn?'#00ffff':'#6b7280',
+                        fontSize:11,cursor:'pointer',fontWeight:'600',
+                        display:'flex',alignItems:'center',justifyContent:'center',gap:6,
+                        marginBottom:4,transition:'all 0.15s',
+                      }}>
+                      ⚡ Neon Glow {glowOn?'— ON':''}
+                    </button>
+                  );
+                })()}
+                {/* Quick actions row */}
+                <div style={{display:'flex',gap:4,marginTop:2}}>
+                  {selectedLayer.type!=='background'&&(
+                    <button onClick={()=>duplicateLayer(selectedLayer.id)}
+                      title="Duplicate layer"
+                      style={{flex:1,padding:'4px 0',borderRadius:5,border:'1px solid #1f2937',background:'transparent',color:'#6b7280',fontSize:10,cursor:'pointer'}}>
+                      ⧉ Dupe
+                    </button>
+                  )}
+                  {selectedLayer.type!=='background'&&(
+                    <button onClick={()=>deleteLayer(selectedLayer.id)}
+                      title="Delete layer"
+                      style={{flex:1,padding:'4px 0',borderRadius:5,border:'1px solid #374151',background:'transparent',color:'#f87171',fontSize:10,cursor:'pointer'}}>
+                      ✕ Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Footer */}
             <div style={{
