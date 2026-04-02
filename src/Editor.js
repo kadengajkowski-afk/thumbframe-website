@@ -797,6 +797,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const saveStatusTimerRef = useRef(null);
   const deletedIdsRef = useRef(new Set());
   const isSavingRef = useRef(false);
+  const lassoDrawingRef = useRef(false);
+  const lassoPointsRef  = useRef([]);
+  const lassoSvgRef     = useRef(null);
   const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
   const saveMetaRef = useRef({});
@@ -3649,6 +3652,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   function onLayerMouseDown(e,id){
     if(activeTool==='rimlight') return;
     if(activeTool==='brush') return;
+    if(activeTool==='lasso' && isLassoMode) return;
     const layer=layers.find(l=>l.id===id);if(!layer)return;
     console.log('🖱️ Layer clicked:', layer.type, 'id:', id, 'z-index:', layers.indexOf(layer)+1);
     e.stopPropagation();
@@ -4680,6 +4684,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     }
                     return;
                   }
+                  if(activeTool==='lasso' && isLassoMode && lassoDrawingRef.current){
+                    const rect=canvasRef.current.getBoundingClientRect();
+                    const x=(e.clientX-rect.left)/zoom;
+                    const y=(e.clientY-rect.top)/zoom;
+                    lassoPointsRef.current.push({x,y});
+                    if(lassoSvgRef.current) lassoSvgRef.current.setAttribute('points', lassoPointsRef.current.map(p=>`${p.x},${p.y}`).join(' '));
+                    return;
+                  }
                 }}
                 onMouseDown={(e)=>{
                   if(activeTool==='rimlight'){
@@ -4756,10 +4768,44 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     applyRimLight(x,y);
                     return;
                   }
+                  if(activeTool==='lasso' && isLassoMode){
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const rect=canvasRef.current.getBoundingClientRect();
+                    const x=(e.clientX-rect.left)/zoom;
+                    const y=(e.clientY-rect.top)/zoom;
+                    lassoDrawingRef.current=true;
+                    lassoPointsRef.current=[{x,y}];
+                    if(lassoSvgRef.current) lassoSvgRef.current.setAttribute('points',`${x},${y}`);
+                    return;
+                  }
                 }}
                 onMouseUp={(e)=>{
                   if(activeTool==='rimlight'){
                     rimPaintingRef.current=false;
+                    return;
+                  }
+                  if(activeTool==='lasso' && isLassoMode && lassoDrawingRef.current){
+                    lassoDrawingRef.current=false;
+                    const points=lassoPointsRef.current;
+                    if(points.length>=3 && selectedLayer && selectedLayer.type==='image'){
+                      const tmp=document.createElement('canvas');
+                      tmp.width=selectedLayer.width;
+                      tmp.height=selectedLayer.height;
+                      const ctx=tmp.getContext('2d');
+                      ctx.fillStyle='black';
+                      ctx.fillRect(0,0,tmp.width,tmp.height);
+                      ctx.fillStyle='white';
+                      ctx.beginPath();
+                      ctx.moveTo(points[0].x-selectedLayer.x, points[0].y-selectedLayer.y);
+                      for(let i=1;i<points.length;i++) ctx.lineTo(points[i].x-selectedLayer.x, points[i].y-selectedLayer.y);
+                      ctx.closePath();
+                      ctx.fill();
+                      updateLayer(selectedLayer.id,{mask:{enabled:true,data:tmp.toDataURL('image/png')}});
+                    }
+                    setIsLassoMode(false);
+                    lassoPointsRef.current=[];
+                    if(lassoSvgRef.current) lassoSvgRef.current.setAttribute('points','');
                     return;
                   }
                   triggerAutoSave();
@@ -4772,6 +4818,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     rimPaintingRef.current=false;
                     const cursor=document.getElementById('rim-cursor');
                     if(cursor) cursor.style.display='none';
+                    return;
+                  }
+                  if(activeTool==='lasso' && isLassoMode && lassoDrawingRef.current){
+                    lassoDrawingRef.current=false;
+                    lassoPointsRef.current=[];
+                    if(lassoSvgRef.current) lassoSvgRef.current.setAttribute('points','');
                     return;
                   }
                 }}
@@ -4829,11 +4881,12 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 style={{width:p.preview.w,height:p.preview.h,position:'relative',overflow:'hidden',borderRadius:4,boxShadow:'0 8px 40px rgba(0,0,0,0.8)',flexShrink:0,cursor:activeTool==='brush'?'crosshair':
                        activeTool==='rimlight'?(rimPickingColor?'crosshair':'crosshair'):
                        activeTool==='zoom'?'zoom-in':
+                       (activeTool==='lasso'&&isLassoMode)?'crosshair':
                        'default'}}>
 
                 <div style={{position:'absolute',inset:0,filter:canvasFilter,zIndex:0}}>
                   <div style={{position:'absolute',inset:0,
-                    pointerEvents: (activeTool==='brush'||activeTool==='zoom') ? 'none' : 'auto',
+                    pointerEvents: (activeTool==='brush'||activeTool==='zoom'||(activeTool==='lasso'&&isLassoMode)) ? 'none' : 'auto',
                   }}>
                     <CanvasLayerRenderer layers={layers} renderLayerElement={renderLayerElement} />
                   </div>
@@ -4863,6 +4916,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     );
                   })}
                 </div>
+
+                {/* Lasso mask SVG overlay */}
+                {isLassoMode&&(
+                  <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:10000}}>
+                    <polyline ref={lassoSvgRef} points="" fill="rgba(249,115,22,0.12)" stroke="#f97316" strokeWidth="2" strokeDasharray="6,4"/>
+                  </svg>
+                )}
 
                 {/* ✅ Brush overlay — no CSS width/height, no filter, canvas sizes itself */}
                 {brushingImageId&&selectedLayer&&!maskingLayerId&&(
