@@ -1299,11 +1299,19 @@ PHASE 4 — Toolbar button:
     setSelectedId(null);
   },[user?.email]);
   const T  = {
-    bg:darkMode?'#0f0f0f':'#f2f2f2',panel:darkMode?'#1a1a1a':'#ffffff',
-    sidebar:darkMode?'#161616':'#fafafa',input:darkMode?'#242424':'#ffffff',
-    border:darkMode?'#2a2a2a':'#e8e8e8',text:darkMode?'#e8e8e8':'#1a1a1a',
-    muted:darkMode?'#5a5a5a':'#9a9a9a',accent:'#f97316',
-    danger:'#ef4444',success:'#22c55e',warning:'#f59e0b',
+    bg:     darkMode?'#06070a':'#f0f2f5',
+    bg2:    darkMode?'#0d0f14':'#e8eaed',
+    panel:  darkMode?'#0c0d11':'#ffffff',
+    sidebar:darkMode?'#08090d':'#f7f8fa',
+    input:  darkMode?'#13151c':'#ffffff',
+    border: darkMode?'#1c1f2b':'#e2e5ec',
+    text:   darkMode?'#e8eaf2':'#111827',
+    muted:  darkMode?'#454e6b':'#9ca3af',
+    accent: '#f97316',
+    accentDim: darkMode?'rgba(249,115,22,0.1)':'rgba(249,115,22,0.08)',
+    accentBorder: darkMode?'rgba(249,115,22,0.25)':'rgba(249,115,22,0.3)',
+    danger: '#ef4444',success:'#22c55e',warning:'#f59e0b',
+    glow: darkMode?'0 0 0 1px rgba(249,115,22,0.15), 0 4px 24px rgba(249,115,22,0.08)':'none',
   };
 
   const selectedLayer   = layers.find(l=>l.id===selectedId);
@@ -4261,40 +4269,67 @@ PHASE 4 — Toolbar button:
   }
 
   const css={
-    label:   {fontSize:'10px',color:T.muted,marginBottom:4,marginTop:14,letterSpacing:'0.8px',fontWeight:'600',textTransform:'uppercase',display:'block'},
-    input:   {padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:12,width:'100%',boxSizing:'border-box',outline:'none',fontFamily:'inherit'},
-    color:   {width:'100%',height:36,borderRadius:6,border:`1px solid ${T.border}`,cursor:'pointer',background:'none'},
-    pill:    (a)=>({padding:'3px 10px',borderRadius:4,border:`1px solid ${a?T.accent:T.border}`,background:a?T.accent:'transparent',color:a?'#fff':T.text,fontSize:11,cursor:'pointer',fontWeight:a?'600':'400'}),
-    iconBtn: (a)=>({padding:'5px 9px',borderRadius:6,border:`1px solid ${a?T.accent:T.border}`,background:a?T.accent:'transparent',color:a?'#fff':T.text,cursor:'pointer',fontSize:12,fontWeight:a?'600':'400'}),
-    toolBtn: (a)=>({padding:'7px 10px',borderRadius:6,border:'none',background:a?`${T.accent}18`:'transparent',color:a?T.accent:T.muted,fontSize:12,cursor:'pointer',textAlign:'left',width:'100%',fontWeight:a?'600':'400',display:'flex',alignItems:'center',gap:8,marginBottom:1}),
-    addBtn:  {padding:10,borderRadius:7,background:T.accent,color:'#fff',border:'none',fontSize:12,cursor:'pointer',fontWeight:'600',width:'100%',marginTop:12},
-    section: {padding:10,background:T.input,borderRadius:7,border:`1px solid ${T.border}`,marginTop:8},
+    label:   {fontSize:'9px',color:T.muted,marginBottom:5,marginTop:16,letterSpacing:'1px',fontWeight:'700',textTransform:'uppercase',display:'block'},
+    input:   {padding:'8px 11px',borderRadius:7,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:12,width:'100%',boxSizing:'border-box',outline:'none',fontFamily:'inherit',transition:'border-color 0.15s'},
+    color:   {width:'100%',height:34,borderRadius:7,border:`1px solid ${T.border}`,cursor:'pointer',background:'none'},
+    pill:    (a)=>({padding:'4px 11px',borderRadius:6,border:`1px solid ${a?T.accent:T.border}`,background:a?T.accent:T.input,color:a?'#fff':T.muted,fontSize:11,cursor:'pointer',fontWeight:a?'600':'400',transition:'all 0.12s'}),
+    iconBtn: (a)=>({padding:'5px 10px',borderRadius:6,border:`1px solid ${a?T.accentBorder:T.border}`,background:a?T.accentDim:'transparent',color:a?T.accent:T.muted,cursor:'pointer',fontSize:12,fontWeight:a?'600':'400',transition:'all 0.12s'}),
+    toolBtn: (a)=>({
+      padding:'7px 10px',borderRadius:7,border:'none',
+      background:a?T.accentDim:'transparent',
+      color:a?T.accent:T.muted,
+      fontSize:11,cursor:'pointer',textAlign:'left',width:'100%',
+      fontWeight:a?'600':'500',
+      display:'flex',alignItems:'center',gap:8,marginBottom:1,
+      borderLeft:a?`2px solid ${T.accent}`:'2px solid transparent',
+      transition:'all 0.1s',
+    }),
+    addBtn:  {padding:'9px 12px',borderRadius:8,background:T.accent,color:'#fff',border:'none',fontSize:12,cursor:'pointer',fontWeight:'600',width:'100%',marginTop:12,transition:'opacity 0.15s'},
+    section: {padding:10,background:T.bg2,borderRadius:8,border:`1px solid ${T.border}`,marginTop:8},
     row:     {display:'flex',gap:6,alignItems:'center'},
-    divider: {height:1,background:T.border,margin:'10px 0'},
+    divider: {height:1,background:T.border,margin:'12px 0'},
   };
 
   if(isLoading){
     return (
       <div style={{
-        minHeight:'100vh',
-        display:'flex',
-        alignItems:'center',
-        justifyContent:'center',
+        minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',
         background:T.bg,
-        color:T.text,
         fontFamily:'-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       }}>
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:14}}>
-          <div style={{
-            width:34,
-            height:34,
-            borderRadius:'50%',
-            border:`3px solid ${T.border}`,
-            borderTopColor:T.accent,
-            animation:'editor-spin 0.8s linear infinite',
-          }}/>
-          <div style={{fontSize:13,fontWeight:'600',color:T.muted}}>Restoring draft...</div>
-          <style>{`@keyframes editor-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        <style>{`
+          @keyframes editor-spin { to { transform: rotate(360deg); } }
+          @keyframes editor-fade-up { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        `}</style>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:20,animation:'editor-fade-up 0.4s ease both'}}>
+          {/* Logo mark */}
+          <div style={{position:'relative',width:52,height:52}}>
+            <div style={{
+              position:'absolute',inset:0,borderRadius:14,
+              background:'linear-gradient(135deg,#f97316,#ea580c)',
+              boxShadow:'0 0 40px rgba(249,115,22,0.35)',
+              display:'flex',alignItems:'center',justifyContent:'center',
+            }}>
+              <span style={{fontSize:22,fontWeight:'900',color:'#fff',letterSpacing:'-1px'}}>T</span>
+            </div>
+            <div style={{
+              position:'absolute',bottom:-2,right:-2,width:18,height:18,
+              borderRadius:'50%',border:`3px solid ${T.bg}`,
+              borderTopColor:'transparent',
+              background:'transparent',
+              animation:'editor-spin 0.75s linear infinite',
+              boxSizing:'border-box',
+              borderColor:`${T.accent} transparent transparent transparent`,
+            }}/>
+          </div>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:15,fontWeight:'700',color:T.text,letterSpacing:'-0.3px',marginBottom:4}}>ThumbFrame</div>
+            <div style={{fontSize:12,color:T.muted,fontWeight:'400'}}>Loading your workspace…</div>
+          </div>
+          {/* Progress bar */}
+          <div style={{width:160,height:2,borderRadius:2,background:T.border,overflow:'hidden'}}>
+            <div style={{height:'100%',width:'40%',borderRadius:2,background:T.accent,animation:'editor-spin 1.5s ease-in-out infinite',transformOrigin:'left center'}}/>
+          </div>
         </div>
       </div>
     );
@@ -4590,104 +4625,176 @@ PHASE 4 — Toolbar button:
       )}
 
       {/* Top bar */}
-      <div style={{display:'flex',alignItems:'center',height:isMobile?40:46,padding:isMobile?'0 8px':'0 12px',background:T.panel,borderBottom:`1px solid ${T.border}`,gap:isMobile?4:6,flexShrink:0,overflowX:isMobile?'auto':'visible'}}>
-        <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-          {onExit&&<button onClick={onExit} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11}}>←</button>}
-          <div style={{fontSize:isMobile?12:14,fontWeight:'700',color:T.accent,letterSpacing:'-0.3px'}}>ThumbFrame</div>
-          {!isMobile&&<button onClick={()=>setShowFileTab(true)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:12,fontWeight:'500',display:'flex',alignItems:'center',gap:5}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>📁 File</button>}
-        </div>
-        {!isMobile&&<button onClick={()=>{setCmdOpen(true);setTimeout(()=>cmdInputRef.current?.focus(),50);}} style={{flex:1,maxWidth:340,display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,color:T.muted,cursor:'pointer',fontSize:12,textAlign:'left'}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-          <span style={{fontFamily:'monospace',fontSize:13,color:T.accent}}>⌘</span>
-          <span style={{flex:1}}>Command palette...</span>
-          {cmdLog&&<span style={{fontSize:10,color:T.success,fontWeight:'600',flexShrink:0}}>✓ {cmdLog}</span>}
-          <span style={{fontSize:10,background:T.bg,padding:'1px 6px',borderRadius:4,border:`1px solid ${T.border}`,color:T.muted,flexShrink:0}}>Ctrl+K</span>
-        </button>}
-        {!isMobile&&<button
-          onClick={()=>{setShowAiBar(true);setTimeout(()=>aiCmdInputRef.current?.focus(),50);}}
-          style={{
-            display:'flex',alignItems:'center',gap:6,
-            padding:'6px 14px',borderRadius:8,
-            border:`1px solid ${T.accent}`,
-            background:`${T.accent}18`,
-            color:T.accent,cursor:'pointer',fontSize:12,fontWeight:'600',
-            flexShrink:0,
-          }}
-          title="AI command bar (Ctrl+I)">
-          ⚡ AI
-          <span style={{
-            fontSize:8,fontWeight:'700',color:'#f59e0b',
-            background:'rgba(245,158,11,0.15)',
-            border:'1px solid rgba(245,158,11,0.3)',
-            padding:'1px 5px',borderRadius:8,
-          }}>BETA</span>
-          <span style={{fontSize:10,background:T.bg,padding:'1px 5px',
-            borderRadius:4,border:`1px solid ${T.border}`,color:T.muted}}>
-            Ctrl+I
-          </span>
-        </button>}
-        {!isMobile&&<button
-          onClick={()=>{
-            const isPro = isProUser;
-            const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
-            if (!isPro && !isAdmin) {
-              setShowPaywall(true);
-              return;
-            }
-            setActiveTool('ai');
-          }}
-          style={{
-            display:'flex',alignItems:'center',gap:6,
-            padding:'6px 14px',borderRadius:8,
-            border:`1px solid ${T.warning}`,
-            background:`${T.warning}18`,
-            color:T.warning,cursor:'pointer',fontSize:12,fontWeight:'600',
-            flexShrink:0,
-          }}
-          title="AI Generate thumbnail from text prompt">
-          ⚡ AI Generate
-          <span style={{
-            fontSize:8,fontWeight:'700',color:'#fff',
-            background:'linear-gradient(135deg,#f59e0b,#ef4444)',
-            padding:'2px 6px',borderRadius:8,
-          }}>PRO</span>
-        </button>}
-        <div style={{display:'flex',gap:3,alignItems:'center',flexShrink:0,marginLeft:'auto'}}>
-          <div style={{
-            padding:'4px 8px',
-            borderRadius:999,
-            border:`1px solid ${saveStatus==='Error'?T.danger:saveStatus==='Saving...'?T.warning:saveStatus==='Unsaved'?T.muted:T.success}`,
-            background:saveStatus==='Error'?`${T.danger}22`:saveStatus==='Saving...'?`${T.warning}22`:saveStatus==='Unsaved'?`${T.muted}22`:`${T.success}22`,
-            color:saveStatus==='Error'?T.danger:saveStatus==='Saving...'?T.warning:saveStatus==='Unsaved'?T.muted:T.success,
-            fontSize:10,
-            fontWeight:'700',
-            letterSpacing:'0.3px',
-            minWidth:64,
-            textAlign:'center',
-          }}>
-            {saveStatus}
+      <div style={{
+        display:'flex',alignItems:'center',
+        height:isMobile?42:50,
+        padding:isMobile?'0 10px':'0 14px',
+        background:T.panel,
+        borderBottom:`1px solid ${T.border}`,
+        gap:isMobile?4:8,
+        flexShrink:0,
+        overflowX:isMobile?'auto':'visible',
+        boxShadow:'0 1px 0 rgba(255,255,255,0.02)',
+      }}>
+        <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          {onExit&&(
+            <button onClick={onExit} style={{
+              padding:'5px 8px',borderRadius:6,
+              border:`1px solid ${T.border}`,
+              background:'transparent',color:T.muted,cursor:'pointer',fontSize:12,
+              lineHeight:1,
+            }}>←</button>
+          )}
+          {/* Brand mark */}
+          <div style={{display:'flex',alignItems:'center',gap:7,flexShrink:0}}>
+            <div style={{
+              width:24,height:24,borderRadius:6,
+              background:'linear-gradient(135deg,#f97316,#ea580c)',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              flexShrink:0,
+              boxShadow:'0 2px 8px rgba(249,115,22,0.3)',
+            }}>
+              <span style={{fontSize:11,fontWeight:'900',color:'#fff',letterSpacing:'-0.5px'}}>T</span>
+            </div>
+            <span style={{fontSize:13,fontWeight:'700',color:T.text,letterSpacing:'-0.4px'}}>ThumbFrame</span>
           </div>
-          <button onClick={undo} disabled={historyIndex<=0} style={{...css.iconBtn(false),opacity:historyIndex<=0?0.3:1}}>↩</button>
-          <button onClick={redo} disabled={historyIndex>=history.length-1} style={{...css.iconBtn(false),opacity:historyIndex>=history.length-1?0.3:1}}>↪</button>
+          {!isMobile&&(
+            <div style={{width:1,height:16,background:T.border,margin:'0 2px'}}/>
+          )}
+          {!isMobile&&(
+            <button onClick={()=>setShowFileTab(true)}
+              style={{
+                padding:'5px 11px',borderRadius:6,
+                border:`1px solid ${T.border}`,
+                background:'transparent',color:T.muted,
+                cursor:'pointer',fontSize:11,fontWeight:'500',
+                display:'flex',alignItems:'center',gap:4,
+              }}
+              onMouseEnter={e=>{e.currentTarget.style.color=T.text;e.currentTarget.style.borderColor=T.border;}}
+              onMouseLeave={e=>{e.currentTarget.style.color=T.muted;e.currentTarget.style.borderColor=T.border;}}>
+              File
+            </button>
+          )}
+        </div>
+        {!isMobile&&(
+          <button onClick={()=>{setCmdOpen(true);setTimeout(()=>cmdInputRef.current?.focus(),50);}}
+            style={{
+              flex:1,maxWidth:320,
+              display:'flex',alignItems:'center',gap:8,
+              padding:'7px 12px',borderRadius:8,
+              border:`1px solid ${T.border}`,
+              background:T.input,
+              color:T.muted,cursor:'pointer',fontSize:12,textAlign:'left',
+            }}
+            onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(249,115,22,0.3)'}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+            <span style={{fontSize:12,color:T.muted,fontFamily:'monospace'}}>⌘</span>
+            <span style={{flex:1,color:T.muted,fontSize:11}}>Search commands…</span>
+            {cmdLog&&<span style={{fontSize:10,color:T.success,fontWeight:'600',flexShrink:0,maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>✓ {cmdLog}</span>}
+            <span style={{fontSize:9,background:T.bg2,padding:'2px 6px',borderRadius:4,border:`1px solid ${T.border}`,color:T.muted,flexShrink:0,letterSpacing:'0.3px'}}>⌃K</span>
+          </button>
+        )}
+        {!isMobile&&(
+          <button
+            onClick={()=>{setShowAiBar(true);setTimeout(()=>aiCmdInputRef.current?.focus(),50);}}
+            style={{
+              display:'flex',alignItems:'center',gap:5,
+              padding:'6px 12px',borderRadius:7,
+              border:`1px solid ${T.accentBorder}`,
+              background:T.accentDim,
+              color:T.accent,cursor:'pointer',fontSize:11,fontWeight:'600',
+              flexShrink:0,letterSpacing:'0.1px',
+            }}
+            title="AI command bar (Ctrl+I)">
+            ⚡ AI
+            <span style={{
+              fontSize:8,fontWeight:'700',color:'#f59e0b',
+              background:'rgba(245,158,11,0.12)',
+              border:'1px solid rgba(245,158,11,0.25)',
+              padding:'1px 4px',borderRadius:4,letterSpacing:'0.5px',
+            }}>BETA</span>
+          </button>
+        )}
+        {!isMobile&&(
+          <button
+            onClick={()=>{
+              const isPro=isProUser;
+              const isAdmin=user?.is_admin||user?.email==='kadengajkowski@gmail.com';
+              if(!isPro&&!isAdmin){setShowPaywall(true);return;}
+              setActiveTool('ai');
+            }}
+            style={{
+              display:'flex',alignItems:'center',gap:5,
+              padding:'6px 12px',borderRadius:7,
+              border:'1px solid rgba(245,158,11,0.25)',
+              background:'rgba(245,158,11,0.07)',
+              color:'#f59e0b',cursor:'pointer',fontSize:11,fontWeight:'600',
+              flexShrink:0,
+            }}
+            title="AI Generate thumbnail from text prompt">
+            ✦ Generate
+            <span style={{
+              fontSize:8,fontWeight:'700',color:'#fff',
+              background:'linear-gradient(135deg,#f59e0b,#ef4444)',
+              padding:'1px 5px',borderRadius:4,letterSpacing:'0.5px',
+            }}>PRO</span>
+          </button>
+        )}
+        <div style={{display:'flex',gap:4,alignItems:'center',flexShrink:0,marginLeft:'auto'}}>
+          {/* Save status pill */}
+          <div style={{
+            padding:'3px 9px',
+            borderRadius:6,
+            border:`1px solid ${
+              saveStatus==='Error'?`${T.danger}44`
+              :saveStatus==='Saving...'?`${T.warning}44`
+              :saveStatus==='Unsaved'?T.border
+              :`${T.success}33`}`,
+            background:saveStatus==='Error'?`${T.danger}12`
+              :saveStatus==='Saving...'?`${T.warning}12`
+              :saveStatus==='Unsaved'?'transparent'
+              :`${T.success}10`,
+            color:saveStatus==='Error'?T.danger
+              :saveStatus==='Saving...'?T.warning
+              :saveStatus==='Unsaved'?T.muted
+              :T.success,
+            fontSize:10,fontWeight:'600',letterSpacing:'0.2px',
+            minWidth:52,textAlign:'center',
+          }}>{saveStatus}</div>
+          {/* Undo / Redo */}
+          <div style={{display:'flex',gap:1,background:T.input,borderRadius:7,padding:'2px',border:`1px solid ${T.border}`}}>
+            <button onClick={undo} disabled={historyIndex<=0}
+              style={{padding:'4px 8px',borderRadius:5,border:'none',background:'transparent',color:T.text,cursor:'pointer',fontSize:13,opacity:historyIndex<=0?0.25:0.7,lineHeight:1}}>↩</button>
+            <button onClick={redo} disabled={historyIndex>=history.length-1}
+              style={{padding:'4px 8px',borderRadius:5,border:'none',background:'transparent',color:T.text,cursor:'pointer',fontSize:13,opacity:historyIndex>=history.length-1?0.25:0.7,lineHeight:1}}>↪</button>
+          </div>
           <button onClick={()=>saveDesign(designName)}
-            style={{padding:'6px 14px',borderRadius:7,
+            style={{
+              padding:'6px 13px',borderRadius:7,
               border:`1px solid ${T.border}`,
               background:T.input,color:T.text,
-              cursor:'pointer',fontSize:12,fontWeight:'600',
-              display:'flex',alignItems:'center',gap:5}}>
-            💾 Save
+              cursor:'pointer',fontSize:11,fontWeight:'600',
+              display:'flex',alignItems:'center',gap:5,
+            }}
+            onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+            Save
           </button>
           <button onClick={()=>selectedId&&duplicateLayer(selectedId)}
             disabled={!selectedId||selectedLayer?.type==='background'}
-            style={{padding:'6px 14px',borderRadius:7,
+            style={{
+              padding:'6px 12px',borderRadius:7,
               border:`1px solid ${T.border}`,
-              background:T.input,
-              color:(!selectedId||selectedLayer?.type==='background')?T.muted:T.text,
-              cursor:'pointer',fontSize:12,fontWeight:'500',
-              opacity:(!selectedId||selectedLayer?.type==='background')?0.4:1}}>
-            ⧉ Duplicate
+              background:'transparent',
+              color:(!selectedId||selectedLayer?.type==='background')?T.muted:T.muted,
+              cursor:'pointer',fontSize:11,fontWeight:'500',
+              opacity:(!selectedId||selectedLayer?.type==='background')?0.3:1,
+            }}>
+            ⧉
           </button>
-          <div style={{width:1,height:20,background:T.border,margin:'0 2px'}}/>
-          <div style={{display:'flex',gap:1,alignItems:'center',background:T.input,borderRadius:6,padding:'2px 5px',border:`1px solid ${T.border}`}}>
+          <div style={{width:1,height:18,background:T.border,margin:'0 1px'}}/>
+          {/* Zoom control */}
+          <div style={{display:'flex',gap:0,alignItems:'center',background:T.input,borderRadius:7,padding:'2px 4px',border:`1px solid ${T.border}`}}>
             <button onClick={()=>setZoom(z=>Math.max(0.25,+(z-0.1).toFixed(1)))} style={{padding:'2px 6px',borderRadius:4,border:'none',background:'transparent',color:T.text,cursor:'pointer',fontSize:13}}>−</button>
             <input
               type="number"
@@ -4709,39 +4816,60 @@ PHASE 4 — Toolbar button:
             <button onClick={()=>setZoom(z=>Math.min(16,+(z+0.1).toFixed(1)))} style={{padding:'2px 6px',borderRadius:4,border:'none',background:'transparent',color:T.text,cursor:'pointer',fontSize:13}}>+</button>
             <button onClick={()=>setZoom(1)} style={{padding:'2px 5px',borderRadius:4,border:'none',background:'transparent',color:T.muted,cursor:'pointer',fontSize:10}}>fit</button>
           </div>
-          {!isMobile&&<>
-          <button onClick={()=>setShowGrid(g=>!g)} style={css.iconBtn(showGrid)} title="Grid">⊞</button>
-          <button onClick={()=>setShowRuler(r=>!r)} style={css.iconBtn(showRuler)} title="Ruler">⊢</button>
-          <button onClick={()=>setSnapToGrid(s=>!s)} style={css.iconBtn(snapToGrid)} title="Snap">⊡</button>
-          <button onClick={()=>setLockAspect(l=>!l)} style={css.iconBtn(lockAspect)} title="Lock aspect">⊠</button>
-          <button onClick={()=>setShowSafeZones(s=>!s)} style={{...css.iconBtn(showSafeZones),fontSize:10,padding:'5px 8px',whiteSpace:'nowrap'}} title="Safe zones">⬜ Zones</button>
-          <button onClick={()=>setShowStampTest(s=>!s)} style={{...css.iconBtn(showStampTest),fontSize:10,padding:'5px 8px',whiteSpace:'nowrap'}} title="Mobile preview">📱 Mobile</button>
-          <button onClick={()=>setDarkMode(!darkMode)} style={css.iconBtn(false)}>{darkMode?'○':'●'}</button>
-          <div style={{width:1,height:20,background:T.border,margin:'0 2px'}}/>
-          </>}
-          <label style={{padding:isMobile?'5px 10px':'6px 14px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'500',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+          {!isMobile&&(
+            <div style={{display:'flex',gap:1,background:T.input,borderRadius:7,padding:'2px',border:`1px solid ${T.border}`}}>
+              <button onClick={()=>setShowGrid(g=>!g)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showGrid?T.accentDim:'transparent',color:showGrid?T.accent:T.muted,cursor:'pointer',fontSize:11,fontWeight:'500'}} title="Grid">⊞</button>
+              <button onClick={()=>setShowRuler(r=>!r)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showRuler?T.accentDim:'transparent',color:showRuler?T.accent:T.muted,cursor:'pointer',fontSize:11}} title="Ruler">⊢</button>
+              <button onClick={()=>setSnapToGrid(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:snapToGrid?T.accentDim:'transparent',color:snapToGrid?T.accent:T.muted,cursor:'pointer',fontSize:11}} title="Snap to grid">⊡</button>
+              <button onClick={()=>setShowSafeZones(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showSafeZones?T.accentDim:'transparent',color:showSafeZones?T.accent:T.muted,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Safe zones">Zones</button>
+              <button onClick={()=>setShowStampTest(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showStampTest?T.accentDim:'transparent',color:showStampTest?T.accent:T.muted,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Mobile preview">Mobile</button>
+              <button onClick={()=>setDarkMode(!darkMode)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:'transparent',color:T.muted,cursor:'pointer',fontSize:11}} title="Toggle theme">{darkMode?'○':'●'}</button>
+            </div>
+          )}
+          <div style={{width:1,height:18,background:T.border,margin:'0 1px',flexShrink:0}}/>
+          <label style={{
+            padding:isMobile?'5px 10px':'6px 13px',
+            borderRadius:7,
+            border:`1px solid ${T.border}`,
+            background:T.input,color:T.muted,
+            cursor:'pointer',fontSize:11,fontWeight:'500',
+            display:'flex',alignItems:'center',gap:4,flexShrink:0,
+          }}>
             ↑ {isMobile?'':'Upload'}
             <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{display:'none'}}/>
           </label>
-          <button onClick={()=>setShowDownload(true)} style={{padding:isMobile?'5px 10px':'6px 16px',borderRadius:8,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:isMobile?10:12,fontWeight:'700',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.35)',flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='#16a34a'} onMouseLeave={e=>e.currentTarget.style.background=T.success}>↓{isMobile?'':' Download'}</button>
+          <button onClick={()=>setShowDownload(true)}
+            style={{
+              padding:isMobile?'5px 12px':'6px 16px',
+              borderRadius:7,border:'none',
+              background:'#22c55e',color:'#fff',
+              cursor:'pointer',fontSize:11,fontWeight:'700',
+              display:'flex',alignItems:'center',gap:5,
+              boxShadow:'0 2px 12px rgba(34,197,94,0.25)',flexShrink:0,
+            }}
+            onMouseEnter={e=>e.currentTarget.style.background='#16a34a'}
+            onMouseLeave={e=>e.currentTarget.style.background='#22c55e'}>
+            ↓ {isMobile?'':'Export'}
+          </button>
           {!isMobile&&(
             <button
               onClick={generateAndExportVariants}
               disabled={variantExporting}
               title="Generate A/B/C variants and download as 2x JPEG ZIP"
               style={{
-                padding:'6px 14px',borderRadius:8,border:'none',
-                background:variantExporting?T.muted:'linear-gradient(135deg,#7c3aed,#4f46e5)',
-                color:'#fff',cursor:variantExporting?'not-allowed':'pointer',
-                fontSize:12,fontWeight:'700',
-                display:'flex',alignItems:'center',gap:6,
-                boxShadow:variantExporting?'none':'0 2px 8px rgba(124,58,237,0.4)',
-                flexShrink:0,opacity:variantExporting?0.7:1,
-                transition:'all 0.2s',
+                padding:'6px 13px',borderRadius:7,
+                border:'1px solid rgba(124,58,237,0.3)',
+                background:variantExporting?'transparent':'rgba(124,58,237,0.1)',
+                color:variantExporting?T.muted:'#a78bfa',
+                cursor:variantExporting?'not-allowed':'pointer',
+                fontSize:11,fontWeight:'600',
+                display:'flex',alignItems:'center',gap:5,
+                flexShrink:0,opacity:variantExporting?0.5:1,
+                transition:'all 0.15s',
               }}>
               {variantExporting
-                ?<><span style={{display:'inline-block',animation:'spin 0.8s linear infinite'}}>◌</span> Exporting…</>
-                :<>⚡ Export A/B Variants</>
+                ?<><span style={{display:'inline-block',animation:'editor-spin 0.8s linear infinite'}}>◌</span> Exporting…</>
+                :<>⚡ A/B Export</>
               }
             </button>
           )}
@@ -4759,14 +4887,14 @@ PHASE 4 — Toolbar button:
             }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
           }}
             style={{
-              padding:'7px 14px',borderRadius:7,
-              border:'none',
-              background:'linear-gradient(135deg, #f59e0b, #ef4444)',
-              color:'#fff',cursor:'pointer',fontSize:12,fontWeight:'700',
-              boxShadow:'0 2px 8px rgba(245,158,11,0.4)',
-              display:'flex',alignItems:'center',gap:5,
+              padding:'6px 13px',borderRadius:7,
+              border:'1px solid rgba(249,115,22,0.3)',
+              background:'linear-gradient(135deg,rgba(249,115,22,0.15),rgba(234,88,12,0.1))',
+              color:T.accent,cursor:'pointer',fontSize:11,fontWeight:'700',
+              display:'flex',alignItems:'center',gap:5,flexShrink:0,
+              letterSpacing:'0.1px',
             }}>
-            ⚡ Pro — $15/mo
+            ⚡ Pro
           </button>
         </div>
       </div>
@@ -4774,7 +4902,7 @@ PHASE 4 — Toolbar button:
       <div style={{display:'flex',flex:1,overflow:'hidden',flexDirection:isMobile?'column':'row'}}>
 
         {/* Left sidebar — hidden on mobile */}
-        {!isMobile&&<div style={{width:150,background:T.sidebar,borderRight:`1px solid ${T.border}`,padding:'8px 6px',display:'flex',flexDirection:'column',overflowY:'auto',flexShrink:0}}>
+        {!isMobile&&<div style={{width:148,background:T.sidebar,borderRight:`1px solid ${T.border}`,padding:'6px 5px',display:'flex',flexDirection:'column',overflowY:'auto',flexShrink:0}}>
           {(()=>{
             let lastGroup = null;
             const grouped = [];
@@ -4791,49 +4919,58 @@ PHASE 4 — Toolbar button:
               if(item.type==='header'){
                 const isExpanded = expandedCategories[item.group];
                 return(
-                  <div key={`header-${item.group}`} 
+                  <div key={`header-${item.group}`}
                     onClick={()=>setExpandedCategories(prev=>({...prev,[item.group]:!prev[item.group]}))}
                     style={{
-                      fontSize:'8px',color:'#e5e5e5',fontWeight:'700',
-                      letterSpacing:'0.8px',textTransform:'uppercase',
-                      padding:'6px 10px 2px',
+                      fontSize:'8px',color:T.muted,fontWeight:'700',
+                      letterSpacing:'1.2px',textTransform:'uppercase',
+                      padding:'10px 10px 3px',
                       cursor:'pointer',
-                      display:'flex',
-                      alignItems:'center',
-                      justifyContent:'space-between',
+                      display:'flex',alignItems:'center',justifyContent:'space-between',
                       userSelect:'none',
                     }}>
-                    <span>{item.group}</span>
+                    <span style={{letterSpacing:'0.9px'}}>{item.group}</span>
                     <span style={{
-                      fontSize:'10px',
+                      fontSize:'9px',
                       transform:isExpanded?'rotate(90deg)':'rotate(0deg)',
-                      transition:'transform 0.2s',
-                      color:T.muted,
+                      transition:'transform 0.15s',
+                      color:T.muted,opacity:0.6,
                     }}>›</span>
                   </div>
                 );
               }
-              
+
               const t = item.tool;
               const isExpanded = expandedCategories[t.group];
               if(!isExpanded) return null;
-              
+              const isLassoActive = t.key==='lasso'&&isLassoMode;
+              const isActive = activeTool===t.key;
+
               return(
-                <button key={t.key} onClick={()=>{setActiveTool(t.key);if(t.key!=='lasso')setIsLassoMode(false);}} title={t.label}
-                  style={t.key==='lasso'&&isLassoMode
-                    ? {...css.toolBtn(true),background:T.accent,color:'#fff'}
-                    : css.toolBtn(activeTool===t.key)}>
-                  <span style={{fontSize:13,width:16,textAlign:'center',
-                    flexShrink:0,color:t.key==='lasso'&&isLassoMode?'#fff':activeTool===t.key?T.accent:T.muted}}>
-                    {t.icon}
-                  </span>
-                  <span style={{fontSize:11,flex:1,color:t.key==='lasso'&&isLassoMode?'#fff':'#e5e5e5'}}>{t.label}</span>
-                  {t.pro&&<span style={{
-                    fontSize:7,
-                    background:'linear-gradient(135deg,#f59e0b,#ef4444)',
-                    color:'#fff',padding:'1px 4px',borderRadius:4,
-                    fontWeight:'700',flexShrink:0,
-                  }}>PRO</span>}
+                <button key={t.key}
+                  onClick={()=>{setActiveTool(t.key);if(t.key!=='lasso')setIsLassoMode(false);}}
+                  title={t.label}
+                  style={{
+                    ...css.toolBtn(isActive||isLassoActive),
+                    ...(isLassoActive?{background:'rgba(249,115,22,0.15)',color:T.accent}:{}),
+                  }}>
+                  <span style={{
+                    fontSize:12,width:14,textAlign:'center',flexShrink:0,
+                    color:isLassoActive?T.accent:isActive?T.accent:T.muted,
+                    opacity:isActive||isLassoActive?1:0.7,
+                  }}>{t.icon}</span>
+                  <span style={{
+                    fontSize:11,flex:1,
+                    color:isActive||isLassoActive?T.text:T.muted,
+                  }}>{t.label}</span>
+                  {t.pro&&(
+                    <span style={{
+                      fontSize:7,background:'rgba(249,115,22,0.15)',
+                      color:T.accent,padding:'1px 4px',borderRadius:3,
+                      fontWeight:'700',flexShrink:0,letterSpacing:'0.3px',
+                      border:'1px solid rgba(249,115,22,0.2)',
+                    }}>PRO</span>
+                  )}
                 </button>
               );
             });
@@ -7143,7 +7280,7 @@ PHASE 4 — Toolbar button:
         {!isMobile&&(
           <div style={{
             width:210,
-            background:'#111827',
+            background:T.panel,
             borderLeft:`1px solid ${T.border}`,
             display:'flex',flexDirection:'column',
             flexShrink:0,
@@ -7153,16 +7290,16 @@ PHASE 4 — Toolbar button:
             <div style={{
               display:'flex',alignItems:'center',justifyContent:'space-between',
               padding:'9px 10px 7px',
-              borderBottom:'1px solid #1f2937',
+              borderBottom:`1px solid ${T.border}`,
               flexShrink:0,
             }}>
               <div style={{display:'flex',alignItems:'center',gap:7}}>
-                <span style={{fontSize:11,color:'#f9fafb',fontWeight:'700',letterSpacing:'0.6px',textTransform:'uppercase'}}>Layers</span>
-                <span style={{fontSize:10,color:'#9ca3af',background:'#1f2937',padding:'1px 6px',borderRadius:10,border:'1px solid #374151'}}>{layers.length}</span>
+                <span style={{fontSize:11,color:T.text,fontWeight:'700',letterSpacing:'0.6px',textTransform:'uppercase'}}>Layers</span>
+                <span style={{fontSize:10,color:T.muted,background:T.bg2,padding:'1px 6px',borderRadius:10,border:`1px solid ${T.border}`}}>{layers.length}</span>
               </div>
               <div style={{display:'flex',gap:2}}>
                 <button title="Delete selected layer" onClick={()=>selectedId&&deleteLayer(selectedId)}
-                  style={{padding:'2px 6px',borderRadius:4,border:'1px solid #374151',background:'transparent',color:selectedId?'#f87171':'#374151',fontSize:11,cursor:'pointer'}}>✕</button>
+                  style={{padding:'2px 6px',borderRadius:4,border:`1px solid ${T.border}`,background:'transparent',color:selectedId?T.danger:T.border,fontSize:11,cursor:'pointer'}}>✕</button>
               </div>
             </div>
 
@@ -7190,27 +7327,27 @@ PHASE 4 — Toolbar button:
                       display:'flex',alignItems:'center',gap:4,
                       padding:'5px 5px',borderRadius:6,marginBottom:1,
                       cursor:'pointer',
-                      background:isSelected?'rgba(249,115,22,0.12)':isDragOver2?'rgba(249,115,22,0.06)':'transparent',
-                      border:`1px solid ${isSelected?'#f97316':isDragOver2?'rgba(249,115,22,0.35)':'transparent'}`,
+                      background:isSelected?T.accentDim:isDragOver2?'rgba(249,115,22,0.06)':'transparent',
+                      border:`1px solid ${isSelected?T.accent:isDragOver2?T.accentBorder:'transparent'}`,
                       opacity:isBeingDragged2?0.3:1,
                       transition:'all 0.08s',
                     }}>
                     {/* Drag grip */}
-                    <div style={{color:'#374151',fontSize:9,cursor:'grab',flexShrink:0,opacity:0.6}}>⠿</div>
+                    <div style={{color:T.border,fontSize:9,cursor:'grab',flexShrink:0,opacity:0.7}}>⠿</div>
                     {/* Type icon */}
                     <div style={{
                       width:17,height:17,borderRadius:3,flexShrink:0,
-                      background:isSelected?'rgba(249,115,22,0.18)':'#1f2937',
+                      background:isSelected?T.accentDim:T.bg2,
                       display:'flex',alignItems:'center',justifyContent:'center',
                       fontSize:8,fontWeight:'700',fontFamily:'monospace',
-                      color:isSelected?'#f97316':'#6b7280',
-                      border:'1px solid #374151',
+                      color:isSelected?T.accent:T.muted,
+                      border:`1px solid ${T.border}`,
                     }}>{getLayerIcon(layer)}</div>
                     {/* Name + badges */}
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{
                         fontSize:11,
-                        color:isHidden?'#374151':(isSelected?'#f9fafb':'#d1d5db'),
+                        color:isHidden?T.border:(isSelected?T.text:T.muted),
                         overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
                         fontWeight:isSelected?'600':'400',
                         textDecoration:isHidden?'line-through':'none',
@@ -7218,7 +7355,7 @@ PHASE 4 — Toolbar button:
                       {(hasEffects||layer.mask?.enabled)&&(
                         <div style={{display:'flex',gap:2,marginTop:1}}>
                           {layer.mask?.enabled&&<span style={{fontSize:7,color:'#60a5fa',background:'rgba(96,165,250,0.1)',padding:'0 3px',borderRadius:2}}>mask</span>}
-                          {hasEffects&&<span style={{fontSize:7,color:'#f59e0b',background:'rgba(245,158,11,0.1)',padding:'0 3px',borderRadius:2}}>fx</span>}
+                          {hasEffects&&<span style={{fontSize:7,color:T.warning,background:'rgba(245,158,11,0.1)',padding:'0 3px',borderRadius:2}}>fx</span>}
                         </div>
                       )}
                     </div>
@@ -7226,28 +7363,28 @@ PHASE 4 — Toolbar button:
                     <div style={{display:'flex',gap:0,flexShrink:0}}>
                       {/* Eye — visibility */}
                       <button title={isHidden?'Show':'Hide'} onClick={e=>{e.stopPropagation();updateLayer(layer.id,{hidden:!isHidden});}}
-                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:isHidden?'#4b5563':'#9ca3af',fontSize:12,lineHeight:1}}>
+                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:isHidden?T.border:T.muted,fontSize:12,lineHeight:1}}>
                         {isHidden?'⊘':'⊙'}
                       </button>
                       {/* Lock */}
                       {layer.type!=='background'&&(
                         <button title={isLocked?'Unlock':'Lock'} onClick={e=>{e.stopPropagation();updateLayer(layer.id,{locked:!isLocked});}}
-                          style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:isLocked?'#f59e0b':'#4b5563',fontSize:11,lineHeight:1}}>
+                          style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:isLocked?T.warning:T.border,fontSize:11,lineHeight:1}}>
                           {isLocked?'⊠':'⊡'}
                         </button>
                       )}
                       {/* Bring forward */}
                       <button title="Bring forward" onClick={e=>{e.stopPropagation();moveLayerUp(layer.id);}} disabled={atTop}
-                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:atTop?'default':'pointer',color:atTop?'#1f2937':'#6b7280',fontSize:10,lineHeight:1}}>▲</button>
+                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:atTop?'default':'pointer',color:atTop?T.border:T.muted,fontSize:10,lineHeight:1}}>▲</button>
                       {/* Send backward */}
                       <button title="Send backward" onClick={e=>{e.stopPropagation();moveLayerDown(layer.id);}} disabled={atBottom}
-                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:atBottom?'default':'pointer',color:atBottom?'#1f2937':'#6b7280',fontSize:10,lineHeight:1}}>▼</button>
+                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:atBottom?'default':'pointer',color:atBottom?T.border:T.muted,fontSize:10,lineHeight:1}}>▼</button>
                       {/* Delete */}
                       {layer.type!=='background'&&(
                         <button title="Delete layer" onClick={e=>{e.stopPropagation();deleteLayer(layer.id);}}
-                          style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:'#374151',fontSize:11,lineHeight:1}}
-                          onMouseEnter={e=>e.currentTarget.style.color='#f87171'}
-                          onMouseLeave={e=>e.currentTarget.style.color='#374151'}>✕</button>
+                          style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:T.border,fontSize:11,lineHeight:1}}
+                          onMouseEnter={e=>e.currentTarget.style.color=T.danger}
+                          onMouseLeave={e=>e.currentTarget.style.color=T.border}>✕</button>
                       )}
                     </div>
                   </div>
@@ -7257,8 +7394,8 @@ PHASE 4 — Toolbar button:
 
             {/* Selected Object Specs */}
             {selectedLayer&&(
-              <div style={{borderTop:'1px solid #1f2937',padding:'8px 10px',flexShrink:0}}>
-                <div style={{fontSize:9,color:'#6b7280',fontWeight:'700',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>
+              <div style={{borderTop:`1px solid ${T.border}`,padding:'8px 10px',flexShrink:0}}>
+                <div style={{fontSize:9,color:T.muted,fontWeight:'700',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>
                   Selected — {getLayerName(selectedLayer)}
                 </div>
                 {/* Neon Glow quick-toggle */}
@@ -7281,7 +7418,7 @@ PHASE 4 — Toolbar button:
                       }}
                       style={{
                         width:'100%',padding:'6px 8px',borderRadius:6,
-                        border:`1px solid ${glowOn?'#00ffff':'#1f2937'}`,
+                        border:`1px solid ${glowOn?'#00ffff':T.border}`,
                         background:glowOn?'rgba(0,255,255,0.08)':'transparent',
                         color:glowOn?'#00ffff':'#6b7280',
                         fontSize:11,cursor:'pointer',fontWeight:'600',
@@ -7297,14 +7434,14 @@ PHASE 4 — Toolbar button:
                   {selectedLayer.type!=='background'&&(
                     <button onClick={()=>duplicateLayer(selectedLayer.id)}
                       title="Duplicate layer"
-                      style={{flex:1,padding:'4px 0',borderRadius:5,border:'1px solid #1f2937',background:'transparent',color:'#6b7280',fontSize:10,cursor:'pointer'}}>
+                      style={{flex:1,padding:'4px 0',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:10,cursor:'pointer'}}>
                       ⧉ Dupe
                     </button>
                   )}
                   {selectedLayer.type!=='background'&&(
                     <button onClick={()=>deleteLayer(selectedLayer.id)}
                       title="Delete layer"
-                      style={{flex:1,padding:'4px 0',borderRadius:5,border:'1px solid #374151',background:'transparent',color:'#f87171',fontSize:10,cursor:'pointer'}}>
+                      style={{flex:1,padding:'4px 0',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.danger,fontSize:10,cursor:'pointer'}}>
                       ✕ Delete
                     </button>
                   )}
@@ -7314,8 +7451,8 @@ PHASE 4 — Toolbar button:
 
             {/* Footer */}
             <div style={{
-              padding:'5px 10px',borderTop:'1px solid #1f2937',
-              fontSize:9,color:'#374151',textAlign:'center',flexShrink:0,
+              padding:'5px 10px',borderTop:`1px solid ${T.border}`,
+              fontSize:9,color:T.border,textAlign:'center',flexShrink:0,
             }}>Drag rows to reorder</div>
           </div>
         )}
