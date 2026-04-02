@@ -3980,11 +3980,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       // Build clip-path polygon from stored lasso points (relative to the cropped div)
       let clipPathValue='none';
       if(hasMask){
-        const pts=obj.mask.points.map(p=>`${p.x}px ${p.y}px`).join(',');
+        const mpts=obj.mask.points;
         if(maskInverted){
-          // evenodd outer rect + inner polygon = cuts the inside, keeps outside
-          clipPathValue=`polygon(evenodd, 0px 0px, ${cropW}px 0px, ${cropW}px ${cropH}px, 0px ${cropH}px, ${pts})`;
+          // SVG path with two subpaths + evenodd: outer rect is "kept", lasso interior is "cut"
+          const outerRect=`M 0,0 H ${cropW} V ${cropH} H 0 Z`;
+          const innerPath=`M ${mpts[0].x},${mpts[0].y} `+mpts.slice(1).map(p=>`L ${p.x},${p.y}`).join(' ')+' Z';
+          clipPathValue=`path(evenodd, '${outerRect} ${innerPath}')`;
         } else {
+          const pts=mpts.map(p=>`${p.x}px ${p.y}px`).join(',');
           clipPathValue=`polygon(${pts})`;
         }
       }
