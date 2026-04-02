@@ -800,6 +800,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const lassoDrawingRef = useRef(false);
   const lassoPointsRef  = useRef([]);
   const lassoSvgRef     = useRef(null);
+  const lassoFeatherRef = useRef(0);
+  const lassoInvertRef  = useRef(false);
   const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
   const saveMetaRef = useRef({});
@@ -1272,8 +1274,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       setBrandKitLoading(true);
 
       try{
-        await fetchSavedDesigns();
-
+        // ── Resolve project ID synchronously before any await ──
         const urlDesignId = getProjectIdFromUrl();
         const resolvedProjectId = urlDesignId || generateProjectId();
         if(!cancelled){
@@ -1281,33 +1282,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           if(!urlDesignId) syncProjectIdToUrl(resolvedProjectId);
         }
 
-        // If a ?project=ID is in the URL, fetch that design from Supabase first.
-        // This is the primary path when navigating from the Dashboard.
-        let remoteDesign = null;
-        if(urlDesignId){
-          try{
-            console.log('[BOOTSTRAP] URL has project ID:', urlDesignId, '— fetching from Supabase...');
-            const { data: remoteData, error: remoteError } = await supabase
-              .from('thumbnails')
-              .select('*')
-              .eq('id', urlDesignId)
-              .single();
-            if(remoteError){
-              console.error('[BOOTSTRAP] Failed to load remote design:', remoteError.message);
-            }else if(remoteData){
-              console.log('[BOOTSTRAP] Remote design loaded:', remoteData.name);
-              remoteDesign = remoteData;
-            }
-          }catch(remoteErr){
-            console.error('[BOOTSTRAP] Exception loading remote design:', remoteErr);
-          }
-        }
-
+        // ── Read localStorage draft synchronously (no network, instant) ──
         let restoredDraft = null;
-        // Only use localStorage draft if it belongs to the same design as the URL
-        // (i.e. the user was editing this design before and a local draft exists).
-        // If a remote design was just fetched, prefer the remote data which is authoritative.
-        if(!remoteDesign){
+        if(urlDesignId){
+          // If there's a URL project ID we'll prefer the remote — skip draft for now
+        } else {
           try{
             const rawDraft = localStorage.getItem(getProjectStorageKey(resolvedProjectId));
             if(rawDraft) restoredDraft = JSON.parse(rawDraft);
@@ -1317,20 +1296,53 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           }
         }
 
-        try{
-          const isAdmin = safeUser?.is_admin || safeUser?.email === 'kadengajkowski@gmail.com';
-          const [brandKitResult, profileResult] = await Promise.allSettled([
-            supabase
-              .from('brand_kits')
-              .select('*')
-              .eq('user_id', safeUser.id)
-              .limit(1),
-            safeUser?.email
-              ? supabase.from('profiles').select('is_pro').eq('email', safeUser.email).maybeSingle()
-              : Promise.resolve({ data: null, error: null }),
-          ]);
+        // ── Fire ALL network requests in parallel ──
+        const isAdmin = safeUser?.is_admin || safeUser?.email === 'kadengajkowski@gmail.com';
+        const [savedDesignsResult, remoteDesignResult, brandKitResult, profileResult] = await Promise.allSettled([
+          // 1. Saved designs list (Railway API)
+          fetchSavedDesigns(),
+          // 2. Remote design from Supabase (if URL has project ID)
+          urlDesignId
+            ? supabase.from('thumbnails').select('*').eq('id', urlDesignId).single()
+            : Promise.resolve({ data: null, error: null }),
+          // 3. Brand kit
+          supabase.from('brand_kits').select('*').eq('user_id', safeUser.id).limit(1),
+          // 4. Pro profile
+          safeUser?.email
+            ? supabase.from('profiles').select('is_pro').eq('email', safeUser.email).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+        ]);
 
-          if(cancelled)return;
+        if(cancelled)return;
+
+        // ── Process remote design result ──
+        let remoteDesign = null;
+        if(urlDesignId){
+          if(remoteDesignResult.status==='fulfilled'){
+            const { data: remoteData, error: remoteError } = remoteDesignResult.value;
+            if(remoteError){
+              console.error('[BOOTSTRAP] Failed to load remote design:', remoteError.message);
+            }else if(remoteData){
+              console.log('[BOOTSTRAP] Remote design loaded:', remoteData.name);
+              remoteDesign = remoteData;
+            }
+          }else{
+            console.error('[BOOTSTRAP] Exception loading remote design:', remoteDesignResult.reason);
+          }
+        }
+
+        // If no remote design and we skipped draft earlier, try localStorage now
+        if(!remoteDesign && urlDesignId && !restoredDraft){
+          try{
+            const rawDraft = localStorage.getItem(getProjectStorageKey(resolvedProjectId));
+            if(rawDraft) restoredDraft = JSON.parse(rawDraft);
+          }catch(e){ /* ignore */ }
+        }
+
+        try{
+          if(savedDesignsResult.status==='rejected'){
+            console.error('Saved designs fetch failed:', savedDesignsResult.reason);
+          }
 
           if(safeToken==='test-key-123' || isAdmin){
             setIsProUser(true);
@@ -3956,6 +3968,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       const cropW=obj.width-(obj.cropLeft||0)-(obj.cropRight||0);
       const cropH=obj.height-(obj.cropTop||0)-(obj.cropBottom||0);
       const hasMask=obj.mask?.enabled&&obj.mask?.data;
+      const maskInverted=hasMask&&obj.mask?.inverted;
       const imageSrc = getSafeImageSrc(obj);
       return(
         <div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)}
@@ -3963,12 +3976,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             position:'absolute',left:obj.x,top:obj.y,zIndex,
             opacity:opacityVal,cursor,...selStyle,...blendStyle,
             overflow:'hidden',width:cropW,height:cropH,...effectsStyle,
-            WebkitMaskImage: hasMask?`url(${obj.mask.data})`:'none',
+            WebkitMaskImage: hasMask?(maskInverted?`linear-gradient(#fff,#fff), url(${obj.mask.data})`:`url(${obj.mask.data})`):'none',
             WebkitMaskSize: hasMask?`${cropW}px ${cropH}px`:'none',
             WebkitMaskRepeat:'no-repeat',
-            maskImage: hasMask?`url(${obj.mask.data})`:'none',
+            WebkitMaskComposite: maskInverted?'xor':'source-over',
+            maskImage: hasMask?(maskInverted?`linear-gradient(#fff,#fff), url(${obj.mask.data})`:`url(${obj.mask.data})`):'none',
             maskSize: hasMask?`${cropW}px ${cropH}px`:'none',
             maskRepeat:'no-repeat',
+            maskComposite: maskInverted?'exclude':'add',
           }}>
           {imageSrc ? (
             <img src={imageSrc} alt="" style={{
@@ -4789,19 +4804,43 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     lassoDrawingRef.current=false;
                     const points=lassoPointsRef.current;
                     if(points.length>=3 && selectedLayer && selectedLayer.type==='image'){
+                      // Crop-aware dimensions — the mask is applied to the cropped div
+                      const cropL=selectedLayer.cropLeft||0;
+                      const cropT=selectedLayer.cropTop||0;
+                      const cropW=selectedLayer.width-cropL-(selectedLayer.cropRight||0);
+                      const cropH=selectedLayer.height-cropT-(selectedLayer.cropBottom||0);
+                      const mw=Math.max(1,Math.round(cropW));
+                      const mh=Math.max(1,Math.round(cropH));
                       const tmp=document.createElement('canvas');
-                      tmp.width=selectedLayer.width;
-                      tmp.height=selectedLayer.height;
+                      tmp.width=mw; tmp.height=mh;
                       const ctx=tmp.getContext('2d');
-                      ctx.fillStyle='black';
-                      ctx.fillRect(0,0,tmp.width,tmp.height);
-                      ctx.fillStyle='white';
+                      // Fill black (hidden), then white polygon (visible)
+                      ctx.fillStyle='#000';
+                      ctx.fillRect(0,0,mw,mh);
+                      ctx.fillStyle='#fff';
                       ctx.beginPath();
-                      ctx.moveTo(points[0].x-selectedLayer.x, points[0].y-selectedLayer.y);
-                      for(let i=1;i<points.length;i++) ctx.lineTo(points[i].x-selectedLayer.x, points[i].y-selectedLayer.y);
+                      // Points are in canvas space; shift by layer origin + crop offset
+                      const ox=selectedLayer.x+cropL;
+                      const oy=selectedLayer.y+cropT;
+                      ctx.moveTo(points[0].x-ox, points[0].y-oy);
+                      for(let i=1;i<points.length;i++) ctx.lineTo(points[i].x-ox, points[i].y-oy);
                       ctx.closePath();
                       ctx.fill();
-                      updateLayer(selectedLayer.id,{mask:{enabled:true,data:tmp.toDataURL('image/png')}});
+                      // Apply feathering if set
+                      const feather=lassoFeatherRef.current||0;
+                      if(feather>0){
+                        // Blur the mask then re-threshold for soft edges
+                        ctx.filter=`blur(${feather}px)`;
+                        const blurred=document.createElement('canvas');
+                        blurred.width=mw; blurred.height=mh;
+                        const bctx=blurred.getContext('2d');
+                        bctx.drawImage(tmp,0,0);
+                        ctx.filter='none';
+                        ctx.clearRect(0,0,mw,mh);
+                        ctx.drawImage(blurred,0,0);
+                      }
+                      const maskData=tmp.toDataURL('image/png');
+                      updateLayer(selectedLayer.id,{mask:{enabled:true,inverted:lassoInvertRef.current||false,data:maskData}});
                     }
                     setIsLassoMode(false);
                     lassoPointsRef.current=[];
@@ -4829,6 +4868,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                 }}
                 onClick={(e)=>{
                   if(activeTool==='rimlight') return;
+                  if(activeTool==='lasso') return;
                   if(justSelectedRef.current){justSelectedRef.current=false;return;}
                   if(activeTool==='brush') return;
                   if(activeTool==='zoom'){
@@ -6536,33 +6576,73 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             {activeTool==='lasso'&&(
   <div>
     <span style={css.label}>Lasso Mask</span>
-    <div style={{...css.section,marginTop:0}}>
-      <div style={{fontSize:13,color:T.text,fontWeight:'700',marginBottom:4}}>✂️ Lasso Mask Tool</div>
-      <div style={{fontSize:11,color:T.muted,marginBottom:10,lineHeight:1.6}}>
-        {isLassoMode
-          ? 'Drawing — drag to trace around the area to keep. Release to apply the mask.'
-          : 'Select an image layer, then click Start Lasso to draw a freeform mask.'}
+
+    {isLassoMode&&(
+      <div style={{padding:'8px 12px',background:`${T.accent}18`,border:`1px solid ${T.accent}55`,borderRadius:8,fontSize:12,color:T.accent,fontWeight:'700',textAlign:'center',marginBottom:8,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+        <span style={{width:8,height:8,borderRadius:'50%',background:T.accent,display:'inline-block',animation:'pulse 1s infinite'}}/>
+        Drawing — drag to trace, release to apply
       </div>
-      {isLassoMode&&(
-        <div style={{padding:'6px 10px',background:`${T.accent}18`,border:`1px solid ${T.accent}44`,borderRadius:6,fontSize:11,color:T.accent,fontWeight:'600',textAlign:'center',marginBottom:8}}>
-          ● Drawing active — trace your selection
-        </div>
-      )}
-      {selectedLayer?.type==='image'?(
-        <div>
+    )}
+
+    {selectedLayer?.type==='image'?(
+      <div>
+        <div style={{...css.section,marginTop:0}}>
           <button
             onClick={()=>setIsLassoMode(v=>!v)}
-            style={{width:'100%',padding:10,borderRadius:7,background:isLassoMode?T.accent:T.input,color:isLassoMode?'#fff':T.text,border:`1px solid ${isLassoMode?T.accent:T.border}`,fontSize:12,cursor:'pointer',fontWeight:'700',transition:'all 0.2s'}}>
-            {isLassoMode?'✂️ Cancel Lasso':'✂️ Start Lasso'}
+            style={{width:'100%',padding:11,borderRadius:8,background:isLassoMode?T.accent:T.input,color:isLassoMode?'#fff':T.text,border:`1px solid ${isLassoMode?T.accent:T.border}`,fontSize:13,cursor:'pointer',fontWeight:'700',transition:'all 0.2s',marginBottom:8}}>
+            {isLassoMode?'✕ Cancel':'✂️ Start Lasso'}
           </button>
+          {!isLassoMode&&(
+            <div style={{fontSize:10,color:T.muted,textAlign:'center',lineHeight:1.5}}>
+              Draw around what you want to keep. Everything outside is cut out.
+            </div>
+          )}
         </div>
-      ):(
-        <div style={{...css.section,fontSize:11,color:T.muted,textAlign:'center',padding:16}}>
-          <div style={{fontSize:20,marginBottom:6}}>✂️</div>
-          Click an image on the canvas first
+
+        <div style={css.section}>
+          <div style={{...css.label,marginBottom:6}}>Feather — {lassoFeatherRef.current||0}px</div>
+          <input type="range" min="0" max="40" defaultValue="0"
+            onChange={e=>{ lassoFeatherRef.current=parseInt(e.target.value); e.target.previousSibling&&(e.target.previousSibling.textContent=`Feather — ${e.target.value}px`); }}
+            style={{width:'100%',accentColor:T.accent}}/>
+          <div style={{fontSize:10,color:T.muted,marginTop:4}}>Soft edges blend the cutout naturally</div>
         </div>
-      )}
-    </div>
+
+        <div style={css.section}>
+          <div style={{...css.label,marginBottom:8}}>Options</div>
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.text,cursor:'pointer',marginBottom:10}}>
+            <input type="checkbox" defaultChecked={false}
+              onChange={e=>{ lassoInvertRef.current=e.target.checked; }}
+              style={{accentColor:T.accent,width:14,height:14}}/>
+            Invert selection (cut inside, keep outside)
+          </label>
+        </div>
+
+        {selectedLayer?.mask?.enabled&&selectedLayer?.mask?.data&&(
+          <div style={css.section}>
+            <div style={{...css.label,marginBottom:8}}>Active mask</div>
+            <div style={{display:'flex',gap:6}}>
+              <button onClick={()=>{
+                // Toggle invert on existing mask
+                updateLayer(selectedLayer.id,{mask:{...selectedLayer.mask,inverted:!selectedLayer.mask?.inverted}});
+              }} style={{flex:1,padding:'7px 0',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:11,cursor:'pointer',fontWeight:'600'}}>
+                ↔ Invert
+              </button>
+              <button onClick={()=>{
+                updateLayer(selectedLayer.id,{mask:{enabled:false,data:null,inverted:false}});
+              }} style={{flex:1,padding:'7px 0',borderRadius:6,border:`1px solid ${T.danger}`,background:'transparent',color:T.danger,fontSize:11,cursor:'pointer',fontWeight:'600'}}>
+                × Clear mask
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    ):(
+      <div style={{...css.section,fontSize:11,color:T.muted,textAlign:'center',padding:20}}>
+        <div style={{fontSize:24,marginBottom:8}}>✂️</div>
+        <div style={{fontWeight:600,marginBottom:4,color:T.text}}>Select an image first</div>
+        Click any image layer on the canvas or in the layers panel
+      </div>
+    )}
   </div>
 )}
 
