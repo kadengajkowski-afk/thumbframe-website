@@ -2283,28 +2283,36 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             const cb=(obj.cropBottom||0)*scaleY;
 
             ctx.save();
-            if(obj.mask?.enabled&&obj.mask?.data){
-              const maskImg=new Image();
-              maskImg.crossOrigin='Anonymous';
-              maskImg.onload=()=>{
-                ctx.beginPath();
-                ctx.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);
+            if(obj.mask?.enabled&&obj.mask?.type==='lasso'&&obj.mask?.points?.length>=3){
+              // Apply lasso clip path to export canvas
+              const mpts=obj.mask.points;
+              const cropWe=w-cl-cr, cropHe=h-ct-cb;
+              ctx.beginPath();
+              if(obj.mask.inverted){
+                ctx.rect(x+cl,y+ct,cropWe,cropHe);
+                ctx.moveTo(x+cl+mpts[0].x*scaleX, y+ct+mpts[0].y*scaleY);
+                for(let i=1;i<mpts.length;i++) ctx.lineTo(x+cl+mpts[i].x*scaleX, y+ct+mpts[i].y*scaleY);
+                ctx.closePath();
+                ctx.clip('evenodd');
+              } else {
+                ctx.moveTo(x+cl+mpts[0].x*scaleX, y+ct+mpts[0].y*scaleY);
+                for(let i=1;i<mpts.length;i++) ctx.lineTo(x+cl+mpts[i].x*scaleX, y+ct+mpts[i].y*scaleY);
+                ctx.closePath();
                 ctx.clip();
-                if(obj.flipH||obj.flipV){
-                  ctx.translate(x+w/2,y+h/2);
-                  ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
-                  ctx.translate(-(x+w/2),-(y+h/2));
-                }
-                ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
-                if(obj.effects?.glow?.enabled){
-                  drawGlowImage(ctx,img,x-cl,y-ct,w,h,obj.effects.glow.color||'#ffffff',obj.effects.glow.blur||20);
-                } else {
-                  ctx.drawImage(img,x-cl,y-ct,w,h);
-                }
-                ctx.restore();
-                resolve();
-              };
-              maskImg.src=obj.mask.data;
+              }
+              if(obj.flipH||obj.flipV){
+                ctx.translate(x+w/2,y+h/2);
+                ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
+                ctx.translate(-(x+w/2),-(y+h/2));
+              }
+              ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
+              if(obj.effects?.glow?.enabled){
+                drawGlowImage(ctx,img,x-cl,y-ct,w,h,obj.effects.glow.color||'#ffffff',obj.effects.glow.blur||20);
+              } else {
+                ctx.drawImage(img,x-cl,y-ct,w,h);
+              }
+              ctx.restore();
+              resolve();
             } else {
               ctx.save();
               if(obj.rotation){
@@ -3967,8 +3975,19 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     if(obj.type==='image'){
       const cropW=obj.width-(obj.cropLeft||0)-(obj.cropRight||0);
       const cropH=obj.height-(obj.cropTop||0)-(obj.cropBottom||0);
-      const hasMask=obj.mask?.enabled&&obj.mask?.data;
+      const hasMask=obj.mask?.enabled&&obj.mask?.points?.length>=3;
       const maskInverted=hasMask&&obj.mask?.inverted;
+      // Build clip-path polygon from stored lasso points (relative to the cropped div)
+      let clipPathValue='none';
+      if(hasMask){
+        const pts=obj.mask.points.map(p=>`${p.x}px ${p.y}px`).join(',');
+        if(maskInverted){
+          // evenodd outer rect + inner polygon = cuts the inside, keeps outside
+          clipPathValue=`polygon(evenodd, 0px 0px, ${cropW}px 0px, ${cropW}px ${cropH}px, 0px ${cropH}px, ${pts})`;
+        } else {
+          clipPathValue=`polygon(${pts})`;
+        }
+      }
       const imageSrc = getSafeImageSrc(obj);
       return(
         <div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)}
@@ -3976,14 +3995,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
             position:'absolute',left:obj.x,top:obj.y,zIndex,
             opacity:opacityVal,cursor,...selStyle,...blendStyle,
             overflow:'hidden',width:cropW,height:cropH,...effectsStyle,
-            WebkitMaskImage: hasMask?(maskInverted?`linear-gradient(#fff,#fff), url(${obj.mask.data})`:`url(${obj.mask.data})`):'none',
-            WebkitMaskSize: hasMask?`${cropW}px ${cropH}px`:'none',
-            WebkitMaskRepeat:'no-repeat',
-            WebkitMaskComposite: maskInverted?'xor':'source-over',
-            maskImage: hasMask?(maskInverted?`linear-gradient(#fff,#fff), url(${obj.mask.data})`:`url(${obj.mask.data})`):'none',
-            maskSize: hasMask?`${cropW}px ${cropH}px`:'none',
-            maskRepeat:'no-repeat',
-            maskComposite: maskInverted?'exclude':'add',
+            clipPath: clipPathValue,
+            WebkitClipPath: clipPathValue,
           }}>
           {imageSrc ? (
             <img src={imageSrc} alt="" style={{
@@ -4804,43 +4817,35 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
                     lassoDrawingRef.current=false;
                     const points=lassoPointsRef.current;
                     if(points.length>=3 && selectedLayer && selectedLayer.type==='image'){
-                      // Crop-aware dimensions — the mask is applied to the cropped div
                       const cropL=selectedLayer.cropLeft||0;
                       const cropT=selectedLayer.cropTop||0;
                       const cropW=selectedLayer.width-cropL-(selectedLayer.cropRight||0);
                       const cropH=selectedLayer.height-cropT-(selectedLayer.cropBottom||0);
-                      const mw=Math.max(1,Math.round(cropW));
-                      const mh=Math.max(1,Math.round(cropH));
-                      const tmp=document.createElement('canvas');
-                      tmp.width=mw; tmp.height=mh;
-                      const ctx=tmp.getContext('2d');
-                      // Fill black (hidden), then white polygon (visible)
-                      ctx.fillStyle='#000';
-                      ctx.fillRect(0,0,mw,mh);
-                      ctx.fillStyle='#fff';
-                      ctx.beginPath();
-                      // Points are in canvas space; shift by layer origin + crop offset
+                      // Convert canvas-space points to coordinates relative to the image div
                       const ox=selectedLayer.x+cropL;
                       const oy=selectedLayer.y+cropT;
-                      ctx.moveTo(points[0].x-ox, points[0].y-oy);
-                      for(let i=1;i<points.length;i++) ctx.lineTo(points[i].x-ox, points[i].y-oy);
-                      ctx.closePath();
-                      ctx.fill();
-                      // Apply feathering if set
-                      const feather=lassoFeatherRef.current||0;
-                      if(feather>0){
-                        // Blur the mask then re-threshold for soft edges
-                        ctx.filter=`blur(${feather}px)`;
-                        const blurred=document.createElement('canvas');
-                        blurred.width=mw; blurred.height=mh;
-                        const bctx=blurred.getContext('2d');
-                        bctx.drawImage(tmp,0,0);
-                        ctx.filter='none';
-                        ctx.clearRect(0,0,mw,mh);
-                        ctx.drawImage(blurred,0,0);
+                      // Simplify path: keep 1 point per 3px of movement to reduce polygon complexity
+                      const simplified=[];
+                      let lastX=null,lastY=null;
+                      for(const p of points){
+                        const rx=p.x-ox, ry=p.y-oy;
+                        if(lastX===null||Math.hypot(rx-lastX,ry-lastY)>3){
+                          simplified.push({x:Math.round(rx*10)/10, y:Math.round(ry*10)/10});
+                          lastX=rx; lastY=ry;
+                        }
                       }
-                      const maskData=tmp.toDataURL('image/png');
-                      updateLayer(selectedLayer.id,{mask:{enabled:true,inverted:lassoInvertRef.current||false,data:maskData}});
+                      if(simplified.length>=3){
+                        updateLayer(selectedLayer.id,{
+                          mask:{
+                            enabled:true,
+                            type:'lasso',
+                            inverted:lassoInvertRef.current||false,
+                            points:simplified,
+                            w:Math.round(cropW),
+                            h:Math.round(cropH),
+                          }
+                        });
+                      }
                     }
                     setIsLassoMode(false);
                     lassoPointsRef.current=[];
@@ -6617,20 +6622,19 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           </label>
         </div>
 
-        {selectedLayer?.mask?.enabled&&selectedLayer?.mask?.data&&(
+        {selectedLayer?.mask?.enabled&&selectedLayer?.mask?.points?.length>=3&&(
           <div style={css.section}>
             <div style={{...css.label,marginBottom:8}}>Active mask</div>
             <div style={{display:'flex',gap:6}}>
               <button onClick={()=>{
-                // Toggle invert on existing mask
                 updateLayer(selectedLayer.id,{mask:{...selectedLayer.mask,inverted:!selectedLayer.mask?.inverted}});
               }} style={{flex:1,padding:'7px 0',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:11,cursor:'pointer',fontWeight:'600'}}>
                 ↔ Invert
               </button>
               <button onClick={()=>{
-                updateLayer(selectedLayer.id,{mask:{enabled:false,data:null,inverted:false}});
+                updateLayer(selectedLayer.id,{mask:{enabled:false,type:null,points:null,inverted:false}});
               }} style={{flex:1,padding:'7px 0',borderRadius:6,border:`1px solid ${T.danger}`,background:'transparent',color:T.danger,fontSize:11,cursor:'pointer',fontWeight:'600'}}>
-                × Clear mask
+                × Clear
               </button>
             </div>
           </div>
