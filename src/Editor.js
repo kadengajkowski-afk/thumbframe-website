@@ -961,6 +961,40 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     layersRef.current = layers;
   },[layers]);
 
+  // ── Sprint 3: Layers Panel sync plan ──────────────────────────────────────
+  useEffect(()=>{
+    console.log(
+`[LAYERS PANEL SYNC PLAN]
+Architecture: Pure React state — NO Fabric.js required.
+
+PHASE 1 — State Source of Truth:
+  • layers[] is the single source of truth (React useState)
+  • layersRef.current mirrors it for non-reactive contexts
+  • Every mutation (add/remove/move/update) goes through setLayers()
+  • No event listeners needed — React re-renders propagate all changes automatically
+
+PHASE 2 — Dedicated Right Sidebar:
+  • New 3rd flex column (w:210) added to the right of the tool-options panel
+  • Layers rendered via [...layers].reverse() — top canvas layer appears first (Photoshop order)
+
+PHASE 3 — Per-Layer Controls:
+  • Eye (●/○)    → updateLayer(id, { hidden: !hidden })
+  • Lock (🔒/🔓) → updateLayer(id, { locked: !locked })
+  • ▲ Bring fwd  → moveLayerUp(id)   — swaps layer[idx] with layer[idx+1]
+  • ▼ Send back  → moveLayerDown(id) — swaps layer[idx] with layer[idx-1]
+  • 🗑 Delete    → deleteLayer(id)   — removes from layers[], pushes undo history
+
+PHASE 4 — Selection Hook:
+  • Click row → setSelectedId(id) → canvas re-renders with selection handles
+  • Background layer click also triggers setActiveTool('background')
+
+Guards:
+  • Background layer: lock toggle + delete button are hidden
+  • ▲ disabled at top of stack; ▼ disabled at bottom / for background layer`
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]); // run once on mount
+
   const saveProjectRef = useRef(null);
   const debouncedSaveRef = useRef(null);
   const triggerAutoSave = useCallback(() => {
@@ -6797,6 +6831,131 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
           </div>
 
         </div>
+
+        {/* ── Sprint 3: Dedicated Layers Panel ──────────────────────────── */}
+        {!isMobile&&(
+          <div style={{
+            width:210,
+            background:'#111827',
+            borderLeft:`1px solid ${T.border}`,
+            display:'flex',flexDirection:'column',
+            flexShrink:0,
+            userSelect:'none',
+          }}>
+            {/* Header */}
+            <div style={{
+              display:'flex',alignItems:'center',justifyContent:'space-between',
+              padding:'9px 10px 7px',
+              borderBottom:'1px solid #1f2937',
+              flexShrink:0,
+            }}>
+              <div style={{display:'flex',alignItems:'center',gap:7}}>
+                <span style={{fontSize:11,color:'#f9fafb',fontWeight:'700',letterSpacing:'0.6px',textTransform:'uppercase'}}>Layers</span>
+                <span style={{fontSize:10,color:'#9ca3af',background:'#1f2937',padding:'1px 6px',borderRadius:10,border:'1px solid #374151'}}>{layers.length}</span>
+              </div>
+              <div style={{display:'flex',gap:2}}>
+                <button title="Delete selected layer" onClick={()=>selectedId&&deleteLayer(selectedId)}
+                  style={{padding:'2px 6px',borderRadius:4,border:'1px solid #374151',background:'transparent',color:selectedId?'#f87171':'#374151',fontSize:11,cursor:'pointer'}}>✕</button>
+              </div>
+            </div>
+
+            {/* Layer list */}
+            <div style={{flex:1,overflowY:'auto',padding:'4px 6px 8px'}}>
+              {[...layers].reverse().map((layer,idx)=>{
+                const realIdx=layers.length-1-idx;
+                const isSelected=selectedId===layer.id;
+                const isDragOver2=layerDragOver===layer.id;
+                const isBeingDragged2=layerDragId===layer.id;
+                const isHidden=layer.hidden;
+                const isLocked=layer.locked;
+                const atTop=realIdx===layers.length-1;
+                const atBottom=layer.type==='background'||realIdx===0;
+                const hasEffects=layer.effects&&(layer.effects.layerBlur>0||layer.effects.shadow?.enabled||layer.effects.glow?.enabled||layer.effects.outline?.enabled);
+                return(
+                  <div key={layer.id}
+                    draggable
+                    onDragStart={e=>onLayerDragStart(e,layer.id)}
+                    onDragOver={e=>onLayerDragOver(e,layer.id)}
+                    onDrop={e=>onLayerDrop(e,layer.id)}
+                    onDragEnd={onLayerDragEnd}
+                    onClick={()=>{setSelectedId(layer.id);if(layer.type==='background')setActiveTool('background');}}
+                    style={{
+                      display:'flex',alignItems:'center',gap:4,
+                      padding:'5px 5px',borderRadius:6,marginBottom:1,
+                      cursor:'pointer',
+                      background:isSelected?'rgba(249,115,22,0.12)':isDragOver2?'rgba(249,115,22,0.06)':'transparent',
+                      border:`1px solid ${isSelected?'#f97316':isDragOver2?'rgba(249,115,22,0.35)':'transparent'}`,
+                      opacity:isBeingDragged2?0.3:1,
+                      transition:'all 0.08s',
+                    }}>
+                    {/* Drag grip */}
+                    <div style={{color:'#374151',fontSize:9,cursor:'grab',flexShrink:0,opacity:0.6}}>⠿</div>
+                    {/* Type icon */}
+                    <div style={{
+                      width:17,height:17,borderRadius:3,flexShrink:0,
+                      background:isSelected?'rgba(249,115,22,0.18)':'#1f2937',
+                      display:'flex',alignItems:'center',justifyContent:'center',
+                      fontSize:8,fontWeight:'700',fontFamily:'monospace',
+                      color:isSelected?'#f97316':'#6b7280',
+                      border:'1px solid #374151',
+                    }}>{getLayerIcon(layer)}</div>
+                    {/* Name + badges */}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{
+                        fontSize:11,
+                        color:isHidden?'#374151':(isSelected?'#f9fafb':'#d1d5db'),
+                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                        fontWeight:isSelected?'600':'400',
+                        textDecoration:isHidden?'line-through':'none',
+                      }}>{getLayerName(layer)}</div>
+                      {(hasEffects||layer.mask?.enabled)&&(
+                        <div style={{display:'flex',gap:2,marginTop:1}}>
+                          {layer.mask?.enabled&&<span style={{fontSize:7,color:'#60a5fa',background:'rgba(96,165,250,0.1)',padding:'0 3px',borderRadius:2}}>mask</span>}
+                          {hasEffects&&<span style={{fontSize:7,color:'#f59e0b',background:'rgba(245,158,11,0.1)',padding:'0 3px',borderRadius:2}}>fx</span>}
+                        </div>
+                      )}
+                    </div>
+                    {/* Controls */}
+                    <div style={{display:'flex',gap:0,flexShrink:0}}>
+                      {/* Eye — visibility */}
+                      <button title={isHidden?'Show':'Hide'} onClick={e=>{e.stopPropagation();updateLayer(layer.id,{hidden:!isHidden});}}
+                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:isHidden?'#4b5563':'#9ca3af',fontSize:12,lineHeight:1}}>
+                        {isHidden?'⊘':'⊙'}
+                      </button>
+                      {/* Lock */}
+                      {layer.type!=='background'&&(
+                        <button title={isLocked?'Unlock':'Lock'} onClick={e=>{e.stopPropagation();updateLayer(layer.id,{locked:!isLocked});}}
+                          style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:isLocked?'#f59e0b':'#4b5563',fontSize:11,lineHeight:1}}>
+                          {isLocked?'⊠':'⊡'}
+                        </button>
+                      )}
+                      {/* Bring forward */}
+                      <button title="Bring forward" onClick={e=>{e.stopPropagation();moveLayerUp(layer.id);}} disabled={atTop}
+                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:atTop?'default':'pointer',color:atTop?'#1f2937':'#6b7280',fontSize:10,lineHeight:1}}>▲</button>
+                      {/* Send backward */}
+                      <button title="Send backward" onClick={e=>{e.stopPropagation();moveLayerDown(layer.id);}} disabled={atBottom}
+                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:atBottom?'default':'pointer',color:atBottom?'#1f2937':'#6b7280',fontSize:10,lineHeight:1}}>▼</button>
+                      {/* Delete */}
+                      {layer.type!=='background'&&(
+                        <button title="Delete layer" onClick={e=>{e.stopPropagation();deleteLayer(layer.id);}}
+                          style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:'#374151',fontSize:11,lineHeight:1}}
+                          onMouseEnter={e=>e.currentTarget.style.color='#f87171'}
+                          onMouseLeave={e=>e.currentTarget.style.color='#374151'}>✕</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding:'5px 10px',borderTop:'1px solid #1f2937',
+              fontSize:9,color:'#374151',textAlign:'center',flexShrink:0,
+            }}>Drag rows to reorder</div>
+          </div>
+        )}
+
       </div>
 
       {/* Mobile bottom toolbar */}
