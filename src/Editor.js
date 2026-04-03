@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
+import MobileEditor from './MobileEditor';
 import MemesPanel from './Memes';
 import BrushTool, { BrushOverlay } from './Brush';
 import BrandKitSetupModal from './BrandKit';
@@ -777,6 +778,16 @@ function debounce(fn, wait){
   return debounced;
 }
 
+// ── Feature J: Niche profiles (frontend display config) ───────────────────────
+const NICHE_CONFIG = {
+  gaming:    { label:'Gaming',    emoji:'🎮', desc:'Gameplay, reactions & esports',      accentColor:'#7c3aed', gradFrom:'#4c1d95', gradTo:'#7c3aed' },
+  tech:      { label:'Tech',      emoji:'💻', desc:'Reviews, tutorials & unboxings',     accentColor:'#0ea5e9', gradFrom:'#0c4a6e', gradTo:'#0ea5e9' },
+  vlog:      { label:'Vlog',      emoji:'🎥', desc:'Lifestyle, travel & daily life',     accentColor:'#ec4899', gradFrom:'#831843', gradTo:'#ec4899' },
+  cooking:   { label:'Cooking',   emoji:'🍳', desc:'Recipes, restaurants & food reviews',accentColor:'#f59e0b', gradFrom:'#78350f', gradTo:'#f59e0b' },
+  fitness:   { label:'Fitness',   emoji:'💪', desc:'Workouts, nutrition & transformation',accentColor:'#22c55e', gradFrom:'#14532d', gradTo:'#22c55e' },
+  education: { label:'Education', emoji:'📚', desc:'Tutorials, explainers & how-tos',   accentColor:'#f97316', gradFrom:'#7c2d12', gradTo:'#f97316' },
+};
+
 export default function Editor({onExit, user, token, apiUrl, brandKit: initialBrandKit}){
   const resolvedApiUrl = (apiUrl || process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
   const [layers,setLayersRaw]              = useState([]);
@@ -902,14 +913,78 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [ctrScore,setCtrScore]     = useState(null);
   const [ctrBreakdown,setCtrBreakdown] = useState(null);
   const [ctrLoading,setCtrLoading] = useState(false);
+  const [ctrV2,         setCtrV2]          = useState(null);
+  const [ctrTitle,      setCtrTitle]       = useState('');
+  const [ctrNiche,      setCtrNiche]       = useState('Gaming');
+  const [ctrChecked,    setCtrChecked]     = useState(new Set());
+  const [ctrExpandedCat,setCtrExpandedCat] = useState(null);
+  const [ctrThumbUrl,   setCtrThumbUrl]    = useState(null);
+  const [compResult,setCompResult]           = useState(null);
+  const [compLoading,setCompLoading]         = useState(false);
+  const [compOverlay,setCompOverlay]         = useState(true);
+  const [compChecked,setCompChecked]         = useState(new Set());
+  const [compVideoTitle,setCompVideoTitle]   = useState('');
+  const [aiTextTitle,  setAiTextTitle]       = useState('');
+  const [aiTextNiche,  setAiTextNiche]       = useState('Gaming');
+  const [aiTextResults,setAiTextResults]     = useState([]);
+  const [aiTextLoading,setAiTextLoading]     = useState(false);
+  const [styleMode,     setStyleMode]         = useState('preset');
+  const [stylePreset,   setStylePreset]       = useState('mrbeast');
+  const [styleUrl,      setStyleUrl]          = useState('');
+  const [styleResult,   setStyleResult]       = useState(null);
+  const [styleIntensity,setStyleIntensity]    = useState(75);
+  const [styleBusy,     setStyleBusy]         = useState(false);
+  const [bgGenNiche,    setBgGenNiche]         = useState('gaming');
+  const [bgGenCustom,   setBgGenCustom]        = useState('');
+  const [bgGenPreview,  setBgGenPreview]       = useState(null);
+  const [bgGenBusy,     setBgGenBusy]          = useState(false);
+  const [bgGenPrompt,   setBgGenPrompt]        = useState('');
+  const [cgPreset,      setCgPreset]           = useState('default');
+  const [cgIntensity,   setCgIntensity]        = useState(80);
+  const [cgBusy,        setCgBusy]             = useState(false);
+  const [cgOriginalSrc, setCgOriginalSrc]      = useState(null);
+  const [cgGradedSrc,   setCgGradedSrc]        = useState(null);
+  const [cgLayerId,     setCgLayerId]          = useState(null);
   const [abVariants,setAbVariants]   = useState([]);
   const [abLoading,setAbLoading]     = useState(false);
   const [abSelected,setAbSelected]   = useState(null);
+  const [aiVariants,setAiVariants]   = useState([]);   // Feature I: [{base64,label,description}|null] ×6
+  const [aiVarBusy, setAiVarBusy]   = useState(false);
+  const [aiVarSelected,setAiVarSelected] = useState(null);
+  const [aiVarTitle, setAiVarTitle]  = useState('');
+  const [aiVarNiche, setAiVarNiche]  = useState('gaming');
+  // Feature J: Niche profiles
+  const [userNiche,     setUserNicheState] = useState(()=>localStorage.getItem('tf_niche')||null);
+  const [nicheOnboarding,setNicheOnboarding] = useState(false);
+  const [nicheHovered,  setNicheHovered]  = useState(null);
+  const [nicheSaving,   setNicheSaving]   = useState(false);
   const [resizeExporting,setResizeExporting] = useState(false);
   const [ytConnected,setYtConnected]       = useState(()=>{
     // Check if we have a stored YouTube token from a previous OAuth flow
     return !!localStorage.getItem('yt_access_token');
   });
+  // Feature K: YouTube History Intelligence
+  const [ytHistConnected, setYtHistConnected] = useState(()=>!!localStorage.getItem('tf_yt_connected'));
+  const [ytHistChannel,   setYtHistChannel]   = useState(()=>{try{return JSON.parse(localStorage.getItem('tf_yt_channel')||'null');}catch{return null;}});
+  const [ytHistVideos,    setYtHistVideos]    = useState([]);
+  const [ytHistInsights,  setYtHistInsights]  = useState(()=>{try{return JSON.parse(localStorage.getItem('tf_yt_insights')||'null');}catch{return null;}});
+  const [ytHistBusy,      setYtHistBusy]      = useState(false);
+  const [ytHistProgress,  setYtHistProgress]  = useState(0);
+  const [ytHistError,     setYtHistError]     = useState('');
+  // Feature L: Team Collaboration & Version History
+  const [teamData,        setTeamData]        = useState(null);
+  const [teamBusy,        setTeamBusy]        = useState(false);
+  const [teamError,       setTeamError]       = useState('');
+  const [teamInviteEmail, setTeamInviteEmail] = useState('');
+  const [teamCreateName,  setTeamCreateName]  = useState('');
+  const [comments,        setComments]        = useState([]);
+  const [commentMode,     setCommentMode]     = useState(false); // clicking canvas drops a pin
+  const [activeCommentId, setActiveCommentId] = useState(null); // open popover
+  const [replyDraft,      setReplyDraft]      = useState('');
+  const [versionHistory,  setVersionHistory]  = useState([]);
+  const [versionBusy,     setVersionBusy]     = useState(false);
+  const [versionLabel,    setVersionLabel]    = useState('');
+  const [approvalStatus,  setApprovalStatus]  = useState('draft'); // draft | review | approved
   const [ytTests,setYtTests]               = useState([]);
   const [ytVideoUrl,setYtVideoUrl]         = useState('');
   const [ytTestDuration,setYtTestDuration] = useState('24h');
@@ -1349,6 +1424,74 @@ PHASE 4 — Toolbar button:
   },[]);
 
   useEffect(()=>{zoomRef.current=zoom;},[zoom]);
+
+  // Feature J: load niche from backend on mount; show onboarding if not set
+  useEffect(()=>{
+    if(!token) return;
+    fetch(`${resolvedApiUrl}/api/get-niche`,{
+      headers:{Authorization:`Bearer ${token}`}
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.success&&data.niche){
+        setUserNicheState(data.niche);
+        localStorage.setItem('tf_niche',data.niche);
+      } else if(!localStorage.getItem('tf_niche')){
+        setNicheOnboarding(true);
+      }
+    })
+    .catch(()=>{ if(!localStorage.getItem('tf_niche')) setNicheOnboarding(true); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[token]);
+
+  // Feature K: detect ?yt_connected=1 redirect back from OAuth
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    if(params.get('yt_connected')==='1'&&token){
+      // Remove the param from URL without reload
+      const url=new URL(window.location.href);
+      url.searchParams.delete('yt_connected');
+      window.history.replaceState(null,'',url.toString());
+
+      localStorage.setItem('tf_yt_connected','1');
+      setYtHistConnected(true);
+      // Immediately fetch channel info so we can show name + avatar
+      fetch(`${resolvedApiUrl}/api/youtube/thumbnails`,{
+        headers:{Authorization:`Bearer ${token}`}
+      })
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.success){
+          const ch={title:data.channelTitle,avatar:data.channelAvatar};
+          setYtHistChannel(ch);
+          setYtHistVideos(data.videos||[]);
+          localStorage.setItem('tf_yt_channel',JSON.stringify(ch));
+        }
+      })
+      .catch(()=>{});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[token]);
+
+  // Feature L: handle ?team_invite= redirect
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const inviteToken=params.get('team_invite');
+    const teamId=params.get('team');
+    if(inviteToken&&teamId&&token){
+      const url=new URL(window.location.href);
+      url.searchParams.delete('team_invite');
+      url.searchParams.delete('team');
+      window.history.replaceState(null,'',url.toString());
+      fetch(`${resolvedApiUrl}/api/team/join?token=${inviteToken}&teamId=${teamId}`,{
+        headers:{Authorization:`Bearer ${token}`}
+      })
+      .then(r=>r.json())
+      .then(d=>{ if(d.success) setTeamData(d.team); })
+      .catch(()=>{});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[token]);
 
   useEffect(()=>{
     let cancelled=false;
@@ -2897,6 +3040,310 @@ PHASE 4 — Toolbar button:
     triggerAutoSave();
   }
 
+  // ── Feature J: Niche setter ───────────────────────────────────────────────
+  async function setNiche(niche){
+    setNicheSaving(true);
+    try{
+      const res=await fetch(`${resolvedApiUrl}/api/set-niche`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        body:JSON.stringify({niche}),
+      });
+      const data=await res.json();
+      if(data.success){
+        setUserNicheState(niche);
+        localStorage.setItem('tf_niche',niche);
+        setNicheOnboarding(false);
+      }
+    } catch(e){ /* niche set failed, leave modal open */ }
+    setNicheSaving(false);
+  }
+
+  // ── Feature K: YouTube History Intelligence ──────────────────────────────
+  async function connectYouTube(){
+    try{
+      const res=await fetch(`${resolvedApiUrl}/api/youtube/auth`,{
+        headers:{Authorization:`Bearer ${token}`}
+      });
+      const data=await res.json();
+      if(data.url) window.location.href=data.url;
+    }catch(e){
+      setYtHistError('Could not initiate YouTube connect. Check your connection.');
+    }
+  }
+
+  async function fetchAndAnalyzeYouTubeHistory(){
+    setYtHistBusy(true);
+    setYtHistError('');
+    setYtHistProgress(10);
+
+    try{
+      // Step 1: fetch thumbnails + stats
+      const fetchRes=await fetch(`${resolvedApiUrl}/api/youtube/thumbnails`,{
+        headers:{Authorization:`Bearer ${token}`}
+      });
+      const fetchData=await fetchRes.json();
+      if(!fetchData.success) throw new Error(fetchData.error||'Fetch failed');
+
+      const ch={title:fetchData.channelTitle,avatar:fetchData.channelAvatar};
+      setYtHistChannel(ch);
+      localStorage.setItem('tf_yt_channel',JSON.stringify(ch));
+      setYtHistVideos(fetchData.videos||[]);
+      setYtHistProgress(55);
+
+      // Step 2: analyze
+      const analyzeRes=await fetch(`${resolvedApiUrl}/api/youtube/analyze`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        body:JSON.stringify({videos:fetchData.videos}),
+      });
+      setYtHistProgress(90);
+      const analyzeData=await analyzeRes.json();
+      if(!analyzeData.success) throw new Error(analyzeData.error||'Analyze failed');
+
+      setYtHistInsights(analyzeData.insights||[]);
+      localStorage.setItem('tf_yt_insights',JSON.stringify(analyzeData.insights||[]));
+      setYtHistProgress(100);
+
+      // Auto-apply the highest-impact colorGrade default if insight suggests one
+      const applyInsight=analyzeData.insights?.find(i=>i.applyDefault?.colorGrade);
+      if(applyInsight) setCgPreset(applyInsight.applyDefault.colorGrade);
+
+    }catch(err){
+      setYtHistError(err.message||'Analysis failed');
+    }
+    setYtHistBusy(false);
+  }
+
+  // ── Feature L: Team Collaboration & Version History ────────────────────���──
+
+  // Load team on mount
+  useEffect(()=>{
+    if(!token) return;
+    fetch(`${resolvedApiUrl}/api/team/me`,{headers:{Authorization:`Bearer ${token}`}})
+      .then(r=>r.json())
+      .then(d=>{ if(d.success) setTeamData(d.team); })
+      .catch(()=>{});
+    // Load comments for current project if we have designName as projectId
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[token]);
+
+  // Load comments whenever the active project changes
+  useEffect(()=>{
+    if(!token||!designName) return;
+    fetch(`${resolvedApiUrl}/api/comments/${encodeURIComponent(designName)}`,{headers:{Authorization:`Bearer ${token}`}})
+      .then(r=>r.json())
+      .then(d=>{ if(d.success) setComments(d.comments||[]); })
+      .catch(()=>{});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[token,designName]);
+
+  // Load version history whenever versions panel opens
+  function loadVersionHistory(){
+    if(!token||!designName) return;
+    setVersionBusy(true);
+    fetch(`${resolvedApiUrl}/api/projects/${encodeURIComponent(designName)}/versions`,{headers:{Authorization:`Bearer ${token}`}})
+      .then(r=>r.json())
+      .then(d=>{ if(d.success) setVersionHistory(d.versions||[]); })
+      .catch(()=>{})
+      .finally(()=>setVersionBusy(false));
+  }
+
+  async function createTeam(){
+    if(!teamCreateName.trim()) return;
+    setTeamBusy(true); setTeamError('');
+    try{
+      const res=await fetch(`${resolvedApiUrl}/api/team/create`,{
+        method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        body:JSON.stringify({name:teamCreateName.trim()}),
+      });
+      const d=await res.json();
+      if(d.success){ setTeamData(d.team); setTeamCreateName(''); }
+      else setTeamError(d.error||'Create failed');
+    }catch(e){ setTeamError('Network error'); }
+    setTeamBusy(false);
+  }
+
+  async function inviteToTeam(){
+    if(!teamInviteEmail.trim()||!teamData?.teamId) return;
+    setTeamBusy(true); setTeamError('');
+    try{
+      const res=await fetch(`${resolvedApiUrl}/api/team/invite`,{
+        method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        body:JSON.stringify({teamId:teamData.teamId, inviteEmail:teamInviteEmail.trim()}),
+      });
+      const d=await res.json();
+      if(d.success){ setTeamInviteEmail(''); setTeamError('Invite sent!'); }
+      else setTeamError(d.error||'Invite failed');
+    }catch(e){ setTeamError('Network error'); }
+    setTeamBusy(false);
+  }
+
+  async function addComment(xPct, yPct, text){
+    if(!text.trim()||!designName) return;
+    const res=await fetch(`${resolvedApiUrl}/api/comments/add`,{
+      method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+      body:JSON.stringify({projectId:designName, x:xPct, y:yPct, text:text.trim()}),
+    });
+    const d=await res.json();
+    if(d.success) setComments(prev=>[...prev, d.comment]);
+  }
+
+  async function resolveComment(commentId){
+    const res=await fetch(`${resolvedApiUrl}/api/comments/${commentId}/resolve`,{
+      method:'PATCH', headers:{Authorization:`Bearer ${token}`},
+    });
+    const d=await res.json();
+    if(d.success) setComments(prev=>prev.map(c=>c.id===commentId?d.comment:c));
+  }
+
+  async function replyToComment(commentId, text){
+    if(!text.trim()) return;
+    const res=await fetch(`${resolvedApiUrl}/api/comments/${commentId}/reply`,{
+      method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+      body:JSON.stringify({text}),
+    });
+    const d=await res.json();
+    if(d.success){
+      setComments(prev=>prev.map(c=>c.id===commentId?{...c,replies:[...c.replies,d.reply]}:c));
+      setReplyDraft('');
+    }
+  }
+
+  async function saveVersion(){
+    if(!designName) return;
+    setVersionBusy(true);
+    // Flatten canvas to base64
+    const flat=document.createElement('canvas');
+    flat.width=p.preview.w; flat.height=p.preview.h;
+    await renderLayersToCanvas(flat,layers);
+    const canvasData=flat.toDataURL('image/jpeg',0.7);
+    const res=await fetch(`${resolvedApiUrl}/api/projects/version`,{
+      method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+      body:JSON.stringify({projectId:designName, label:versionLabel||undefined, canvasData}),
+    });
+    const d=await res.json();
+    if(d.success){
+      setVersionLabel('');
+      loadVersionHistory();
+    }
+    setVersionBusy(false);
+  }
+
+  async function restoreVersion(versionId){
+    if(!window.confirm('Restore this version? Current canvas will be replaced.')) return;
+    const res=await fetch(`${resolvedApiUrl}/api/projects/${encodeURIComponent(designName)}/versions/${versionId}`,{
+      headers:{Authorization:`Bearer ${token}`},
+    });
+    const d=await res.json();
+    if(d.success&&d.version?.canvasData){
+      // Replace canvas with single image layer from the snapshot
+      const newLayers=[{id:`restore_${Date.now()}`,type:'image',src:d.version.canvasData,x:0,y:0,width:p.preview.w,height:p.preview.h,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,opacity:100}];
+      setLayers(newLayers); pushHistory(newLayers);
+    }
+  }
+
+  async function updateApprovalStatus(nextStatus){
+    setApprovalStatus(nextStatus);
+    if(!designName) return;
+    await fetch(`${resolvedApiUrl}/api/projects/${encodeURIComponent(designName)}/status`,{
+      method:'PATCH', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+      body:JSON.stringify({status:nextStatus}),
+    }).catch(()=>{});
+  }
+
+  // ── Feature I: AI Variant Generator ──────────────────────────────────────
+  const AI_VARIANT_NICHES=['gaming','tech','fitness','cooking','finance','education'];
+
+  async function generateAiVariants(){
+    if(aiVarBusy) return;
+    setAiVarBusy(true);
+    setAiVarSelected(null);
+
+    // Render current canvas to flat JPEG
+    const flat=document.createElement('canvas');
+    flat.width=p.preview.w; flat.height=p.preview.h;
+    await renderLayersToCanvas(flat,layers);
+    const currentDataUrl=flat.toDataURL('image/jpeg',0.88);
+
+    // Seed grid: original in slot 0, 5 null placeholders for variants
+    setAiVariants([
+      {base64:currentDataUrl, label:'Original', description:'Your current design — the baseline'},
+      null, null, null, null, null,
+    ]);
+
+    const makeVariant=async(slotIdx, variantType)=>{
+      try{
+        const res=await fetch(`${resolvedApiUrl}/api/generate-variants`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+          body:JSON.stringify({image:currentDataUrl, title:aiVarTitle, niche:aiVarNiche, variantType}),
+        });
+        const data=await res.json();
+        if(!data.success) throw new Error(data.error||'Generation failed');
+        setAiVariants(prev=>{const n=[...prev];n[slotIdx]=data.variant;return n;});
+      }catch(err){
+        console.error(`[AI_VARIANTS] type=${variantType}`,err.message);
+        setAiVariants(prev=>{
+          const n=[...prev];
+          n[slotIdx]={base64:null,label:`Variant ${variantType}`,description:'Generation failed — try again',error:true};
+          return n;
+        });
+      }
+    };
+
+    // All 5 in parallel → cards populate as each resolves
+    await Promise.all([
+      makeVariant(1,1), makeVariant(2,2), makeVariant(3,3),
+      makeVariant(4,4), makeVariant(5,5),
+    ]);
+    setAiVarBusy(false);
+    setCmdLog('Variants ready — pick your winner');
+  }
+
+  function selectAiVariant(idx){
+    if(!aiVariants[idx]?.base64) return;
+    if(!window.confirm(`Apply "${aiVariants[idx].label}" as your active canvas? This replaces all current layers.`)) return;
+    const id=`aivar_${Date.now()}`;
+    const newLayers=[{
+      id, type:'image', src:aiVariants[idx].base64,
+      x:0, y:0, width:p.preview.w, height:p.preview.h,
+      opacity:100, hidden:false, locked:false, blendMode:'normal',
+      flipH:false, flipV:false, rotation:0,
+      cropTop:0, cropBottom:0, cropLeft:0, cropRight:0,
+      imgBrightness:100, imgContrast:100, imgSaturate:100, imgBlur:0,
+      effects:{shadow:{enabled:false},glow:{enabled:false},border:{enabled:false},overlay:{enabled:false},noise:{enabled:false}},
+    }];
+    setLayers(newLayers);
+    pushHistory(newLayers);
+    setSelectedId(null);
+    setAiVarSelected(idx);
+    setCmdLog(`Applied: ${aiVariants[idx].label}`);
+    setActiveTool('select');
+    triggerAutoSave();
+  }
+
+  async function downloadAiVariantsZip(){
+    const ready=aiVariants.filter(v=>v?.base64);
+    if(ready.length===0) return;
+    setAiVarBusy(true);
+    try{
+      const zip=new JSZip();
+      ready.forEach(v=>{
+        const b64=v.base64.split(',')[1];
+        const safe=v.label.replace(/[^a-zA-Z0-9-_ ]/g,'').trim();
+        zip.file(`ThumbFrame-${safe}.jpg`,b64,{base64:true});
+      });
+      const blob=await zip.generateAsync({type:'blob'});
+      saveAs(blob,'ThumbFrame-AI-Variants.zip');
+      setCmdLog(`Downloaded ${ready.length} variants as ZIP`);
+    }catch(err){
+      console.error('[AI_VARIANTS ZIP]',err);
+    }finally{
+      setAiVarBusy(false);
+    }
+  }
+
   // ── A/B Variant ZIP Export ────────────────────────────────────────────────
   async function downloadVariantsAsZip(){
     if(abVariants.length===0) return;
@@ -3418,233 +3865,322 @@ PHASE 4 — Toolbar button:
 
   async function analyzeCTR(){
     setCtrLoading(true);
-    setCtrScore(null);
-    setCtrBreakdown(null);
-
+    setCtrV2(null);
+    setCtrChecked(new Set());
+    setCtrExpandedCat(null);
     try{
-      // Render full canvas using the shared renderer (CORS-safe)
-      const canvas  = document.createElement('canvas');
-      canvas.width  = p.preview.w;
-      canvas.height = p.preview.h;
-      await renderLayersToCanvas(canvas, layers);
-      const ctx = canvas.getContext('2d');
+      const flat=document.createElement('canvas');
+      flat.width=p.preview.w; flat.height=p.preview.h;
+      await renderLayersToCanvas(flat,layers);
+      const dataUrl=flat.toDataURL('image/jpeg',0.88);
+      setCtrThumbUrl(dataUrl);
 
-      // ── Analyze pixel data ──────────────────────────────────────────────────
-      const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
-      const data      = imageData.data;
-      const total     = canvas.width*canvas.height;
-
-      // 1. Contrast score — measure luminance variance
-      let lumSum=0, lumSumSq=0;
-      for(let i=0;i<data.length;i+=4){
-        const lum=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
-        lumSum+=lum; lumSumSq+=lum*lum;
-      }
-      const lumMean = lumSum/total;
-      const lumVar  = lumSumSq/total - lumMean*lumMean;
-      const lumStd  = Math.sqrt(lumVar);
-      const contrastScore = Math.min(100, Math.round((lumStd/80)*100));
-
-      // 2. Color vibrancy — measure saturation
-      let satSum=0;
-      for(let i=0;i<data.length;i+=4){
-        const r=data[i]/255,g=data[i+1]/255,b=data[i+2]/255;
-        const max=Math.max(r,g,b), min=Math.min(r,g,b);
-        satSum+=(max+min>0)?(max-min)/(1-Math.abs(max+min-1)):0;
-      }
-      const avgSat       = satSum/total;
-      const vibrancyScore = Math.min(100, Math.round(avgSat*180));
-
-      // 3. Text presence score — check if text layers exist and are readable
-      const textLayers  = layers.filter(l=>l.type==='text'&&!l.hidden);
-      const hasText     = textLayers.length>0;
-      const hasBoldText = textLayers.some(l=>(l.fontWeight||400)>=700);
-      const hasLargeText = textLayers.some(l=>(l.fontSize||0)>=36);
-      const hasStroke    = textLayers.some(l=>(l.strokeWidth||0)>0);
-      const hasShadow    = textLayers.some(l=>l.shadowEnabled);
-      let textScore = 0;
-      if(hasText)     textScore+=25;
-      if(hasBoldText) textScore+=25;
-      if(hasLargeText)textScore+=20;
-      if(hasStroke)   textScore+=15;
-      if(hasShadow)   textScore+=15;
-      textScore = Math.min(100, textScore);
-
-      // 4. Face/subject presence — check if there's an image with transparency
-      // (removed background = subject cutout)
-      const hasSubject = layers.some(l=>l.type==='image'&&!l.hidden);
-      const hasCutout  = layers.some(l=>{
-        if(l.type!=='image'||l.hidden) return false;
-        // Rough check — if image is smaller than canvas it's probably a cutout
-        return l.width<p.preview.w*0.95||l.height<p.preview.h*0.95;
+      const res=await fetch(`${resolvedApiUrl}/api/ctr-score-v2`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},
+        body:JSON.stringify({image:dataUrl,title:ctrTitle.trim()||undefined,niche:ctrNiche}),
       });
-      const subjectScore = hasSubject?(hasCutout?100:60):20;
+      const data=await res.json();
+      if(!res.ok){
+        if(res.status===429){setCmdLog(data.error||'Quota exceeded.');return;}
+        throw new Error(data.error||'Analysis failed');
+      }
+      if(!data.success) throw new Error(data.error||'Invalid response');
+      setCtrV2({...data,_ts:Date.now()});
+      setCmdLog(`CTR Score: ${data.overall}/100 — ${data.predicted_ctr_low}%–${data.predicted_ctr_high}% predicted CTR`);
+    }catch(err){
+      console.error('[CTRV2]',err);
+      setCmdLog('CTR analysis failed. Try again.');
+    }finally{
+      setCtrLoading(false);
+    }
+  }
 
-      // 5. Composition score — check layer count and variety
-      const layerCount  = layers.filter(l=>!l.hidden&&l.type!=='background').length;
-      const hasShape    = layers.some(l=>l.type==='shape'&&!l.hidden);
-      const layerVariety = new Set(layers.filter(l=>!l.hidden).map(l=>l.type)).size;
-      let compScore = 0;
-      if(layerCount>=2) compScore+=30;
-      if(layerCount>=3) compScore+=20;
-      if(hasShape)      compScore+=20;
-      if(layerVariety>=3) compScore+=30;
-      compScore = Math.min(100, compScore);
+  // ── Composition AI ────────────────────────────────────────────────────────
+  async function analyzeComposition(){
+    setCompLoading(true);
+    setCompResult(null);
+    setCompChecked(new Set());
+    try{
+      const flatCanvas=document.createElement('canvas');
+      flatCanvas.width=p.preview.w;
+      flatCanvas.height=p.preview.h;
+      await renderLayersToCanvas(flatCanvas,layers);
+      const dataUrl=flatCanvas.toDataURL('image/jpeg',0.92);
+      const base64Data=dataUrl.split(',')[1];
+      const mediaType=dataUrl.split(';')[0].split(':')[1]||'image/jpeg';
 
-      // 6. Safe zone score — check if important layers are in safe zone
-      const safeTop=20, safeBottom=p.preview.h-40, safeLeft=20, safeRight=p.preview.w-20;
-      const layersInSafeZone = layers.filter(l=>{
-        if(l.hidden||l.type==='background') return false;
-        return l.x>=safeLeft&&l.y>=safeTop&&(l.x+(l.width||100))<=safeRight&&(l.y+(l.height||50))<=safeBottom;
-      }).length;
-      const totalActiveLayers = layers.filter(l=>!l.hidden&&l.type!=='background').length;
-      const safeScore = totalActiveLayers>0
-        ? Math.round((layersInSafeZone/totalActiveLayers)*100)
-        : 50;
+      const res=await fetch(`${resolvedApiUrl}/api/analyze-composition`,{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          ...(token?{'Authorization':`Bearer ${token}`}:{}),
+        },
+        body:JSON.stringify({image:dataUrl,title:compVideoTitle.trim()||undefined}),
+      });
+      const data=await res.json();
 
-      // ── Calculate overall score (weighted) ─────────────────────────────────
-      const weights = {
-        contrast:  0.25,
-        vibrancy:  0.20,
-        text:      0.25,
-        subject:   0.15,
-        comp:      0.10,
-        safe:      0.05,
-      };
+      if(!res.ok){
+        if(res.status===429){setCmdLog(data.error||'Quota exceeded.');setCompLoading(false);return;}
+        throw new Error(data.error||'Analysis failed');
+      }
+      if(!data.success) throw new Error(data.error||'Invalid response');
 
-      const overall = Math.round(
-        contrastScore  * weights.contrast  +
-        vibrancyScore  * weights.vibrancy  +
-        textScore      * weights.text      +
-        subjectScore   * weights.subject   +
-        compScore      * weights.comp      +
-        safeScore      * weights.safe
+      setCompResult(data);
+      setCompOverlay(true);
+      setCmdLog(`Composition score: ${data.score}/10 — ${data.issues?.length||0} issue${data.issues?.length!==1?'s':''} found`);
+    }catch(err){
+      console.error('[COMP]',err);
+      setCmdLog('Composition analysis failed. Try again.');
+    }finally{
+      setCompLoading(false);
+    }
+  }
+
+  function applyCropSuggestion(){
+    const crop=compResult?.crop_suggestion;
+    if(!crop) return;
+    const cx=crop.x/100*p.preview.w;
+    const cy=crop.y/100*p.preview.h;
+    const cw=crop.w/100*p.preview.w;
+    const ch=crop.h/100*p.preview.h;
+    // Zoom + pan to frame the suggested crop region (non-destructive)
+    const newZoom=Math.min(p.preview.w/Math.max(1,cw),p.preview.h/Math.max(1,ch))*0.92;
+    const centerX=cx+cw/2;
+    const centerY=cy+ch/2;
+    setZoom(Math.min(8,Math.max(0.25,newZoom)));
+    setPanOffset({x:p.preview.w/2-centerX,y:p.preview.h/2-centerY});
+    setCmdLog('Crop suggestion applied — view zoomed to recommended area');
+  }
+
+  // ── AI Text Engine ────────────────────────────────────────────────────────
+  async function generateAIText(){
+    setAiTextLoading(true);
+    setAiTextResults([]);
+    try{
+      const flatCanvas=document.createElement('canvas');
+      flatCanvas.width=p.preview.w; flatCanvas.height=p.preview.h;
+      await renderLayersToCanvas(flatCanvas,layers);
+      const dataUrl=flatCanvas.toDataURL('image/jpeg',0.88);
+      const res=await fetch(`${resolvedApiUrl}/api/generate-text`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},
+        body:JSON.stringify({
+          title:aiTextTitle.trim()||undefined,
+          niche:aiTextNiche.trim()||undefined,
+          image:dataUrl,
+        }),
+      });
+      const data=await res.json();
+      if(!res.ok){
+        if(res.status===429){setCmdLog(data.error||'Quota exceeded.');return;}
+        throw new Error(data.error||'Generation failed');
+      }
+      if(!data.success) throw new Error(data.error||'Invalid response');
+      setAiTextResults(data.options||[]);
+      setCmdLog(`${data.options?.length||0} headline${data.options?.length!==1?'s':''} generated — click any to place`);
+    }catch(err){
+      console.error('[AITEXT]',err);
+      setCmdLog('Text generation failed. Try again.');
+    }finally{
+      setAiTextLoading(false);
+    }
+  }
+
+  function placeAITextOption(opt){
+    const xPx=Math.round((opt.x/100)*p.preview.w);
+    const yPx=Math.round((opt.y/100)*p.preview.h);
+    const textColor=opt.color==='light'?'#ffffff':'#111111';
+    const strokeColor=opt.color==='light'?'#000000':'#ffffff';
+    addLayer({
+      type:'text',
+      text:opt.text,
+      x:Math.max(4,Math.min(p.preview.w-180,xPx)),
+      y:Math.max(4,Math.min(p.preview.h-70,yPx)),
+      fontSize:opt.fontSize||60,
+      fontFamily:opt.fontFamily||'Anton',
+      fontWeight:900,
+      fontItalic:false,
+      textColor,
+      strokeColor,
+      strokeWidth:opt.strokeWidth||0,
+      shadowEnabled:true,
+      shadowColor:'#000000',
+      shadowBlur:20,
+      shadowX:0,
+      shadowY:4,
+      glowEnabled:false,
+      glowColor:'#f97316',
+      arcEnabled:false,
+      arcRadius:300,
+      letterSpacing:2,
+      lineHeight:1.1,
+      textAlign:'left',
+    });
+    setActiveTool('select');
+    setCmdLog(`"${opt.text}" placed — adjust freely in the canvas`);
+  }
+
+  // ── Style Transfer ────────────────────────────────────────────────────────
+  async function applyStyleTransfer(){
+    setStyleBusy(true);
+    setStyleResult(null);
+    try{
+      // Find bottom-most real image layer to process (preserve text/sticker layers above it)
+      const imgLayer=[...layers].find(l=>
+        (l.type==='image'||(l.type==='background'&&l.src))&&!l.isRimLight&&l.src
       );
 
-      // ── Generate tips ───────────────────────────────────────────────────────
-      const tips = [];
-      if(contrastScore<60)  tips.push({type:'warn', text:'Low contrast — viewers scroll past low-contrast thumbnails. Try a darker background or brighter subject.'});
-      if(vibrancyScore<50)  tips.push({type:'warn', text:'Muted colors — saturated thumbnails get 34% more clicks. Boost saturation in Adjustments.'});
-      if(!hasText)          tips.push({type:'bad',  text:'No text — thumbnails with bold text get significantly more clicks.'});
-      if(hasText&&!hasBoldText) tips.push({type:'warn', text:'Text weight too light — use Bold or Black weight for maximum readability.'});
-      if(hasText&&!hasLargeText) tips.push({type:'warn', text:'Text too small — should be at least 36px to read at mobile size.'});
-      if(hasText&&!hasStroke)   tips.push({type:'tip',  text:'Add a text outline — makes text readable on any background.'});
-      if(!hasSubject)       tips.push({type:'warn', text:'No image layer — thumbnails with a clear subject get more clicks.'});
-      if(hasCutout)         tips.push({type:'good', text:'Background removed — great! Subject stands out clearly.'});
-      if(compScore<50)      tips.push({type:'tip',  text:'Add more elements — shapes, stickers, or a background image add visual interest.'});
-      if(safeScore<70)      tips.push({type:'warn', text:'Elements near edges — YouTube UI covers corners. Keep important content in the center.'});
-      if(overall>=80)       tips.push({type:'good', text:'Strong thumbnail! This has the key ingredients for high CTR.'});
-      if(overall>=90)       tips.push({type:'good', text:'Excellent! This thumbnail has everything a viral video needs.'});
-
-      // ── Generate attention heatmap ──────────────────────────────────────────
-      const heatW=canvas.width, heatH=canvas.height;
-      const heatCanvas=document.createElement('canvas');
-      heatCanvas.width=heatW; heatCanvas.height=heatH;
-      const hctx=heatCanvas.getContext('2d');
-
-      // Build attention map: higher values = more visual attention expected
-      const gridSize=8;
-      const cols=Math.ceil(heatW/gridSize), rows=Math.ceil(heatH/gridSize);
-      const attention=new Float32Array(cols*rows);
-
-      // Factor 1: Local contrast (edges/boundaries draw eyes)
-      for(let gy=0;gy<rows;gy++){
-        for(let gx=0;gx<cols;gx++){
-          const px=gx*gridSize, py=gy*gridSize;
-          const idx=((py*heatW)+px)*4;
-          const lum=0.299*data[idx]+0.587*data[idx+1]+0.114*data[idx+2];
-          // Compare to neighbors
-          let diff=0, count=0;
-          for(let dy=-1;dy<=1;dy++){
-            for(let dx=-1;dx<=1;dx++){
-              if(dx===0&&dy===0) continue;
-              const nx=gx+dx, ny=gy+dy;
-              if(nx<0||ny<0||nx>=cols||ny>=rows) continue;
-              const npx=nx*gridSize, npy=ny*gridSize;
-              const nidx=((npy*heatW)+npx)*4;
-              const nlum=0.299*data[nidx]+0.587*data[nidx+1]+0.114*data[nidx+2];
-              diff+=Math.abs(lum-nlum);
-              count++;
-            }
-          }
-          attention[gy*cols+gx]+=(count>0?diff/count:0)/255;
-        }
+      let imageDataUrl;
+      if(imgLayer?.src){
+        imageDataUrl=imgLayer.src;
+      }else{
+        const flat=document.createElement('canvas');
+        flat.width=p.preview.w; flat.height=p.preview.h;
+        await renderLayersToCanvas(flat,layers);
+        imageDataUrl=flat.toDataURL('image/jpeg',0.92);
       }
 
-      // Factor 2: Saturation hotspots (vivid colors attract)
-      for(let gy=0;gy<rows;gy++){
-        for(let gx=0;gx<cols;gx++){
-          const px=gx*gridSize, py=gy*gridSize;
-          const idx=((py*heatW)+px)*4;
-          const r=data[idx]/255, g=data[idx+1]/255, b=data[idx+2]/255;
-          const mx=Math.max(r,g,b), mn=Math.min(r,g,b);
-          const sat=(mx+mn>0)?(mx-mn)/(1-Math.abs(mx+mn-1)):0;
-          attention[gy*cols+gx]+=sat*0.3;
-        }
-      }
-
-      // Factor 3: Text/subject layer positions (known attention anchors)
-      for(const l of layers){
-        if(l.hidden) continue;
-        if(l.type==='text'||l.type==='image'){
-          const lx=Math.max(0,Math.floor((l.x||0)/gridSize));
-          const ly=Math.max(0,Math.floor((l.y||0)/gridSize));
-          const lw=Math.ceil((l.width||(l.type==='text'?200:100))/gridSize);
-          const lh=Math.ceil((l.height||(l.type==='text'?60:100))/gridSize);
-          const boost=l.type==='text'?0.6:0.4;
-          for(let gy=ly;gy<Math.min(ly+lh,rows);gy++){
-            for(let gx=lx;gx<Math.min(lx+lw,cols);gx++){
-              attention[gy*cols+gx]+=boost;
-            }
-          }
-        }
-      }
-
-      // Factor 4: Center bias (eyes land center-ish first)
-      const cx=cols/2, cy=rows/2, maxDist=Math.sqrt(cx*cx+cy*cy);
-      for(let gy=0;gy<rows;gy++){
-        for(let gx=0;gx<cols;gx++){
-          const dist=Math.sqrt((gx-cx)**2+(gy-cy)**2);
-          attention[gy*cols+gx]+=(1-dist/maxDist)*0.25;
-        }
-      }
-
-      // Normalize to 0-1
-      let maxAtt=0;
-      for(let i=0;i<attention.length;i++) if(attention[i]>maxAtt) maxAtt=attention[i];
-      if(maxAtt>0) for(let i=0;i<attention.length;i++) attention[i]/=maxAtt;
-
-      // Render heatmap with smooth interpolation
-      for(let gy=0;gy<rows;gy++){
-        for(let gx=0;gx<cols;gx++){
-          const v=attention[gy*cols+gx];
-          // Cold (blue) → Warm (green) → Hot (red)
-          const r=v<0.5?0:Math.round((v-0.5)*2*255);
-          const g=v<0.5?Math.round(v*2*255):Math.round((1-v)*2*255);
-          const b=v<0.5?Math.round((1-v*2)*255):0;
-          hctx.fillStyle=`rgba(${r},${g},${b},${0.35+v*0.25})`;
-          hctx.fillRect(gx*gridSize,gy*gridSize,gridSize,gridSize);
-        }
-      }
-
-      const heatmapDataUrl=heatCanvas.toDataURL('image/png');
-
-      setCtrScore(overall);
-      setCtrBreakdown({
-        contrast:  contrastScore,
-        vibrancy:  vibrancyScore,
-        text:      textScore,
-        subject:   subjectScore,
-        comp:      compScore,
-        safe:      safeScore,
-        tips,
-        heatmap:   heatmapDataUrl,
+      const res=await fetch(`${resolvedApiUrl}/api/style-transfer`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},
+        body:JSON.stringify({
+          image:imageDataUrl,
+          preset:styleMode==='preset'?stylePreset:undefined,
+          referenceUrl:styleMode==='url'?styleUrl.trim():undefined,
+          intensity:styleIntensity,
+        }),
       });
-    } catch(err){
-      console.error('CTR analyze error:',err);
-      setCtrScore(0);
+      const data=await res.json();
+      if(!res.ok){
+        if(res.status===429){setCmdLog(data.error||'Quota exceeded.');return;}
+        throw new Error(data.error||'Style transfer failed');
+      }
+      if(!data.success) throw new Error(data.error||'Invalid response');
+
+      setStyleResult(data.style);
+
+      if(imgLayer){
+        updateLayer(imgLayer.id,{src:data.processedImage});
+        setCmdLog(`Style applied — ${data.style.mood}`);
+      }else{
+        addLayer({type:'image',src:data.processedImage,x:0,y:0,width:p.preview.w,height:p.preview.h});
+        setCmdLog(`Style applied as new layer — ${data.style.mood}`);
+      }
+    }catch(err){
+      console.error('[STYLE]',err);
+      setCmdLog('Style transfer failed. Try again.');
+    }finally{
+      setStyleBusy(false);
     }
-    setCtrLoading(false);
+  }
+
+  // ── AI Background Generation ──────────────────────────────────────────────
+  async function generateBackground(){
+    setBgGenBusy(true);
+    setBgGenPreview(null);
+    setBgGenPrompt('');
+    try{
+      // Check if selected layer is a cutout to composite
+      const subjectLayer=selectedLayer?.type==='image'&&!selectedLayer?.isRimLight?selectedLayer:null;
+
+      const res=await fetch(`${resolvedApiUrl}/api/generate-background`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},
+        body:JSON.stringify({
+          niche:bgGenNiche,
+          customPrompt:bgGenCustom.trim()||undefined,
+          subject:subjectLayer?.src||undefined,
+        }),
+      });
+      const data=await res.json();
+      if(!res.ok){
+        if(res.status===429){setCmdLog(data.error||'Quota exceeded.');return;}
+        throw new Error(data.error||'Generation failed');
+      }
+      if(!data.success) throw new Error(data.error||'Invalid response');
+      setBgGenPreview(data.image);
+      setBgGenPrompt(data.prompt||'');
+      setCmdLog('Background generated — preview below. Click Apply to use it.');
+    }catch(err){
+      console.error('[BGGEN]',err);
+      setCmdLog('Background generation failed. Try again.');
+    }finally{
+      setBgGenBusy(false);
+    }
+  }
+
+  function applyGeneratedBackground(){
+    if(!bgGenPreview) return;
+    // Replace existing background layer or add below everything
+    const bgLayer=layers.find(l=>l.type==='background');
+    if(bgLayer){
+      // Convert background layer to image type with the new src
+      updateLayer(bgLayer.id,{type:'image',src:bgGenPreview,x:0,y:0,width:p.preview.w,height:p.preview.h,bgColor:null,bgGradient:null,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0});
+    }else{
+      // Prepend as bottom layer
+      const id=`bg_${Date.now()}`;
+      setLayers(prev=>{
+        const nl=[{type:'image',src:bgGenPreview,id,x:0,y:0,width:p.preview.w,height:p.preview.h,opacity:100,hidden:false,locked:false,blendMode:'normal',flipH:false,flipV:false,rotation:0,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,effects:{shadow:{enabled:false},glow:{enabled:false},border:{enabled:false},overlay:{enabled:false},noise:{enabled:false}}}, ...prev];
+        pushHistory(nl);
+        return nl;
+      });
+      setSelectedId(id);
+    }
+    setBgGenPreview(null);
+    setBgGenPrompt('');
+    setActiveTool('select');
+    setCmdLog('AI background applied');
+  }
+
+  // ── Auto Color Grade & Pop ────────────────────────────────────────────────
+  async function applyColorGrade(){
+    const imgLayer=[...layers].find(l=>
+      (l.type==='image'||(l.type==='background'&&l.src))&&!l.isRimLight&&l.src
+    );
+    if(!imgLayer){setCmdLog('Add an image layer first.');return;}
+
+    setCgBusy(true);
+    try{
+      // Non-destructive: always grade from original, not from previously graded copy
+      const sourceToGrade=cgOriginalSrc||imgLayer.src;
+      const targetId=cgLayerId||imgLayer.id;
+
+      if(!cgOriginalSrc){
+        setCgOriginalSrc(imgLayer.src);
+        setCgLayerId(imgLayer.id);
+      }
+
+      const [data]=await Promise.all([
+        fetch(`${resolvedApiUrl}/api/color-grade`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},
+          body:JSON.stringify({image:sourceToGrade,preset:cgPreset,intensity:cgIntensity}),
+        }).then(r=>r.json()),
+        new Promise(resolve=>setTimeout(resolve,380)), // minimum flash so it feels intentional
+      ]);
+
+      if(!data.success){
+        if(data.code==='QUOTA_EXCEEDED'){setCmdLog(data.error||'Quota exceeded.');return;}
+        throw new Error(data.error||'Grade failed');
+      }
+      setCgGradedSrc(data.image);
+      updateLayer(targetId,{src:data.image});
+      setCmdLog(`Color grade applied — ${cgPreset} @ ${cgIntensity}%`);
+    }catch(err){
+      console.error('[COLORGRADE]',err);
+      setCmdLog('Color grade failed. Try again.');
+    }finally{
+      setCgBusy(false);
+    }
+  }
+
+  function resetColorGrade(){
+    if(cgLayerId&&cgOriginalSrc) updateLayer(cgLayerId,{src:cgOriginalSrc});
+    setCgOriginalSrc(null);
+    setCgGradedSrc(null);
+    setCgLayerId(null);
+    setCmdLog('Color grade reset');
   }
 
   // Performance: Throttled rimlight to max 60fps
@@ -4627,6 +5163,11 @@ PHASE 4 — Toolbar button:
     divider: {height:1,background:T.border,margin:'12px 0'},
   };
 
+  // Feature M: Mobile Quick Editor — render parallel mobile experience on small screens
+  if(isMobile){
+    return <MobileEditor user={user} token={token} apiUrl={apiUrl} onSwitchToDesktop={()=>setIsMobile(false)}/>;
+  }
+
   if(isLoading){
     return (
       <div style={{
@@ -4682,6 +5223,7 @@ PHASE 4 — Toolbar button:
     {key:'shapes',    label:'Shapes',       icon:'○',   group:'Create'},
     {key:'stickers',  label:'Elements',     icon:'◆',   group:'Create'},
     {key:'memes',     label:'Memes & GIFs', icon:'▣',   group:'Create'},
+    {key:'bggen',     label:'AI Background',icon:'⬡',   group:'Create'},
     null,
     {key:'brush',     label:'Brush',        icon:'⌀',  group:'Paint'},
     {key:'freehand',  label:'Draw',         icon:'✏',  group:'Paint'},
@@ -4694,12 +5236,21 @@ PHASE 4 — Toolbar button:
     {key:'effects',   label:'Effects',      icon:'✦',   group:'Design'},
     {key:'brandkit',  label:'Brand Kit',    icon:'◐',   group:'Design'},
     null,
-    {key:'templates', label:'Templates',    icon:'⊞',   group:'Analyze'},
-    {key:'ctr',       label:'CTR Score',    icon:'◈',   group:'Analyze'},
+    {key:'templates',   label:'Templates',    icon:'⊞',   group:'Analyze'},
+    {key:'composition', label:'Composition', icon:'◫',   group:'Analyze'},
+    {key:'aitext',      label:'AI Text',     icon:'✦',   group:'Analyze'},
+    {key:'style',       label:'Style',       icon:'◑',   group:'Analyze'},
+    {key:'colorgrade',  label:'Color Grade', icon:'◕',   group:'Analyze'},
+    {key:'ctr',         label:'CTR Score',   icon:'◈',   group:'Analyze'},
     {key:'face',      label:'Face Score',   icon:'◉',   group:'Analyze'},
     {key:'ab',        label:'A/B Variants', icon:'⊟',   group:'Analyze'},
     {key:'yttest',    label:'YouTube Test', icon:'▶',   group:'Analyze'},
+    {key:'ythistory', label:'YT Insights',  icon:'◎',   group:'Analyze', pro:true},
     {key:'resize',    label:'All Sizes',    icon:'⊠',   group:'Analyze'},
+    null,
+    {key:'team',      label:'Team',         icon:'⊕',   group:'Collab', pro:true},
+    {key:'versions',  label:'Versions',     icon:'⊘',   group:'Collab', pro:true},
+    {key:'comments',  label:'Comments',     icon:'◌',   group:'Collab', pro:true},
     null,
     {key:'upload',    label:'Upload',       icon:'↑',   group:'File'},
   ];
@@ -5078,6 +5629,43 @@ PHASE 4 — Toolbar button:
             }}>PRO</span>
           </button>
         )}
+        {/* Feature J: Niche badge pill */}
+        {userNiche&&NICHE_CONFIG[userNiche]&&(
+          <button
+            onClick={()=>{setNicheHovered(userNiche);setNicheOnboarding(true);}}
+            title={`Channel niche: ${NICHE_CONFIG[userNiche].label} — click to change`}
+            style={{
+              display:'flex',alignItems:'center',gap:5,
+              padding:'5px 10px',borderRadius:7,
+              border:`1px solid ${NICHE_CONFIG[userNiche].accentColor}44`,
+              background:`${NICHE_CONFIG[userNiche].accentColor}14`,
+              color:NICHE_CONFIG[userNiche].accentColor,
+              cursor:'pointer',fontSize:11,fontWeight:'700',
+              flexShrink:0,letterSpacing:'0.05em',
+              transition:'border-color 0.15s,background 0.15s',
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=NICHE_CONFIG[userNiche].accentColor+'99';e.currentTarget.style.background=NICHE_CONFIG[userNiche].accentColor+'22';}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=NICHE_CONFIG[userNiche].accentColor+'44';e.currentTarget.style.background=NICHE_CONFIG[userNiche].accentColor+'14';}}>
+            {NICHE_CONFIG[userNiche].emoji} {NICHE_CONFIG[userNiche].label}
+          </button>
+        )}
+        {/* Feature L: Approval status badge */}
+        {(()=>{
+          const STATUS_CFG={
+            draft:    {label:'Draft',    color:'#94a3b8', bg:'rgba(148,163,184,0.1)', border:'rgba(148,163,184,0.2)', next:'review'},
+            review:   {label:'In Review',color:'#f59e0b', bg:'rgba(245,158,11,0.1)',  border:'rgba(245,158,11,0.25)', next:'approved'},
+            approved: {label:'Approved', color:'#22c55e', bg:'rgba(34,197,94,0.1)',   border:'rgba(34,197,94,0.25)',  next:'draft'},
+          };
+          const cfg=STATUS_CFG[approvalStatus]||STATUS_CFG.draft;
+          return(
+            <button
+              onClick={()=>updateApprovalStatus(cfg.next)}
+              title={`Status: ${cfg.label} — click to advance`}
+              style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:6,border:`1px solid ${cfg.border}`,background:cfg.bg,color:cfg.color,fontSize:10,fontWeight:'700',cursor:'pointer',flexShrink:0,letterSpacing:'0.05em'}}>
+              {approvalStatus==='approved'?'✓ ':approvalStatus==='review'?'◌ ':'● '}{cfg.label}
+            </button>
+          );
+        })()}
         <div style={{display:'flex',gap:4,alignItems:'center',flexShrink:0,marginLeft:'auto'}}>
           {/* Save status pill */}
           <div style={{
@@ -5750,6 +6338,93 @@ PHASE 4 — Toolbar button:
                   </svg>
                 )}
 
+                {/* Feature L: Comment pin overlay */}
+                {comments.map((c,idx)=>{
+                  const isActive=activeCommentId===c.id;
+                  const unresolved=!c.resolved;
+                  return(
+                    <div key={c.id} style={{
+                      position:'absolute',
+                      left:`${c.x}%`, top:`${c.y}%`,
+                      transform:'translate(-50%,-100%)',
+                      zIndex:19999,
+                      pointerEvents:'all',
+                    }}>
+                      {/* Pin circle */}
+                      <div
+                        onClick={e=>{e.stopPropagation();setActiveCommentId(isActive?null:c.id);}}
+                        style={{
+                          width:24,height:24,borderRadius:'50% 50% 50% 0',
+                          transform:'rotate(-45deg)',
+                          background:c.resolved?'#4b5563':'#f97316',
+                          border:c.resolved?'2px solid #6b7280':'2px solid #fff',
+                          display:'flex',alignItems:'center',justifyContent:'center',
+                          cursor:'pointer',
+                          boxShadow:unresolved?'0 0 0 0 rgba(249,115,22,0.4)':'none',
+                          animation:unresolved?'comment-pulse 2s ease-in-out infinite':'none',
+                        }}
+                      >
+                        <span style={{transform:'rotate(45deg)',fontSize:9,fontWeight:'800',color:'#fff',lineHeight:1}}>{idx+1}</span>
+                      </div>
+                      {/* Popover */}
+                      {isActive&&(
+                        <div
+                          onClick={e=>e.stopPropagation()}
+                          style={{
+                            position:'absolute',bottom:'calc(100% + 8px)',left:'50%',transform:'translateX(-50%)',
+                            width:240,background:'#0d0f14',border:'1px solid rgba(249,115,22,0.3)',
+                            borderRadius:10,padding:'12px',
+                            boxShadow:'0 8px 32px rgba(0,0,0,0.8)',zIndex:20000,
+                          }}>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                            <span style={{fontSize:10,color:'#f97316',fontWeight:'700'}}>#{idx+1}</span>
+                            <span style={{flex:1,fontSize:10,color:'rgba(255,255,255,0.4)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.userId}</span>
+                            <button onClick={()=>resolveComment(c.id)} style={{padding:'2px 7px',borderRadius:4,border:`1px solid ${c.resolved?'#4b5563':'rgba(249,115,22,0.4)'}`,background:'transparent',color:c.resolved?'#6b7280':'#f97316',fontSize:9,cursor:'pointer',fontWeight:'700',flexShrink:0}}>
+                              {c.resolved?'Reopen':'Resolve'}
+                            </button>
+                          </div>
+                          <div style={{fontSize:12,color:'#e5e7eb',lineHeight:1.5,marginBottom:8}}>{c.text}</div>
+                          {c.replies?.length>0&&(
+                            <div style={{borderTop:'1px solid rgba(255,255,255,0.08)',paddingTop:8,marginBottom:8,display:'flex',flexDirection:'column',gap:6}}>
+                              {c.replies.map(r=>(
+                                <div key={r.id} style={{fontSize:11,color:'rgba(255,255,255,0.6)',paddingLeft:8,borderLeft:'2px solid rgba(249,115,22,0.3)'}}>
+                                  <span style={{color:'rgba(255,255,255,0.35)',fontSize:9}}>{r.userId}: </span>{r.text}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{display:'flex',gap:5}}>
+                            <input value={replyDraft} onChange={e=>setReplyDraft(e.target.value)}
+                              onKeyDown={e=>{if(e.key==='Enter'&&replyDraft.trim()){replyToComment(c.id,replyDraft);e.preventDefault();}}}
+                              placeholder="Reply…" style={{flex:1,padding:'5px 8px',borderRadius:5,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.06)',color:'#fff',fontSize:11,outline:'none'}}/>
+                            <button onClick={()=>replyToComment(c.id,replyDraft)} style={{padding:'5px 10px',borderRadius:5,border:'none',background:'#f97316',color:'#fff',fontSize:11,fontWeight:'700',cursor:'pointer'}}>↩</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Comment-mode drop target overlay */}
+                {commentMode&&(
+                  <div
+                    style={{position:'absolute',inset:0,zIndex:18000,cursor:'crosshair',background:'rgba(249,115,22,0.04)',border:'2px dashed rgba(249,115,22,0.3)'}}
+                    onClick={e=>{
+                      const rect=e.currentTarget.getBoundingClientRect();
+                      const xPct=((e.clientX-rect.left)/rect.width*100).toFixed(2);
+                      const yPct=((e.clientY-rect.top)/rect.height*100).toFixed(2);
+                      const text=window.prompt('Add comment:');
+                      if(text?.trim()){
+                        addComment(xPct,yPct,text);
+                        setCommentMode(false);
+                      }
+                    }}
+                  >
+                    <div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'rgba(0,0,0,0.8)',borderRadius:6,padding:'4px 12px',fontSize:11,color:'#f97316',fontWeight:'700',pointerEvents:'none',whiteSpace:'nowrap'}}>
+                      Click anywhere to drop a comment
+                    </div>
+                  </div>
+                )}
+
                 {/* Smart Cutout — segmentation overlays */}
                 {activeTool==='segment'&&(
                   <>
@@ -5924,6 +6599,71 @@ PHASE 4 — Toolbar button:
                       display:'none',
                       boxShadow:`0 0 12px ${rimLightColor}88`,
                     }}/>
+                  </div>
+                )}
+
+                {/* Composition AI overlays — rule-of-thirds, text zones, crop box */}
+                {activeTool==='composition'&&compResult&&compOverlay&&(
+                  <div style={{position:'absolute',inset:0,zIndex:9989,pointerEvents:'none'}}>
+
+                    {/* Rule-of-thirds grid */}
+                    {[33.33,66.66].map(pct=>(
+                      <React.Fragment key={`v${pct}`}>
+                        <div style={{position:'absolute',top:0,bottom:0,left:`${pct}%`,width:1,background:'rgba(249,115,22,0.22)',boxShadow:'0 0 4px rgba(249,115,22,0.15)'}}/>
+                        <div style={{position:'absolute',left:0,right:0,top:`${pct}%`,height:1,background:'rgba(249,115,22,0.22)',boxShadow:'0 0 4px rgba(249,115,22,0.15)'}}/>
+                      </React.Fragment>
+                    ))}
+                    {[33.33,66.66].flatMap(x=>[33.33,66.66].map(y=>(
+                      <div key={`dot-${x}-${y}`} style={{position:'absolute',left:`${x}%`,top:`${y}%`,width:6,height:6,borderRadius:'50%',background:'rgba(249,115,22,0.55)',transform:'translate(-50%,-50%)',boxShadow:'0 0 6px rgba(249,115,22,0.4)'}}/>
+                    )))}
+
+                    {/* Text placement zones */}
+                    {compResult.text_zones?.map((zone,i)=>(
+                      <div key={`zone-${i}`} style={{
+                        position:'absolute',
+                        left:`${zone.x}%`,top:`${zone.y}%`,
+                        width:`${zone.w}%`,height:`${zone.h}%`,
+                        background:'rgba(249,115,22,0.09)',
+                        border:'1.5px dashed rgba(249,115,22,0.7)',
+                        borderRadius:3,
+                        display:'flex',alignItems:'center',justifyContent:'center',
+                      }}>
+                        <span style={{
+                          fontSize:8,fontWeight:'800',color:'rgba(249,115,22,0.9)',
+                          textTransform:'uppercase',letterSpacing:'0.8px',
+                          background:'rgba(0,0,0,0.55)',padding:'2px 7px',borderRadius:10,
+                          whiteSpace:'nowrap',
+                        }}>
+                          {zone.label||`Text zone ${i+1}`}
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* Crop suggestion box */}
+                    {compResult.crop_suggestion&&(()=>{
+                      const c=compResult.crop_suggestion;
+                      const isFullCanvas=c.x===0&&c.y===0&&c.w>=98&&c.h>=98;
+                      if(isFullCanvas) return null;
+                      return(
+                        <div style={{
+                          position:'absolute',
+                          left:`${c.x}%`,top:`${c.y}%`,
+                          width:`${c.w}%`,height:`${c.h}%`,
+                          border:'2px dashed rgba(249,115,22,0.9)',
+                          borderRadius:3,
+                          boxShadow:'0 0 0 9999px rgba(0,0,0,0.35)',
+                        }}>
+                          <div style={{
+                            position:'absolute',bottom:4,right:4,
+                            background:'#f97316',color:'#fff',
+                            fontSize:9,fontWeight:'800',
+                            padding:'2px 8px',borderRadius:10,letterSpacing:'0.4px',
+                          }}>
+                            SUGGESTED CROP
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -7020,6 +7760,373 @@ PHASE 4 — Toolbar button:
               </div>
             )}
 
+            {/* Feature L: Team Collaboration panel */}
+            {activeTool==='team'&&(()=>{
+              const isAgency=user?.email==='kadengajkowski@gmail.com'||(user?.plan||'free').toLowerCase()==='agency';
+              if(!isAgency) return(
+                <div>
+                  <span style={css.label}>Team Collaboration</span>
+                  <div style={{margin:'8px 0',borderRadius:14,border:`1px solid ${T.accentBorder}`,background:'linear-gradient(160deg,rgba(249,115,22,0.08),rgba(249,115,22,0.02))',padding:'20px 16px',textAlign:'center'}}>
+                    <div style={{fontSize:30,marginBottom:10}}>⊕</div>
+                    <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Agency Feature</div>
+                    <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Invite team members, share projects, leave canvas comments, and track approval status — all in one workspace.</div>
+                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user?.email,plan:'agency'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Agency →</button>
+                  </div>
+                </div>
+              );
+              return(
+                <div>
+                  <span style={css.label}>Team Workspace</span>
+                  {!teamData?(
+                    <div>
+                      <div style={{...css.section,fontSize:11,color:T.muted,lineHeight:1.6}}>Create a workspace to collaborate with your team.</div>
+                      <input value={teamCreateName} onChange={e=>setTeamCreateName(e.target.value)} placeholder="Team name…" style={{...css.input,width:'100%',boxSizing:'border-box',marginBottom:6}}/>
+                      <button onClick={createTeam} disabled={teamBusy||!teamCreateName.trim()} style={{...css.addBtn,marginTop:0,background:T.accent}}>{teamBusy?'Creating…':'Create Team'}</button>
+                      {teamError&&<div style={{marginTop:6,fontSize:11,color:T.danger}}>{teamError}</div>}
+                    </div>
+                  ):(
+                    <div>
+                      {/* Team header */}
+                      <div style={{padding:'10px 12px',borderRadius:10,background:T.input,border:`1px solid ${T.border}`,marginBottom:10}}>
+                        <div style={{fontSize:13,fontWeight:'700',color:T.text,marginBottom:4}}>{teamData.name}</div>
+                        <div style={{fontSize:10,color:T.muted}}>{teamData.members?.length||1} member{(teamData.members?.length||1)!==1?'s':''}</div>
+                      </div>
+                      {/* Member avatars */}
+                      <span style={css.label}>Members</span>
+                      <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:10}}>
+                        {(teamData.members||[]).map(m=>(
+                          <div key={m.email} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:7,background:T.bg2,border:`1px solid ${T.border}`}}>
+                            <div style={{width:26,height:26,borderRadius:'50%',background:`linear-gradient(135deg,${T.accent},#ea580c)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:'700',color:'#fff',flexShrink:0}}>
+                              {m.email[0].toUpperCase()}
+                            </div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:11,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.email}</div>
+                              <div style={{fontSize:9,color:m.role==='owner'?T.accent:T.muted,textTransform:'uppercase',fontWeight:'700',letterSpacing:'0.3px'}}>{m.role}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Invite */}
+                      <span style={css.label}>Invite Member</span>
+                      <div style={{display:'flex',gap:5}}>
+                        <input value={teamInviteEmail} onChange={e=>setTeamInviteEmail(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')inviteToTeam();}} placeholder="Email address…" style={{...css.input,flex:1}}/>
+                        <button onClick={inviteToTeam} disabled={teamBusy||!teamInviteEmail.trim()} style={{padding:'6px 10px',borderRadius:7,border:'none',background:T.accent,color:'#fff',fontSize:11,fontWeight:'700',cursor:'pointer',flexShrink:0}}>{teamBusy?'…':'Send'}</button>
+                      </div>
+                      {teamError&&<div style={{marginTop:6,fontSize:11,color:teamError==='Invite sent!'?T.success:T.danger}}>{teamError}</div>}
+                      {/* Share current project */}
+                      <button onClick={()=>{if(!designName)return;fetch(`${resolvedApiUrl}/api/team/share-project`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({teamId:teamData.teamId,projectId:designName})}).then(r=>r.json()).then(d=>{if(d.success)setTeamError('Project shared with team!');});}} style={{...css.addBtn,marginTop:12,background:'transparent',border:`1px solid ${T.border}`,color:T.muted,fontSize:11}}>
+                        Share current project with team
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Feature L: Version History panel */}
+            {activeTool==='versions'&&(()=>{
+              const isAgency=user?.email==='kadengajkowski@gmail.com'||(user?.plan||'free').toLowerCase()==='agency';
+              if(!isAgency) return(
+                <div>
+                  <span style={css.label}>Version History</span>
+                  <div style={{margin:'8px 0',borderRadius:14,border:`1px solid ${T.accentBorder}`,background:'linear-gradient(160deg,rgba(249,115,22,0.08),rgba(249,115,22,0.02))',padding:'20px 16px',textAlign:'center'}}>
+                    <div style={{fontSize:30,marginBottom:10}}>⊘</div>
+                    <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Agency Feature</div>
+                    <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Save named snapshots of your canvas and roll back to any previous version instantly.</div>
+                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user?.email,plan:'agency'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Agency →</button>
+                  </div>
+                </div>
+              );
+              return(
+                <div>
+                  <span style={css.label}>Version History</span>
+                  {/* Save new version */}
+                  <div style={{display:'flex',gap:5,marginBottom:10}}>
+                    <input value={versionLabel} onChange={e=>setVersionLabel(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveVersion();}} placeholder="Version label (optional)…" style={{...css.input,flex:1}}/>
+                    <button onClick={saveVersion} disabled={versionBusy} style={{padding:'6px 10px',borderRadius:7,border:'none',background:T.accent,color:'#fff',fontSize:11,fontWeight:'700',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>{versionBusy?'…':'Save'}</button>
+                  </div>
+                  {/* Load history button */}
+                  {versionHistory.length===0&&(
+                    <button onClick={loadVersionHistory} disabled={versionBusy} style={{...css.addBtn,marginTop:0,background:'transparent',border:`1px solid ${T.border}`,color:T.muted,fontSize:11}}>
+                      {versionBusy?'Loading…':'Load version history'}
+                    </button>
+                  )}
+                  {/* Timeline */}
+                  {versionHistory.length>0&&(
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      {versionHistory.map((v,i)=>(
+                        <div key={v.id} style={{
+                          display:'flex',gap:10,alignItems:'flex-start',
+                          padding:'10px 12px',borderRadius:9,
+                          background:T.input,border:`1px solid ${T.border}`,
+                          position:'relative',
+                        }}>
+                          {/* Timeline dot + line */}
+                          <div style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
+                            <div style={{width:10,height:10,borderRadius:'50%',background:i===0?T.accent:T.border,border:`2px solid ${i===0?T.accent:T.border}`,marginTop:2}}/>
+                            {i<versionHistory.length-1&&<div style={{width:2,flex:1,background:T.border,minHeight:16,marginTop:4}}/>}
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:'700',color:T.text,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v.label}</div>
+                            <div style={{fontSize:10,color:T.muted,marginBottom:6}}>
+                              {new Date(v.timestamp).toLocaleString()} · {v.savedBy}
+                            </div>
+                            <div style={{display:'flex',gap:5}}>
+                              <button onClick={()=>restoreVersion(v.id)} style={{padding:'3px 8px',borderRadius:5,border:`1px solid ${T.accentBorder}`,background:T.accentDim,color:T.accent,fontSize:10,cursor:'pointer',fontWeight:'600'}}>Restore</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Feature L: Comments panel */}
+            {activeTool==='comments'&&(()=>{
+              const isAgency=user?.email==='kadengajkowski@gmail.com'||(user?.plan||'free').toLowerCase()==='agency';
+              if(!isAgency) return(
+                <div>
+                  <span style={css.label}>Canvas Comments</span>
+                  <div style={{margin:'8px 0',borderRadius:14,border:`1px solid ${T.accentBorder}`,background:'linear-gradient(160deg,rgba(249,115,22,0.08),rgba(249,115,22,0.02))',padding:'20px 16px',textAlign:'center'}}>
+                    <div style={{fontSize:30,marginBottom:10}}>◌</div>
+                    <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Agency Feature</div>
+                    <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Drop comment pins anywhere on the canvas. Pin positions, reply threads, and resolve status all sync in real time with your team.</div>
+                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user?.email,plan:'agency'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Agency →</button>
+                  </div>
+                </div>
+              );
+              const openComments=comments.filter(c=>!c.resolved);
+              const resolved=comments.filter(c=>c.resolved);
+              return(
+                <div>
+                  <span style={css.label}>Canvas Comments</span>
+                  {/* Drop pin button */}
+                  <button
+                    onClick={()=>setCommentMode(!commentMode)}
+                    style={{...css.addBtn,marginTop:0,marginBottom:10,background:commentMode?T.accent:'transparent',border:`1px solid ${commentMode?T.accent:T.border}`,color:commentMode?'#fff':T.muted,fontSize:12,fontWeight:'700',transition:'all 0.15s'}}>
+                    {commentMode?'◌ Click canvas to drop pin':'+ Add Comment Pin'}
+                  </button>
+                  {/* Open comments */}
+                  {openComments.length>0&&(
+                    <>
+                      <span style={css.label}>Open ({openComments.length})</span>
+                      <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:10}}>
+                        {openComments.map((c,idx)=>(
+                          <div key={c.id} onClick={()=>setActiveCommentId(c.id===activeCommentId?null:c.id)} style={{
+                            padding:'8px 10px',borderRadius:8,
+                            background:activeCommentId===c.id?T.accentDim:T.input,
+                            border:`1px solid ${activeCommentId===c.id?T.accentBorder:T.border}`,
+                            cursor:'pointer',
+                          }}>
+                            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                              <div style={{width:18,height:18,borderRadius:'50%',background:'#f97316',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:'800',color:'#fff',flexShrink:0}}>{comments.indexOf(c)+1}</div>
+                              <span style={{fontSize:10,color:T.muted,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.userId}</span>
+                              {c.replies?.length>0&&<span style={{fontSize:9,color:T.muted}}>{c.replies.length} repl{c.replies.length===1?'y':'ies'}</span>}
+                            </div>
+                            <div style={{fontSize:11,color:T.text,lineHeight:1.4}}>{c.text}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {/* Resolved */}
+                  {resolved.length>0&&(
+                    <>
+                      <span style={css.label}>Resolved ({resolved.length})</span>
+                      <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        {resolved.map(c=>(
+                          <div key={c.id} style={{padding:'7px 10px',borderRadius:7,background:T.bg2,border:`1px solid ${T.border}`,opacity:0.55}}>
+                            <div style={{fontSize:11,color:T.muted,lineHeight:1.4,textDecoration:'line-through'}}>{c.text}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {comments.length===0&&(
+                    <div style={{...css.section,textAlign:'center',fontSize:11,color:T.muted}}>No comments yet. Click "Add Comment Pin" then click the canvas.</div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {activeTool==='ythistory'&&(()=>{
+              const isAgency = user?.email==='kadengajkowski@gmail.com' || (user?.plan||'free').toLowerCase()==='agency';
+              const IMPACT_COLOR = {high:T.accent, medium:'#f59e0b', low:T.muted};
+              const CAT_ICON = {face:'◉',color:'◕',text:'✦',background:'◫',composition:'◈',channel:'▶'};
+
+              // Agency gate
+              if(!isAgency){
+                return(
+                  <div>
+                    <span style={css.label}>YouTube History Intelligence</span>
+                    <div style={{
+                      margin:'8px 0',borderRadius:14,overflow:'hidden',
+                      border:`1px solid ${T.accentBorder}`,
+                      background:'linear-gradient(160deg,rgba(249,115,22,0.08) 0%,rgba(249,115,22,0.02) 100%)',
+                    }}>
+                      <div style={{padding:'20px 16px',textAlign:'center'}}>
+                        <div style={{fontSize:32,marginBottom:10}}>◎</div>
+                        <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Agency Feature</div>
+                        <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:16}}>
+                          Connect your real YouTube channel and let AI study your last 50 thumbnails.
+                          Get personalized insights like <em style={{color:T.text}}>"Faces on the left get 2.3× more clicks on your channel"</em> — then auto-apply them as editor defaults.
+                        </div>
+                        <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16,textAlign:'left'}}>
+                          {['◉ Face position & CTR correlation','◕ Best-performing color grades for your audience','✦ Text presence patterns vs engagement','◫ Busy vs minimal background analysis'].map(s=>(
+                            <div key={s} style={{fontSize:11,color:T.muted,display:'flex',alignItems:'center',gap:8}}>
+                              <span style={{color:T.accent,fontSize:9}}>●</span>{s}
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          onClick={()=>{
+                            fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user?.email,plan:'agency'})})
+                            .then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
+                          }}
+                          style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800',letterSpacing:'0.02em'}}>
+                          Upgrade to Agency →
+                        </button>
+                        <div style={{marginTop:8,fontSize:10,color:T.muted}}>Includes unlimited AI, all features</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return(
+                <div>
+                  <span style={css.label}>YouTube History Intelligence</span>
+
+                  {/* Connect / channel header */}
+                  {!ytHistConnected?(
+                    <div style={{...css.section,textAlign:'center',padding:'20px 14px'}}>
+                      <div style={{fontSize:32,marginBottom:10}}>◎</div>
+                      <div style={{fontSize:13,fontWeight:'700',color:T.text,marginBottom:6}}>Connect your YouTube channel</div>
+                      <div style={{fontSize:11,color:T.muted,lineHeight:1.6,marginBottom:14}}>
+                        We read your last 50 thumbnails and their CTR, then tell you exactly what to do differently.
+                      </div>
+                      <button onClick={connectYouTube}
+                        style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#FF0000,#CC0000)',fontSize:13,fontWeight:'700'}}>
+                        ▶ Connect YouTube
+                      </button>
+                    </div>
+                  ):(
+                    <div>
+                      {ytHistChannel&&(
+                        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,background:T.input,border:`1px solid ${T.border}`,marginBottom:10}}>
+                          {ytHistChannel.avatar&&(
+                            <img src={ytHistChannel.avatar} alt="" style={{width:32,height:32,borderRadius:'50%',flexShrink:0}}/>
+                          )}
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:'700',color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ytHistChannel.title||'Your Channel'}</div>
+                            <div style={{fontSize:10,color:T.success}}>● Connected</div>
+                          </div>
+                          <button onClick={()=>{localStorage.removeItem('tf_yt_connected');localStorage.removeItem('tf_yt_channel');setYtHistConnected(false);setYtHistChannel(null);setYtHistInsights(null);}}
+                            style={{padding:'3px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:10,cursor:'pointer'}}>
+                            Disconnect
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Analyse button + progress */}
+                      {!ytHistInsights&&(
+                        <div>
+                          {ytHistBusy?(
+                            <div style={{padding:'14px',borderRadius:10,background:T.input,border:`1px solid ${T.border}`,textAlign:'center'}}>
+                              <div style={{fontSize:12,color:T.text,fontWeight:'600',marginBottom:10}}>
+                                Studying your last 50 thumbnails…
+                              </div>
+                              <div style={{height:4,borderRadius:2,background:T.border,overflow:'hidden',marginBottom:8}}>
+                                <div style={{
+                                  height:'100%',borderRadius:2,
+                                  background:`linear-gradient(90deg,${T.accent},#ea580c)`,
+                                  width:`${ytHistProgress}%`,
+                                  transition:'width 0.6s ease',
+                                }}/>
+                              </div>
+                              <div style={{fontSize:10,color:T.muted}}>
+                                {ytHistProgress<55?'Fetching videos and stats…':ytHistProgress<90?'Sending to Claude for analysis…':'Finishing up…'}
+                              </div>
+                            </div>
+                          ):(
+                            <button onClick={fetchAndAnalyzeYouTubeHistory}
+                              style={{...css.addBtn,marginTop:0,background:`linear-gradient(135deg,${T.accent},#ea580c)`,fontSize:13,fontWeight:'700'}}>
+                              ◎ Analyze My Channel
+                            </button>
+                          )}
+                          {ytHistError&&(
+                            <div style={{marginTop:8,padding:'8px 10px',borderRadius:7,fontSize:11,color:T.danger,background:`${T.danger}14`,border:`1px solid ${T.danger}33`}}>
+                              {ytHistError}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Insights panel */}
+                      {ytHistInsights&&ytHistInsights.length>0&&(
+                        <div>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                            <span style={css.label}>Your Insights</span>
+                            <button onClick={()=>{setYtHistInsights(null);localStorage.removeItem('tf_yt_insights');setYtHistProgress(0);}}
+                              style={{padding:'2px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:10,cursor:'pointer'}}>
+                              Re-analyze
+                            </button>
+                          </div>
+                          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                            {ytHistInsights.map((ins,i)=>(
+                              <div key={i} style={{
+                                borderRadius:10,overflow:'hidden',
+                                border:`1px solid ${IMPACT_COLOR[ins.impact]||T.border}33`,
+                                background:T.input,
+                              }}>
+                                {/* Impact bar */}
+                                <div style={{height:3,background:`linear-gradient(90deg,${IMPACT_COLOR[ins.impact]||T.border},transparent)`,opacity:0.7}}/>
+                                <div style={{padding:'10px 12px'}}>
+                                  <div style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:6}}>
+                                    <span style={{fontSize:13,flexShrink:0,marginTop:1}}>{CAT_ICON[ins.category]||'◈'}</span>
+                                    <div style={{flex:1}}>
+                                      <div style={{fontSize:12,fontWeight:'700',color:T.text,lineHeight:1.3}}>{ins.headline}</div>
+                                      <div style={{fontSize:9,color:IMPACT_COLOR[ins.impact]||T.muted,textTransform:'uppercase',letterSpacing:'0.4px',fontWeight:'700',marginTop:2}}>
+                                        {ins.impact} impact · {ins.category}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div style={{fontSize:11,color:T.muted,lineHeight:1.5,marginBottom:6}}>{ins.detail}</div>
+                                  <div style={{
+                                    padding:'6px 8px',borderRadius:6,
+                                    background:`${IMPACT_COLOR[ins.impact]||T.border}14`,
+                                    border:`1px solid ${IMPACT_COLOR[ins.impact]||T.border}22`,
+                                    fontSize:10,color:T.text,fontWeight:'600',lineHeight:1.4,
+                                  }}>
+                                    → {ins.recommendation}
+                                    {ins.applyDefault?.colorGrade&&(
+                                      <button onClick={()=>setCgPreset(ins.applyDefault.colorGrade)}
+                                        style={{display:'block',marginTop:4,padding:'3px 8px',borderRadius:5,border:`1px solid ${T.accent}44`,background:`${T.accent}14`,color:T.accent,fontSize:9,cursor:'pointer',fontWeight:'700'}}>
+                                        Apply {ins.applyDefault.colorGrade} grade now
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Video count summary */}
+                          {ytHistVideos.length>0&&(
+                            <div style={{marginTop:10,padding:'8px 10px',borderRadius:7,background:T.bg2,border:`1px solid ${T.border}`,fontSize:10,color:T.muted,textAlign:'center'}}>
+                              Based on {ytHistVideos.length} videos · {ytHistVideos.filter(v=>v.ctr!=null).length} with CTR data
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {activeTool==='resize'&&(
               <div>
                 <span style={css.label}>Export all platforms</span>
@@ -7079,9 +8186,182 @@ PHASE 4 — Toolbar button:
               </div>
             )}
 
-            {activeTool==='ab'&&(
+            {activeTool==='ab'&&(()=>{
+              const cardW=114, cardH=Math.round(cardW*720/1280); // 16:9 ≈ 64px
+              const SLOT_LABELS=['Original','Tight + Default','Wide + Warm','Cool + New Text','Cinematic + Right','Neon + AI BG'];
+              const hasAny=aiVariants.some(v=>v?.base64);
+              const readyCount=aiVariants.filter(v=>v?.base64).length;
+              return(
               <div>
-                <span style={css.label}>A/B Variants</span>
+                <span style={css.label}>AI Variant Generator</span>
+
+                {/* Config */}
+                <div style={{marginBottom:10}}>
+                  <span style={css.label}>Video title</span>
+                  <input
+                    value={aiVarTitle}
+                    onChange={e=>setAiVarTitle(e.target.value)}
+                    placeholder="e.g. I Spent 30 Days in Antarctica"
+                    style={{...css.input,marginBottom:6}}
+                  />
+                  <span style={css.label}>Niche</span>
+                  <select value={aiVarNiche} onChange={e=>setAiVarNiche(e.target.value)} style={{...css.input,marginBottom:0}}>
+                    {AI_VARIANT_NICHES.map(n=><option key={n} value={n}>{n.charAt(0).toUpperCase()+n.slice(1)}</option>)}
+                  </select>
+                </div>
+
+                <button
+                  onClick={generateAiVariants}
+                  disabled={aiVarBusy}
+                  style={{
+                    ...css.addBtn,marginTop:0,
+                    background:aiVarBusy?'transparent':`linear-gradient(135deg,#f97316,#ea580c)`,
+                    color:aiVarBusy?T.accent:'#fff',
+                    border:aiVarBusy?`1px solid ${T.accentBorder}`:'none',
+                    fontSize:13,fontWeight:'800',letterSpacing:'0.3px',
+                    display:'flex',alignItems:'center',justifyContent:'center',gap:7,
+                    boxShadow:aiVarBusy?'none':'0 0 20px rgba(249,115,22,0.3)',
+                    opacity:aiVarBusy?0.85:1,
+                  }}>
+                  {aiVarBusy
+                    ?<><span style={{display:'inline-block',animation:'editor-spin 0.8s linear infinite'}}>◌</span> Generating {aiVariants.filter(v=>v?.base64).length}/5…</>
+                    :<>⊟ Generate 5 AI Variants</>}
+                </button>
+
+                {/* 2×3 grid — original + 5 variants */}
+                {(aiVariants.length>0)&&(
+                  <div style={{marginTop:14}}>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                      {Array.from({length:6}).map((_,idx)=>{
+                        const v=aiVariants[idx];
+                        const isSelected=aiVarSelected===idx&&idx>0;
+                        const isOriginal=idx===0;
+                        const isLoading=!v&&idx>0&&aiVarBusy;
+                        const isError=v?.error;
+                        return(
+                          <div key={idx} style={{
+                            borderRadius:7,
+                            border:`2px solid ${isSelected?T.accent:isOriginal?T.border:T.border}`,
+                            overflow:'hidden',cursor:v?.base64?'pointer':'default',
+                            transition:'border-color 0.15s,box-shadow 0.15s',
+                            boxShadow:isSelected?`0 0 14px rgba(249,115,22,0.45)`:'none',
+                            background:T.bg2,
+                          }}
+                          onClick={()=>{ if(v?.base64&&!isOriginal) selectAiVariant(idx); }}
+                          onMouseEnter={e=>{ if(v?.base64&&!isOriginal) e.currentTarget.style.borderColor=T.accent; }}
+                          onMouseLeave={e=>{ e.currentTarget.style.borderColor=isSelected?T.accent:T.border; }}>
+
+                            {/* Thumbnail */}
+                            <div style={{
+                              width:'100%',height:cardH,
+                              background:'#111',position:'relative',overflow:'hidden',
+                              display:'flex',alignItems:'center',justifyContent:'center',
+                            }}>
+                              {v?.base64?(
+                                <img src={v.base64} alt={v.label}
+                                  style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>
+                              ):isLoading?(
+                                <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                                  <span style={{fontSize:14,color:T.muted,animation:'editor-spin 1s linear infinite',display:'inline-block'}}>◌</span>
+                                  <span style={{fontSize:8,color:T.muted,letterSpacing:'0.3px'}}>GENERATING</span>
+                                </div>
+                              ):(
+                                <div style={{fontSize:9,color:T.muted,textAlign:'center',padding:'0 4px'}}>
+                                  {isError?'Failed':'—'}
+                                </div>
+                              )}
+
+                              {/* Label badge */}
+                              <div style={{
+                                position:'absolute',top:3,left:3,
+                                fontSize:7,fontWeight:'800',color:'#fff',letterSpacing:'0.4px',
+                                background:isOriginal?'rgba(0,0,0,0.65)':isSelected?T.accent:'rgba(0,0,0,0.65)',
+                                padding:'1px 5px',borderRadius:4,
+                                textTransform:'uppercase',
+                              }}>
+                                {isOriginal?'Original':isSelected?'✓ Winner':SLOT_LABELS[idx].split(' + ')[0]}
+                              </div>
+
+                              {/* Selected glow ring */}
+                              {isSelected&&(
+                                <div style={{position:'absolute',inset:0,border:`2px solid ${T.accent}`,borderRadius:5,pointerEvents:'none'}}/>
+                              )}
+                            </div>
+
+                            {/* Card footer */}
+                            <div style={{padding:'5px 6px',background:T.bg2}}>
+                              <div style={{fontSize:9,fontWeight:'700',color:isSelected?T.accent:T.text,
+                                overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:2}}>
+                                {v?.label||SLOT_LABELS[idx]}
+                              </div>
+                              {v?.description&&(
+                                <div style={{fontSize:8,color:T.muted,overflow:'hidden',textOverflow:'ellipsis',
+                                  whiteSpace:'nowrap',lineHeight:1.3}}>
+                                  {v.description}
+                                </div>
+                              )}
+                              {v?.base64&&!isOriginal&&!isSelected&&(
+                                <button
+                                  onClick={e=>{e.stopPropagation();selectAiVariant(idx);}}
+                                  style={{
+                                    marginTop:4,width:'100%',padding:'3px 0',borderRadius:4,
+                                    border:'none',background:T.accent,color:'#fff',
+                                    fontSize:8,fontWeight:'700',cursor:'pointer',letterSpacing:'0.3px',
+                                  }}>
+                                  ✓ Select Winner
+                                </button>
+                              )}
+                              {isSelected&&(
+                                <div style={{marginTop:4,fontSize:8,color:T.accent,fontWeight:'700',textAlign:'center'}}>
+                                  ✓ Applied to canvas
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Actions */}
+                    {hasAny&&(
+                      <div style={{marginTop:10,display:'flex',flexDirection:'column',gap:6}}>
+                        <button
+                          onClick={downloadAiVariantsZip}
+                          disabled={aiVarBusy||readyCount===0}
+                          style={{
+                            ...css.addBtn,marginTop:0,
+                            background:aiVarBusy?T.muted:`linear-gradient(135deg,#f97316,#ea580c)`,
+                            color:'#fff',fontWeight:'700',fontSize:11,
+                            boxShadow:aiVarBusy?'none':'0 0 16px rgba(249,115,22,0.25)',
+                            opacity:aiVarBusy?0.6:1,
+                          }}>
+                          {aiVarBusy?'Working…':`⬇ Download All (${readyCount}) as ZIP`}
+                        </button>
+                        <button
+                          onClick={()=>{setAiVariants([]);setAiVarSelected(null);}}
+                          style={{...css.addBtn,marginTop:0,background:'transparent',
+                            color:T.muted,border:`1px solid ${T.border}`,fontSize:11}}>
+                          Clear &amp; Start Over
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Empty state hint */}
+                {aiVariants.length===0&&!aiVarBusy&&(
+                  <div style={{...css.section,marginTop:10,fontSize:11,color:T.muted,lineHeight:1.65}}>
+                    AI generates 5 pro variants of your thumbnail — different crops,
+                    color grades, and headlines. Cards populate as each finishes.
+                    Pick your winner with one click.
+                  </div>
+                )}
+              </div>);
+            })()}
+
+            {false&&activeTool==='ab_legacy'&&(
+              <div>
+                <span style={css.label}>A/B Variants (legacy)</span>
                 <div style={{...css.section,marginTop:0,fontSize:11,
                   color:T.muted,lineHeight:1.6}}>
                   Generate 3 variations of your current thumbnail instantly.
@@ -7285,131 +8565,998 @@ PHASE 4 — Toolbar button:
               </div>
             )}
 
-            {activeTool==='ctr'&&(
+            {activeTool==='ctr'&&(()=>{
+              const CAT_LABELS={
+                face_prominence:'Face',text_readability:'Text',
+                color_contrast:'Contrast',emotional_intensity:'Emotion',
+                composition:'Layout',niche_relevance:'Niche Fit',
+              };
+              const gaugeR=56, gaugeSize=128;
+              const circ=2*Math.PI*gaugeR;
+              const score=ctrV2?.overall||0;
+              const targetOffset=circ-(score/100)*circ;
+              const gaugeColor=score>=80?T.success:score>=60?T.warning:T.danger;
+              const animId=ctrV2?._ts||0;
+              return(
               <div>
-                <span style={css.label}>CTR Score</span>
-                <div style={{...css.section,marginTop:0,fontSize:11,
-                  color:T.muted,lineHeight:1.6}}>
-                  Analyze your thumbnail and get a click-through rate score based on contrast, text, subject and composition.
+                {/* Animate gauge from empty on each new result */}
+                {ctrV2&&<style>{`
+                  @keyframes tf-ctr-gauge-${animId}{
+                    from{stroke-dashoffset:${circ.toFixed(1)}}
+                    to{stroke-dashoffset:${targetOffset.toFixed(1)}}
+                  }
+                  .tf-ctr-arc-${animId}{
+                    animation:tf-ctr-gauge-${animId} 1.3s cubic-bezier(0.4,0,0.2,1) forwards;
+                    transform:rotate(-90deg);
+                    transform-origin:${gaugeSize/2}px ${gaugeSize/2}px;
+                  }
+                `}</style>}
+
+                <span style={css.label}>CTR Score v2</span>
+
+                {/* Inputs */}
+                <div style={{...css.section,marginTop:0,display:'flex',flexDirection:'column',gap:6}}>
+                  <input placeholder="Video title (improves scoring)"
+                    value={ctrTitle} onChange={e=>setCtrTitle(e.target.value)}
+                    onKeyDown={e=>{if(e.key==='Enter'&&!ctrLoading)analyzeCTR();}}
+                    style={{...css.input,marginBottom:0}}/>
+                  <select value={ctrNiche} onChange={e=>setCtrNiche(e.target.value)}
+                    style={{...css.input,marginBottom:0,appearance:'none',
+                      backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23454e6b'/%3E%3C/svg%3E")`,
+                      backgroundRepeat:'no-repeat',backgroundPosition:'right 10px center',paddingRight:28}}>
+                    {['Gaming','Tech','Finance','Fitness','Food','Beauty','Travel','Education','Vlog','Business','Motivation','Comedy','Reaction','DIY','Music','Sports','Science'].map(n=>(
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <button onClick={analyzeCTR} disabled={ctrLoading}
-                  style={{...css.addBtn,background:ctrLoading?T.muted:T.accent,
-                    marginTop:10,fontSize:13,fontWeight:'700',opacity:ctrLoading?0.6:1}}>
-                  {ctrLoading?'Analyzing...':'◈ Analyze thumbnail'}
+                  style={{...css.addBtn,
+                    background:ctrLoading?'transparent':`linear-gradient(135deg,#f97316,#ea580c)`,
+                    color:ctrLoading?T.accent:'#fff',
+                    border:ctrLoading?`1px solid ${T.accentBorder}`:'none',
+                    fontWeight:'700',fontSize:13,marginTop:0}}>
+                  {ctrLoading?'Analyzing…':'◈ Analyze CTR'}
                 </button>
 
-                {ctrScore!==null&&(
-                  <div>
-                    <div style={{textAlign:'center',padding:'20px 0 10px'}}>
+                {ctrV2&&(<>
+
+                  {/* ── Hero: Circular gauge ── */}
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'18px 0 12px'}}>
+                    <svg width={gaugeSize} height={gaugeSize} viewBox={`0 0 ${gaugeSize} ${gaugeSize}`}>
+                      {/* Track */}
+                      <circle cx={gaugeSize/2} cy={gaugeSize/2} r={gaugeR}
+                        fill="none" stroke={T.border} strokeWidth="10"/>
+                      {/* Animated arc */}
+                      <circle cx={gaugeSize/2} cy={gaugeSize/2} r={gaugeR}
+                        fill="none" stroke={gaugeColor} strokeWidth="10"
+                        strokeLinecap="round"
+                        strokeDasharray={circ.toFixed(1)}
+                        className={`tf-ctr-arc-${animId}`}/>
+                      {/* Score number */}
+                      <text x={gaugeSize/2} y={gaugeSize/2-8} textAnchor="middle"
+                        dominantBaseline="middle" fontSize="30" fontWeight="900"
+                        fill={T.text} fontFamily="Anton,sans-serif">{score}</text>
+                      <text x={gaugeSize/2} y={gaugeSize/2+18} textAnchor="middle"
+                        fontSize="8" fontWeight="700" fill={T.muted}
+                        letterSpacing="1">OUT OF 100</text>
+                    </svg>
+
+                    {/* Predicted CTR range */}
+                    <div style={{textAlign:'center',marginTop:4}}>
                       <div style={{
-                        fontSize:56,fontWeight:'900',
-                        color: ctrScore>=80?T.success:ctrScore>=60?T.warning:T.danger,
-                        lineHeight:1,letterSpacing:'-2px',
-                      }}>{ctrScore}</div>
-                      <div style={{fontSize:13,color:T.muted,marginTop:4}}>
-                        {ctrScore>=90?'S':''}
-                        {ctrScore>=80&&ctrScore<90?'A':''}
-                        {ctrScore>=70&&ctrScore<80?'B':''}
-                        {ctrScore>=60&&ctrScore<70?'C':''}
-                        {ctrScore>=40&&ctrScore<60?'D':''}
-                        {ctrScore<40?'F':''}
-                        {' — '}out of 100
-                      </div>
-                      <div style={{
-                        fontSize:14,fontWeight:'700',marginTop:8,
-                        color: ctrScore>=80?T.success:ctrScore>=60?T.warning:T.danger,
+                        fontSize:20,fontWeight:'900',color:gaugeColor,
+                        letterSpacing:'-0.5px',lineHeight:1.1,
                       }}>
-                        {ctrScore>=90?'🔥 Viral potential':
-                         ctrScore>=80?'✅ Strong thumbnail':
-                         ctrScore>=60?'⚠️ Needs work':
-                         '❌ Low CTR risk'}
+                        {ctrV2.predicted_ctr_low}%
+                        <span style={{fontSize:14,color:T.muted,fontWeight:'400',margin:'0 4px'}}>–</span>
+                        {ctrV2.predicted_ctr_high}%
+                      </div>
+                      <div style={{fontSize:10,color:T.muted,fontWeight:'600',marginTop:2,letterSpacing:'0.3px'}}>
+                        PREDICTED CTR
+                      </div>
+                      <div style={{fontSize:10,color:T.muted,marginTop:4}}>
+                        vs. <span style={{color:T.warning}}>{ctrV2.industry_avg}%</span> {ctrNiche} avg
                       </div>
                     </div>
+                  </div>
 
-                    <div style={{height:8,borderRadius:4,background:T.border,marginBottom:16,overflow:'hidden'}}>
+                  {/* ── Mobile preview ── */}
+                  {ctrThumbUrl&&(
+                    <div style={{marginBottom:10}}>
+                      <span style={css.label}>YouTube Mobile Preview</span>
                       <div style={{
-                        height:'100%',borderRadius:4,
-                        width:`${ctrScore}%`,
-                        background: ctrScore>=80?T.success:ctrScore>=60?T.warning:T.danger,
-                        transition:'width 0.5s ease',
-                      }}/>
+                        background:'#0f0f0f',borderRadius:8,padding:8,
+                        border:`1px solid ${T.border}`,
+                      }}>
+                        <img src={ctrThumbUrl} alt="Mobile preview"
+                          style={{width:180,height:101,objectFit:'cover',borderRadius:4,display:'block',margin:'0 auto'}}/>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginTop:6,padding:'0 2px'}}>
+                          <div style={{width:24,height:24,borderRadius:'50%',background:T.border,flexShrink:0}}/>
+                          <div style={{flex:1}}>
+                            <div style={{height:7,borderRadius:3,background:T.muted,marginBottom:4,width:'90%'}}/>
+                            <div style={{height:6,borderRadius:3,background:T.border,width:'60%'}}/>
+                          </div>
+                        </div>
+                        <div style={{textAlign:'center',marginTop:4,fontSize:8,color:T.border,letterSpacing:'0.5px'}}>
+                          180 × 101 px — YouTube mobile grid
+                        </div>
+                      </div>
                     </div>
+                  )}
 
-                    <span style={css.label}>Breakdown</span>
-                    <div style={css.section}>
-                      {[
-                        ['Contrast',   ctrBreakdown.contrast, 'How much light/dark variation'],
-                        ['Vibrancy',   ctrBreakdown.vibrancy, 'Color saturation and pop'],
-                        ['Text',       ctrBreakdown.text,     'Bold readable text present'],
-                        ['Subject',    ctrBreakdown.subject,  'Clear main subject'],
-                        ['Composition',ctrBreakdown.comp,     'Layer variety and depth'],
-                        ['Safe zones', ctrBreakdown.safe,     'Content away from YouTube UI'],
-                      ].map(([label,score,desc])=>(
-                        <div key={label} style={{marginBottom:10}}>
-                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                            <span style={{fontSize:11,color:T.text,fontWeight:'600'}}>{label}</span>
-                            <span style={{fontSize:11,fontWeight:'700',
-                              color:score>=80?T.success:score>=60?T.warning:T.danger}}>
-                              {score}/100
-                            </span>
-                          </div>
-                          <div style={{height:5,borderRadius:3,background:T.border,overflow:'hidden'}}>
+                  {/* ── Category breakdown ── */}
+                  <span style={css.label}>Score breakdown</span>
+                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    {Object.entries(ctrV2.categories).map(([key,cat])=>{
+                      const pct=Math.round((cat.score/cat.max)*100);
+                      const barColor=pct>=80?T.success:pct>=53?T.warning:T.danger;
+                      const expanded=ctrExpandedCat===key;
+                      return(
+                        <div key={key}>
+                          <button onClick={()=>setCtrExpandedCat(expanded?null:key)}
+                            style={{
+                              width:'100%',padding:'7px 0',background:'none',border:'none',
+                              cursor:'pointer',textAlign:'left',
+                            }}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                              <span style={{fontSize:11,color:expanded?T.accent:T.text,fontWeight:'600',transition:'color 0.1s'}}>
+                                {CAT_LABELS[key]||key}
+                              </span>
+                              <div style={{display:'flex',alignItems:'center',gap:5}}>
+                                <span style={{fontSize:10,fontWeight:'700',color:barColor,fontFamily:'monospace'}}>
+                                  {cat.score}/{cat.max}
+                                </span>
+                                <span style={{fontSize:9,color:T.muted,transition:'transform 0.15s',
+                                  display:'inline-block',transform:expanded?'rotate(180deg)':'none'}}>▾</span>
+                              </div>
+                            </div>
+                            <div style={{height:4,borderRadius:2,background:T.border,overflow:'hidden'}}>
+                              <div style={{
+                                height:'100%',borderRadius:2,
+                                width:`${pct}%`,background:barColor,
+                                transition:'width 0.6s cubic-bezier(0.4,0,0.2,1)',
+                              }}/>
+                            </div>
+                          </button>
+                          {expanded&&(
                             <div style={{
-                              height:'100%',borderRadius:3,
-                              width:`${score}%`,
-                              background:score>=80?T.success:score>=60?T.warning:T.danger,
-                            }}/>
-                          </div>
-                          <div style={{fontSize:9,color:T.muted,marginTop:2}}>{desc}</div>
+                              padding:'8px 10px',marginTop:2,marginBottom:4,
+                              borderRadius:7,fontSize:11,color:T.text,lineHeight:1.55,
+                              background:`${T.accent}0d`,border:`1px solid ${T.accentBorder}`,
+                            }}>
+                              {cat.tip}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* ── Issues checklist ── */}
+                  {ctrV2.issues.length>0&&(<>
+                    <span style={css.label}>Issues — {ctrV2.issues.length-ctrChecked.size} remaining</span>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                      {ctrV2.issues.map((issue,i)=>{
+                        const checked=ctrChecked.has(i);
+                        return(
+                          <button key={i} onClick={()=>{
+                            setCtrChecked(prev=>{const n=new Set(prev);checked?n.delete(i):n.add(i);return n;});
+                          }} style={{
+                            display:'flex',alignItems:'flex-start',gap:8,
+                            padding:'7px 9px',borderRadius:7,cursor:'pointer',
+                            background:checked?`${T.success}0d`:`${T.danger}0d`,
+                            border:`1px solid ${checked?T.success:T.danger}33`,
+                            textAlign:'left',width:'100%',transition:'all 0.12s',
+                          }}>
+                            <span style={{
+                              width:14,height:14,borderRadius:3,flexShrink:0,marginTop:1,
+                              background:checked?T.success:'transparent',
+                              border:`2px solid ${checked?T.success:T.danger}`,
+                              display:'flex',alignItems:'center',justifyContent:'center',
+                              fontSize:9,color:'#fff',fontWeight:'900',
+                            }}>{checked?'✓':''}</span>
+                            <span style={{fontSize:11,color:checked?T.muted:T.text,lineHeight:1.45,
+                              textDecoration:checked?'line-through':'none'}}>
+                              {issue}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>)}
+
+                  {/* ── Wins ── */}
+                  {ctrV2.wins.length>0&&(<>
+                    <span style={css.label}>What's working</span>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                      {ctrV2.wins.map((win,i)=>(
+                        <div key={i} style={{
+                          display:'flex',alignItems:'flex-start',gap:8,
+                          padding:'7px 9px',borderRadius:7,
+                          background:`${T.success}0d`,
+                          border:`1px solid ${T.success}33`,
+                        }}>
+                          <span style={{color:T.success,fontSize:12,flexShrink:0,marginTop:1}}>✓</span>
+                          <span style={{fontSize:11,color:T.text,lineHeight:1.45}}>{win}</span>
                         </div>
                       ))}
                     </div>
+                  </>)}
 
-                    {ctrBreakdown.heatmap&&(<>
-                      <span style={css.label}>Attention Heatmap</span>
-                      <div style={{...css.section,padding:0,overflow:'hidden',position:'relative'}}>
-                        <img src={ctrBreakdown.heatmap} alt="Attention heatmap"
-                          style={{width:'100%',display:'block',borderRadius:7}}/>
-                        <div style={{position:'absolute',bottom:6,right:6,display:'flex',gap:4,fontSize:8,color:'#fff'}}>
-                          <span style={{background:'rgba(0,0,255,0.7)',padding:'1px 5px',borderRadius:3}}>Cold</span>
-                          <span style={{background:'rgba(0,180,0,0.7)',padding:'1px 5px',borderRadius:3}}>Warm</span>
-                          <span style={{background:'rgba(255,0,0,0.7)',padding:'1px 5px',borderRadius:3}}>Hot</span>
+                  <button onClick={()=>{setCtrV2(null);setCtrChecked(new Set());setCtrExpandedCat(null);setCtrThumbUrl(null);}}
+                    style={{...css.addBtn,background:'transparent',color:T.muted,
+                      border:`1px solid ${T.border}`,marginTop:10,fontSize:11}}>
+                    × Clear results
+                  </button>
+                </>)}
+              </div>
+              );
+            })()}
+
+            {activeTool==='composition'&&(
+              <div>
+                <span style={css.label}>Composition AI</span>
+
+                {/* Video title input */}
+                <div style={{...css.section,marginTop:0}}>
+                  <div style={{fontSize:11,color:T.muted,marginBottom:8,lineHeight:1.6}}>
+                    Claude Vision analyzes your thumbnail for click-worthiness — rule-of-thirds, subject placement, text zones, and more.
+                  </div>
+                  <input
+                    placeholder="Video title (optional, improves analysis)"
+                    value={compVideoTitle}
+                    onChange={e=>setCompVideoTitle(e.target.value)}
+                    style={{...css.input,marginBottom:0}}
+                  />
+                </div>
+
+                <button
+                  onClick={analyzeComposition}
+                  disabled={compLoading}
+                  style={{...css.addBtn,
+                    background:compLoading?T.muted:T.accent,
+                    fontSize:13,fontWeight:'700',
+                    opacity:compLoading?0.6:1,
+                    marginTop:0,
+                  }}
+                >
+                  {compLoading?'Analyzing…':'◫ Analyze composition'}
+                </button>
+
+                {compResult&&(<>
+                  {/* Score gauge */}
+                  <div style={{textAlign:'center',padding:'18px 0 10px'}}>
+                    <div style={{
+                      fontSize:60,fontWeight:'900',lineHeight:1,letterSpacing:'-2px',
+                      color:compResult.score>=8?T.success:compResult.score>=5?T.warning:T.danger,
+                    }}>{compResult.score}<span style={{fontSize:22,fontWeight:'400',color:T.muted}}>/10</span></div>
+                    <div style={{fontSize:12,color:T.muted,marginTop:4}}>
+                      {compResult.score>=9?'Near-perfect composition':
+                       compResult.score>=7?'Strong composition':
+                       compResult.score>=5?'Needs refinement':
+                       'Major composition issues'}
+                    </div>
+                  </div>
+
+                  {/* Score bar */}
+                  <div style={{height:7,borderRadius:4,background:T.border,marginBottom:14,overflow:'hidden'}}>
+                    <div style={{
+                      height:'100%',borderRadius:4,
+                      width:`${compResult.score*10}%`,
+                      background:compResult.score>=8?T.success:compResult.score>=5?T.warning:T.danger,
+                      transition:'width 0.5s ease',
+                    }}/>
+                  </div>
+
+                  {/* Overlay toggle */}
+                  <button
+                    onClick={()=>setCompOverlay(v=>!v)}
+                    style={{
+                      width:'100%',padding:'7px 10px',borderRadius:7,
+                      background:compOverlay?`${T.accent}22`:'transparent',
+                      border:`1px solid ${compOverlay?T.accent:T.border}`,
+                      color:compOverlay?T.accent:T.muted,
+                      fontSize:11,cursor:'pointer',fontWeight:'600',marginBottom:10,
+                      transition:'all 0.15s',
+                    }}
+                  >
+                    {compOverlay?'◫ Overlay ON — click to hide':'◫ Show overlay'}
+                  </button>
+
+                  {/* Assessments */}
+                  {(compResult.focal_point||compResult.negative_space||compResult.face_placement)&&(<>
+                    <span style={css.label}>Assessments</span>
+                    <div style={{...css.section,display:'flex',flexDirection:'column',gap:8}}>
+                      {compResult.focal_point&&(
+                        <div style={{fontSize:11,color:T.text,lineHeight:1.5}}>
+                          <span style={{color:T.accent,fontWeight:'700',marginRight:5}}>◎ Focal point</span>
+                          {compResult.focal_point}
                         </div>
-                      </div>
-                    </>)}
+                      )}
+                      {compResult.negative_space&&(
+                        <div style={{fontSize:11,color:T.text,lineHeight:1.5}}>
+                          <span style={{color:T.accent,fontWeight:'700',marginRight:5}}>⬜ Space</span>
+                          {compResult.negative_space}
+                        </div>
+                      )}
+                      {compResult.face_placement&&(
+                        <div style={{fontSize:11,color:T.text,lineHeight:1.5}}>
+                          <span style={{color:T.accent,fontWeight:'700',marginRight:5}}>◉ Face</span>
+                          {compResult.face_placement}
+                        </div>
+                      )}
+                    </div>
+                  </>)}
 
-                    {ctrBreakdown.tips.length>0&&(<>
-                      <span style={css.label}>Suggestions</span>
-                      <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                        {ctrBreakdown.tips.map((tip,i)=>(
-                          <div key={i} style={{
-                            padding:'8px 10px',borderRadius:7,fontSize:11,lineHeight:1.5,
-                            background: tip.type==='good'?`${T.success}18`:
-                                        tip.type==='bad'?`${T.danger}18`:`${T.warning}18`,
-                            border:`1px solid ${
-                              tip.type==='good'?T.success:
-                              tip.type==='bad'?T.danger:T.warning}44`,
-                            color:T.text,
+                  {/* Issues checklist */}
+                  {compResult.issues?.length>0&&(<>
+                    <span style={css.label}>Issues to fix — {compResult.issues.length-compChecked.size} remaining</span>
+                    <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                      {compResult.issues.map((issue,i)=>{
+                        const checked=compChecked.has(i);
+                        return(
+                          <button key={i} onClick={()=>{
+                            setCompChecked(prev=>{
+                              const next=new Set(prev);
+                              checked?next.delete(i):next.add(i);
+                              return next;
+                            });
+                          }} style={{
+                            display:'flex',alignItems:'flex-start',gap:8,
+                            padding:'8px 10px',borderRadius:7,
+                            background:checked?`${T.success}18`:`${T.danger}12`,
+                            border:`1px solid ${checked?T.success:T.danger}44`,
+                            cursor:'pointer',textAlign:'left',width:'100%',
+                            transition:'all 0.15s',
                           }}>
-                            <span style={{marginRight:6}}>
-                              {tip.type==='good'?'✓':tip.type==='bad'?'✗':'→'}
-                            </span>
-                            {tip.text}
+                            <span style={{
+                              width:16,height:16,borderRadius:4,flexShrink:0,marginTop:1,
+                              background:checked?T.success:'transparent',
+                              border:`2px solid ${checked?T.success:T.danger}`,
+                              display:'flex',alignItems:'center',justifyContent:'center',
+                              fontSize:10,color:'#fff',fontWeight:'900',
+                            }}>{checked?'✓':''}</span>
+                            <span style={{
+                              fontSize:11,color:checked?T.muted:T.text,
+                              lineHeight:1.5,
+                              textDecoration:checked?'line-through':'none',
+                            }}>{issue}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>)}
+
+                  {/* Crop suggestion */}
+                  {compResult.crop_suggestion&&
+                   !(compResult.crop_suggestion.x===0&&compResult.crop_suggestion.y===0&&
+                     compResult.crop_suggestion.w>=98&&compResult.crop_suggestion.h>=98)&&(<>
+                    <span style={css.label}>Crop suggestion</span>
+                    <div style={{...css.section,fontSize:11,color:T.muted,lineHeight:1.6,marginBottom:6}}>
+                      Claude recommends tightening the crop to focus on the key subject. Apply to zoom the view.
+                    </div>
+                    <button
+                      onClick={applyCropSuggestion}
+                      style={{...css.addBtn,background:`${T.accent}22`,
+                        color:T.accent,border:`1px solid ${T.accent}`,
+                        fontWeight:'700',fontSize:12,marginTop:0}}
+                    >
+                      ✂ Apply suggested crop
+                    </button>
+                  </>)}
+
+                  {/* Reset */}
+                  <button
+                    onClick={()=>{setCompResult(null);setCompChecked(new Set());setCompOverlay(false);}}
+                    style={{...css.addBtn,background:'transparent',
+                      color:T.muted,border:`1px solid ${T.border}`,marginTop:8}}
+                  >
+                    × Clear
+                  </button>
+                </>)}
+              </div>
+            )}
+
+            {activeTool==='aitext'&&(
+              <div>
+                <style>{`@keyframes tf-caret{0%,100%{opacity:1}50%{opacity:0}}`}</style>
+                <span style={css.label}>AI Text Engine</span>
+
+                {/* Inputs */}
+                <div style={{...css.section,marginTop:0,display:'flex',flexDirection:'column',gap:7}}>
+                  <input
+                    placeholder="Video title (e.g. I Spent $10,000...)"
+                    value={aiTextTitle}
+                    onChange={e=>setAiTextTitle(e.target.value)}
+                    onKeyDown={e=>{if(e.key==='Enter'&&!aiTextLoading)generateAIText();}}
+                    style={{...css.input,marginBottom:0}}
+                  />
+                  <select
+                    value={aiTextNiche}
+                    onChange={e=>setAiTextNiche(e.target.value)}
+                    style={{...css.input,marginBottom:0,appearance:'none',paddingRight:28,
+                      backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23454e6b'/%3E%3C/svg%3E")`,
+                      backgroundRepeat:'no-repeat',backgroundPosition:'right 10px center',
+                    }}
+                  >
+                    {['Gaming','Tech','Finance','Fitness','Food','Beauty','Travel',
+                      'Education','Vlog','Business','Motivation','Comedy','Reaction',
+                      'DIY','Music','Sports','Science','News'].map(n=>(
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Generate button */}
+                <button
+                  onClick={generateAIText}
+                  disabled={aiTextLoading}
+                  style={{
+                    ...css.addBtn,
+                    background:aiTextLoading?'transparent':T.accent,
+                    color:aiTextLoading?T.accent:'#fff',
+                    border:aiTextLoading?`1px solid ${T.accentBorder}`:'none',
+                    fontWeight:'700',fontSize:13,marginTop:0,
+                    display:'flex',alignItems:'center',justifyContent:'center',gap:6,
+                    opacity:aiTextLoading?1:1,
+                  }}
+                >
+                  {aiTextLoading?(
+                    <>
+                      Writing your headline...
+                      <span style={{
+                        display:'inline-block',width:2,height:14,
+                        background:T.accent,marginLeft:2,
+                        verticalAlign:'middle',
+                        animation:'tf-caret 0.8s step-end infinite',
+                      }}/>
+                    </>
+                  ):'✦ Generate headlines'}
+                </button>
+
+                {/* Result cards */}
+                {aiTextResults.length>0&&(<>
+                  <span style={css.label}>Click any card to place on canvas</span>
+                  <div style={{display:'flex',flexDirection:'column',gap:7}}>
+                    {aiTextResults.map((opt,i)=>{
+                      const isLight=opt.color==='light';
+                      const row=opt.y<35?'TOP':(opt.y>65?'BOTTOM':'MID');
+                      const col=opt.x<35?'LEFT':(opt.x>65?'RIGHT':'CENTER');
+                      const fontStack=opt.fontFamily==='Bebas Neue'?'"Bebas Neue",Anton,sans-serif':
+                                      opt.fontFamily==='Oswald'?'Oswald,sans-serif':
+                                      'Anton,sans-serif';
+                      const previewSize=Math.min(24,Math.max(15,Math.round((opt.fontSize||60)/3)));
+                      return(
+                        <button key={i}
+                          onClick={()=>placeAITextOption(opt)}
+                          onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 0 0 2px ${T.accent}`}
+                          onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}
+                          style={{
+                            display:'block',width:'100%',padding:'13px 14px 11px',
+                            borderRadius:10,border:`1px solid ${isLight?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}`,
+                            background:isLight?'#0f1117':'#f3f4f6',
+                            cursor:'pointer',textAlign:'left',outline:'none',
+                            position:'relative',transition:'box-shadow 0.12s',
+                          }}
+                        >
+                          {/* Text preview */}
+                          <div style={{
+                            fontSize:previewSize,
+                            fontFamily:fontStack,
+                            fontWeight:900,
+                            color:isLight?'#ffffff':'#0f1117',
+                            letterSpacing:opt.fontFamily==='Bebas Neue'?2:1,
+                            lineHeight:1.1,
+                            marginBottom:9,
+                            userSelect:'none',
+                            textShadow:isLight&&opt.strokeWidth>4
+                              ?`0 0 ${opt.strokeWidth*1.5}px rgba(0,0,0,0.9)`
+                              :!isLight&&opt.strokeWidth>4
+                              ?`0 0 ${opt.strokeWidth*1.5}px rgba(255,255,255,0.8)`
+                              :'none',
+                            paddingRight:22,
+                          }}>
+                            {opt.text}
                           </div>
+
+                          {/* Metadata chips */}
+                          <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+                            <span style={{
+                              fontSize:8,fontWeight:'700',letterSpacing:'0.6px',
+                              background:`${T.accent}1a`,color:T.accent,
+                              padding:'2px 6px',borderRadius:4,
+                              border:`1px solid ${T.accent}33`,
+                              fontFamily:'monospace',
+                            }}>◎ {row} {col}</span>
+
+                            <span style={{
+                              fontSize:8,fontWeight:'600',
+                              background:isLight?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)',
+                              color:isLight?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.4)',
+                              padding:'2px 6px',borderRadius:4,
+                              border:`1px solid ${isLight?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)'}`,
+                              fontFamily:'monospace',
+                            }}>
+                              {opt.fontFamily||'Anton'} {opt.fontSize||60}px
+                            </span>
+
+                            {(opt.strokeWidth||0)>0&&(
+                              <span style={{
+                                fontSize:8,fontWeight:'600',
+                                background:isLight?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)',
+                                color:isLight?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.35)',
+                                padding:'2px 6px',borderRadius:4,
+                                border:`1px solid ${isLight?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)'}`,
+                                fontFamily:'monospace',
+                              }}>stroke {opt.strokeWidth}</span>
+                            )}
+
+                            <span style={{
+                              fontSize:8,fontWeight:'600',
+                              background:isLight?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.07)',
+                              color:isLight?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.35)',
+                              padding:'2px 6px',borderRadius:4,
+                              border:`1px solid ${isLight?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)'}`,
+                            }}>{isLight?'⬜ light':'⬛ dark'}</span>
+                          </div>
+
+                          {/* Place indicator */}
+                          <span style={{
+                            position:'absolute',top:'50%',right:12,
+                            transform:'translateY(-50%)',
+                            fontSize:18,color:T.accent,opacity:0.5,
+                            fontWeight:'900',lineHeight:1,
+                          }}>+</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={generateAIText}
+                    disabled={aiTextLoading}
+                    style={{...css.addBtn,background:'transparent',
+                      color:T.accent,border:`1px solid ${T.accent}`,
+                      marginTop:8,fontSize:11,opacity:aiTextLoading?0.5:1}}
+                  >
+                    ↺ Regenerate
+                  </button>
+                </>)}
+              </div>
+            )}
+
+            {activeTool==='style'&&(()=>{
+              const PRESETS=[
+                {id:'mrbeast',   label:'MrBeast',        mood:'Punchy & Viral',    colors:['#f97316','#facc15','#ef4444','#22c55e','#0ea5e9']},
+                {id:'mkbhd',     label:'MKBHD',          mood:'Clean & Minimal',   colors:['#0a0a0a','#18181b','#1d4ed8','#60a5fa','#f1f5f9']},
+                {id:'veritasium',label:'Veritasium',     mood:'Natural & Engaging',colors:['#1a3d2b','#2d6a4f','#52b788','#f4a261','#fefae0']},
+                {id:'linus',     label:'Linus Tech Tips', mood:'Bright & Direct',  colors:['#f8fafc','#e2e8f0','#3b82f6','#1d4ed8','#fbbf24']},
+                {id:'markrober', label:'Mark Rober',     mood:'Vibrant & Bold',    colors:['#1d4ed8','#ef4444','#f59e0b','#10b981','#7c3aed']},
+              ];
+              return(
+              <div>
+                <span style={css.label}>Style Transfer</span>
+
+                {/* Mode tabs */}
+                <div style={{display:'flex',gap:4,marginBottom:10,padding:3,background:T.bg2,borderRadius:8,border:`1px solid ${T.border}`}}>
+                  {[['preset','Creator Presets'],['url','Reference URL']].map(([m,label])=>(
+                    <button key={m} onClick={()=>{setStyleMode(m);setStyleResult(null);}}
+                      style={{
+                        flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:10,
+                        fontWeight:'700',letterSpacing:'0.3px',cursor:'pointer',
+                        background:styleMode===m?T.accent:'transparent',
+                        color:styleMode===m?'#fff':T.muted,
+                        transition:'all 0.12s',
+                      }}
+                    >{label}</button>
+                  ))}
+                </div>
+
+                {/* ── Creator Preset Grid ── */}
+                {styleMode==='preset'&&(
+                  <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                    {PRESETS.map(p=>{
+                      const sel=stylePreset===p.id;
+                      return(
+                        <button key={p.id} onClick={()=>setStylePreset(p.id)}
+                          onMouseEnter={e=>{if(!sel)e.currentTarget.style.borderColor=T.accentBorder;}}
+                          onMouseLeave={e=>{if(!sel)e.currentTarget.style.borderColor=T.border;}}
+                          style={{
+                            display:'flex',alignItems:'center',
+                            padding:'11px 12px',borderRadius:9,cursor:'pointer',
+                            border:`1px solid ${sel?T.accent:T.border}`,
+                            borderLeft:`3px solid ${sel?T.accent:'transparent'}`,
+                            background:sel?`${T.accent}0d`:T.bg2,
+                            transition:'all 0.12s',outline:'none',gap:10,
+                          }}
+                        >
+                          {/* Creator info */}
+                          <div style={{flex:1,textAlign:'left'}}>
+                            <div style={{
+                              fontSize:12,fontWeight:'800',color:sel?T.accent:T.text,
+                              letterSpacing:'-0.2px',lineHeight:1.2,
+                              fontFamily:'Anton,sans-serif',
+                            }}>{p.label}</div>
+                            <div style={{fontSize:9,color:T.muted,marginTop:2,letterSpacing:'0.3px'}}>{p.mood}</div>
+                          </div>
+
+                          {/* Color swatch strip */}
+                          <div style={{display:'flex',gap:3,alignItems:'center',flexShrink:0}}>
+                            {p.colors.map((c,ci)=>(
+                              <div key={ci} style={{
+                                width:12,height:12,borderRadius:'50%',background:c,flexShrink:0,
+                                boxShadow:`0 0 0 1px rgba(0,0,0,0.25)`,
+                              }}/>
+                            ))}
+                          </div>
+
+                          {/* Selected dot */}
+                          {sel&&<div style={{
+                            width:7,height:7,borderRadius:'50%',
+                            background:T.accent,flexShrink:0,
+                          }}/>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ── URL Mode ── */}
+                {styleMode==='url'&&(
+                  <div>
+                    <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted,lineHeight:1.6}}>
+                      Paste any YouTube thumbnail URL. We'll extract its color grade and apply it to your image.
+                    </div>
+                    <input
+                      placeholder="https://i.ytimg.com/vi/..."
+                      value={styleUrl}
+                      onChange={e=>setStyleUrl(e.target.value)}
+                      style={{...css.input,marginTop:6}}
+                    />
+                  </div>
+                )}
+
+                {/* Intensity slider */}
+                <div style={{marginTop:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+                    <span style={{...css.label,marginTop:0,marginBottom:0}}>Intensity</span>
+                    <span style={{fontSize:11,fontWeight:'700',color:T.accent}}>{styleIntensity}%</span>
+                  </div>
+                  <Slider min={10} max={100} value={styleIntensity} onChange={v=>setStyleIntensity(v)} style={{width:'100%'}}/>
+                </div>
+
+                {/* Apply button */}
+                <button
+                  onClick={applyStyleTransfer}
+                  disabled={styleBusy||(styleMode==='url'&&!styleUrl.trim())}
+                  style={{
+                    ...css.addBtn,
+                    background:styleBusy?'transparent':T.accent,
+                    color:styleBusy?T.accent:'#fff',
+                    border:styleBusy?`1px solid ${T.accentBorder}`:'none',
+                    fontWeight:'700',fontSize:13,marginTop:12,
+                    opacity:(styleMode==='url'&&!styleUrl.trim())?0.45:1,
+                  }}
+                >
+                  {styleBusy?'Applying style…':'◑ Apply style transfer'}
+                </button>
+
+                {/* ── Result card ── */}
+                {styleResult&&(
+                  <div style={{marginTop:12}}>
+                    <span style={css.label}>Applied style</span>
+                    <div style={{
+                      ...css.section,
+                      background:`linear-gradient(135deg,${T.bg2},${T.panel})`,
+                      border:`1px solid ${T.accent}33`,
+                    }}>
+                      {/* Mood */}
+                      <div style={{
+                        fontSize:13,fontWeight:'800',color:T.text,marginBottom:10,
+                        letterSpacing:'-0.2px',
+                      }}>{styleResult.mood}</div>
+
+                      {/* Color palette */}
+                      <div style={{display:'flex',gap:5,marginBottom:10,alignItems:'center'}}>
+                        {styleResult.colors?.map((c,i)=>(
+                          <div key={i} title={c} style={{
+                            flex:1,height:24,borderRadius:5,background:c,
+                            boxShadow:'0 1px 4px rgba(0,0,0,0.3)',cursor:'default',
+                          }}/>
                         ))}
                       </div>
-                    </>)}
 
-                    <button onClick={()=>{setCtrScore(null);setCtrBreakdown(null);}}
+                      {/* Stats */}
+                      <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                        {[
+                          ['Brightness', styleResult.brightness, 1.0],
+                          ['Saturation', styleResult.saturation, 1.0],
+                          ['Contrast',   styleResult.contrast,   1.0],
+                        ].filter(([,v])=>v!=null).map(([label,val,max])=>{
+                          const pct=Math.min(100,Math.round((val/max)*100));
+                          return(
+                            <div key={label}>
+                              <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                                <span style={{fontSize:9,color:T.muted,fontWeight:'700',letterSpacing:'0.5px',textTransform:'uppercase'}}>{label}</span>
+                                <span style={{fontSize:9,color:T.muted,fontFamily:'monospace'}}>{Math.round(val*100)}%</span>
+                              </div>
+                              <div style={{height:3,borderRadius:2,background:T.border,overflow:'hidden'}}>
+                                <div style={{height:'100%',borderRadius:2,width:`${pct}%`,background:T.accent}}/>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={()=>setStyleResult(null)}
                       style={{...css.addBtn,background:'transparent',
-                        color:T.muted,border:`1px solid ${T.border}`,marginTop:10}}>
-                      Reset
-                    </button>
+                        color:T.muted,border:`1px solid ${T.border}`,marginTop:8,fontSize:11}}
+                    >× Clear</button>
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
+
+            {activeTool==='bggen'&&(()=>{
+              const NICHES=[
+                {id:'gaming',    emoji:'🎮', label:'Gaming'},
+                {id:'vlog',      emoji:'🎥', label:'Vlog'},
+                {id:'tech',      emoji:'💻', label:'Tech'},
+                {id:'cooking',   emoji:'🍳', label:'Cooking'},
+                {id:'fitness',   emoji:'💪', label:'Fitness'},
+                {id:'education', emoji:'📚', label:'Education'},
+              ];
+              return(
+              <div>
+                <style>{`
+                  @keyframes tf-bgpulse{
+                    0%,100%{background-position:0% 50%}
+                    50%{background-position:100% 50%}
+                  }
+                `}</style>
+
+                <span style={css.label}>AI Background</span>
+
+                {/* Subject hint */}
+                {selectedLayer?.type==='image'&&!selectedLayer?.isRimLight&&(
+                  <div style={{
+                    ...css.section,marginTop:0,
+                    background:`${T.accent}10`,border:`1px solid ${T.accentBorder}`,
+                    fontSize:11,color:T.accent,fontWeight:'600',lineHeight:1.5,
+                    display:'flex',alignItems:'center',gap:7,
+                  }}>
+                    <span style={{fontSize:15,flexShrink:0}}>◎</span>
+                    Selected layer will be composited onto the generated background.
+                  </div>
+                )}
+
+                {/* Niche grid */}
+                <span style={css.label}>Niche</span>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:5}}>
+                  {NICHES.map(n=>{
+                    const sel=bgGenNiche===n.id;
+                    return(
+                      <button key={n.id} onClick={()=>setBgGenNiche(n.id)}
+                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.borderColor=T.accentBorder;}}
+                        onMouseLeave={e=>{if(!sel)e.currentTarget.style.borderColor=T.border;}}
+                        style={{
+                          display:'flex',flexDirection:'column',alignItems:'center',
+                          justifyContent:'center',gap:5,padding:'12px 4px',
+                          borderRadius:9,cursor:'pointer',outline:'none',
+                          border:`1.5px solid ${sel?T.accent:T.border}`,
+                          background:sel?`${T.accent}12`:T.bg2,
+                          transition:'all 0.12s',
+                        }}
+                      >
+                        <span style={{fontSize:22,lineHeight:1}}>{n.emoji}</span>
+                        <span style={{
+                          fontSize:9,fontWeight:'700',letterSpacing:'0.3px',
+                          color:sel?T.accent:T.muted,textTransform:'uppercase',
+                        }}>{n.label}</span>
+                        {sel&&<div style={{width:14,height:2,borderRadius:1,background:T.accent}}/>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Custom prompt */}
+                <span style={css.label}>Additional details (optional)</span>
+                <input
+                  placeholder="e.g. cyberpunk city, purple sky, rain..."
+                  value={bgGenCustom}
+                  onChange={e=>setBgGenCustom(e.target.value)}
+                  onKeyDown={e=>{if(e.key==='Enter'&&!bgGenBusy)generateBackground();}}
+                  style={{...css.input,marginBottom:0}}
+                />
+
+                {/* Generate button */}
+                <button
+                  onClick={generateBackground}
+                  disabled={bgGenBusy}
+                  style={{
+                    ...css.addBtn,
+                    background:bgGenBusy
+                      ?'transparent'
+                      :`linear-gradient(135deg,#f97316,#ea580c)`,
+                    color:bgGenBusy?T.accent:'#fff',
+                    border:bgGenBusy?`1px solid ${T.accentBorder}`:'none',
+                    fontWeight:'700',fontSize:13,marginTop:10,
+                    position:'relative',overflow:'hidden',
+                  }}
+                >
+                  {bgGenBusy?(
+                    <span style={{
+                      display:'inline-flex',alignItems:'center',gap:8,
+                      background:`linear-gradient(90deg,${T.accent},#fb923c,${T.accent})`,
+                      backgroundSize:'200% 100%',
+                      WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',
+                      backgroundClip:'text',
+                      animation:'tf-bgpulse 1.6s ease infinite',
+                    }}>
+                      Generating your background...
+                    </span>
+                  ):'⬡ Generate background'}
+                </button>
+
+                {/* Preview */}
+                {bgGenPreview&&(
+                  <div style={{marginTop:12}}>
+                    <span style={css.label}>Preview — click Apply to use</span>
+                    <div style={{
+                      borderRadius:8,overflow:'hidden',
+                      border:`1px solid ${T.accent}44`,
+                      position:'relative',marginBottom:8,
+                    }}>
+                      <img src={bgGenPreview} alt="Generated background"
+                        style={{width:'100%',display:'block'}}/>
+                      <div style={{
+                        position:'absolute',bottom:0,left:0,right:0,
+                        background:'linear-gradient(transparent,rgba(0,0,0,0.7))',
+                        padding:'20px 10px 8px',
+                      }}>
+                        <div style={{fontSize:9,color:'rgba(255,255,255,0.6)',lineHeight:1.4,fontStyle:'italic'}}>
+                          {bgGenPrompt.slice(0,90)}{bgGenPrompt.length>90?'…':''}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{display:'flex',gap:6}}>
+                      <button
+                        onClick={applyGeneratedBackground}
+                        style={{
+                          flex:2,padding:'9px 0',borderRadius:8,border:'none',
+                          background:`linear-gradient(135deg,#f97316,#ea580c)`,
+                          color:'#fff',fontSize:12,cursor:'pointer',fontWeight:'700',
+                        }}
+                      >✓ Apply background</button>
+                      <button
+                        onClick={generateBackground}
+                        disabled={bgGenBusy}
+                        style={{
+                          flex:1,padding:'9px 0',borderRadius:8,
+                          border:`1px solid ${T.border}`,
+                          background:'transparent',
+                          color:T.muted,fontSize:12,cursor:'pointer',fontWeight:'600',
+                          opacity:bgGenBusy?0.5:1,
+                        }}
+                      >↺</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              );
+            })()}
+
+            {activeTool==='colorgrade'&&(()=>{
+              const CG_PRESETS=[
+                {id:'default',   label:'Default',   gradient:'linear-gradient(135deg,#f97316,#fb923c,#fed7aa)'},
+                {id:'warm',      label:'Warm',       gradient:'linear-gradient(135deg,#b45309,#f59e0b,#fef08a)'},
+                {id:'cool',      label:'Cool',       gradient:'linear-gradient(135deg,#1d4ed8,#0ea5e9,#67e8f9)'},
+                {id:'cinematic', label:'Cinema',     gradient:'linear-gradient(135deg,#0f172a,#334155,#94a3b8)'},
+                {id:'neon',      label:'Neon',       gradient:'linear-gradient(135deg,#7c3aed,#ec4899,#06b6d4)'},
+              ];
+              const hasResult=!!(cgGradedSrc);
+              return(
+              <div>
+                <span style={css.label}>Color Grade</span>
+
+                {/* Description — only before first apply */}
+                {!hasResult&&(
+                  <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted,lineHeight:1.6}}>
+                    One click to boost contrast, punch, and colour on your bottom-most image layer. Non-destructive — reset any time.
+                  </div>
+                )}
+
+                {/* Preset swatches — show after first apply */}
+                {hasResult&&(<>
+                  <span style={css.label}>Preset</span>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:4}}>
+                    {CG_PRESETS.map(pr=>{
+                      const sel=cgPreset===pr.id;
+                      return(
+                        <button key={pr.id} onClick={()=>setCgPreset(pr.id)}
+                          style={{
+                            padding:0,borderRadius:7,overflow:'hidden',cursor:'pointer',
+                            outline:'none',border:`2px solid ${sel?T.accent:'transparent'}`,
+                            background:'none',transition:'border-color 0.1s',
+                          }}
+                        >
+                          {/* Colour swatch */}
+                          <div style={{height:28,background:pr.gradient}}/>
+                          {/* Label */}
+                          <div style={{
+                            padding:'3px 0',textAlign:'center',
+                            fontSize:7,fontWeight:'700',letterSpacing:'0.2px',
+                            color:sel?T.accent:T.muted,
+                            background:T.bg2,textTransform:'uppercase',
+                          }}>{pr.label}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Intensity slider */}
+                  <div style={{marginTop:10}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                      <span style={{...css.label,marginTop:0,marginBottom:0}}>Intensity</span>
+                      <span style={{fontSize:11,fontWeight:'700',color:T.accent}}>{cgIntensity}%</span>
+                    </div>
+                    <Slider min={10} max={100} value={cgIntensity} onChange={v=>setCgIntensity(v)} style={{width:'100%'}}/>
+                  </div>
+                </>)}
+
+                {/* Main CTA */}
+                <button
+                  onClick={applyColorGrade}
+                  disabled={cgBusy}
+                  style={{
+                    ...css.addBtn,
+                    background:cgBusy?'transparent':`linear-gradient(135deg,#f97316,#ea580c)`,
+                    color:cgBusy?T.accent:'#fff',
+                    border:cgBusy?`1px solid ${T.accentBorder}`:'none',
+                    fontWeight:'800',fontSize:14,letterSpacing:'-0.2px',
+                    marginTop:hasResult?8:10,
+                  }}
+                >
+                  {cgBusy?'Enhancing…':hasResult?'◕ Re-apply':'✦ Make It Pop'}
+                </button>
+
+                {/* Before/After + Reset — only after first apply */}
+                {hasResult&&(<>
+                  <button
+                    onMouseDown={()=>{if(cgLayerId&&cgOriginalSrc)updateLayerSilent(cgLayerId,{src:cgOriginalSrc});}}
+                    onMouseUp={()=>{if(cgLayerId&&cgGradedSrc)updateLayerSilent(cgLayerId,{src:cgGradedSrc});}}
+                    onMouseLeave={()=>{if(cgLayerId&&cgGradedSrc)updateLayerSilent(cgLayerId,{src:cgGradedSrc});}}
+                    style={{
+                      ...css.addBtn,
+                      background:'transparent',
+                      border:`1px solid ${T.border}`,
+                      color:T.muted,fontSize:11,fontWeight:'600',
+                      marginTop:6,
+                      userSelect:'none',
+                    }}
+                  >
+                    ◑ Hold to preview original
+                  </button>
+
+                  <button
+                    onClick={resetColorGrade}
+                    style={{
+                      ...css.addBtn,background:'transparent',
+                      color:T.danger,border:`1px solid ${T.danger}33`,
+                      fontSize:11,marginTop:4,
+                    }}
+                  >
+                    × Reset grade
+                  </button>
+                </>)}
+              </div>
+              );
+            })()}
 
             {activeTool==='rimlight'&&(
               <div>
@@ -8238,6 +10385,93 @@ PHASE 4 — Toolbar button:
             <button onClick={()=>setShowAlreadyPro(false)} style={{width:'100%',padding:'12px 24px',borderRadius:10,border:'none',background:T.success,color:'#fff',cursor:'pointer',fontSize:14,fontWeight:'700',boxShadow:'0 4px 16px rgba(34,197,94,0.3)'}}>
               Got it!
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Feature J: Niche Onboarding Modal */}
+      {nicheOnboarding && (
+        <div style={{position:'fixed',inset:0,zIndex:1200,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(4,5,8,0.97)',backdropFilter:'blur(16px)'}}>
+          <style>{`
+            @keyframes niche-float { 0%,100%{transform:translateY(0px)} 50%{transform:translateY(-6px)} }
+            @keyframes niche-glow  { 0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,0)} 50%{box-shadow:0 0 32px 8px rgba(249,115,22,0.35)} }
+            @keyframes niche-fade-in { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+            .niche-card { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease !important; cursor:pointer; }
+            .niche-card:hover { transform: translateY(-4px) scale(1.03) !important; }
+          `}</style>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',maxWidth:820,width:'100%',padding:'0 24px',animation:'niche-fade-in 0.5s ease both'}}>
+            {/* Header */}
+            <div style={{textAlign:'center',marginBottom:48}}>
+              <div style={{fontSize:13,fontWeight:'700',letterSpacing:'0.18em',color:'#f97316',textTransform:'uppercase',marginBottom:16}}>
+                Welcome to ThumbFrame
+              </div>
+              <div style={{fontSize:42,fontWeight:'900',color:'#fff',lineHeight:1.05,marginBottom:12,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
+                What kind of channel<br/>do you create for?
+              </div>
+              <div style={{fontSize:16,color:'rgba(255,255,255,0.45)',lineHeight:1.6}}>
+                We'll tailor every AI feature to your audience so you get<br/>thumbnails that actually perform.
+              </div>
+            </div>
+
+            {/* 2×3 niche card grid */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,width:'100%',marginBottom:40}}>
+              {Object.entries(NICHE_CONFIG).map(([key,cfg])=>{
+                const isSelected=nicheHovered===key;
+                return (
+                  <div
+                    key={key}
+                    className="niche-card"
+                    onClick={()=>setNicheHovered(key)}
+                    style={{
+                      position:'relative',overflow:'hidden',
+                      background: isSelected
+                        ? `linear-gradient(135deg, ${cfg.gradFrom} 0%, ${cfg.gradTo} 100%)`
+                        : 'rgba(255,255,255,0.04)',
+                      borderRadius:20,
+                      border: isSelected ? `2px solid ${cfg.accentColor}` : '2px solid rgba(255,255,255,0.08)',
+                      padding:'28px 24px 24px',
+                      animation: isSelected ? 'niche-glow 2s ease infinite' : 'none',
+                      boxShadow: isSelected ? `0 8px 40px ${cfg.accentColor}55` : '0 2px 12px rgba(0,0,0,0.4)',
+                      userSelect:'none',
+                    }}
+                  >
+                    {isSelected && (
+                      <div style={{
+                        position:'absolute',top:12,right:12,width:22,height:22,borderRadius:'50%',
+                        background:cfg.accentColor,display:'flex',alignItems:'center',justifyContent:'center',
+                        fontSize:12,fontWeight:'900',color:'#fff',boxShadow:`0 2px 8px ${cfg.accentColor}88`,
+                      }}>✓</div>
+                    )}
+                    <div style={{fontSize:40,marginBottom:14,display:'block',animation:isSelected?'niche-float 3s ease infinite':undefined}}>{cfg.emoji}</div>
+                    <div style={{fontSize:17,fontWeight:'800',color:'#fff',marginBottom:6}}>{cfg.label}</div>
+                    <div style={{fontSize:13,color:isSelected?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.4)',lineHeight:1.5}}>{cfg.desc}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* CTA */}
+            <button
+              disabled={!nicheHovered||nicheSaving}
+              onClick={()=>nicheHovered&&setNiche(nicheHovered)}
+              style={{
+                padding:'16px 64px',borderRadius:14,border:'none',
+                background: nicheHovered
+                  ? `linear-gradient(135deg, ${NICHE_CONFIG[nicheHovered]?.gradFrom||'#7c2d12'}, ${NICHE_CONFIG[nicheHovered]?.accentColor||'#f97316'})`
+                  : 'rgba(255,255,255,0.08)',
+                color: nicheHovered?'#fff':'rgba(255,255,255,0.25)',
+                fontSize:17,fontWeight:'800',cursor:nicheHovered?'pointer':'default',
+                boxShadow: nicheHovered?`0 8px 32px ${NICHE_CONFIG[nicheHovered]?.accentColor||'#f97316'}55`:'none',
+                transition:'all 0.2s ease',
+                letterSpacing:'0.02em',
+              }}
+            >
+              {nicheSaving ? 'Setting up…' : nicheHovered ? `Continue as ${NICHE_CONFIG[nicheHovered]?.label} Creator →` : 'Pick your niche above'}
+            </button>
+
+            <div style={{marginTop:16,fontSize:12,color:'rgba(255,255,255,0.2)'}}>
+              You can change this any time in settings
+            </div>
           </div>
         </div>
       )}
