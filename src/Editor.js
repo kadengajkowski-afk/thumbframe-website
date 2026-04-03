@@ -946,6 +946,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [segmentHoverIdx,setSegmentHoverIdx]           = useState(null);
   const [segmentStatus,setSegmentStatus]               = useState('');
   const [segmentError,setSegmentError]                 = useState('');
+  const [expressionScore,setExpressionScore]           = useState(null);
+  const [expressionBusy,setExpressionBusy]             = useState(false);
+  const [enhanceBusy,setEnhanceBusy]                   = useState(false);
+  const [enhanceInstruction,setEnhanceInstruction]     = useState('open mouth more');
   const [saveStatus, setSaveStatus]                    = useState('Saved');
   const [aiPrompt,setAiPrompt]                         = useState('');
   const [lastGeneratedImageUrl,setLastGeneratedImageUrl] = useState('');
@@ -2336,6 +2340,208 @@ PHASE 4 — Toolbar button:
       setFaceAnalysis({error:true,message:'Analysis failed. Try again.'});
     }
     setFaceLoading(false);
+  }
+
+  // ── MediaPipe Face Mesh — Expression Engine ───────────────────────────────
+
+  // Lazy-load MediaPipe from CDN (only when first needed)
+  async function loadMediaPipeFaceMesh(){
+    if(window._mpFaceMeshReady) return true;
+    return new Promise((resolve)=>{
+      if(document.getElementById('mp-face-mesh-script')){
+        // Script tag exists but may still be loading
+        const check=setInterval(()=>{
+          if(window.FaceMesh){clearInterval(check);window._mpFaceMeshReady=true;resolve(true);}
+        },200);
+        setTimeout(()=>{clearInterval(check);resolve(false);},15000);
+        return;
+      }
+      const script=document.createElement('script');
+      script.id='mp-face-mesh-script';
+      script.src='https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/face_mesh.js';
+      script.crossOrigin='anonymous';
+      script.onload=()=>{window._mpFaceMeshReady=true;resolve(true);};
+      script.onerror=()=>resolve(false);
+      document.head.appendChild(script);
+    });
+  }
+
+  function calculateExpressionScore(landmarks){
+    if(!landmarks||landmarks.length<468) return null;
+    const lm=landmarks;
+    const faceHeight=Math.abs(lm[152].y-lm[10].y)||0.3;
+
+    // 1. Mouth openness — inner lip gap
+    const mouthOpen=Math.abs(lm[13].y-lm[14].y)/faceHeight;
+    const mouthScore=Math.min(10,Math.round((mouthOpen/0.12)*10));
+    const mouthTip=mouthOpen<0.04
+      ?'Open your mouth wider — closed mouths lose ~30% CTR on average'
+      :mouthOpen<0.08
+      ?'Open your mouth a bit more for a higher-energy expression'
+      :null;
+
+    // 2. Eye wideness — eyelid gap
+    const leftEyeH =Math.abs(lm[159].y-lm[145].y)/faceHeight;
+    const rightEyeH=Math.abs(lm[386].y-lm[374].y)/faceHeight;
+    const eyeAvg=(leftEyeH+rightEyeH)/2;
+    const eyeScore=Math.min(10,Math.round((eyeAvg/0.04)*10));
+    const eyeTip=eyeAvg<0.02
+      ?'Open your eyes wider — wide eyes signal surprise and excitement'
+      :eyeAvg<0.03
+      ?'Open your eyes a bit more for a punchier expression'
+      :null;
+
+    // 3. Eyebrow raise — brow-to-eye vertical gap (landmarks 66/296 are mid-brow)
+    const leftBrow =Math.abs(lm[66].y -lm[159].y)/faceHeight;
+    const rightBrow=Math.abs(lm[296].y-lm[386].y)/faceHeight;
+    const browAvg=(leftBrow+rightBrow)/2;
+    const browScore=Math.min(10,Math.round((browAvg/0.09)*10));
+    const browTip=browAvg<0.05
+      ?'Raise your eyebrows — high eyebrows signal shock or excitement'
+      :browAvg<0.07
+      ?'Raise your eyebrows a bit more for maximum impact'
+      :null;
+
+    // 4. Head tilt — angle of eye-to-eye line
+    const dx=lm[263].x-lm[33].x;
+    const dy=lm[263].y-lm[33].y;
+    const tiltDeg=Math.abs(Math.atan2(dy,dx)*(180/Math.PI));
+    const tiltScore=tiltDeg<3?4:tiltDeg<7?7:tiltDeg<22?10:tiltDeg<35?7:4;
+    const tiltTip=tiltDeg<5
+      ?'Add a slight head tilt (10–15°) — dynamic angles boost visual energy'
+      :tiltDeg>30
+      ?'Your tilt is quite extreme — 10–20° is the sweet spot'
+      :null;
+
+    const weights=[0.35,0.25,0.25,0.15];
+    const overall=Math.min(10,Math.round(
+      mouthScore*weights[0]+eyeScore*weights[1]+browScore*weights[2]+tiltScore*weights[3]
+    ));
+
+    // Face bounding box (normalized 0-1)
+    const faceX=Math.min(lm[234].x,lm[454].x);
+    const faceY=Math.min(lm[10].y, lm[152].y);
+    const faceW=Math.abs(lm[454].x-lm[234].x);
+    const faceH=Math.abs(lm[152].y-lm[10].y);
+
+    return{overall,mouth:{score:mouthScore,tip:mouthTip},eyes:{score:eyeScore,tip:eyeTip},brows:{score:browScore,tip:browTip},tilt:{score:tiltScore,tip:tiltTip},bbox:{x:faceX,y:faceY,w:faceW,h:faceH}};
+  }
+
+  // Run on composite canvas — called after image upload (fire-and-forget)
+  async function runFaceDetectionOnComposite(){
+    const ready=await loadMediaPipeFaceMesh();
+    if(!ready||!window.FaceMesh) return;
+    setExpressionBusy(true);
+    try{
+      const flatCanvas=document.createElement('canvas');
+      flatCanvas.width=p.preview.w;
+      flatCanvas.height=p.preview.h;
+      await renderLayersToCanvas(flatCanvas,layersRef.current);
+
+      const imgEl=new Image();
+      imgEl.src=flatCanvas.toDataURL('image/jpeg',0.9);
+      await new Promise(res=>{ imgEl.onload=res; imgEl.onerror=res; });
+
+      const result=await new Promise((resolve)=>{
+        try{
+          const fm=new window.FaceMesh({
+            locateFile:(file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/${file}`,
+          });
+          fm.setOptions({maxNumFaces:1,refineLandmarks:false,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
+          fm.onResults((r)=>{
+            fm.close();
+            resolve(r.multiFaceLandmarks?.[0]||null);
+          });
+          fm.send({image:imgEl}).catch(()=>resolve(null));
+        }catch(e){resolve(null);}
+      });
+
+      if(result){
+        setExpressionScore(calculateExpressionScore(result));
+      }
+    }catch(e){
+      console.warn('[FACE MESH]',e.message);
+    }finally{
+      setExpressionBusy(false);
+    }
+  }
+
+  // Enhance expression via backend SD inpainting
+  async function enhanceExpression(){
+    if(!expressionScore?.bbox||enhanceBusy) return;
+    setEnhanceBusy(true);
+    try{
+      // Composite full canvas
+      const flatCanvas=document.createElement('canvas');
+      flatCanvas.width=p.preview.w;
+      flatCanvas.height=p.preview.h;
+      await renderLayersToCanvas(flatCanvas,layers);
+
+      // Extract face crop with 15% padding
+      const bb=expressionScore.bbox;
+      const padX=bb.w*p.preview.w*0.15;
+      const padY=bb.h*p.preview.h*0.15;
+      const cx=Math.max(0,Math.round(bb.x*p.preview.w-padX));
+      const cy=Math.max(0,Math.round(bb.y*p.preview.h-padY));
+      const cw=Math.min(p.preview.w-cx,Math.round(bb.w*p.preview.w+padX*2));
+      const ch=Math.min(p.preview.h-cy,Math.round(bb.h*p.preview.h+padY*2));
+
+      const crop=document.createElement('canvas');
+      crop.width=cw; crop.height=ch;
+      crop.getContext('2d').drawImage(flatCanvas,cx,cy,cw,ch,0,0,cw,ch);
+
+      // Create mask (white = re-generate expression features, black = keep edges)
+      const maskCanvas=document.createElement('canvas');
+      maskCanvas.width=cw; maskCanvas.height=ch;
+      const mCtx=maskCanvas.getContext('2d');
+      mCtx.fillStyle='#000000';
+      mCtx.fillRect(0,0,cw,ch);
+      mCtx.fillStyle='#ffffff';
+      const mx=cw*0.08, my=ch*0.12, mw=cw*0.84, mh=ch*0.78;
+      mCtx.beginPath();
+      if(mCtx.roundRect) mCtx.roundRect(mx,my,mw,mh,16);
+      else mCtx.rect(mx,my,mw,mh);
+      mCtx.fill();
+
+      const faceCrop=crop.toDataURL('image/png');
+      const mask=maskCanvas.toDataURL('image/png');
+
+      const res=await fetch(`${resolvedApiUrl}/api/enhance-expression`,{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          ...(token?{'Authorization':`Bearer ${token}`}:{}),
+        },
+        body:JSON.stringify({faceCrop,mask,instruction:enhanceInstruction}),
+      });
+      const data=await res.json();
+
+      if(!res.ok){
+        if(res.status===429){setCmdLog(data.error||'Quota exceeded.');return;}
+        throw new Error(data.error||'Enhancement failed');
+      }
+      if(!data.success||!data.image) throw new Error('No image returned');
+
+      // Add enhanced face as new layer at face position
+      const enhImg=new Image();
+      enhImg.src=data.image;
+      await new Promise(r=>{enhImg.onload=r;enhImg.onerror=r;});
+      addLayer({
+        type:'image',
+        src:data.image,
+        width:cw,height:ch,
+        x:cx,y:cy,
+        cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+        imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+        effects:defaultEffects(),
+      });
+      setCmdLog('Enhanced expression applied as new layer');
+    }catch(err){
+      console.error('[ENHANCE]',err);
+      setCmdLog('Expression enhancement failed. Try again.');
+    }finally{
+      setEnhanceBusy(false);
+    }
   }
 
   // ── Shared canvas renderer (single source of truth) ──────────────────────
@@ -3957,6 +4163,8 @@ PHASE 4 — Toolbar button:
               return nextLayers;
             });
             setSelectedId(id);
+            // Fire-and-forget: run MediaPipe face detection on new image
+            setTimeout(()=>runFaceDetectionOnComposite(),400);
           }catch(err){
             console.error('[ADD IMAGE] Image processing failed:', err);
             alert('Failed to add image. Please try a different file.');
@@ -5618,6 +5826,35 @@ PHASE 4 — Toolbar button:
                   </>
                 )}
 
+                {/* Face Score Badge — expression score on detected face */}
+                {expressionScore?.bbox&&!expressionBusy&&(()=>{
+                  const sc=expressionScore.overall;
+                  const badgeColor=sc>=8?'#22c55e':sc>=5?'#f59e0b':'#ef4444';
+                  const bx=Math.round(expressionScore.bbox.x*p.preview.w);
+                  const by=Math.round(expressionScore.bbox.y*p.preview.h);
+                  const bw=Math.round(expressionScore.bbox.w*p.preview.w);
+                  return(
+                    <div style={{position:'absolute',left:bx,top:Math.max(0,by-28),zIndex:9984,pointerEvents:'none'}}>
+                      <div style={{
+                        display:'flex',alignItems:'center',gap:5,
+                        background:'rgba(10,10,15,0.85)',
+                        border:`1.5px solid ${badgeColor}`,
+                        borderRadius:20,padding:'3px 10px',
+                        backdropFilter:'blur(6px)',
+                        boxShadow:`0 2px 12px rgba(0,0,0,0.5),0 0 0 1px ${badgeColor}22`,
+                      }}>
+                        <span style={{
+                          fontSize:15,fontWeight:'900',color:badgeColor,
+                          letterSpacing:'-0.5px',lineHeight:1,
+                        }}>{sc}</span>
+                        <span style={{fontSize:9,color:'rgba(255,255,255,0.6)',fontWeight:'600',letterSpacing:'0.3px'}}>/10</span>
+                        <span style={{fontSize:9,color:badgeColor,fontWeight:'700',letterSpacing:'0.2px',marginLeft:1}}>EXPR</span>
+                      </div>
+                      <div style={{width:bw,height:1.5,background:`${badgeColor}55`,marginTop:2,borderRadius:1}}/>
+                    </div>
+                  );
+                })()}
+
                 {/* ✅ Brush overlay — no CSS width/height, no filter, canvas sizes itself */}
                 {brushingImageId&&selectedLayer&&!maskingLayerId&&(
                   <div style={{
@@ -6381,13 +6618,134 @@ PHASE 4 — Toolbar button:
             {activeTool==='face'&&(
               <div>
                 <span style={css.label}>Face & emotion score</span>
-                <div style={{...css.section,marginTop:0,fontSize:11,
-                  color:T.muted,lineHeight:1.6}}>
-                  Analyze your thumbnail's face placement, size, lighting and get emotion suggestions for maximum CTR.
-                </div>
+
+                {/* ── Expression Score (MediaPipe) ── */}
+                {(expressionScore||expressionBusy)&&(
+                  <div style={{...css.section,marginTop:0,border:`1px solid ${
+                    !expressionBusy&&expressionScore?.overall>=8?'rgba(34,197,94,0.35)':
+                    !expressionBusy&&expressionScore?.overall>=5?'rgba(245,158,11,0.35)':
+                    'rgba(239,68,68,0.25)'}`}}>
+                    {expressionBusy?(
+                      <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:T.muted}}>
+                        <span style={{display:'inline-block',animation:'editor-spin 0.9s linear infinite'}}>◌</span>
+                        Reading face landmarks...
+                      </div>
+                    ):(()=>{
+                      const sc=expressionScore;
+                      const scoreColor=sc.overall>=8?T.success:sc.overall>=5?T.warning:T.danger;
+                      const breakdown=[
+                        {label:'Mouth',icon:'👄',data:sc.mouth},
+                        {label:'Eyes', icon:'👁', data:sc.eyes},
+                        {label:'Brows',icon:'🤨',data:sc.brows},
+                        {label:'Tilt', icon:'↗', data:sc.tilt},
+                      ];
+                      const tips=breakdown.map(b=>b.data.tip).filter(Boolean);
+                      const topTip=tips[0];
+                      return(
+                        <>
+                          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                            <div style={{
+                              width:52,height:52,borderRadius:'50%',
+                              border:`3px solid ${scoreColor}`,
+                              display:'flex',flexDirection:'column',
+                              alignItems:'center',justifyContent:'center',
+                              background:`${scoreColor}10`,flexShrink:0,
+                            }}>
+                              <span style={{fontSize:22,fontWeight:'900',color:scoreColor,lineHeight:1}}>{sc.overall}</span>
+                              <span style={{fontSize:8,color:T.muted,fontWeight:'600'}}>/ 10</span>
+                            </div>
+                            <div>
+                              <div style={{fontSize:12,fontWeight:'800',color:T.text,marginBottom:2}}>Expression Score</div>
+                              <div style={{fontSize:11,color:scoreColor,fontWeight:'700'}}>
+                                {sc.overall>=8?'🔥 High energy!':sc.overall>=5?'⚡ Getting there':sc.overall>=3?'⚠ Low energy':'❌ Flat expression'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Sub-scores */}
+                          <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                            {breakdown.map(({label,icon,data})=>{
+                              const pct=data.score/10;
+                              const c=pct>=0.8?T.success:pct>=0.5?T.warning:T.danger;
+                              return(
+                                <div key={label}>
+                                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                                    <span style={{fontSize:10,color:T.muted,fontWeight:'600'}}>{icon} {label}</span>
+                                    <span style={{fontSize:10,fontWeight:'800',color:c}}>{data.score}/10</span>
+                                  </div>
+                                  <div style={{height:3,borderRadius:2,background:T.border,overflow:'hidden'}}>
+                                    <div style={{height:'100%',width:`${data.score*10}%`,background:c,borderRadius:2,transition:'width 0.4s ease'}}/>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Top actionable tip */}
+                          {topTip&&(
+                            <div style={{marginTop:10,padding:'7px 10px',borderRadius:7,background:`${T.warning}10`,border:`1px solid ${T.warning}33`,fontSize:11,color:T.text,lineHeight:1.55}}>
+                              → {topTip}
+                            </div>
+                          )}
+
+                          {/* Enhance Expression */}
+                          <div style={{marginTop:10}}>
+                            <div style={{fontSize:9,color:T.muted,fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:5}}>AI Enhance</div>
+                            <select
+                              value={enhanceInstruction}
+                              onChange={e=>setEnhanceInstruction(e.target.value)}
+                              style={{...css.input,marginBottom:6,padding:'6px 10px',fontSize:11}}>
+                              <option value="open mouth more">Open mouth more</option>
+                              <option value="raise eyebrows">Raise eyebrows</option>
+                              <option value="open eyes wider">Open eyes wider</option>
+                              <option value="excited expression">Full excited expression</option>
+                              <option value="shocked expression">Shocked / surprised expression</option>
+                            </select>
+                            <button
+                              onClick={enhanceExpression}
+                              disabled={enhanceBusy}
+                              style={{
+                                ...css.addBtn,marginTop:0,
+                                background:enhanceBusy?T.bg2:`linear-gradient(135deg,#7c3aed,#6d28d9)`,
+                                opacity:enhanceBusy?0.6:1,
+                                display:'flex',alignItems:'center',justifyContent:'center',gap:6,
+                                boxShadow:enhanceBusy?'none':'0 3px 12px rgba(124,58,237,0.35)',
+                              }}>
+                              {enhanceBusy
+                                ?<><span style={{display:'inline-block',animation:'editor-spin 0.9s linear infinite'}}>◌</span> Enhancing...</>
+                                :'✦ Enhance Expression'}
+                            </button>
+                            <div style={{fontSize:9,color:T.muted,marginTop:4,textAlign:'center'}}>
+                              Uses 1 AI action · Result added as new layer
+                            </div>
+                          </div>
+
+                          <button onClick={()=>setExpressionScore(null)} style={{...css.addBtn,marginTop:8,background:'transparent',color:T.muted,border:`1px solid ${T.border}`,fontSize:11}}>Clear</button>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {!expressionScore&&!expressionBusy&&(
+                  <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted,lineHeight:1.6}}>
+                    Upload a thumbnail with a face to get an automatic expression score — or click analyze below for full placement + lighting analysis.
+                  </div>
+                )}
+
+                <button
+                  onClick={()=>{setExpressionScore(null);runFaceDetectionOnComposite();}}
+                  disabled={expressionBusy}
+                  style={{...css.addBtn,marginTop:8,
+                    background:expressionBusy?T.bg2:'rgba(249,115,22,0.15)',
+                    color:expressionBusy?T.muted:T.accent,
+                    border:`1px solid ${T.accentBorder}`,
+                    fontSize:11,fontWeight:'700',opacity:expressionBusy?0.6:1}}>
+                  {expressionBusy?'Detecting...':'◉ Re-scan expression'}
+                </button>
 
                 <button onClick={analyzeFace} disabled={faceLoading}
-                  style={{...css.addBtn,marginTop:10,
+                  style={{...css.addBtn,marginTop:6,
                     background:faceLoading?T.muted:T.accent,
                     opacity:faceLoading?0.6:1,fontSize:13,fontWeight:'700'}}>
                   {faceLoading?'Analyzing...':'◉ Analyze face & emotion'}
