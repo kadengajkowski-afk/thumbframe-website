@@ -910,8 +910,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [rimLightBlend,setRimLightBlend]       = useState('screen');
   const [rimPickingColor,setRimPickingColor] = useState(false);
   const [rimPickedFrom,setRimPickedFrom]     = useState(null);
-  const [ctrScore,setCtrScore]     = useState(null);
-  const [ctrBreakdown,setCtrBreakdown] = useState(null);
+  const [ctrScore,setCtrScore]     = useState(null);     // eslint-disable-line no-unused-vars
+  const [ctrBreakdown,setCtrBreakdown] = useState(null); // eslint-disable-line no-unused-vars
   const [ctrLoading,setCtrLoading] = useState(false);
   const [ctrV2,         setCtrV2]          = useState(null);
   const [ctrTitle,      setCtrTitle]       = useState('');
@@ -3907,8 +3907,8 @@ PHASE 4 — Toolbar button:
       flatCanvas.height=p.preview.h;
       await renderLayersToCanvas(flatCanvas,layers);
       const dataUrl=flatCanvas.toDataURL('image/jpeg',0.92);
-      const base64Data=dataUrl.split(',')[1];
-      const mediaType=dataUrl.split(';')[0].split(':')[1]||'image/jpeg';
+      const base64Data=dataUrl.split(',')[1]; // eslint-disable-line no-unused-vars
+      const mediaType=dataUrl.split(';')[0].split(':')[1]||'image/jpeg'; // eslint-disable-line no-unused-vars
 
       const res=await fetch(`${resolvedApiUrl}/api/analyze-composition`,{
         method:'POST',
