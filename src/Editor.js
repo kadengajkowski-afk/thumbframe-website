@@ -941,6 +941,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.email==='kadengajkowski@gmail.com'));
   const [isLoading,setIsLoading]                       = useState(true);
   const [removeBgBusy,setRemoveBgBusy]                 = useState(false);
+  const [segmentMasks,setSegmentMasks]                 = useState([]);
+  const [segmentBusy,setSegmentBusy]                   = useState(false);
+  const [segmentHoverIdx,setSegmentHoverIdx]           = useState(null);
+  const [segmentStatus,setSegmentStatus]               = useState('');
+  const [segmentError,setSegmentError]                 = useState('');
   const [saveStatus, setSaveStatus]                    = useState('Saved');
   const [aiPrompt,setAiPrompt]                         = useState('');
   const [lastGeneratedImageUrl,setLastGeneratedImageUrl] = useState('');
@@ -3612,6 +3617,130 @@ PHASE 4 — Toolbar button:
     }
   }
 
+  // ── Smart Cutout: run SAM 2 segmentation ─────────────────────────────────
+  async function runSegmentation(){
+    setSegmentBusy(true);
+    setSegmentMasks([]);
+    setSegmentError('');
+    setSegmentStatus('Rendering canvas...');
+    try{
+      const flatCanvas=document.createElement('canvas');
+      flatCanvas.width=p.preview.w;
+      flatCanvas.height=p.preview.h;
+      await renderLayersToCanvas(flatCanvas,layers);
+      const imageDataUrl=flatCanvas.toDataURL('image/jpeg',0.92);
+
+      setSegmentStatus('Analyzing objects in your thumbnail...');
+
+      const res=await fetch(`${resolvedApiUrl}/api/segment`,{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          ...(token?{'Authorization':`Bearer ${token}`}:{}),
+        },
+        body:JSON.stringify({image:imageDataUrl}),
+      });
+      const data=await res.json();
+
+      if(!res.ok){
+        if(res.status===429){setSegmentError(data.error||'Daily limit reached. Upgrade to continue.');return;}
+        throw new Error(data.error||'Segmentation failed');
+      }
+      if(!data.success||!Array.isArray(data.masks)||data.masks.length===0){
+        throw new Error('No objects detected in this thumbnail');
+      }
+
+      setSegmentMasks(data.masks);
+      setCmdLog(`Detected ${data.masks.length} object${data.masks.length!==1?'s':''} — click on canvas to isolate`);
+    }catch(err){
+      console.error('[SEGMENT]',err);
+      setSegmentError(err.message||'Segmentation failed. Please try again.');
+    }finally{
+      setSegmentBusy(false);
+      setSegmentStatus('');
+    }
+  }
+
+  // ── Smart Cutout: apply a mask → new isolated layer ──────────────────────
+  async function applySegmentMask(maskIdx){
+    const maskUrl=segmentMasks[maskIdx];
+    if(!maskUrl)return;
+    try{
+      setCmdLog('Isolating object...');
+
+      // 1. Full composited image
+      const flatCanvas=document.createElement('canvas');
+      flatCanvas.width=p.preview.w;
+      flatCanvas.height=p.preview.h;
+      await renderLayersToCanvas(flatCanvas,layers);
+
+      // 2. Load mask PNG
+      const maskImg=await new Promise((resolve,reject)=>{
+        const img=new Image();
+        img.onload=()=>resolve(img);
+        img.onerror=()=>reject(new Error('Mask load failed'));
+        img.src=maskUrl;
+      });
+
+      // 3. Apply mask as alpha channel
+      const out=document.createElement('canvas');
+      out.width=p.preview.w;
+      out.height=p.preview.h;
+      const ctx=out.getContext('2d');
+      ctx.drawImage(flatCanvas,0,0);
+      ctx.globalCompositeOperation='destination-in';
+      ctx.drawImage(maskImg,0,0,out.width,out.height);
+      ctx.globalCompositeOperation='source-over';
+
+      // 4. Compute tight bounding box from mask pixels
+      const mCanvas=document.createElement('canvas');
+      mCanvas.width=p.preview.w;
+      mCanvas.height=p.preview.h;
+      mCanvas.getContext('2d').drawImage(maskImg,0,0,p.preview.w,p.preview.h);
+      const mData=mCanvas.getContext('2d').getImageData(0,0,p.preview.w,p.preview.h).data;
+      let minX=p.preview.w,maxX=0,minY=p.preview.h,maxY=0;
+      for(let y=0;y<p.preview.h;y++){
+        for(let x=0;x<p.preview.w;x++){
+          const i=(y*p.preview.w+x)*4;
+          if(mData[i]>24||mData[i+3]>24){
+            if(x<minX)minX=x; if(x>maxX)maxX=x;
+            if(y<minY)minY=y; if(y>maxY)maxY=y;
+          }
+        }
+      }
+      const cropW=Math.max(1,maxX-minX+1);
+      const cropH=Math.max(1,maxY-minY+1);
+
+      // 5. Crop to tight bounds
+      const cropped=document.createElement('canvas');
+      cropped.width=cropW;
+      cropped.height=cropH;
+      cropped.getContext('2d').drawImage(out,minX,minY,cropW,cropH,0,0,cropW,cropH);
+
+      // 6. Add as new layer
+      addLayer({
+        type:'image',
+        src:cropped.toDataURL('image/png'),
+        width:cropW,
+        height:cropH,
+        x:minX,
+        y:minY,
+        cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+        imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+        isSubject:true,
+        effects:defaultEffects(),
+      });
+
+      setSegmentMasks([]);
+      setSegmentHoverIdx(null);
+      setActiveTool('select');
+      setCmdLog('Object isolated as new layer');
+    }catch(err){
+      console.error('[SEGMENT APPLY]',err);
+      setCmdLog('Failed to isolate object. Try again.');
+    }
+  }
+
   function addMaskToLayer(id){ // eslint-disable-line no-unused-vars
     const layer=layers.find(l=>l.id===id);
     if(!layer||layer.type==='background') return;
@@ -4350,6 +4479,7 @@ PHASE 4 — Toolbar button:
     {key:'freehand',  label:'Draw',         icon:'✏',  group:'Paint'},
     {key:'rimlight',  label:'Rim Light',    icon:'☀',  group:'Paint'},
     {key:'removebg',  label:'Remove BG',    icon:'✂',  group:'Paint'},
+    {key:'segment',   label:'Smart Cutout', icon:'◎',  group:'Paint'},
     {key:'lasso',     label:'Lasso Mask',   icon:'✂️', group:'Paint'},
     null,
     {key:'background',label:'Background',   icon:'▨',   group:'Design'},
@@ -5410,6 +5540,82 @@ PHASE 4 — Toolbar button:
                   <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:10000}}>
                     <polyline ref={freehandSvgRef} points="" fill="none" stroke={freeBrushColor} strokeWidth={freeBrushSize} strokeLinecap="round" strokeLinejoin="round" opacity="0.85"/>
                   </svg>
+                )}
+
+                {/* Smart Cutout — segmentation overlays */}
+                {activeTool==='segment'&&(
+                  <>
+                    {segmentBusy&&(
+                      <div style={{position:'absolute',inset:0,zIndex:9996,pointerEvents:'none',overflow:'hidden'}}>
+                        <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.28)'}}/>
+                        <div style={{
+                          position:'absolute',left:0,right:0,height:2,
+                          background:'linear-gradient(90deg,transparent,#f97316 30%,#ff8c00 50%,#f97316 70%,transparent)',
+                          boxShadow:'0 0 14px 5px rgba(249,115,22,0.55)',
+                          animation:'tf-scan 1.8s ease-in-out infinite',
+                        }}/>
+                        <div style={{
+                          position:'absolute',top:'50%',left:'50%',
+                          transform:'translate(-50%,-50%)',
+                          background:'rgba(10,10,15,0.85)',
+                          border:'1px solid rgba(249,115,22,0.4)',
+                          borderRadius:10,padding:'10px 18px',
+                          fontSize:12,fontWeight:'700',color:'#f97316',
+                          display:'flex',alignItems:'center',gap:8,
+                          letterSpacing:'0.2px',
+                        }}>
+                          <span style={{display:'inline-block',animation:'editor-spin 1s linear infinite',fontSize:14}}>◌</span>
+                          {segmentStatus||'Analyzing objects...'}
+                        </div>
+                      </div>
+                    )}
+                    {!segmentBusy&&segmentMasks.map((maskUrl,idx)=>(
+                      <div
+                        key={idx}
+                        onClick={e=>{e.stopPropagation();applySegmentMask(idx);}}
+                        onMouseEnter={()=>setSegmentHoverIdx(idx)}
+                        onMouseLeave={()=>setSegmentHoverIdx(null)}
+                        style={{
+                          position:'absolute',inset:0,
+                          zIndex:9990+idx,
+                          cursor:'pointer',
+                          mixBlendMode:'screen',
+                          opacity:segmentHoverIdx===idx?0.95:0.5,
+                          transition:'opacity 0.12s',
+                        }}>
+                        <img
+                          src={maskUrl}
+                          alt=""
+                          style={{
+                            width:'100%',height:'100%',objectFit:'fill',
+                            filter:`hue-rotate(${idx*47}deg) saturate(6) brightness(${segmentHoverIdx===idx?1.5:0.7})`,
+                            pointerEvents:'none',display:'block',
+                          }}
+                        />
+                        {segmentHoverIdx===idx&&(
+                          <div style={{
+                            position:'absolute',inset:0,
+                            border:'2px solid #f97316',
+                            borderRadius:2,
+                            boxShadow:'inset 0 0 0 1px rgba(249,115,22,0.4)',
+                            pointerEvents:'none',
+                            animation:'tf-pulse-outline 1.2s ease-in-out infinite',
+                          }}>
+                            <div style={{
+                              position:'absolute',bottom:6,left:'50%',
+                              transform:'translateX(-50%)',
+                              background:'rgba(249,115,22,0.95)',
+                              color:'#fff',fontSize:10,fontWeight:'800',
+                              padding:'2px 10px',borderRadius:20,
+                              whiteSpace:'nowrap',letterSpacing:'0.3px',
+                            }}>
+                              Click to isolate
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </>
                 )}
 
                 {/* ✅ Brush overlay — no CSS width/height, no filter, canvas sizes itself */}
@@ -7018,6 +7224,97 @@ PHASE 4 — Toolbar button:
       )}
     </div>
 
+  </div>
+)}
+
+            {activeTool==='segment'&&(
+  <div>
+    <span style={css.label}>Smart Cutout</span>
+
+    <div style={{...css.section,marginTop:0,border:`1px solid ${T.accentBorder}`,background:`linear-gradient(135deg,${T.bg2},rgba(249,115,22,0.04))`}}>
+      <div style={{fontSize:13,fontWeight:'800',color:T.text,marginBottom:4,letterSpacing:'-0.2px'}}>◎ Smart Object Detection</div>
+      <div style={{fontSize:11,color:T.muted,marginBottom:12,lineHeight:1.65}}>
+        AI scans your entire thumbnail and highlights every object. Click any highlighted region on the canvas to isolate it as a new layer.
+      </div>
+
+      {segmentError&&(
+        <div style={{padding:'9px 11px',background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.25)',borderRadius:8,fontSize:11,color:T.danger,marginBottom:10,lineHeight:1.55}}>
+          ⚠ {segmentError}
+          {segmentError.toLowerCase().includes('limit')&&(
+            <div style={{marginTop:8}}>
+              <button onClick={()=>{
+                fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user?.email,plan:'pro'})})
+                  .then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
+              }} style={{padding:'5px 14px',borderRadius:6,border:'none',background:T.accent,color:'#fff',fontSize:11,cursor:'pointer',fontWeight:'700'}}>
+                Upgrade →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!segmentBusy&&segmentMasks.length>0&&(
+        <div style={{
+          padding:'8px 11px',marginBottom:10,
+          background:`${T.accent}12`,border:`1px solid ${T.accentBorder}`,
+          borderRadius:8,fontSize:11,color:T.accent,fontWeight:'700',
+          display:'flex',alignItems:'center',gap:7,
+        }}>
+          <span style={{width:7,height:7,borderRadius:'50%',background:T.accent,display:'inline-block',flexShrink:0}}/>
+          {segmentMasks.length} object{segmentMasks.length!==1?'s':''} found — hover &amp; click on canvas
+        </div>
+      )}
+
+      <button
+        onClick={runSegmentation}
+        disabled={segmentBusy}
+        style={{
+          width:'100%',padding:'11px 0',borderRadius:8,border:'none',
+          background:segmentBusy?T.bg2:`linear-gradient(135deg,#f97316,#ea580c)`,
+          color:segmentBusy?T.muted:'#fff',
+          cursor:segmentBusy?'not-allowed':'pointer',
+          fontSize:12,fontWeight:'800',letterSpacing:'0.3px',
+          display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+          boxShadow:segmentBusy?'none':'0 4px 16px rgba(249,115,22,0.35)',
+          transition:'all 0.2s',
+        }}>
+        {segmentBusy
+          ?<><span style={{display:'inline-block',animation:'editor-spin 0.9s linear infinite',fontSize:14}}>◌</span>{segmentStatus||'Analyzing...'}</>
+          :<>◎ {segmentMasks.length>0?'Re-scan Objects':'Scan for Objects'}</>
+        }
+      </button>
+
+      {segmentMasks.length>0&&!segmentBusy&&(
+        <button
+          onClick={()=>{setSegmentMasks([]);setSegmentHoverIdx(null);}}
+          style={{width:'100%',marginTop:6,padding:'7px 0',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11,fontWeight:'500'}}>
+          × Clear overlays
+        </button>
+      )}
+
+      <div style={{marginTop:10,fontSize:10,color:T.muted,lineHeight:1.5,textAlign:'center'}}>
+        Powered by SAM 2 · Uses 1 AI action per scan
+      </div>
+    </div>
+
+    {!segmentBusy&&segmentMasks.length===0&&!segmentError&&(
+      <div style={{...css.section,marginTop:8}}>
+        <div style={{fontSize:9,color:T.muted,fontWeight:'700',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.9px'}}>How it works</div>
+        {[
+          ['◎','Scan','AI finds every object in your thumbnail using SAM 2'],
+          ['⊡','Select','Hover to preview, click any region on the canvas'],
+          ['▤','Layer','The object becomes an isolated, editable layer'],
+        ].map(([icon,title,desc])=>(
+          <div key={title} style={{display:'flex',gap:9,marginBottom:9,alignItems:'flex-start'}}>
+            <div style={{width:22,height:22,borderRadius:5,background:`${T.accent}12`,border:`1px solid ${T.accentBorder}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,flexShrink:0,color:T.accent,marginTop:1}}>{icon}</div>
+            <div>
+              <div style={{fontSize:11,fontWeight:'700',color:T.text,marginBottom:1}}>{title}</div>
+              <div style={{fontSize:10,color:T.muted,lineHeight:1.45}}>{desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 )}
 
