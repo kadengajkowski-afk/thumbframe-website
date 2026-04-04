@@ -7818,15 +7818,15 @@ PHASE 4 — Toolbar button:
 
             {/* Feature L: Team Collaboration panel */}
             {activeTool==='team'&&(()=>{
-              const isAgency=user?.is_admin||(user?.plan||'free').toLowerCase()==='agency';
-              if(!isAgency) return(
+              const isPro=user?.is_admin||(user?.plan||'free').toLowerCase()==='pro'||(user?.is_pro===true);
+              if(!isPro) return(
                 <div>
                   <span style={css.label}>Team Collaboration</span>
                   <div style={{margin:'8px 0',borderRadius:14,border:`1px solid ${T.accentBorder}`,background:'linear-gradient(160deg,rgba(249,115,22,0.08),rgba(249,115,22,0.02))',padding:'20px 16px',textAlign:'center'}}>
                     <div style={{fontSize:30,marginBottom:10}}>⊕</div>
-                    <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Agency Feature</div>
+                    <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Pro Feature</div>
                     <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Invite team members, share projects, leave canvas comments, and track approval status — all in one workspace.</div>
-                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user?.email,plan:'agency'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Agency →</button>
+                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({email:user?.email,plan:'pro'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
                   </div>
                 </div>
               );
@@ -7881,15 +7881,15 @@ PHASE 4 — Toolbar button:
 
             {/* Feature L: Version History panel */}
             {activeTool==='versions'&&(()=>{
-              const isAgency=user?.is_admin||(user?.plan||'free').toLowerCase()==='agency';
-              if(!isAgency) return(
+              const isPro=user?.is_admin||(user?.plan||'free').toLowerCase()==='pro'||(user?.is_pro===true);
+              if(!isPro) return(
                 <div>
                   <span style={css.label}>Version History</span>
                   <div style={{margin:'8px 0',borderRadius:14,border:`1px solid ${T.accentBorder}`,background:'linear-gradient(160deg,rgba(249,115,22,0.08),rgba(249,115,22,0.02))',padding:'20px 16px',textAlign:'center'}}>
                     <div style={{fontSize:30,marginBottom:10}}>⊘</div>
-                    <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Agency Feature</div>
+                    <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Pro Feature</div>
                     <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Save named snapshots of your canvas and roll back to any previous version instantly.</div>
-                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user?.email,plan:'agency'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Agency →</button>
+                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({email:user?.email,plan:'pro'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
                   </div>
                 </div>
               );
@@ -7941,15 +7941,15 @@ PHASE 4 — Toolbar button:
 
             {/* Feature L: Comments panel */}
             {activeTool==='comments'&&(()=>{
-              const isAgency=user?.is_admin||(user?.plan||'free').toLowerCase()==='agency';
-              if(!isAgency) return(
+              const isPro=user?.is_admin||(user?.plan||'free').toLowerCase()==='pro'||(user?.is_pro===true);
+              if(!isPro) return(
                 <div>
                   <span style={css.label}>Canvas Comments</span>
                   <div style={{margin:'8px 0',borderRadius:14,border:`1px solid ${T.accentBorder}`,background:'linear-gradient(160deg,rgba(249,115,22,0.08),rgba(249,115,22,0.02))',padding:'20px 16px',textAlign:'center'}}>
                     <div style={{fontSize:30,marginBottom:10}}>◌</div>
-                    <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Agency Feature</div>
+                    <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Pro Feature</div>
                     <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Drop comment pins anywhere on the canvas. Pin positions, reply threads, and resolve status all sync in real time with your team.</div>
-                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user?.email,plan:'agency'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Agency →</button>
+                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({email:user?.email,plan:'pro'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
                   </div>
                 </div>
               );
@@ -8008,12 +8008,12 @@ PHASE 4 — Toolbar button:
             })()}
 
             {activeTool==='ythistory'&&(()=>{
-              const isAgency = user?.is_admin || (user?.plan||'free').toLowerCase()==='agency';
+              const isPro = user?.is_admin || (user?.plan||'free').toLowerCase()==='pro' || (user?.is_pro===true);
               const IMPACT_COLOR = {high:T.accent, medium:'#f59e0b', low:T.muted};
               const CAT_ICON = {face:'◉',color:'◕',text:'✦',background:'◫',composition:'◈',channel:'▶'};
 
-              // Agency gate
-              if(!isAgency){
+              // Pro gate
+              if(!isPro){
                 return(
                   <div>
                     <span style={css.label}>YouTube History Intelligence</span>
@@ -8024,7 +8024,7 @@ PHASE 4 — Toolbar button:
                     }}>
                       <div style={{padding:'20px 16px',textAlign:'center'}}>
                         <div style={{fontSize:32,marginBottom:10}}>◎</div>
-                        <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Agency Feature</div>
+                        <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Pro Feature</div>
                         <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:16}}>
                           Connect your real YouTube channel and let AI study your last 50 thumbnails.
                           Get personalized insights like <em style={{color:T.text}}>"Faces on the left get 2.3× more clicks on your channel"</em> — then auto-apply them as editor defaults.
@@ -8038,13 +8038,13 @@ PHASE 4 — Toolbar button:
                         </div>
                         <button
                           onClick={()=>{
-                            fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user?.email,plan:'agency'})})
+                            fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({email:user?.email,plan:'pro'})})
                             .then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
                           }}
                           style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800',letterSpacing:'0.02em'}}>
-                          Upgrade to Agency →
+                          Upgrade to Pro →
                         </button>
-                        <div style={{marginTop:8,fontSize:10,color:T.muted}}>Includes unlimited AI, all features</div>
+                        <div style={{marginTop:8,fontSize:10,color:T.muted}}>300 AI actions/month, all features</div>
                       </div>
                     </div>
                   </div>

@@ -251,9 +251,8 @@ async function authMiddleware(req,res,next){
 // ── AI Quota System ────────────────────────────────────────────────────────────
 function getPlanQuota(plan){
   switch((plan||'free').toLowerCase()){
-    case 'agency':  return{limit:Infinity, period:'month'};
-    case 'pro':     return{limit:300,      period:'month'};
-    default:        return{limit:3,        period:'day'};
+    case 'pro':  return{limit:300, period:'month'};
+    default:     return{limit:3,   period:'day'};
   }
 }
 
@@ -275,8 +274,8 @@ function checkQuota(email){
   if(usage.count>=limit){
     const planLabel=(user.plan||'free').charAt(0).toUpperCase()+(user.plan||'free').slice(1);
     const msg=(!user.plan||user.plan==='free')
-      ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 300/month or Agency for unlimited.'
-      :`${planLabel} plan limit (${limit}/${period}) reached. Upgrade to Agency for unlimited.`;
+      ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 300/month.'
+      :`Pro plan limit (${limit}/${period}) reached. Contact support to discuss higher usage.`;
     return{ok:false,message:msg,code:'QUOTA_EXCEEDED'};
   }
   return{ok:true,remaining:limit-usage.count};
@@ -338,8 +337,8 @@ function checkAndDecrementQuota(email){
   if(usage.count>=limit){
     const planLabel=(user.plan||'free').charAt(0).toUpperCase()+(user.plan||'free').slice(1);
     const msg=(!user.plan||user.plan==='free')
-      ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 300/month or Agency for unlimited.'
-      :`${planLabel} plan limit (${limit}/${period}) reached. Upgrade to Agency for unlimited.`;
+      ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 300/month.'
+      :`Pro plan limit (${limit}/${period}) reached. Contact support to discuss higher usage.`;
     return{ok:false,message:msg,code:'QUOTA_EXCEEDED'};
   }
 
@@ -349,12 +348,12 @@ function checkAndDecrementQuota(email){
   return{ok:true,remaining:limit-usage.count};
 }
 
-// Middleware: Agency plan required
+// Middleware: Pro plan required (replaces former agency gate — only two plans exist: Free and Pro)
 function agencyMiddleware(req,res,next){
   const users=loadUsers();
   const user=users[req.user?.email];
-  const isAgency=(user?.plan||'free').toLowerCase()==='agency'||user?.email===ADMIN_EMAIL;
-  if(!isAgency) return res.status(403).json({success:false,error:'Agency plan required',code:'AGENCY_REQUIRED'});
+  const isPro=(user?.plan||'free').toLowerCase()==='pro'||user?.email===ADMIN_EMAIL;
+  if(!isPro) return res.status(403).json({success:false,error:'Pro plan required',code:'PRO_REQUIRED'});
   next();
 }
 

@@ -1014,7 +1014,7 @@ export default function App() {
         ...prev,
         email: userData.email,
         name: userData.name,
-        is_pro: userData.plan === 'pro' || userData.plan === 'agency',
+        is_pro: userData.plan === 'pro',
         plan: userData.plan,
       })))
       .catch(() => { setToken(null); localStorage.removeItem('sf_token'); });
