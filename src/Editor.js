@@ -8,6 +8,7 @@ import { SHORTCUT_GROUPS, TOOL_SHORTCUT_MAP } from './shortcuts';
 import CurvesPanel, { CurveThumbnail } from './CurvesPanel';
 import { DEFAULT_CURVES, applyLUTSync } from './curvesUtils';
 import CommandPalette from './CommandPalette';
+import LiquifyModal from './LiquifyModal';
 import SelectionOverlay from './SelectionOverlay';
 import { rectMask, ellipseMask, pathMask, magicWandMask, combineMasks, invertMask, selectAllMask, maskBounds, featherMask } from './selectionUtils'; // eslint-disable-line no-unused-vars
 const MobileEditor = lazy(() => import('./MobileEditor'));
@@ -1034,6 +1035,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [showDownload,setShowDownload]     = useState(false);
   const [showShortcutsModal,setShowShortcutsModal] = useState(false);
   const [showCommandPalette,setShowCommandPalette] = useState(false);
+  const [showLiquify,setShowLiquify]               = useState(false);
+  const [liquifySource,setLiquifySource]           = useState(null); // {imageData,w,h}
   const [savedDesigns,setSavedDesigns]     = useState([]);
   const [galleryLoading,setGalleryLoading] = useState(false);
   const galleryLastFetchAt                 = useRef(0); // timestamp of last successful fetch
@@ -2388,6 +2391,16 @@ PHASE 4 — Toolbar button:
   function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};});pushHistory(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
   function updateLayerEffectNestedSilent(id,ek,sk,value){setLayers(prev=>prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};}));}
   function updateLayerStrokes(id,newStrokes){updateLayerEffect(id,'strokes',newStrokes);}
+
+  async function openLiquify(){
+    const flat = document.createElement('canvas');
+    flat.width  = p.preview.w;
+    flat.height = p.preview.h;
+    await renderLayersToCanvas(flat, layers);
+    const imgData = flat.getContext('2d').getImageData(0, 0, p.preview.w, p.preview.h);
+    setLiquifySource({ imageData: imgData, w: p.preview.w, h: p.preview.h });
+    setShowLiquify(true);
+  }
 
   function addCurvesLayer(){
     const id=newId();
@@ -5529,6 +5542,7 @@ PHASE 4 — Toolbar button:
     if(id==='tool-bggen')    {setActiveTool('bggen');return;}
     // Filters → open colorgrade panel
     if(id.startsWith('filter-')) {setActiveTool('colorgrade');return;}
+    if(id==='filter-liquify'||id==='tool-liquify') {openLiquify();return;}
     // Adjustments
     if(id==='adj-curves')    {addCurvesLayer();return;}
     if(id==='adj-brightness'||id==='adj-hue') {setActiveTool('adjust');return;}
@@ -6000,6 +6014,7 @@ PHASE 4 — Toolbar button:
     {key:'background',label:'Background',   icon:'▨',   group:'Design'},
     {key:'effects',   label:'Effects',      icon:'✦',   group:'Design'},
     {key:'curves',    label:'Curves',       icon:'◑',   group:'Design'},
+    {key:'liquify',   label:'Liquify',      icon:'≋',   group:'Design'},
     {key:'brandkit',  label:'Brand Kit',    icon:'◐',   group:'Design'},
     null,
     {key:'templates',   label:'Templates',    icon:'⊞',   group:'Analyze'},
@@ -6255,6 +6270,27 @@ PHASE 4 — Toolbar button:
         onClose={()=>setShowCommandPalette(false)}
         onExecute={executePaletteCommand}
       />
+
+      {showLiquify&&liquifySource&&(
+        <LiquifyModal
+          sourceImageData={liquifySource.imageData}
+          W={liquifySource.w}
+          H={liquifySource.h}
+          onApply={(dataUrl)=>{
+            addLayer({
+              type:'image',src:dataUrl,
+              width:p.preview.w,height:p.preview.h,
+              x:0,y:0,
+              cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+              imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+            });
+            saveEngineRef.current?.markDirty('layerContent','liquify');
+            setShowLiquify(false);
+            setLiquifySource(null);
+          }}
+          onCancel={()=>{setShowLiquify(false);setLiquifySource(null);}}
+        />
+      )}
 
       {showDownload&&(
         <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'}} onClick={e=>{if(e.target===e.currentTarget)setShowDownload(false);}}>
@@ -8604,6 +8640,14 @@ PHASE 4 — Toolbar button:
                   <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Add a Curves adjustment layer to non-destructively adjust tone and color for all layers below it.</div>
                 )}
                 <button onClick={addCurvesLayer} style={css.addBtn}>+ Add Curves Layer</button>
+              </div>
+            )}
+
+            {activeTool==='liquify'&&(
+              <div>
+                <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Push, pull, bloat, and pinch pixels interactively. Face-aware handles auto-detected.</div>
+                <div style={{fontSize:10,color:T.muted,marginBottom:8}}>Tools inside: Forward Warp, Bloat, Pucker, Twirl, Reconstruct, Freeze/Thaw Mask.</div>
+                <button onClick={openLiquify} style={css.addBtn}>≋ Open Liquify</button>
               </div>
             )}
 
