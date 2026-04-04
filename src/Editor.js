@@ -587,11 +587,12 @@ const ALL_COMMANDS = [
 function defaultEffects(){
   return{
     layerBlur:0,brightness:100,contrast:100,saturation:100,
-    shadow:{enabled:false,x:4,y:4,blur:12,color:'#000000',opacity:60},
+    shadow:{enabled:false,x:4,y:4,blur:12,spread:0,color:'#000000',opacity:60},
     dropShadow:{enabled:false,x:0,y:0,blur:0,color:'#ffffff',opacity:100,spread:0},
-    glow:{enabled:false,color:'#f97316',blur:20},
-    outline:{enabled:false,color:'#ffffff',width:2},
+    glow:{enabled:false,color:'#f97316',blur:20,opacity:80},
+    outline:{enabled:false,color:'#ffffff',width:2,position:'outside'},
     subjectOutline:{enabled:false,color:'#ffffff',width:5},
+    strokes:[],
     mask:{enabled:false,inverted:false,data:null},
   };
 }
@@ -627,16 +628,34 @@ function getEffectsStyle(effects){
     filters.push(`drop-shadow(${x}px ${y}px ${singleBlur}px ${rgba})`);
   }
   if(effects.glow?.enabled){
-    shadows.push(`0 0 ${effects.glow.blur}px ${effects.glow.color}`);
-    shadows.push(`0 0 ${effects.glow.blur*2}px ${effects.glow.color}`);
-    filters.push(`drop-shadow(0 0 ${Math.ceil((effects.glow.blur||20)/3)}px ${effects.glow.color})`);
+    const glowBlur=effects.glow.blur||20;
+    const glowOpacity=(effects.glow.opacity??80)/100;
+    const glowHex=effects.glow.color||'#f97316';
+    const gr=parseInt(glowHex.slice(1,3),16)||249;
+    const gg=parseInt(glowHex.slice(3,5),16)||115;
+    const gb=parseInt(glowHex.slice(5,7),16)||22;
+    const glowRgba=`rgba(${gr},${gg},${gb},${glowOpacity})`;
+    shadows.push(`0 0 ${glowBlur}px ${glowRgba}`);
+    shadows.push(`0 0 ${glowBlur*2}px ${glowRgba}`);
+    filters.push(`drop-shadow(0 0 ${Math.ceil(glowBlur/3)}px ${glowRgba})`);
+  }
+  // Additional strokes (rendered as layered box-shadows with 0 blur)
+  if(Array.isArray(effects.strokes)){
+    effects.strokes.forEach(st=>{
+      if(!st.enabled||!st.width)return;
+      const pos=st.position||'outside';
+      const spread=pos==='inside'?-(st.width):pos==='center'?Math.round(st.width/2):st.width;
+      shadows.push(`0 0 0 ${spread}px ${st.color||'#ffffff'}`);
+    });
   }
   const style={};
   if(filters.length)style.filter=filters.join(' ');
   if(shadows.length)style.boxShadow=shadows.join(',');
   if(effects.outline?.enabled&&effects.outline.width>0){
+    const pos=effects.outline.position||'outside';
+    const offset=pos==='inside'?-(effects.outline.width):pos==='center'?0:0;
     style.outline=`${effects.outline.width}px solid ${effects.outline.color}`;
-    style.outlineOffset='2px';
+    style.outlineOffset=`${offset}px`;
   }
   if(effects.subjectOutline?.enabled&&effects.subjectOutline.width>0){
     const sc=effects.subjectOutline.color||'#ffffff';
@@ -2047,10 +2066,11 @@ PHASE 4 — Toolbar button:
 
   function updateLayer(id,updates){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,...updates}:l);pushHistoryDebounced(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
   function updateLayerSilent(id,updates){setLayers(prev=>prev.map(l=>l.id===id?{...l,...updates}:l));}
-  function updateLayerEffect(id,key,value){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l);pushHistory(nl);return nl;});triggerAutoSave();}
+  function updateLayerEffect(id,key,value){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l);pushHistory(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
   function updateLayerEffectSilent(id,key,value){setLayers(prev=>prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l));}
-  function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};});pushHistory(nl);return nl;});triggerAutoSave();}
+  function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};});pushHistory(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
   function updateLayerEffectNestedSilent(id,ek,sk,value){setLayers(prev=>prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};}));}
+  function updateLayerStrokes(id,newStrokes){updateLayerEffect(id,'strokes',newStrokes);}
   function deleteLayer(id){
     const layer=layers.find(l=>l.id===id);
     if(!layer) return;
@@ -2874,6 +2894,22 @@ PHASE 4 — Toolbar button:
             const cr=(obj.cropRight||0)*scaleX;
             const cb=(obj.cropBottom||0)*scaleY;
 
+            // ── Helper: apply drop shadow to ctx then draw, then clear ──────
+            const applyShadowAndDraw=(drawFn)=>{
+              const sh=obj.effects?.shadow;
+              if(sh?.enabled){
+                const sr=parseInt((sh.color||'#000').slice(1,3),16)||0;
+                const sg=parseInt((sh.color||'#000').slice(3,5),16)||0;
+                const sb=parseInt((sh.color||'#000').slice(5,7),16)||0;
+                ctx.shadowColor=`rgba(${sr},${sg},${sb},${(sh.opacity??60)/100})`;
+                ctx.shadowOffsetX=(sh.x||0)*scaleX;
+                ctx.shadowOffsetY=(sh.y||0)*scaleY;
+                ctx.shadowBlur=(sh.blur||12)*Math.min(scaleX,scaleY);
+              }
+              drawFn();
+              ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;
+            };
+
             ctx.save();
             if(obj.mask?.enabled&&obj.mask?.type==='lasso'&&obj.mask?.points?.length>=3){
               // Apply lasso clip path to export canvas
@@ -2899,9 +2935,13 @@ PHASE 4 — Toolbar button:
               }
               ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
               if(obj.effects?.glow?.enabled){
-                drawGlowImage(ctx,img,x-cl,y-ct,w,h,obj.effects.glow.color||'#ffffff',obj.effects.glow.blur||20);
+                const glowBlur=(obj.effects.glow.blur||20);
+                const glowOpacity=(obj.effects.glow.opacity??80)/100;
+                const gh=obj.effects.glow.color||'#f97316';
+                const gr2=parseInt(gh.slice(1,3),16)||249,gg2=parseInt(gh.slice(3,5),16)||115,gb2=parseInt(gh.slice(5,7),16)||22;
+                drawGlowImage(ctx,img,x-cl,y-ct,w,h,`rgba(${gr2},${gg2},${gb2},${glowOpacity})`,glowBlur);
               } else {
-                ctx.drawImage(img,x-cl,y-ct,w,h);
+                applyShadowAndDraw(()=>ctx.drawImage(img,x-cl,y-ct,w,h));
               }
               ctx.restore();
               resolve();
@@ -2923,9 +2963,13 @@ PHASE 4 — Toolbar button:
               }
               ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
               if(obj.effects?.glow?.enabled){
-                drawGlowImage(ctx,img,x-cl,y-ct,w,h,obj.effects.glow.color||'#ffffff',(obj.effects.glow.blur||20)*Math.min(scaleX,scaleY));
+                const glowBlur=(obj.effects.glow.blur||20)*Math.min(scaleX,scaleY);
+                const glowOpacity=(obj.effects.glow.opacity??80)/100;
+                const gh=obj.effects.glow.color||'#f97316';
+                const gr2=parseInt(gh.slice(1,3),16)||249,gg2=parseInt(gh.slice(3,5),16)||115,gb2=parseInt(gh.slice(5,7),16)||22;
+                drawGlowImage(ctx,img,x-cl,y-ct,w,h,`rgba(${gr2},${gg2},${gb2},${glowOpacity})`,glowBlur);
               } else {
-                ctx.drawImage(img,x-cl,y-ct,w,h);
+                applyShadowAndDraw(()=>ctx.drawImage(img,x-cl,y-ct,w,h));
               }
               ctx.restore();
               resolve();
@@ -7406,75 +7450,242 @@ PHASE 4 — Toolbar button:
             )}
 
             {activeTool==='effects'&&(
-              <div>
-                <span style={css.label}>Layer effects</span>
+              <div style={{paddingBottom:12}}>
+                {/* Panel header */}
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px 6px'}}>
+                  <span style={{fontSize:11,fontWeight:'700',color:T.text,letterSpacing:'0.7px',textTransform:'uppercase'}}>Layer Effects</span>
+                  {selectedLayer&&selectedLayer.type!=='background'&&(
+                    <button onClick={()=>updateLayer(selectedId,{effects:defaultEffects()})}
+                      style={{fontSize:9,color:T.muted,background:'transparent',border:`1px solid ${T.border}`,cursor:'pointer',padding:'2px 7px',borderRadius:3,letterSpacing:'0.3px'}}
+                      onMouseEnter={e=>e.currentTarget.style.color=T.danger}
+                      onMouseLeave={e=>e.currentTarget.style.color=T.muted}>
+                      Reset all
+                    </button>
+                  )}
+                </div>
+
                 {!selectedLayer||selectedLayer.type==='background'?(
-                  <div style={{...css.section,marginTop:0,fontSize:12,color:T.muted,textAlign:'center',padding:20}}><div style={{fontSize:24,marginBottom:8}}>✦</div>Click any layer to apply effects</div>
-                ):(
-                  <>
-                    <div style={{...css.section,marginTop:0,fontSize:11,color:T.success,fontWeight:'600'}}>✦ Non-destructive — editable anytime</div>
-                    <span style={css.label}>Blur — {selectedLayer.effects?.layerBlur||0}px</span>
-                    <Slider min={0} max={30} value={selectedLayer.effects?.layerBlur||0}
-                      onChange={v=>updateLayerEffectSilent(selectedId,'layerBlur',v)}
-                      onCommit={v=>updateLayerEffect(selectedId,'layerBlur',v)}
-                      style={{width:'100%'}}/>
-                    <span style={css.label}>Brightness — {selectedLayer.effects?.brightness||100}%</span>
-                    <Slider min={0} max={200} value={selectedLayer.effects?.brightness||100}
-                      onChange={v=>updateLayerEffectSilent(selectedId,'brightness',v)}
-                      onCommit={v=>updateLayerEffect(selectedId,'brightness',v)}
-                      style={{width:'100%'}}/>
-                    <span style={css.label}>Contrast — {selectedLayer.effects?.contrast||100}%</span>
-                    <Slider min={0} max={300} value={selectedLayer.effects?.contrast||100}
-                      onChange={v=>updateLayerEffectSilent(selectedId,'contrast',v)}
-                      onCommit={v=>updateLayerEffect(selectedId,'contrast',v)}
-                      style={{width:'100%'}}/>
-                    <span style={css.label}>Saturation — {selectedLayer.effects?.saturation||100}%</span>
-                    <Slider min={0} max={300} value={selectedLayer.effects?.saturation||100}
-                      onChange={v=>updateLayerEffectSilent(selectedId,'saturation',v)}
-                      onCommit={v=>updateLayerEffect(selectedId,'saturation',v)}
-                      style={{width:'100%'}}/>
-                    <span style={css.label}>Drop shadow</span>
-                    <div style={css.section}>
-                      <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>updateLayerEffectNested(selectedId,'shadow','enabled',!(selectedLayer.effects?.shadow?.enabled))} style={css.iconBtn(selectedLayer.effects?.shadow?.enabled)}>{selectedLayer.effects?.shadow?.enabled?'On':'Off'}</button></div>
-                      {selectedLayer.effects?.shadow?.enabled&&<>
-                        <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:40}}>Color</span><input type="color" value={selectedLayer.effects.shadow.color||'#000000'} onChange={e=>updateLayerEffectNested(selectedId,'shadow','color',e.target.value)} style={{...css.color,height:28}}/></div>
-                        {[['X','x',-20,20],['Y','y',-20,20],['Blur','blur',0,40],['Opacity','opacity',0,100]].map(([l,k,mn,mx])=>(<div key={k} style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:40}}>{l}</span><Slider min={mn} max={mx} value={selectedLayer.effects.shadow[k]??0} onChange={v=>updateLayerEffectNestedSilent(selectedId,'shadow',k,v)} onCommit={v=>updateLayerEffectNested(selectedId,'shadow',k,v)} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:24,textAlign:'right'}}>{selectedLayer.effects.shadow[k]??0}</span></div>))}
-                      </>}
+                  <div style={{textAlign:'center',padding:'28px 16px'}}>
+                    <div style={{fontSize:22,opacity:0.2,marginBottom:10}}>⬡</div>
+                    <div style={{fontSize:12,color:T.muted,lineHeight:1.6}}>Select a layer<br/>to apply effects</div>
+                  </div>
+                ):(()=>{
+                  const fx=selectedLayer.effects||defaultEffects();
+                  const sid=selectedId;
+
+                  // ── Reusable toggle header ──────────────────────────────
+                  const EffectToggle=({label,enabled,onToggle,accent})=>{
+                    const col=accent||T.accent;
+                    return(
+                      <div onClick={onToggle} style={{
+                        display:'flex',alignItems:'center',justifyContent:'space-between',
+                        padding:'7px 10px',borderRadius:6,cursor:'pointer',
+                        background:enabled?`rgba(${parseInt(col.slice(1,3),16)},${parseInt(col.slice(3,5),16)},${parseInt(col.slice(5,7),16)},0.08)`:'transparent',
+                        border:`1px solid ${enabled?col+'55':T.border}`,
+                        transition:'all 0.12s',userSelect:'none',
+                      }}
+                      onMouseEnter={e=>!enabled&&(e.currentTarget.style.borderColor=col+'33')}
+                      onMouseLeave={e=>!enabled&&(e.currentTarget.style.borderColor=T.border)}>
+                        <div style={{display:'flex',alignItems:'center',gap:7}}>
+                          <div style={{
+                            width:6,height:6,borderRadius:'50%',flexShrink:0,
+                            background:enabled?col:T.border,
+                            boxShadow:enabled?`0 0 8px ${col}`:'none',
+                            transition:'all 0.15s',
+                          }}/>
+                          <span style={{fontSize:11,fontWeight:'700',letterSpacing:'0.6px',textTransform:'uppercase',color:enabled?T.text:T.muted,transition:'color 0.12s'}}>{label}</span>
+                        </div>
+                        {/* Toggle switch */}
+                        <div style={{width:26,height:13,borderRadius:7,background:enabled?col:T.border,position:'relative',transition:'background 0.15s',flexShrink:0}}>
+                          <div style={{position:'absolute',top:2,left:enabled?14:2,width:9,height:9,borderRadius:'50%',background:'#fff',transition:'left 0.12s',boxShadow:'0 1px 3px rgba(0,0,0,0.5)'}}/>
+                        </div>
+                      </div>
+                    );
+                  };
+
+                  // ── Reusable slider row ─────────────────────────────────
+                  const SliderRow=({label,value,min,max,unit='',onChange,onCommit,width})=>(
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginTop:5}}>
+                      <span style={{fontSize:9,color:T.muted,width:width||32,flexShrink:0,letterSpacing:'0.3px'}}>{label}</span>
+                      <Slider min={min} max={max} value={value} onChange={onChange} onCommit={onCommit} style={{flex:1}}/>
+                      <span style={{fontSize:9,color:T.muted,minWidth:26,textAlign:'right'}}>{value}{unit}</span>
                     </div>
-                    <span style={css.label}>Glow</span>
-                    <div style={css.section}>
-                      <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>updateLayerEffectNested(selectedId,'glow','enabled',!(selectedLayer.effects?.glow?.enabled))} style={css.iconBtn(selectedLayer.effects?.glow?.enabled)}>{selectedLayer.effects?.glow?.enabled?'On':'Off'}</button></div>
-                      {selectedLayer.effects?.glow?.enabled&&<>
-                        <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:40}}>Color</span><input type="color" value={selectedLayer.effects.glow.color||'#f97316'} onChange={e=>updateLayerEffectNested(selectedId,'glow','color',e.target.value)} style={{...css.color,height:28}}/></div>
-                        <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:40}}>Blur</span><Slider min={0} max={60} value={selectedLayer.effects.glow.blur||20} onChange={v=>updateLayerEffectNestedSilent(selectedId,'glow','blur',v)} onCommit={v=>updateLayerEffectNested(selectedId,'glow','blur',v)} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:24,textAlign:'right'}}>{selectedLayer.effects.glow.blur||20}</span></div>
-                      </>}
+                  );
+
+                  // ── Color + label row ───────────────────────────────────
+                  const ColorRow=({label,value,onChange})=>(
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:5}}>
+                      <span style={{fontSize:9,color:T.muted,width:32,flexShrink:0}}>{label}</span>
+                      <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
+                        <div style={{width:22,height:22,borderRadius:4,background:value,border:`1px solid ${T.border}`,flexShrink:0,cursor:'pointer'}}/>
+                        <input type="color" value={value} onChange={onChange} style={{position:'absolute',opacity:0,width:0,height:0}}/>
+                        <span style={{fontSize:10,color:T.muted,fontFamily:'monospace'}}>{value}</span>
+                      </label>
                     </div>
-                    <span style={css.label}>Outline</span>
-                    <div style={css.section}>
-                      <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>updateLayerEffectNested(selectedId,'outline','enabled',!(selectedLayer.effects?.outline?.enabled))} style={css.iconBtn(selectedLayer.effects?.outline?.enabled)}>{selectedLayer.effects?.outline?.enabled?'On':'Off'}</button></div>
-                      {selectedLayer.effects?.outline?.enabled&&<>
-                        <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:40}}>Color</span><input type="color" value={selectedLayer.effects.outline.color||'#ffffff'} onChange={e=>updateLayerEffectNested(selectedId,'outline','color',e.target.value)} style={{...css.color,height:28}}/></div>
-                        <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:40}}>Width</span><Slider min={0} max={20} value={selectedLayer.effects.outline.width||2} onChange={v=>updateLayerEffectNestedSilent(selectedId,'outline','width',v)} onCommit={v=>updateLayerEffectNested(selectedId,'outline','width',v)} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:24,textAlign:'right'}}>{selectedLayer.effects.outline.width||2}px</span></div>
-                      </>}
-                    </div>
-                    <span style={css.label}>Subject Glow Outline</span>
-                    <div style={css.section}>
-                      <div style={{fontSize:10,color:T.muted,marginBottom:6,lineHeight:1.5}}>Contour outline using stacked drop-shadows — works on PNG cutouts &amp; removed backgrounds.</div>
-                      <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>updateLayerEffectNested(selectedId,'subjectOutline','enabled',!(selectedLayer.effects?.subjectOutline?.enabled))} style={css.iconBtn(selectedLayer.effects?.subjectOutline?.enabled)}>{selectedLayer.effects?.subjectOutline?.enabled?'On':'Off'}</button></div>
-                      {selectedLayer.effects?.subjectOutline?.enabled&&<>
-                        <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:40}}>Color</span><input type="color" value={selectedLayer.effects?.subjectOutline?.color||'#ffffff'} onChange={e=>updateLayerEffectNested(selectedId,'subjectOutline','color',e.target.value)} style={{...css.color,height:28}}/></div>
-                        <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:40}}>Width</span><Slider min={1} max={20} value={selectedLayer.effects?.subjectOutline?.width||5} onChange={v=>updateLayerEffectNestedSilent(selectedId,'subjectOutline','width',v)} onCommit={v=>updateLayerEffectNested(selectedId,'subjectOutline','width',v)} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:24,textAlign:'right'}}>{selectedLayer.effects?.subjectOutline?.width||5}px</span></div>
-                      </>}
-                    </div>
-                    <span style={css.label}>Layer mask</span>
-                    <div style={{...css.section,textAlign:'center',padding:16}}>
-                      <div style={{fontSize:11,color:T.muted,lineHeight:1.6}}>
-                        Layer masks are coming soon. Paint black to hide, white to reveal — like Photoshop.
+                  );
+
+                  const strokes=Array.isArray(fx.strokes)?fx.strokes:[];
+
+                  return(
+                    <div style={{padding:'0 8px',display:'flex',flexDirection:'column',gap:6}}>
+                      {/* Non-destructive badge */}
+                      <div style={{fontSize:10,color:T.success,display:'flex',alignItems:'center',gap:4,padding:'3px 4px'}}>
+                        <span>✦</span><span>Non-destructive — live preview</span>
+                      </div>
+
+                      {/* ───────────────── DROP SHADOW ───────────────────── */}
+                      <div style={{borderRadius:7,border:`1px solid ${T.border}`,overflow:'hidden'}}>
+                        <EffectToggle label="Drop Shadow" enabled={fx.shadow?.enabled}
+                          onToggle={()=>updateLayerEffectNested(sid,'shadow','enabled',!fx.shadow?.enabled)}/>
+                        {fx.shadow?.enabled&&(
+                          <div style={{padding:'8px 10px',borderTop:`1px solid ${T.border}`,background:T.bg2}}>
+                            <ColorRow label="Color" value={fx.shadow?.color||'#000000'}
+                              onChange={e=>updateLayerEffectNested(sid,'shadow','color',e.target.value)}/>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginTop:6}}>
+                              <SliderRow label="X" value={fx.shadow?.x??4} min={-40} max={40} unit="px"
+                                onChange={v=>updateLayerEffectNestedSilent(sid,'shadow','x',v)}
+                                onCommit={v=>updateLayerEffectNested(sid,'shadow','x',v)}/>
+                              <SliderRow label="Y" value={fx.shadow?.y??4} min={-40} max={40} unit="px"
+                                onChange={v=>updateLayerEffectNestedSilent(sid,'shadow','y',v)}
+                                onCommit={v=>updateLayerEffectNested(sid,'shadow','y',v)}/>
+                              <SliderRow label="Blur" value={fx.shadow?.blur??12} min={0} max={60} unit="px"
+                                onChange={v=>updateLayerEffectNestedSilent(sid,'shadow','blur',v)}
+                                onCommit={v=>updateLayerEffectNested(sid,'shadow','blur',v)}/>
+                              <SliderRow label="Spread" value={fx.shadow?.spread??0} min={0} max={30} unit="px"
+                                onChange={v=>updateLayerEffectNestedSilent(sid,'shadow','spread',v)}
+                                onCommit={v=>updateLayerEffectNested(sid,'shadow','spread',v)}/>
+                            </div>
+                            <SliderRow label="Opacity" value={fx.shadow?.opacity??60} min={0} max={100} unit="%"
+                              onChange={v=>updateLayerEffectNestedSilent(sid,'shadow','opacity',v)}
+                              onCommit={v=>updateLayerEffectNested(sid,'shadow','opacity',v)} width={42}/>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ───────────────── OUTER GLOW ────────────────────── */}
+                      <div style={{borderRadius:7,border:`1px solid ${T.border}`,overflow:'hidden'}}>
+                        <EffectToggle label="Outer Glow" enabled={fx.glow?.enabled} accent='#f59e0b'
+                          onToggle={()=>updateLayerEffectNested(sid,'glow','enabled',!fx.glow?.enabled)}/>
+                        {fx.glow?.enabled&&(
+                          <div style={{padding:'8px 10px',borderTop:`1px solid ${T.border}`,background:T.bg2}}>
+                            <ColorRow label="Color" value={fx.glow?.color||'#f97316'}
+                              onChange={e=>updateLayerEffectNested(sid,'glow','color',e.target.value)}/>
+                            <SliderRow label="Size" value={fx.glow?.blur??20} min={0} max={80} unit="px"
+                              onChange={v=>updateLayerEffectNestedSilent(sid,'glow','blur',v)}
+                              onCommit={v=>updateLayerEffectNested(sid,'glow','blur',v)} width={28}/>
+                            <SliderRow label="Opacity" value={fx.glow?.opacity??80} min={0} max={100} unit="%"
+                              onChange={v=>updateLayerEffectNestedSilent(sid,'glow','opacity',v)}
+                              onCommit={v=>updateLayerEffectNested(sid,'glow','opacity',v)} width={42}/>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ───────────────── STROKE / OUTLINE ─────────────── */}
+                      <div style={{borderRadius:7,border:`1px solid ${T.border}`,overflow:'hidden'}}>
+                        <EffectToggle label="Stroke" enabled={fx.outline?.enabled} accent='#60a5fa'
+                          onToggle={()=>updateLayerEffectNested(sid,'outline','enabled',!fx.outline?.enabled)}/>
+                        {fx.outline?.enabled&&(
+                          <div style={{padding:'8px 10px',borderTop:`1px solid ${T.border}`,background:T.bg2}}>
+                            <ColorRow label="Color" value={fx.outline?.color||'#ffffff'}
+                              onChange={e=>updateLayerEffectNested(sid,'outline','color',e.target.value)}/>
+                            <SliderRow label="Width" value={fx.outline?.width??2} min={1} max={24} unit="px"
+                              onChange={v=>updateLayerEffectNestedSilent(sid,'outline','width',v)}
+                              onCommit={v=>updateLayerEffectNested(sid,'outline','width',v)} width={28}/>
+                            {/* Position */}
+                            <div style={{display:'flex',gap:3,marginTop:6}}>
+                              {['outside','center','inside'].map(pos=>(
+                                <button key={pos} onClick={()=>updateLayerEffectNested(sid,'outline','position',pos)}
+                                  style={{flex:1,padding:'3px 0',borderRadius:4,border:`1px solid ${(fx.outline?.position||'outside')===pos?'#60a5fa':T.border}`,background:(fx.outline?.position||'outside')===pos?'rgba(96,165,250,0.15)':T.bg,color:(fx.outline?.position||'outside')===pos?'#60a5fa':T.muted,fontSize:9,fontWeight:'600',cursor:'pointer',textTransform:'capitalize',letterSpacing:'0.3px'}}>
+                                  {pos}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* Additional strokes */}
+                        {strokes.length>0&&strokes.map((st,i)=>(
+                          <div key={i} style={{borderTop:`1px solid ${T.border}`,background:T.bg2}}>
+                            <div style={{display:'flex',alignItems:'center',gap:4,padding:'6px 10px'}}>
+                              <div onClick={()=>{const ns=[...strokes];ns[i]={...ns[i],enabled:!ns[i].enabled};updateLayerStrokes(sid,ns);}}
+                                style={{width:6,height:6,borderRadius:'50%',background:st.enabled?'#60a5fa':T.border,cursor:'pointer',flexShrink:0,boxShadow:st.enabled?'0 0 6px #60a5fa':'none'}}/>
+                              <span style={{fontSize:9,color:T.muted,letterSpacing:'0.4px',textTransform:'uppercase',fontWeight:'700'}}>Stroke {i+2}</span>
+                              <div style={{flex:1}}/>
+                              <button onClick={()=>{const ns=strokes.filter((_,j)=>j!==i);updateLayerStrokes(sid,ns);}}
+                                style={{padding:'1px 5px',borderRadius:3,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:10,cursor:'pointer',lineHeight:1}}
+                                onMouseEnter={e=>e.currentTarget.style.color=T.danger}
+                                onMouseLeave={e=>e.currentTarget.style.color=T.muted}>✕</button>
+                            </div>
+                            {st.enabled&&(
+                              <div style={{padding:'0 10px 8px'}}>
+                                <ColorRow label="Color" value={st.color||'#ffffff'}
+                                  onChange={e=>{const ns=[...strokes];ns[i]={...ns[i],color:e.target.value};updateLayerStrokes(sid,ns);}}/>
+                                <SliderRow label="Width" value={st.width||2} min={1} max={24} unit="px"
+                                  onChange={v=>{const ns=[...strokes];ns[i]={...ns[i],width:v};updateLayerStrokes(sid,ns);}}
+                                  onCommit={v=>{const ns=[...strokes];ns[i]={...ns[i],width:v};updateLayerStrokes(sid,ns);}} width={28}/>
+                                <div style={{display:'flex',gap:3,marginTop:5}}>
+                                  {['outside','center','inside'].map(pos=>(
+                                    <button key={pos} onClick={()=>{const ns=[...strokes];ns[i]={...ns[i],position:pos};updateLayerStrokes(sid,ns);}}
+                                      style={{flex:1,padding:'3px 0',borderRadius:4,border:`1px solid ${(st.position||'outside')===pos?'#60a5fa':T.border}`,background:(st.position||'outside')===pos?'rgba(96,165,250,0.15)':T.bg,color:(st.position||'outside')===pos?'#60a5fa':T.muted,fontSize:9,fontWeight:'600',cursor:'pointer',textTransform:'capitalize'}}>
+                                      {pos}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {/* Add stroke */}
+                        {strokes.length<3&&(
+                          <div style={{borderTop:`1px solid ${T.border}`}}>
+                            <button onClick={()=>updateLayerStrokes(sid,[...strokes,{enabled:true,color:'#ff6b00',width:2,position:'outside'}])}
+                              style={{width:'100%',padding:'6px',background:'transparent',border:'none',color:T.muted,fontSize:10,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}
+                              onMouseEnter={e=>e.currentTarget.style.color=T.accent}
+                              onMouseLeave={e=>e.currentTarget.style.color=T.muted}>
+                              <span>+</span><span>Add stroke</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ───────────────── SUBJECT GLOW OUTLINE ─────────── */}
+                      <div style={{borderRadius:7,border:`1px solid ${T.border}`,overflow:'hidden'}}>
+                        <EffectToggle label="Subject Outline" enabled={fx.subjectOutline?.enabled} accent='#22c55e'
+                          onToggle={()=>updateLayerEffectNested(sid,'subjectOutline','enabled',!fx.subjectOutline?.enabled)}/>
+                        {fx.subjectOutline?.enabled&&(
+                          <div style={{padding:'8px 10px',borderTop:`1px solid ${T.border}`,background:T.bg2}}>
+                            <div style={{fontSize:9,color:T.muted,marginBottom:6,lineHeight:1.5}}>Contour glow — best on PNG cutouts &amp; removed backgrounds</div>
+                            <ColorRow label="Color" value={fx.subjectOutline?.color||'#ffffff'}
+                              onChange={e=>updateLayerEffectNested(sid,'subjectOutline','color',e.target.value)}/>
+                            <SliderRow label="Width" value={fx.subjectOutline?.width||5} min={1} max={30} unit="px"
+                              onChange={v=>updateLayerEffectNestedSilent(sid,'subjectOutline','width',v)}
+                              onCommit={v=>updateLayerEffectNested(sid,'subjectOutline','width',v)} width={28}/>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ───────────────── IMAGE ADJUSTMENTS ────────────── */}
+                      <div style={{borderRadius:7,border:`1px solid ${T.border}`,overflow:'hidden'}}>
+                        <div style={{padding:'7px 10px',display:'flex',alignItems:'center',gap:7}}>
+                          <span style={{fontSize:11,fontWeight:'700',letterSpacing:'0.6px',textTransform:'uppercase',color:T.muted}}>Adjustments</span>
+                        </div>
+                        <div style={{padding:'4px 10px 10px',borderTop:`1px solid ${T.border}`,background:T.bg2}}>
+                          <SliderRow label="Blur" value={fx.layerBlur||0} min={0} max={30} unit="px"
+                            onChange={v=>updateLayerEffectSilent(sid,'layerBlur',v)}
+                            onCommit={v=>updateLayerEffect(sid,'layerBlur',v)} width={28}/>
+                          <SliderRow label="Bright" value={fx.brightness||100} min={0} max={200} unit="%"
+                            onChange={v=>updateLayerEffectSilent(sid,'brightness',v)}
+                            onCommit={v=>updateLayerEffect(sid,'brightness',v)} width={28}/>
+                          <SliderRow label="Contrast" value={fx.contrast||100} min={0} max={300} unit="%"
+                            onChange={v=>updateLayerEffectSilent(sid,'contrast',v)}
+                            onCommit={v=>updateLayerEffect(sid,'contrast',v)} width={42}/>
+                          <SliderRow label="Saturat" value={fx.saturation||100} min={0} max={300} unit="%"
+                            onChange={v=>updateLayerEffectSilent(sid,'saturation',v)}
+                            onCommit={v=>updateLayerEffect(sid,'saturation',v)} width={42}/>
+                        </div>
                       </div>
                     </div>
-                    <button onClick={()=>updateLayer(selectedId,{effects:defaultEffects()})} style={{...css.addBtn,background:'transparent',color:T.muted,border:`1px solid ${T.border}`,marginTop:10}}>Reset all effects</button>
-                  </>
-                )}
+                  );
+                })()}
               </div>
             )}
 
@@ -10379,6 +10590,13 @@ PHASE 4 — Toolbar button:
                     </div>
                     {/* Controls */}
                     <div style={{display:'flex',gap:0,flexShrink:0}}>
+                      {/* fx button — opens effects panel for this layer */}
+                      {layer.type!=='background'&&(
+                        <button title="Open effects panel" onClick={e=>{e.stopPropagation();setSelectedId(layer.id);setActiveTool('effects');}}
+                          style={{padding:'2px 4px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',fontSize:8,fontWeight:'700',letterSpacing:'0.3px',lineHeight:1,color:hasEffects?T.warning:T.border,fontFamily:'monospace'}}
+                          onMouseEnter={e=>e.currentTarget.style.color=T.warning}
+                          onMouseLeave={e=>e.currentTarget.style.color=hasEffects?T.warning:T.border}>fx</button>
+                      )}
                       {/* Eye — visibility */}
                       <button title={isHidden?'Show':'Hide'} onClick={e=>{e.stopPropagation();updateLayer(layer.id,{hidden:!isHidden});}}
                         style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:isHidden?T.border:T.muted,fontSize:12,lineHeight:1}}>
