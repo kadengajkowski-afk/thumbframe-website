@@ -895,17 +895,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Document title: asterisk when unsaved ─────────────────────────────────
-  // eslint-disable-next-line no-use-before-define
-  useEffect(() => {
-    // eslint-disable-next-line no-use-before-define
-    const isUnsaved = localSaveStatus === 'unsaved';
-    // eslint-disable-next-line no-use-before-define
-    const baseName  = designName || 'ThumbFrame';
-    document.title  = isUnsaved ? `* ${baseName} — ThumbFrame` : `${baseName} — ThumbFrame`;
-    return () => { document.title = 'ThumbFrame — YouTube Thumbnail Editor'; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps,no-use-before-define
-  }, [localSaveStatus, designName]); // eslint-disable-line no-use-before-define
 
   const [platform,setPlatform]             = useState('youtube');
   const [activeTool,setActiveTool]         = useState('select');
@@ -1112,6 +1101,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [showToast,setShowToast]                       = useState(false);
   const [toastMessage]                                 = useState('');
   const [toastType]                                    = useState('info');
+
+  // ── Document title: asterisk when unsaved (must be after localSaveStatus + designName decls) ──
+  useEffect(() => {
+    const isUnsaved = localSaveStatus === 'unsaved';
+    const baseName  = designName || 'ThumbFrame';
+    document.title  = isUnsaved ? `* ${baseName} — ThumbFrame` : `${baseName} — ThumbFrame`;
+    return () => { document.title = 'ThumbFrame — YouTube Thumbnail Editor'; };
+  }, [localSaveStatus, designName]);
 
   function setLayers(val){
     if(typeof val==='function'){
