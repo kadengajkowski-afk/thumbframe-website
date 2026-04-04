@@ -250,8 +250,20 @@ async function authMiddleware(req,res,next){
       return res.status(401).json({error: `Token verification failed: ${error?.message || 'Unknown error'}`});
     }
     
-    // Plan comes from user_metadata (written by webhook on subscribe, never touches ephemeral disk)
-    req.user = { email: user.email, id: user.id, plan: user.user_metadata?.is_pro ? 'pro' : 'free' };
+    // Fast path: user_metadata.is_pro (set by webhook for new subscribers)
+    let isPro = user.user_metadata?.is_pro === true;
+    // Fallback: profiles table (covers existing subscribers whose metadata was never set)
+    if (!isPro) {
+      const { data: profile } = await supabase.from('profiles').select('is_pro').eq('id', user.id).single();
+      isPro = profile?.is_pro === true;
+      // Self-heal: update user_metadata so future tokens carry the flag (fire-and-forget)
+      if (isPro) {
+        supabase.auth.admin.updateUserById(user.id, { user_metadata: { is_pro: true } })
+          .then(() => console.log('[AUTH] Self-healed user_metadata.is_pro for', user.email))
+          .catch(() => {});
+      }
+    }
+    req.user = { email: user.email, id: user.id, plan: isPro ? 'pro' : 'free' };
     req.userId = user.id;
     console.log('[AUTH] Middleware verified user:', user.email, 'plan:', req.user.plan);
     next();
