@@ -1324,8 +1324,12 @@ PHASE 4 — Toolbar button:
     }
 
     try{
-      const endpoint = `${resolvedApiUrl}/designs/list?email=${encodeURIComponent(userEmail)}`;
-      const response = await fetch(endpoint);
+      const endpoint = `${resolvedApiUrl}/designs/list`;
+      const { data: { session: dlSess } } = await supabase.auth.getSession();
+      const dlToken = dlSess?.access_token;
+      const response = await fetch(endpoint, {
+        headers: { 'Authorization': `Bearer ${dlToken}` },
+      });
       if(!response.ok){
         throw new Error(`Design list request failed (${response.status})`);
       }
@@ -1583,9 +1587,13 @@ PHASE 4 — Toolbar button:
             : Promise.resolve({ data: null, error: null }),
           // 2. Brand kit
           supabase.from('brand_kits').select('*').eq('user_id', safeUser.id).limit(1),
-          // 3. Pro profile — query by user ID (UUID), not email, to match the profiles table PK
+          // 3. Pro profile — try by UUID first, fall back to email if schema uses bigint id
           safeUser?.id
             ? supabase.from('profiles').select('is_pro').eq('id', safeUser.id).maybeSingle()
+                .then(r => {
+                  if(r.error){ console.warn('[BOOTSTRAP] profiles by id error:',r.error.message,'— retrying by email'); return supabase.from('profiles').select('is_pro').ilike('email',safeUser.email).maybeSingle(); }
+                  return r;
+                })
             : Promise.resolve({ data: null, error: null }),
         ]);
 

@@ -250,18 +250,29 @@ async function authMiddleware(req,res,next){
       return res.status(401).json({error: `Token verification failed: ${error?.message || 'Unknown error'}`});
     }
     
-    // Fast path: user_metadata.is_pro (set by webhook for new subscribers)
+    // Fast path: user_metadata.is_pro (set by webhook / force-pro for subscribers)
     let isPro = user.user_metadata?.is_pro === true;
-    // Fallback: profiles table (covers existing subscribers whose metadata was never set)
+    // Fallback: profiles table (covers users whose metadata was never written)
     if (!isPro) {
-      const { data: profile } = await supabase.from('profiles').select('is_pro').eq('id', user.id).single();
-      isPro = profile?.is_pro === true;
-      // Self-heal: update user_metadata so future tokens carry the flag (fire-and-forget)
+      // Try by UUID first; if schema has id as bigint this returns an error — fall back to email
+      const { data: profileById, error: errById } = await supabase
+        .from('profiles').select('is_pro').eq('id', user.id).maybeSingle();
+      if (errById) {
+        console.warn('[AUTH] profiles.id query failed (schema mismatch?):', errById.message, '— trying email');
+        const { data: profileByEmail, error: errByEmail } = await supabase
+          .from('profiles').select('is_pro').ilike('email', user.email).maybeSingle();
+        if (errByEmail) console.warn('[AUTH] profiles.email query also failed:', errByEmail.message);
+        isPro = profileByEmail?.is_pro === true;
+      } else {
+        isPro = profileById?.is_pro === true;
+      }
+      // Self-heal: stamp user_metadata so future requests skip this DB call
       if (isPro) {
         supabase.auth.admin.updateUserById(user.id, { user_metadata: { is_pro: true } })
           .then(() => console.log('[AUTH] Self-healed user_metadata.is_pro for', user.email))
           .catch(() => {});
       }
+      console.log('[AUTH] profiles fallback for', user.email, '— isPro:', isPro, errById ? '(used email fallback)' : '(used id)');
     }
     req.user = { email: user.email, id: user.id, plan: isPro ? 'pro' : 'free' };
     req.userId = user.id;
