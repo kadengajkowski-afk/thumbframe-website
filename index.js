@@ -173,8 +173,14 @@ function getPlanQuota(plan){
 
 function checkAndDecrementQuota(email){
   const users=loadUsers();
-  const user=users[email];
-  if(!user) return{ok:false,message:'User not found',code:'INVALID_INPUT'};
+  let user=users[email];
+  if(!user){
+    // Auto-create free-plan record for users registered before quota system existed
+    user={email,plan:'free',aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
+    users[email]=user;
+    saveUsers(users);
+    console.log('[QUOTA] Auto-created quota record for existing user:',email);
+  }
 
   const {limit,period}=getPlanQuota(user.plan);
   if(limit===Infinity) return{ok:true};
@@ -211,6 +217,19 @@ function agencyMiddleware(req,res,next){
   if(!isAgency) return res.status(403).json({success:false,error:'Agency plan required',code:'AGENCY_REQUIRED'});
   next();
 }
+
+// ── Sync user quota record on login ───────────────────────────────────────────
+app.post('/api/sync-user', authMiddleware, (req,res)=>{
+  const email=req.user.email;
+  const users=loadUsers();
+  if(!users[email]){
+    users[email]={email,plan:'free',aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
+    saveUsers(users);
+    console.log('[SYNC-USER] Created quota record for:',email);
+  }
+  const user=users[email];
+  res.json({success:true,plan:user.plan||'free',email});
+});
 
 // ── Health ─────────────────────────────────────────────────────────────────────
 app.get('/',(req,res)=>res.json({status:'ThumbFrame API running',version:'3.0'}));

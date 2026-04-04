@@ -910,6 +910,13 @@ export default function App() {
             name: session.user.user_metadata?.name,
             is_pro: session.user.user_metadata?.is_pro === true,
           });
+          // Ensure quota record exists for this user (fire-and-forget)
+          if (session.access_token) {
+            fetch(`${API_BASE}/api/sync-user`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${session.access_token}` },
+            }).catch(() => {});
+          }
         } else {
           setToken(null);
           localStorage.removeItem('sf_token');
@@ -942,6 +949,13 @@ export default function App() {
           name: session.user.user_metadata?.name,
           is_pro: session.user.user_metadata?.is_pro === true,
         });
+        // Ensure quota record exists (fire-and-forget)
+        if (session.access_token) {
+          fetch(`${API_BASE}/api/sync-user`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${session.access_token}` },
+          }).catch(() => {});
+        }
       } else {
         setToken(null);
         localStorage.removeItem('sf_token');
