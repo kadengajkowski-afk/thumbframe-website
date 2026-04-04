@@ -168,9 +168,61 @@ const GRADIENTS = [
 ];
 
 const BLEND_MODES = [
-  'normal','multiply','screen','overlay','darken','lighten',
-  'color-dodge','color-burn','hard-light','soft-light','difference','exclusion',
+  'normal',
+  'darken','multiply','color-burn',
+  'lighten','screen','color-dodge',
+  'overlay','soft-light','hard-light',
+  'difference','exclusion',
+  'hue','saturation','color','luminosity',
 ];
+const BLEND_MODE_GROUPS = [
+  { label:'Normal',    modes:['normal'] },
+  { label:'Darken',    modes:['darken','multiply','color-burn'] },
+  { label:'Lighten',   modes:['lighten','screen','color-dodge'] },
+  { label:'Contrast',  modes:['overlay','soft-light','hard-light'] },
+  { label:'Inversion', modes:['difference','exclusion'] },
+  { label:'Component', modes:['hue','saturation','color','luminosity'] },
+];
+
+// Module-level blend worker singleton
+let _blendWorker = null;
+function getBlendWorker() {
+  if (!_blendWorker) {
+    try { _blendWorker = new Worker(new URL('./blendWorker.js', import.meta.url)); }
+    catch(e) { console.warn('[blend] Worker init failed:', e); }
+  }
+  return _blendWorker;
+}
+function applyPixelBlend(dstImageData, srcImageData, mode) {
+  return new Promise(resolve => {
+    const worker = getBlendWorker();
+    if (!worker) { resolve(dstImageData); return; }
+    const dstBuf = dstImageData.data.buffer.slice(0);
+    const srcBuf = srcImageData.data.buffer.slice(0);
+    const handler = e => {
+      worker.removeEventListener('message', handler);
+      resolve(new ImageData(new Uint8ClampedArray(e.data.out), dstImageData.width, dstImageData.height));
+    };
+    worker.addEventListener('message', handler);
+    worker.postMessage({ dst: dstBuf, src: srcBuf, mode }, [dstBuf, srcBuf]);
+  });
+}
+
+function BlendModeSelect({ value, onChange, style }) {
+  return (
+    <select value={value||'normal'} onChange={e=>onChange(e.target.value)} style={style}>
+      {BLEND_MODE_GROUPS.map(g=>(
+        <optgroup key={g.label} label={g.label}>
+          {g.modes.map(m=>(
+            <option key={m} value={m}>
+              {m.charAt(0).toUpperCase()+m.slice(1).replace(/-/g,' ')}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
 
 // Text hook swap tables for A/B variant generator
 const TEXT_FLIP_HOOKS = [
@@ -2860,36 +2912,31 @@ PHASE 4 — Toolbar button:
     ctx.imageSmoothingQuality = 'high';
     ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
 
-    for(const obj of layerArray){
-      if(obj.hidden) continue;
-      if(transparent && obj.type==='background') continue;
-      ctx.save();
-      ctx.globalAlpha = (obj.opacity??100)/100;
-      ctx.globalCompositeOperation = obj.blendMode||'normal';
-
+    // Inner render function – draws one layer's content onto context c / canv
+    async function renderLayerContent(c, canv, obj){
       if(obj.type==='background'){
-        ctx.filter='none';
+        c.filter='none';
         if(obj.bgGradient){
-          const g=ctx.createLinearGradient(0,0,0,canvas.height);
+          const g=c.createLinearGradient(0,0,0,canv.height);
           g.addColorStop(0,obj.bgGradient[0]);
           g.addColorStop(1,obj.bgGradient[1]);
-          ctx.fillStyle=g;
+          c.fillStyle=g;
         } else {
-          ctx.fillStyle=obj.bgColor||'#f97316';
+          c.fillStyle=obj.bgColor||'#f97316';
         }
-        ctx.fillRect(0,0,canvas.width,canvas.height);
+        c.fillRect(0,0,canv.width,canv.height);
       }
 
       else if(obj.type==='text'){
         const centerX=(obj.x+(obj.width||100)/2)*scaleX;
         const centerY=(obj.y+(obj.fontSize||48)/2)*scaleY;
-        ctx.translate(centerX,centerY);
-        if(obj.rotation) ctx.rotate((obj.rotation||0)*Math.PI/180);
-        ctx.translate(-centerX,-centerY);
-        ctx.translate(obj.x*scaleX,obj.y*scaleY);
-        if(obj.flipH||obj.flipV) ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
+        c.translate(centerX,centerY);
+        if(obj.rotation) c.rotate((obj.rotation||0)*Math.PI/180);
+        c.translate(-centerX,-centerY);
+        c.translate(obj.x*scaleX,obj.y*scaleY);
+        if(obj.flipH||obj.flipV) c.scale(obj.flipH?-1:1,obj.flipV?-1:1);
         // opentype-powered rendering (gradient fill, precise letter spacing, multi-stroke)
-        await renderTextLayer(ctx, obj, scaleX, scaleY, drawProText);
+        await renderTextLayer(c, obj, scaleX, scaleY, drawProText);
       }
 
       else if(obj.type==='image'){
@@ -2906,84 +2953,84 @@ PHASE 4 — Toolbar button:
             const cr=(obj.cropRight||0)*scaleX;
             const cb=(obj.cropBottom||0)*scaleY;
 
-            // ── Helper: apply drop shadow to ctx then draw, then clear ──────
+            // ── Helper: apply drop shadow to c then draw, then clear ──────
             const applyShadowAndDraw=(drawFn)=>{
               const sh=obj.effects?.shadow;
               if(sh?.enabled){
                 const sr=parseInt((sh.color||'#000').slice(1,3),16)||0;
                 const sg=parseInt((sh.color||'#000').slice(3,5),16)||0;
                 const sb=parseInt((sh.color||'#000').slice(5,7),16)||0;
-                ctx.shadowColor=`rgba(${sr},${sg},${sb},${(sh.opacity??60)/100})`;
-                ctx.shadowOffsetX=(sh.x||0)*scaleX;
-                ctx.shadowOffsetY=(sh.y||0)*scaleY;
-                ctx.shadowBlur=(sh.blur||12)*Math.min(scaleX,scaleY);
+                c.shadowColor=`rgba(${sr},${sg},${sb},${(sh.opacity??60)/100})`;
+                c.shadowOffsetX=(sh.x||0)*scaleX;
+                c.shadowOffsetY=(sh.y||0)*scaleY;
+                c.shadowBlur=(sh.blur||12)*Math.min(scaleX,scaleY);
               }
               drawFn();
-              ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;
+              c.shadowColor='transparent';c.shadowBlur=0;c.shadowOffsetX=0;c.shadowOffsetY=0;
             };
 
-            ctx.save();
+            c.save();
             if(obj.mask?.enabled&&obj.mask?.type==='lasso'&&obj.mask?.points?.length>=3){
               // Apply lasso clip path to export canvas
               const mpts=obj.mask.points;
               const cropWe=w-cl-cr, cropHe=h-ct-cb;
-              ctx.beginPath();
+              c.beginPath();
               if(obj.mask.inverted){
-                ctx.rect(x+cl,y+ct,cropWe,cropHe);
-                ctx.moveTo(x+cl+mpts[0].x*scaleX, y+ct+mpts[0].y*scaleY);
-                for(let i=1;i<mpts.length;i++) ctx.lineTo(x+cl+mpts[i].x*scaleX, y+ct+mpts[i].y*scaleY);
-                ctx.closePath();
-                ctx.clip('evenodd');
+                c.rect(x+cl,y+ct,cropWe,cropHe);
+                c.moveTo(x+cl+mpts[0].x*scaleX, y+ct+mpts[0].y*scaleY);
+                for(let i=1;i<mpts.length;i++) c.lineTo(x+cl+mpts[i].x*scaleX, y+ct+mpts[i].y*scaleY);
+                c.closePath();
+                c.clip('evenodd');
               } else {
-                ctx.moveTo(x+cl+mpts[0].x*scaleX, y+ct+mpts[0].y*scaleY);
-                for(let i=1;i<mpts.length;i++) ctx.lineTo(x+cl+mpts[i].x*scaleX, y+ct+mpts[i].y*scaleY);
-                ctx.closePath();
-                ctx.clip();
+                c.moveTo(x+cl+mpts[0].x*scaleX, y+ct+mpts[0].y*scaleY);
+                for(let i=1;i<mpts.length;i++) c.lineTo(x+cl+mpts[i].x*scaleX, y+ct+mpts[i].y*scaleY);
+                c.closePath();
+                c.clip();
               }
               if(obj.flipH||obj.flipV){
-                ctx.translate(x+w/2,y+h/2);
-                ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
-                ctx.translate(-(x+w/2),-(y+h/2));
+                c.translate(x+w/2,y+h/2);
+                c.scale(obj.flipH?-1:1,obj.flipV?-1:1);
+                c.translate(-(x+w/2),-(y+h/2));
               }
-              ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
+              c.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
               if(obj.effects?.glow?.enabled){
                 const glowBlur=(obj.effects.glow.blur||20);
                 const glowOpacity=(obj.effects.glow.opacity??80)/100;
                 const gh=obj.effects.glow.color||'#f97316';
                 const gr2=parseInt(gh.slice(1,3),16)||249,gg2=parseInt(gh.slice(3,5),16)||115,gb2=parseInt(gh.slice(5,7),16)||22;
-                drawGlowImage(ctx,img,x-cl,y-ct,w,h,`rgba(${gr2},${gg2},${gb2},${glowOpacity})`,glowBlur);
+                drawGlowImage(c,img,x-cl,y-ct,w,h,`rgba(${gr2},${gg2},${gb2},${glowOpacity})`,glowBlur);
               } else {
-                applyShadowAndDraw(()=>ctx.drawImage(img,x-cl,y-ct,w,h));
+                applyShadowAndDraw(()=>c.drawImage(img,x-cl,y-ct,w,h));
               }
-              ctx.restore();
+              c.restore();
               resolve();
             } else {
-              ctx.save();
+              c.save();
               if(obj.rotation){
                 const cx2=x+w/2,cy2=y+h/2;
-                ctx.translate(cx2,cy2);
-                ctx.rotate((obj.rotation||0)*Math.PI/180);
-                ctx.translate(-cx2,-cy2);
+                c.translate(cx2,cy2);
+                c.rotate((obj.rotation||0)*Math.PI/180);
+                c.translate(-cx2,-cy2);
               }
-              ctx.beginPath();
-              ctx.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);
-              ctx.clip();
+              c.beginPath();
+              c.rect(x+cl,y+ct,w-cl-cr,h-ct-cb);
+              c.clip();
               if(obj.flipH||obj.flipV){
-                ctx.translate(x+w/2,y+h/2);
-                ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
-                ctx.translate(-(x+w/2),-(y+h/2));
+                c.translate(x+w/2,y+h/2);
+                c.scale(obj.flipH?-1:1,obj.flipV?-1:1);
+                c.translate(-(x+w/2),-(y+h/2));
               }
-              ctx.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
+              c.filter=`brightness(${obj.imgBrightness||100}%) contrast(${obj.imgContrast||100}%) saturate(${obj.imgSaturate||100}%) blur(${(obj.imgBlur||0)*Math.min(scaleX,scaleY)}px)`;
               if(obj.effects?.glow?.enabled){
                 const glowBlur=(obj.effects.glow.blur||20)*Math.min(scaleX,scaleY);
                 const glowOpacity=(obj.effects.glow.opacity??80)/100;
                 const gh=obj.effects.glow.color||'#f97316';
                 const gr2=parseInt(gh.slice(1,3),16)||249,gg2=parseInt(gh.slice(3,5),16)||115,gb2=parseInt(gh.slice(5,7),16)||22;
-                drawGlowImage(ctx,img,x-cl,y-ct,w,h,`rgba(${gr2},${gg2},${gb2},${glowOpacity})`,glowBlur);
+                drawGlowImage(c,img,x-cl,y-ct,w,h,`rgba(${gr2},${gg2},${gb2},${glowOpacity})`,glowBlur);
               } else {
-                applyShadowAndDraw(()=>ctx.drawImage(img,x-cl,y-ct,w,h));
+                applyShadowAndDraw(()=>c.drawImage(img,x-cl,y-ct,w,h));
               }
-              ctx.restore();
+              c.restore();
               resolve();
             }
           };
@@ -2993,25 +3040,56 @@ PHASE 4 — Toolbar button:
       }
 
       else if(obj.type==='shape'){
-        ctx.translate(obj.x*scaleX,obj.y*scaleY);
-        if(obj.flipH||obj.flipV) ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
+        c.translate(obj.x*scaleX,obj.y*scaleY);
+        if(obj.flipH||obj.flipV) c.scale(obj.flipH?-1:1,obj.flipV?-1:1);
         const sw=obj.width*scaleX,sh=obj.height*scaleY;
-        ctx.fillStyle=obj.fillColor||'#FF4500';
-        ctx.strokeStyle=obj.strokeColor||'#000';
-        ctx.lineWidth=2*Math.min(scaleX,scaleY);
-        ctx.beginPath();
+        c.fillStyle=obj.fillColor||'#FF4500';
+        c.strokeStyle=obj.strokeColor||'#000';
+        c.lineWidth=2*Math.min(scaleX,scaleY);
+        c.beginPath();
         if(obj.shape==='circle'){
-          ctx.ellipse(sw/2,sh/2,sw/2,sh/2,0,0,Math.PI*2);
+          c.ellipse(sw/2,sh/2,sw/2,sh/2,0,0,Math.PI*2);
         } else if(obj.shape==='rect'||obj.shape==='roundrect'){
           const rad=obj.shape==='roundrect'?Math.min(sw,sh)*0.2:0;
-          ctx.roundRect(0,0,sw,sh,rad);
+          c.roundRect(0,0,sw,sh,rad);
         } else {
-          ctx.rect(0,0,sw,sh);
+          c.rect(0,0,sw,sh);
         }
-        ctx.fill();ctx.stroke();
+        c.fill();c.stroke();
       }
+    }
 
-      ctx.restore();
+    const WORKER_MODES = new Set(['hue','saturation','color','luminosity']);
+
+    for(const obj of layerArray){
+      if(obj.hidden) continue;
+      if(transparent && obj.type==='background') continue;
+
+      const mode = obj.blendMode||'normal';
+      const useWorker = WORKER_MODES.has(mode);
+
+      if(useWorker){
+        // Snapshot current dst, render layer to temp canvas, composite via worker
+        const dstData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const tmp = document.createElement('canvas');
+        tmp.width = canvas.width; tmp.height = canvas.height;
+        const tc = tmp.getContext('2d');
+        tc.imageSmoothingEnabled = true;
+        tc.imageSmoothingQuality = 'high';
+        tc.globalAlpha = (obj.opacity??100)/100;
+        tc.save();
+        await renderLayerContent(tc, tmp, obj);
+        tc.restore();
+        const srcData = tc.getImageData(0, 0, tmp.width, tmp.height);
+        const composited = await applyPixelBlend(dstData, srcData, mode);
+        ctx.putImageData(composited, 0, 0);
+      } else {
+        ctx.save();
+        ctx.globalAlpha = (obj.opacity??100)/100;
+        ctx.globalCompositeOperation = mode;
+        await renderLayerContent(ctx, canvas, obj);
+        ctx.restore();
+      }
     }
     ctx.filter='none';
   }
@@ -7172,7 +7250,7 @@ PHASE 4 — Toolbar button:
                     <button onClick={()=>flipLayer(selectedId,'v')} style={{...css.addBtn,flex:1,marginTop:0,background:T.input,color:T.text,border:`1px solid ${T.border}`,fontSize:11}}>↕ V</button>
                   </div>
                   <span style={css.label}>Blend mode</span>
-                  <select value={selectedLayer.blendMode||'normal'} onChange={e=>{updateLayer(selectedId,{blendMode:e.target.value});triggerAutoSave();}} style={css.input}>{BLEND_MODES.map(m=><option key={m} value={m}>{m.charAt(0).toUpperCase()+m.slice(1)}</option>)}</select>
+                  <BlendModeSelect value={selectedLayer.blendMode||'normal'} onChange={v=>{updateLayer(selectedId,{blendMode:v});saveEngineRef.current?.markDirty('layerProperties');}} style={css.input}/>
                   <span style={css.label}>Position</span>
                   <div style={css.section}>
                     <div style={css.row}>
@@ -7516,7 +7594,7 @@ PHASE 4 — Toolbar button:
                 </div>
                 {selectedLayer?.type==='shape'&&(<>
                   <span style={css.label}>Blend mode</span>
-                  <select value={selectedLayer.blendMode||'normal'} onChange={e=>updateLayer(selectedId,{blendMode:e.target.value})} style={css.input}>{BLEND_MODES.map(m=><option key={m} value={m}>{m}</option>)}</select>
+                  <BlendModeSelect value={selectedLayer.blendMode||'normal'} onChange={v=>{updateLayer(selectedId,{blendMode:v});saveEngineRef.current?.markDirty('layerProperties');}} style={css.input}/>
                   <span style={css.label}>Opacity — {selectedLayer.opacity??100}%</span>
                   <Slider min={0} max={100} value={selectedLayer.opacity??100}
                     onChange={v=>updateLayerSilent(selectedId,{opacity:v})}
@@ -10722,6 +10800,37 @@ PHASE 4 — Toolbar button:
                 <div style={{fontSize:9,color:T.muted,fontWeight:'700',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>
                   Selected — {getLayerName(selectedLayer)}
                 </div>
+                {/* Blend mode — non-background only */}
+                {selectedLayer.type!=='background'&&(
+                  <div style={{marginBottom:4}}>
+                    <span style={{...css.label,display:'block',marginBottom:2}}>Blend</span>
+                    <BlendModeSelect
+                      value={selectedLayer.blendMode||'normal'}
+                      onChange={v=>{updateLayer(selectedId,{blendMode:v});saveEngineRef.current?.markDirty('layerProperties');}}
+                      style={{...css.input,width:'100%'}}
+                    />
+                  </div>
+                )}
+                {/* Opacity — non-background only */}
+                {selectedLayer.type!=='background'&&(
+                  <div style={{marginBottom:6}}>
+                    <div style={{...css.row,marginBottom:2}}>
+                      <span style={css.label}>Opacity</span>
+                      <input
+                        type="number" min={0} max={100}
+                        value={selectedLayer.opacity??100}
+                        onChange={e=>updateLayerSilent(selectedId,{opacity:Math.min(100,Math.max(0,Number(e.target.value)))})}
+                        onBlur={e=>{updateLayer(selectedId,{opacity:Math.min(100,Math.max(0,Number(e.target.value)))});saveEngineRef.current?.markDirty('layerProperties');}}
+                        style={{...css.input,width:44,textAlign:'right',padding:'2px 4px'}}
+                      />
+                      <span style={{fontSize:10,color:T.muted}}>%</span>
+                    </div>
+                    <Slider min={0} max={100} value={selectedLayer.opacity??100}
+                      onChange={v=>updateLayerSilent(selectedId,{opacity:v})}
+                      onCommit={v=>{updateLayer(selectedId,{opacity:v});saveEngineRef.current?.markDirty('layerProperties');}}
+                      style={{width:'100%'}}/>
+                  </div>
+                )}
                 {/* Neon Glow quick-toggle */}
                 {(()=>{
                   const isText=selectedLayer.type==='text';
