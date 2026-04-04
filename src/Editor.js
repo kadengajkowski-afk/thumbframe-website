@@ -1059,6 +1059,11 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [layerDragId,setLayerDragId]       = useState(null);
   const [layerDragOver,setLayerDragOver]   = useState(null);
   const [smartGuides,setSmartGuides]       = useState({h:[],v:[]});   // active guide lines during drag
+  const [snapEnabled,setSnapEnabled]       = useState(true);           // master snap toggle (Shift+;)
+  const [showThirds,setShowThirds]         = useState(false);          // rule of thirds overlay
+  const [pixelSnapEnabled,setPixelSnapEnabled] = useState(true);       // snap to whole pixel values
+  const [selectedIds,setSelectedIds]       = useState(new Set());      // multi-select layer IDs
+  const altPressedRef                      = useRef(false);            // Alt held → disable snap temporarily
   const [brushTypeState,setBrushTypeState]             = useState('blur');
   const [brushSizeState,setBrushSizeState]             = useState(20);
   const [brushStrengthState,setBrushStrengthState]     = useState(50);
@@ -2084,24 +2089,54 @@ PHASE 4 — Toolbar button:
       if(snapToGrid){x=Math.round(x/10)*10;y=Math.round(y/10)*10;}
       x=Math.max(-p.preview.w+10,Math.min(p.preview.w-10,x));
       y=Math.max(-p.preview.h+10,Math.min(p.preview.h-10,y));
-      // ── Smart guides ──────────────────────────────────────────────────────
-      const SNAP_DIST=6; // px threshold for snapping
-      const dragLayer=layersRef.current.find(l=>l.id===draggingRef.current);
-      const lw=dragLayer?.width||100, lh=dragLayer?.fontSize||dragLayer?.height||48;
-      // Guide sources: canvas center, other layers' edges and centers
-      const hGuides=[p.preview.h/2]; // canvas horizontal center
-      const vGuides=[p.preview.w/2]; // canvas vertical center
-      layersRef.current.forEach(l=>{
-        if(l.id===draggingRef.current||l.type==='background'||l.hidden)return;
-        const lw2=l.width||100, lh2=l.fontSize||l.height||48;
-        vGuides.push(l.x, l.x+lw2/2, l.x+lw2);
-        hGuides.push(l.y, l.y+lh2/2, l.y+lh2);
-      });
-      const snapV=vGuides.find(g=>Math.abs(x+lw/2-g)<SNAP_DIST)||vGuides.find(g=>Math.abs(x-g)<SNAP_DIST)||vGuides.find(g=>Math.abs(x+lw-g)<SNAP_DIST);
-      const snapH=hGuides.find(g=>Math.abs(y+lh/2-g)<SNAP_DIST)||hGuides.find(g=>Math.abs(y-g)<SNAP_DIST)||hGuides.find(g=>Math.abs(y+lh-g)<SNAP_DIST);
-      if(snapV!==undefined){if(Math.abs(x+lw/2-snapV)<SNAP_DIST)x=snapV-lw/2;else if(Math.abs(x-snapV)<SNAP_DIST)x=snapV;else x=snapV-lw;}
-      if(snapH!==undefined){if(Math.abs(y+lh/2-snapH)<SNAP_DIST)y=snapH-lh/2;else if(Math.abs(y-snapH)<SNAP_DIST)y=snapH;else y=snapH-lh;}
-      setSmartGuides({h:snapH!==undefined?[snapH]:[],v:snapV!==undefined?[snapV]:[]});
+      // ── Smart guides + snap ───────────────────────────────────────────────
+      if(snapEnabled&&!altPressedRef.current){
+        const SNAP_DIST=8;
+        const dragLayer=layersRef.current.find(l=>l.id===draggingRef.current);
+        const lw=dragLayer?.width||100;
+        const lh=dragLayer?.type==='text'?(dragLayer?.fontSize||48):(dragLayer?.height||48);
+        const pw=p.preview.w, ph=p.preview.h;
+        // Targets: canvas edges, center, rule-of-thirds, other layer edges+centers
+        const vT=[0, pw/2, pw, pw/3, pw*2/3];
+        const hT=[0, ph/2, ph, ph/3, ph*2/3];
+        layersRef.current.forEach(l=>{
+          if(l.id===draggingRef.current||l.type==='background'||l.hidden)return;
+          const lw2=l.width||100;
+          const lh2=l.type==='text'?(l.fontSize||48):(l.height||48);
+          vT.push(l.x, l.x+lw2/2, l.x+lw2);
+          hT.push(l.y, l.y+lh2/2, l.y+lh2);
+        });
+        // Equal-spacing distribution guides (equidistant between two other layers)
+        const others=layersRef.current.filter(l=>l.id!==draggingRef.current&&l.type!=='background'&&!l.hidden);
+        for(let i=0;i<others.length;i++){
+          for(let j=i+1;j<others.length;j++){
+            const a=others[i],b=others[j];
+            const aw=a.width||100, bw=b.width||100;
+            const ah=a.type==='text'?(a.fontSize||48):(a.height||48);
+            const bh=b.type==='text'?(b.fontSize||48):(b.height||48);
+            const gH=a.x<b.x?b.x-(a.x+aw):a.x-(b.x+bw);
+            if(gH>0)vT.push(Math.min(a.x+aw,b.x+bw)+gH/2-lw/2);
+            const gV=a.y<b.y?b.y-(a.y+ah):a.y-(b.y+bh);
+            if(gV>0)hT.push(Math.min(a.y+ah,b.y+bh)+gV/2-lh/2);
+          }
+        }
+        let snappedV=null,snappedH=null;
+        for(const g of vT){
+          if(Math.abs(x-g)<SNAP_DIST){snappedV=g;x=g;break;}
+          if(Math.abs(x+lw/2-g)<SNAP_DIST){snappedV=g;x=g-lw/2;break;}
+          if(Math.abs(x+lw-g)<SNAP_DIST){snappedV=g;x=g-lw;break;}
+        }
+        for(const g of hT){
+          if(Math.abs(y-g)<SNAP_DIST){snappedH=g;y=g;break;}
+          if(Math.abs(y+lh/2-g)<SNAP_DIST){snappedH=g;y=g-lh/2;break;}
+          if(Math.abs(y+lh-g)<SNAP_DIST){snappedH=g;y=g-lh;break;}
+        }
+        setSmartGuides({h:snappedH!==null?[snappedH]:[],v:snappedV!==null?[snappedV]:[]});
+      } else {
+        setSmartGuides({h:[],v:[]});
+      }
+      // Pixel snap — always land on whole pixel values
+      if(pixelSnapEnabled){x=Math.round(x);y=Math.round(y);}
       setLayers(prev=>prev.map(l=>l.id===draggingRef.current?{...l,x,y}:l));
     }
     function onUp(){
@@ -2121,7 +2156,7 @@ PHASE 4 — Toolbar button:
     window.addEventListener('pointermove',onMove);
     window.addEventListener('pointerup',onUp);
     return()=>{window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};
-  },[snapToGrid,lockAspect,p.preview.w,p.preview.h,triggerAutoSave]);
+  },[snapToGrid,snapEnabled,pixelSnapEnabled,lockAspect,p.preview.w,p.preview.h,triggerAutoSave]);
 
   useEffect(()=>{
     const handler=(e)=>{
@@ -2148,9 +2183,15 @@ PHASE 4 — Toolbar button:
         // Also flush local IndexedDB save immediately
         saveEngineRef.current?.saveImmediate();
       }
+      // Snap shortcuts (skip when typing in inputs)
+      if(!typing&&e.shiftKey&&e.key===';'){e.preventDefault();setSnapEnabled(s=>!s);}
+      // Alt key — disables snap while held
+      if(e.key==='Alt'){altPressedRef.current=true;}
     };
+    const onKeyUp=(e)=>{ if(e.key==='Alt'){altPressedRef.current=false;} };
     window.addEventListener('keydown',handler);
-    return()=>window.removeEventListener('keydown',handler);
+    window.addEventListener('keyup',onKeyUp);
+    return()=>{window.removeEventListener('keydown',handler);window.removeEventListener('keyup',onKeyUp);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[selectedId,layers,clipboard,historyIndex,history,designName]);
 
@@ -2205,6 +2246,56 @@ PHASE 4 — Toolbar button:
   // ── Text panel helpers — keep panel state + selected layer in sync ────────
   function setTextProp(updates){if(selectedId&&layers.find(l=>l.id===selectedId)?.type==='text')updateLayer(selectedId,updates);}
   function setTextPropSilent(updates){if(selectedId&&layers.find(l=>l.id===selectedId)?.type==='text')updateLayerSilent(selectedId,updates);}
+
+  // ── Multi-select align / distribute ──────────────────────────────────────
+  function getLayerH(l){return l.type==='text'?(l.fontSize||48):(l.height||48);}
+  function alignLayers(mode){
+    const ids=[...selectedIds];
+    if(ids.length<2)return;
+    const sel=layers.filter(l=>ids.includes(l.id));
+    const minX=Math.min(...sel.map(l=>l.x));
+    const maxX=Math.max(...sel.map(l=>l.x+(l.width||100)));
+    const minY=Math.min(...sel.map(l=>l.y));
+    const maxY=Math.max(...sel.map(l=>l.y+getLayerH(l)));
+    let nl=layers.map(l=>{
+      if(!ids.includes(l.id))return l;
+      const lw=l.width||100, lh=getLayerH(l);
+      let nx=l.x, ny=l.y;
+      if(mode==='left')   nx=minX;
+      if(mode==='hcenter')nx=minX+(maxX-minX)/2-lw/2;
+      if(mode==='right')  nx=maxX-lw;
+      if(mode==='top')    ny=minY;
+      if(mode==='vcenter')ny=minY+(maxY-minY)/2-lh/2;
+      if(mode==='bottom') ny=maxY-lh;
+      return {...l,x:Math.round(nx),y:Math.round(ny)};
+    });
+    setLayers(nl);pushHistory(nl);saveEngineRef.current?.markDirty('layerProperties');
+  }
+  function distributeLayers(axis){
+    const ids=[...selectedIds];
+    if(ids.length<3)return;
+    const sel=layers.filter(l=>ids.includes(l.id));
+    let nl=[...layers];
+    if(axis==='h'){
+      const sorted=[...sel].sort((a,b)=>a.x-b.x);
+      const minX=sorted[0].x;
+      const maxX=sorted[sorted.length-1].x+(sorted[sorted.length-1].width||100);
+      const totalW=sorted.reduce((s,l)=>s+(l.width||100),0);
+      const gap=(maxX-minX-totalW)/(sorted.length-1);
+      let cx=minX;
+      sorted.forEach(l=>{nl=nl.map(r=>r.id===l.id?{...r,x:Math.round(cx)}:r);cx+=(l.width||100)+gap;});
+    } else {
+      const sorted=[...sel].sort((a,b)=>a.y-b.y);
+      const minY=sorted[0].y;
+      const maxY=sorted[sorted.length-1].y+getLayerH(sorted[sorted.length-1]);
+      const totalH=sorted.reduce((s,l)=>s+getLayerH(l),0);
+      const gap=(maxY-minY-totalH)/(sorted.length-1);
+      let cy=minY;
+      sorted.forEach(l=>{nl=nl.map(r=>r.id===l.id?{...r,y:Math.round(cy)}:r);cy+=getLayerH(l)+gap;});
+    }
+    setLayers(nl);pushHistory(nl);saveEngineRef.current?.markDirty('layerProperties');
+  }
+
   function deleteLayer(id){
     const layer=layers.find(l=>l.id===id);
     if(!layer) return;
@@ -5185,11 +5276,17 @@ PHASE 4 — Toolbar button:
     if(activeTool==='brush') return;
     if(activeTool==='lasso' && isLassoMode) return;
     const layer=layers.find(l=>l.id===id);if(!layer)return;
-    console.log('🖱️ Layer clicked:', layer.type, 'id:', id, 'z-index:', layers.indexOf(layer)+1);
     e.stopPropagation();
     justSelectedRef.current=true;
+    // Shift+click — multi-select toggle
+    if(e.shiftKey&&layer.type!=='background'){
+      setSelectedIds(prev=>{const n=new Set(prev);if(n.has(id))n.delete(id);else{n.add(id);if(selectedId)n.add(selectedId);}return n;});
+      setSelectedId(id);
+      return;
+    }
+    // Normal click — clear multi-select, pick this layer
+    setSelectedIds(new Set());
     setSelectedId(id);
-    console.log('✅ Layer selected:', id, 'canDrag:', canDrag, 'activeTool:', activeTool);
     if(layer.type==='background'){setActiveTool('background');return;}
     if(!canDrag||layer.locked)return;
     const rect=canvasRef.current.getBoundingClientRect();
@@ -6199,6 +6296,10 @@ PHASE 4 — Toolbar button:
               <button onClick={()=>setShowRuler(r=>!r)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showRuler?T.accentDim:'transparent',color:showRuler?T.accent:T.muted,cursor:'pointer',fontSize:11}} title="Ruler">⊢</button>
               <button onClick={()=>setSnapToGrid(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:snapToGrid?T.accentDim:'transparent',color:snapToGrid?T.accent:T.muted,cursor:'pointer',fontSize:11}} title="Snap to grid">⊡</button>
               <button onClick={()=>setShowSafeZones(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showSafeZones?T.accentDim:'transparent',color:showSafeZones?T.accent:T.muted,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Safe zones">Zones</button>
+              <div style={{width:1,height:14,background:T.border,margin:'0 2px',alignSelf:'center'}}/>
+              <button onClick={()=>setSnapEnabled(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:snapEnabled?`${T.accent}22`:'transparent',color:snapEnabled?T.accent:T.muted,cursor:'pointer',fontSize:10,fontWeight:snapEnabled?'700':'400',whiteSpace:'nowrap'}} title="Smart snap (Shift+;)">{snapEnabled?'⊕ Snap':'⊖ Snap'}</button>
+              <button onClick={()=>setShowThirds(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showThirds?`${T.accent}22`:'transparent',color:showThirds?T.accent:T.muted,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Rule of thirds">⅓</button>
+              <button onClick={()=>setPixelSnapEnabled(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:pixelSnapEnabled?`${T.accent}22`:'transparent',color:pixelSnapEnabled?T.accent:T.muted,cursor:'pointer',fontSize:10,fontWeight:'700',whiteSpace:'nowrap'}} title="Pixel snap — forces whole-pixel positions">px</button>
               <button onClick={()=>setShowStampTest(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showStampTest?T.accentDim:'transparent',color:showStampTest?T.accent:T.muted,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Mobile preview">Mobile</button>
               <button onClick={()=>setDarkMode(!darkMode)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:'transparent',color:T.muted,cursor:'pointer',fontSize:11}} title="Toggle theme">{darkMode?'○':'●'}</button>
             </div>
@@ -6778,14 +6879,26 @@ PHASE 4 — Toolbar button:
                   })}
                 </div>
 
+                {/* ── Rule of thirds overlay ───────────────────────────── */}
+                {showThirds&&(
+                  <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:9988,overflow:'visible'}}>
+                    {[1/3,2/3].map((f,i)=>(
+                      <React.Fragment key={i}>
+                        <line x1={p.preview.w*f} y1={0} x2={p.preview.w*f} y2={p.preview.h} stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
+                        <line x1={0} y1={p.preview.h*f} x2={p.preview.w} y2={p.preview.h*f} stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
+                      </React.Fragment>
+                    ))}
+                  </svg>
+                )}
+
                 {/* ── Smart guide overlay ───────────────────────────────── */}
                 {(smartGuides.h.length>0||smartGuides.v.length>0)&&(
                   <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:9995,overflow:'visible'}}>
                     {smartGuides.v.map((gx,i)=>(
-                      <line key={`v${i}`} x1={gx} y1={0} x2={gx} y2={p.preview.h} stroke="#f97316" strokeWidth="1" strokeDasharray="4,3" opacity="0.9"/>
+                      <line key={`v${i}`} x1={gx} y1={0} x2={gx} y2={p.preview.h} stroke="#FF6B00" strokeWidth="1" strokeDasharray="0" opacity="1"/>
                     ))}
                     {smartGuides.h.map((gy,i)=>(
-                      <line key={`h${i}`} x1={0} y1={gy} x2={p.preview.w} y2={gy} stroke="#f97316" strokeWidth="1" strokeDasharray="4,3" opacity="0.9"/>
+                      <line key={`h${i}`} x1={0} y1={gy} x2={p.preview.w} y2={gy} stroke="#FF6B00" strokeWidth="1" strokeDasharray="0" opacity="1"/>
                     ))}
                   </svg>
                 )}
@@ -10750,8 +10863,15 @@ PHASE 4 — Toolbar button:
                     onDragOver={e=>onLayerDragOver(e,layer.id)}
                     onDrop={e=>onLayerDrop(e,layer.id)}
                     onDragEnd={onLayerDragEnd}
-                    onClick={()=>{setSelectedId(layer.id);if(layer.type==='background')setActiveTool('background');}}
-                    style={{display:'flex',alignItems:'center',gap:6,padding:'6px 8px',borderRadius:7,marginBottom:2,cursor:'pointer',border:`1px solid ${selectedId===layer.id?T.accent:isDragOver?`${T.accent}66`:'transparent'}`,background:selectedId===layer.id?`${T.accent}12`:isDragOver?`${T.accent}06`:'transparent',opacity:isBeingDragged?0.4:1,transition:'all 0.1s'}}>
+                    onClick={e=>{
+                      if(e.shiftKey&&layer.type!=='background'){
+                        setSelectedIds(prev=>{const n=new Set(prev);if(n.has(layer.id))n.delete(layer.id);else{n.add(layer.id);if(selectedId)n.add(selectedId);}return n;});
+                        setSelectedId(layer.id);
+                      } else {
+                        setSelectedIds(new Set());setSelectedId(layer.id);if(layer.type==='background')setActiveTool('background');
+                      }
+                    }}
+                    style={{display:'flex',alignItems:'center',gap:6,padding:'6px 8px',borderRadius:7,marginBottom:2,cursor:'pointer',border:`1px solid ${selectedIds.has(layer.id)||selectedId===layer.id?T.accent:isDragOver?`${T.accent}66`:'transparent'}`,background:selectedIds.has(layer.id)||selectedId===layer.id?`${T.accent}12`:isDragOver?`${T.accent}06`:'transparent',opacity:isBeingDragged?0.4:1,transition:'all 0.1s'}}>
                     <div style={{color:T.muted,fontSize:10,cursor:'grab',flexShrink:0,opacity:0.4,userSelect:'none'}}>⠿</div>
                     <div style={{width:4,height:28,borderRadius:2,flexShrink:0,background:layer.type==='background'?(layer.bgGradient?`linear-gradient(180deg,${layer.bgGradient[0]},${layer.bgGradient[1]})`:color):color}}/>
                     <div style={{width:20,height:20,borderRadius:4,background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:'700',color:selectedId===layer.id?T.accent:T.muted,flexShrink:0,border:`1px solid ${T.border}`,fontFamily:'monospace'}}>{getLayerIcon(layer)}</div>
@@ -10822,13 +10942,20 @@ PHASE 4 — Toolbar button:
                     onDragOver={e=>onLayerDragOver(e,layer.id)}
                     onDrop={e=>onLayerDrop(e,layer.id)}
                     onDragEnd={onLayerDragEnd}
-                    onClick={()=>{setSelectedId(layer.id);if(layer.type==='background')setActiveTool('background');}}
+                    onClick={e=>{
+                      if(e.shiftKey&&layer.type!=='background'){
+                        setSelectedIds(prev=>{const n=new Set(prev);if(n.has(layer.id))n.delete(layer.id);else{n.add(layer.id);if(selectedId)n.add(selectedId);}return n;});
+                        setSelectedId(layer.id);
+                      } else {
+                        setSelectedIds(new Set());setSelectedId(layer.id);if(layer.type==='background')setActiveTool('background');
+                      }
+                    }}
                     style={{
                       display:'flex',alignItems:'center',gap:4,
                       padding:'5px 5px',borderRadius:6,marginBottom:1,
                       cursor:'pointer',
-                      background:isSelected?T.accentDim:isDragOver2?'rgba(249,115,22,0.06)':'transparent',
-                      border:`1px solid ${isSelected?T.accent:isDragOver2?T.accentBorder:'transparent'}`,
+                      background:selectedIds.has(layer.id)?`${T.accent}18`:isSelected?T.accentDim:isDragOver2?'rgba(249,115,22,0.06)':'transparent',
+                      border:`1px solid ${selectedIds.has(layer.id)||isSelected?T.accent:isDragOver2?T.accentBorder:'transparent'}`,
                       opacity:isBeingDragged2?0.3:1,
                       transition:'all 0.08s',
                     }}>
@@ -10898,6 +11025,44 @@ PHASE 4 — Toolbar button:
                 );
               })}
             </div>
+
+            {/* ── Align & Distribute panel — shown when 2+ layers selected ── */}
+            {selectedIds.size>=2&&(
+              <div style={{borderTop:`1px solid ${T.border}`,padding:'8px 10px',flexShrink:0}}>
+                <div style={{fontSize:9,color:T.accent,fontWeight:'700',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>
+                  Align — {selectedIds.size} layers
+                </div>
+                {/* Align row */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:2,marginBottom:4}}>
+                  {[
+                    ['◧','Align left edges',    ()=>alignLayers('left')],
+                    ['▣','Align h-centers',     ()=>alignLayers('hcenter')],
+                    ['▨','Align right edges',   ()=>alignLayers('right')],
+                    ['⊤','Align top edges',     ()=>alignLayers('top')],
+                    ['⊕','Align v-centers',     ()=>alignLayers('vcenter')],
+                    ['⊥','Align bottom edges',  ()=>alignLayers('bottom')],
+                  ].map(([icon,title,fn])=>(
+                    <button key={icon} title={title} onClick={fn}
+                      style={{padding:'4px 2px',borderRadius:4,border:`1px solid ${T.border}`,background:T.bg2,color:T.text,fontSize:11,cursor:'pointer',textAlign:'center'}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.text;}}>{icon}</button>
+                  ))}
+                </div>
+                {/* Distribute row — needs 3+ layers */}
+                {selectedIds.size>=3&&(
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:2}}>
+                    <button onClick={()=>distributeLayers('h')}
+                      style={{padding:'4px 2px',borderRadius:4,border:`1px solid ${T.border}`,background:T.bg2,color:T.muted,fontSize:9,cursor:'pointer',whiteSpace:'nowrap'}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.muted;}}>⟺ H spacing</button>
+                    <button onClick={()=>distributeLayers('v')}
+                      style={{padding:'4px 2px',borderRadius:4,border:`1px solid ${T.border}`,background:T.bg2,color:T.muted,fontSize:9,cursor:'pointer',whiteSpace:'nowrap'}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.muted;}}>⇕ V spacing</button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Selected Object Specs */}
             {selectedLayer&&(
