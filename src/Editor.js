@@ -4,6 +4,7 @@ import supabase from './supabaseClient';
 import { createSaveEngine } from './saveEngine';
 import { saveAs } from 'file-saver';
 import { renderTextLayer, applyTextTransform } from './textRenderer';
+import { SHORTCUT_GROUPS, TOOL_SHORTCUT_MAP } from './shortcuts';
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
 const BrandKitSetupModal = lazy(() => import('./BrandKit'));
@@ -1003,6 +1004,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [clipboard,setClipboard]           = useState(null);
   const [showFileTab,setShowFileTab]       = useState(false);
   const [showDownload,setShowDownload]     = useState(false);
+  const [showShortcutsModal,setShowShortcutsModal] = useState(false);
   const [savedDesigns,setSavedDesigns]     = useState([]);
   const [galleryLoading,setGalleryLoading] = useState(false);
   const galleryLastFetchAt                 = useRef(0); // timestamp of last successful fetch
@@ -1064,6 +1066,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [pixelSnapEnabled,setPixelSnapEnabled] = useState(true);       // snap to whole pixel values
   const [selectedIds,setSelectedIds]       = useState(new Set());      // multi-select layer IDs
   const altPressedRef                      = useRef(false);            // Alt held → disable snap temporarily
+  const spaceHeldRef                       = useRef(false);            // Space held → temporary pan mode
+  const spaceToolRef                       = useRef(null);             // tool active before space was pressed
   const [brushTypeState,setBrushTypeState]             = useState('blur');
   const [brushSizeState,setBrushSizeState]             = useState(20);
   const [brushStrengthState,setBrushStrengthState]     = useState(50);
@@ -2162,38 +2166,132 @@ PHASE 4 — Toolbar button:
     const handler=(e)=>{
       const active=document.activeElement;
       const typing=active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.tagName==='SELECT';
-      if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}
-      if((e.ctrlKey||e.metaKey)&&e.key==='y'){e.preventDefault();redo();}
-      if((e.ctrlKey||e.metaKey)&&e.key==='c'){if(selectedId){const l=layers.find(x=>x.id===selectedId);if(l)setClipboard(l);}}
-      if((e.ctrlKey||e.metaKey)&&e.key==='v'){if(clipboard)duplicateLayerFromObj(clipboard);}
-      if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();if(selectedId)duplicateLayer(selectedId);}
-      if(!typing&&(e.key==='Delete'||e.key==='Backspace')){if(selectedId)deleteLayer(selectedId);}
-      if((e.ctrlKey||e.metaKey)&&(e.key==='+'||e.key==='=')){e.preventDefault();setZoom(z=>Math.min(16,+(z+0.1).toFixed(1)));}
-      if((e.ctrlKey||e.metaKey)&&e.key==='-'){e.preventDefault();setZoom(z=>Math.max(0.25,+(z-0.1).toFixed(1)));}
-      if((e.ctrlKey||e.metaKey)&&e.key==='0'){e.preventDefault();setZoom(1);}
-      if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();setCmdOpen(o=>!o);setTimeout(()=>cmdInputRef.current?.focus(),50);}
-      if((e.ctrlKey||e.metaKey)&&e.key==='i'){
-        e.preventDefault();
-        setShowAiBar(o=>!o);
-        setTimeout(()=>aiCmdInputRef.current?.focus(),50);
-      }
-      if((e.ctrlKey||e.metaKey)&&e.key==='s'){
-        e.preventDefault();
-        saveDesign(designName);
-        // Also flush local IndexedDB save immediately
-        saveEngineRef.current?.saveImmediate();
-      }
-      // Snap shortcuts (skip when typing in inputs)
-      if(!typing&&e.shiftKey&&e.key===';'){e.preventDefault();setSnapEnabled(s=>!s);}
-      // Alt key — disables snap while held
+      const ctrl=e.ctrlKey||e.metaKey;
+
+      // ── Always-on: Alt + Space refs ───────────────────────────────────────
       if(e.key==='Alt'){altPressedRef.current=true;}
+
+      // ── Space → temporary pan mode ────────────────────────────────────────
+      if(e.key===' '&&!typing&&!spaceHeldRef.current){
+        e.preventDefault();
+        spaceHeldRef.current=true;
+        spaceToolRef.current=activeTool;
+        setActiveTool('zoom');
+        return;
+      }
+
+      // ── Ctrl / Cmd combos (work even while typing) ────────────────────────
+      if(ctrl&&e.key==='z'&&!e.shiftKey){e.preventDefault();undo();return;}
+      if(ctrl&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo();return;}
+      if(ctrl&&e.key==='c'&&!e.shiftKey){if(selectedId){const l=layers.find(x=>x.id===selectedId);if(l)setClipboard(l);}return;}
+      if(ctrl&&e.key==='v'){if(clipboard)duplicateLayerFromObj(clipboard);return;}
+      if(ctrl&&e.key==='j'){e.preventDefault();if(selectedId)duplicateLayer(selectedId);return;}
+      if(ctrl&&e.key==='d'){e.preventDefault();setSelectedId(null);setSelectedIds(new Set());return;}
+      if(ctrl&&e.key==='a'){e.preventDefault();const ids=new Set(layers.filter(l=>l.type!=='background').map(l=>l.id));setSelectedIds(ids);return;}
+      if(ctrl&&(e.key==='+'||e.key==='=')){e.preventDefault();setZoom(z=>Math.min(16,+(z+0.1).toFixed(1)));return;}
+      if(ctrl&&e.key==='-'){e.preventDefault();setZoom(z=>Math.max(0.25,+(z-0.1).toFixed(1)));return;}
+      if(ctrl&&e.key==='0'){e.preventDefault();setZoom(1);setPanOffset({x:0,y:0});return;}
+      if(ctrl&&e.key==='k'){e.preventDefault();setCmdOpen(o=>!o);setTimeout(()=>cmdInputRef.current?.focus(),50);return;}
+      if(ctrl&&e.key==='i'&&!e.shiftKey){e.preventDefault();setShowAiBar(o=>!o);setTimeout(()=>aiCmdInputRef.current?.focus(),50);return;}
+      if(ctrl&&e.key==='s'){e.preventDefault();saveDesign(designName);saveEngineRef.current?.saveImmediate();return;}
+      if(ctrl&&(e.key==='e'||e.key==='E')){e.preventDefault();setShowDownload(true);return;}
+      if(ctrl&&e.key==='t'){e.preventDefault();/* free transform: layer already has handles */return;}
+      if(ctrl&&e.key==='/'){ e.preventDefault();setShowShortcutsModal(s=>!s);return;}
+      if(ctrl&&e.shiftKey&&e.key==='i'){e.preventDefault();
+        // Invert selection: select all except current
+        const allIds=new Set(layers.filter(l=>l.type!=='background').map(l=>l.id));
+        if(selectedId) allIds.delete(selectedId);
+        setSelectedIds(allIds);
+        return;
+      }
+
+      // ── Below this point: single-key shortcuts �� skip when typing ─────────
+      if(typing) return;
+
+      // Escape — deselect / cancel
+      if(e.key==='Escape'){setSelectedId(null);setSelectedIds(new Set());setShowShortcutsModal(false);return;}
+
+      // Delete / Backspace — delete selected layer
+      if(e.key==='Delete'||e.key==='Backspace'){if(selectedId)deleteLayer(selectedId);return;}
+
+      // ? — shortcuts modal
+      if(e.key==='?'){setShowShortcutsModal(s=>!s);return;}
+
+      // Smart snap toggle
+      if(e.shiftKey&&e.key===';'){e.preventDefault();setSnapEnabled(s=>!s);return;}
+
+      // Arrow keys — nudge selected layer
+      if(selectedId&&(e.key==='ArrowUp'||e.key==='ArrowDown'||e.key==='ArrowLeft'||e.key==='ArrowRight')){
+        e.preventDefault();
+        const step=e.shiftKey?10:1;
+        const dx=e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0;
+        const dy=e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0;
+        const cur=layers.find(l=>l.id===selectedId);
+        if(cur&&cur.type!=='background'){
+          updateLayer(selectedId,{x:Math.round((cur.x||0)+dx),y:Math.round((cur.y||0)+dy)});
+          saveEngineRef.current?.markDirty('layerProperties',selectedId);
+        }
+        return;
+      }
+
+      // 1-9 → opacity, 0 → 100%
+      if(/^[0-9]$/.test(e.key)&&selectedId){
+        const pct=e.key==='0'?100:Number(e.key)*10;
+        const cur=layers.find(l=>l.id===selectedId);
+        if(cur&&cur.type!=='background'){updateLayer(selectedId,{opacity:pct});return;}
+      }
+
+      // [ ] — brush size   Shift+[ Shift+] — brush hardness
+      if(e.key==='['&&!e.shiftKey&&(activeTool==='brush'||activeTool==='freehand')){
+        if(activeTool==='freehand')setFreeBrushSize(s=>Math.max(1,s-2));
+        else setBrushSizeState(s=>Math.max(1,s-5));
+        return;
+      }
+      if(e.key===']'&&!e.shiftKey&&(activeTool==='brush'||activeTool==='freehand')){
+        if(activeTool==='freehand')setFreeBrushSize(s=>Math.min(100,s+2));
+        else setBrushSizeState(s=>Math.min(300,s+5));
+        return;
+      }
+      if(e.key==='['&&e.shiftKey&&activeTool==='brush'){setBrushEdgeState('soft');return;}
+      if(e.key===']'&&e.shiftKey&&activeTool==='brush'){setBrushEdgeState('hard');return;}
+
+      // Tool switches
+      const toolMap={
+        'v':'select','m':'select','l':'lasso','w':'segment','c':'crop',
+        'b':'brush','e':'freehand','t':'text','i':'rimlight',
+        'g':'bggen','s':'segment','o':'effects','z':'zoom','h':'move',
+      };
+      const dest=toolMap[e.key.toLowerCase()];
+      if(dest){setActiveTool(dest);if(dest!=='lasso')setIsLassoMode(false);return;}
+
+      // D — reset colors, X — swap, Q — quick mask
+      if(e.key==='d'||e.key==='D'){
+        setTextColor('#ffffff');setFillColor('#FF4500');
+        setStrokeColor('#000000');return;
+      }
+      if(e.key==='x'||e.key==='X'){
+        setTextColor(prev=>{const old=prev;setStrokeColor(old);return strokeColor;});return;
+      }
+      if(e.key==='q'||e.key==='Q'){
+        if(activeTool==='lasso'){setIsLassoMode(false);setActiveTool('select');}
+        else{setActiveTool('lasso');setIsLassoMode(true);}
+        return;
+      }
     };
-    const onKeyUp=(e)=>{ if(e.key==='Alt'){altPressedRef.current=false;} };
+
+    const onKeyUp=(e)=>{
+      if(e.key==='Alt'){altPressedRef.current=false;}
+      if(e.key===' '){
+        spaceHeldRef.current=false;
+        if(spaceToolRef.current){setActiveTool(spaceToolRef.current);spaceToolRef.current=null;}
+      }
+    };
+
     window.addEventListener('keydown',handler);
     window.addEventListener('keyup',onKeyUp);
     return()=>{window.removeEventListener('keydown',handler);window.removeEventListener('keyup',onKeyUp);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[selectedId,layers,clipboard,historyIndex,history,designName]);
+  },[selectedId,layers,clipboard,historyIndex,history,designName,activeTool,strokeColor]);
 
   function makeBg(plat){return{id:newId(),type:'background',bgColor:'#ffffff',bgGradient:null,x:0,y:0,width:plat.preview.w,height:plat.preview.h,opacity:100,hidden:false,locked:true,blendMode:'normal',effects:defaultEffects()};}
 
@@ -6302,6 +6400,7 @@ PHASE 4 — Toolbar button:
               <button onClick={()=>setPixelSnapEnabled(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:pixelSnapEnabled?`${T.accent}22`:'transparent',color:pixelSnapEnabled?T.accent:T.muted,cursor:'pointer',fontSize:10,fontWeight:'700',whiteSpace:'nowrap'}} title="Pixel snap — forces whole-pixel positions">px</button>
               <button onClick={()=>setShowStampTest(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showStampTest?T.accentDim:'transparent',color:showStampTest?T.accent:T.muted,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Mobile preview">Mobile</button>
               <button onClick={()=>setDarkMode(!darkMode)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:'transparent',color:T.muted,cursor:'pointer',fontSize:11}} title="Toggle theme">{darkMode?'○':'●'}</button>
+              <button onClick={()=>setShowShortcutsModal(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showShortcutsModal?T.accentDim:'transparent',color:showShortcutsModal?T.accent:T.muted,cursor:'pointer',fontSize:12,fontWeight:'700'}} title="Keyboard shortcuts (? or Ctrl+/)">?</button>
             </div>
           )}
           <div style={{width:1,height:18,background:T.border,margin:'0 1px',flexShrink:0}}/>
@@ -6429,7 +6528,7 @@ PHASE 4 — Toolbar button:
               return(
                 <button key={t.key}
                   onClick={()=>{setActiveTool(t.key);if(t.key!=='lasso')setIsLassoMode(false);}}
-                  title={t.label}
+                  title={TOOL_SHORTCUT_MAP[t.key]?`${t.label} (${TOOL_SHORTCUT_MAP[t.key]})`:t.label}
                   style={{
                     ...css.toolBtn(isActive||isLassoActive),
                     ...(isLassoActive?{background:'rgba(249,115,22,0.15)',color:T.accent}:{}),
@@ -11210,6 +11309,73 @@ PHASE 4 — Toolbar button:
           setShowBrandKitSetup={setShowBrandKitSetup}
           setCmdLog={setCmdLog}
         /></Suspense>
+      )}
+
+      {/* ── Keyboard Shortcuts Reference Modal ────────────────────────────── */}
+      {showShortcutsModal&&(
+        <div
+          onClick={e=>{if(e.target===e.currentTarget)setShowShortcutsModal(false);}}
+          style={{position:'fixed',inset:0,zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.85)',backdropFilter:'blur(6px)'}}>
+          <div style={{
+            width:680,maxWidth:'95vw',maxHeight:'90vh',
+            background:T.panel,borderRadius:16,
+            border:`1.5px solid ${T.border}`,
+            boxShadow:'0 40px 120px rgba(0,0,0,0.95)',
+            display:'flex',flexDirection:'column',overflow:'hidden',
+          }}>
+            {/* Header */}
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 24px 14px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+              <div>
+                <div style={{fontSize:17,fontWeight:'800',color:T.text,letterSpacing:'-0.3px'}}>Keyboard Shortcuts</div>
+                <div style={{fontSize:11,color:T.muted,marginTop:2}}>Press <kbd style={{background:T.input,border:`1px solid ${T.border}`,borderRadius:4,padding:'1px 5px',fontSize:10,color:T.text,fontFamily:'monospace'}}>?</kbd> or <kbd style={{background:T.input,border:`1px solid ${T.border}`,borderRadius:4,padding:'1px 5px',fontSize:10,color:T.text,fontFamily:'monospace'}}>Ctrl+/</kbd> to toggle • <kbd style={{background:T.input,border:`1px solid ${T.border}`,borderRadius:4,padding:'1px 5px',fontSize:10,color:T.text,fontFamily:'monospace'}}>Esc</kbd> to close</div>
+              </div>
+              <button onClick={()=>setShowShortcutsModal(false)}
+                style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:8,color:T.muted,width:32,height:32,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+            </div>
+            {/* Body */}
+            <div style={{overflowY:'auto',padding:'16px 24px 24px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px 32px'}}>
+              {SHORTCUT_GROUPS.map(group=>(
+                <div key={group.label}>
+                  <div style={{fontSize:9,fontWeight:'800',letterSpacing:'0.9px',textTransform:'uppercase',color:T.accent,marginBottom:8,paddingBottom:4,borderBottom:`1px solid ${T.border}`}}>{group.label}</div>
+                  <table style={{width:'100%',borderCollapse:'collapse'}}>
+                    <tbody>
+                      {group.shortcuts.map(sc=>(
+                        <tr key={sc.keys} style={{borderBottom:`1px solid ${T.border}22`}}>
+                          <td style={{padding:'4px 0',whiteSpace:'nowrap',width:1}}>
+                            {sc.keys.split(' or ').map((k,i)=>(
+                              <React.Fragment key={i}>
+                                {i>0&&<span style={{color:T.muted,fontSize:9,margin:'0 3px'}}>or</span>}
+                                <kbd style={{
+                                  display:'inline-block',
+                                  background:T.input,
+                                  border:`1px solid ${T.border}`,
+                                  borderBottom:`2px solid ${T.border}`,
+                                  borderRadius:5,
+                                  padding:'1px 6px',
+                                  fontSize:10,
+                                  color:T.text,
+                                  fontFamily:'monospace',
+                                  whiteSpace:'nowrap',
+                                }}>{k.trim()}</kbd>
+                              </React.Fragment>
+                            ))}
+                          </td>
+                          <td style={{padding:'4px 0 4px 10px',fontSize:11,color:T.muted}}>{sc.description}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+            {/* Footer */}
+            <div style={{padding:'10px 24px',borderTop:`1px solid ${T.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:11,color:T.muted,flex:1}}>Shortcuts are disabled when typing in text inputs.</span>
+              <button onClick={()=>setShowShortcutsModal(false)}
+                style={{padding:'6px 18px',borderRadius:7,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:12,cursor:'pointer',fontWeight:'600'}}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Upgrade to Pro Modal */}
