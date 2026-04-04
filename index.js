@@ -277,7 +277,7 @@ async function authMiddleware(req,res,next){
 // ── AI Quota System ────────────────────────────────────────────────────────────
 function getPlanQuota(plan){
   switch((plan||'free').toLowerCase()){
-    case 'pro':  return{limit:300, period:'month'};
+    case 'pro':  return{limit:150, period:'month'};
     default:     return{limit:3,   period:'day'};
   }
 }
@@ -300,7 +300,7 @@ function checkQuota(email){
   if(usage.count>=limit){
     const planLabel=(user.plan||'free').charAt(0).toUpperCase()+(user.plan||'free').slice(1);
     const msg=(!user.plan||user.plan==='free')
-      ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 300/month.'
+      ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 150/month.'
       :`Pro plan limit (${limit}/${period}) reached. Contact support to discuss higher usage.`;
     return{ok:false,message:msg,code:'QUOTA_EXCEEDED'};
   }
@@ -356,7 +356,7 @@ function checkAndDecrementQuota(email, plan='free'){
 
   if(usage.count>=limit){
     const msg=plan==='free'
-      ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 300/month.'
+      ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 150/month.'
       :`Pro plan limit (${limit}/${period}) reached. Contact support to discuss higher usage.`;
     return{ok:false,message:msg,code:'QUOTA_EXCEEDED'};
   }

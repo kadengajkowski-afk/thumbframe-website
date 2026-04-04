@@ -8037,7 +8037,7 @@ PHASE 4 — Toolbar button:
                           style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800',letterSpacing:'0.02em'}}>
                           Upgrade to Pro →
                         </button>
-                        <div style={{marginTop:8,fontSize:10,color:T.muted}}>300 AI actions/month, all features</div>
+                        <div style={{marginTop:8,fontSize:10,color:T.muted}}>150 AI actions/month, all features</div>
                       </div>
                     </div>
                   </div>
