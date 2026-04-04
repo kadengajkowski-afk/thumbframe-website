@@ -96,47 +96,60 @@ app.post('/webhook', express.raw({ type:'application/json' }), async (req, res) 
   async function grantPro(customerEmail) {
     if (!customerEmail) return;
     const email = customerEmail.toLowerCase().trim();
-    // 1. Supabase
-    const { error: sbErr } = await supabase
+    // 1. Supabase profiles — also select the user ID for step 2
+    const { data: updatedRows, error: sbErr } = await supabase
       .from('profiles')
       .update({ is_pro: true, subscription_active: true })
-      .ilike('email', email);
-    if (sbErr) console.error('[WEBHOOK] Supabase grantPro failed:', email, sbErr.message);
-    // 2. users.json
+      .ilike('email', email)
+      .select('id');
+    if (sbErr) console.error('[WEBHOOK] Supabase profiles grantPro failed:', email, sbErr.message);
+    // 2. Supabase auth user_metadata — this is what authMiddleware reads for plan
+    const userId = updatedRows?.[0]?.id;
+    if (userId) {
+      const { error: metaErr } = await supabase.auth.admin.updateUserById(userId, { user_metadata: { is_pro: true } });
+      if (metaErr) console.error('[WEBHOOK] user_metadata grantPro failed:', metaErr.message);
+      else console.log('[WEBHOOK] grantPro: user_metadata.is_pro=true for', email, 'userId:', userId);
+    } else {
+      console.warn('[WEBHOOK] grantPro: no profile row found for', email, '— user_metadata not updated');
+    }
+    // 3. users.json (cache layer — plan also updated here for usage-count tracking)
     await withUsersMutex(() => {
       const users = loadUsers();
-      if (users[email]) {
-        users[email].plan = 'pro';
-      } else {
-        users[email] = { email, plan: 'pro', aiUsage: { count: 0, resetAt: 0 }, created: new Date().toISOString() };
-      }
+      if (users[email]) users[email].plan = 'pro';
+      else users[email] = { email, plan: 'pro', aiUsage: { count: 0, resetAt: 0 }, created: new Date().toISOString() };
       saveUsers(users);
-      console.log('[WEBHOOK] grantPro: set plan=pro for', email);
+      console.log('[WEBHOOK] grantPro: users.json plan=pro for', email);
     });
   }
 
   async function revokePro(customerId) {
     if (!customerId) return;
-    // Look up email from Supabase by stripe_customer_id
+    // 1. Look up profile (get email + id)
     const { data: profile } = await supabase
       .from('profiles')
-      .select('email')
+      .select('id, email')
       .eq('stripe_customer_id', customerId)
       .single();
     const email = profile?.email?.toLowerCase().trim();
-    // Supabase
+    const userId = profile?.id;
+    // 2. Supabase profiles
     const { error: sbErr } = await supabase
       .from('profiles')
       .update({ is_pro: false, subscription_active: false })
       .eq('stripe_customer_id', customerId);
     if (sbErr) console.error('[WEBHOOK] Supabase revokePro failed:', customerId, sbErr.message);
-    else console.log('[WEBHOOK] revokePro: Supabase updated for customer', customerId);
-    // users.json
+    // 3. Supabase auth user_metadata
+    if (userId) {
+      const { error: metaErr } = await supabase.auth.admin.updateUserById(userId, { user_metadata: { is_pro: false } });
+      if (metaErr) console.error('[WEBHOOK] user_metadata revokePro failed:', metaErr.message);
+      else console.log('[WEBHOOK] revokePro: user_metadata.is_pro=false for', email);
+    }
+    // 4. users.json
     if (email) {
       await withUsersMutex(() => {
         const users = loadUsers();
         if (users[email]) { users[email].plan = 'free'; saveUsers(users); }
-        console.log('[WEBHOOK] revokePro: set plan=free for', email);
+        console.log('[WEBHOOK] revokePro: users.json plan=free for', email);
       });
     }
   }
@@ -237,9 +250,10 @@ async function authMiddleware(req,res,next){
       return res.status(401).json({error: `Token verification failed: ${error?.message || 'Unknown error'}`});
     }
     
-    req.user = { email: user.email, id: user.id };
+    // Plan comes from user_metadata (written by webhook on subscribe, never touches ephemeral disk)
+    req.user = { email: user.email, id: user.id, plan: user.user_metadata?.is_pro ? 'pro' : 'free' };
     req.userId = user.id;
-    console.log('[AUTH] Middleware verified user:', user.email);
+    console.log('[AUTH] Middleware verified user:', user.email, 'plan:', req.user.plan);
     next();
   }catch(err){
     console.error('[AUTH] Middleware error:', err.message);
@@ -308,20 +322,14 @@ function decrementQuota(email){
   });
 }
 
-// Legacy combined check+decrement (kept for backward compat, wraps mutex)
-function checkAndDecrementQuota(email){
+// plan param comes from req.user.plan (set by authMiddleware from Supabase user_metadata)
+// users.json is only used for usage counts — plan is always the authoritative value passed in
+function checkAndDecrementQuota(email, plan='free'){
   const users=loadUsers();
-  let user=users[email];
-  if(!user){
-    // Auto-create free-plan record for users registered before quota system existed
-    user={email,plan:'free',aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
-    users[email]=user;
-    saveUsers(users);
-    console.log('[QUOTA] Auto-created quota record for existing user:',email);
-  }
-  console.log('[QUOTA] checkAndDecrementQuota —',email,'plan:',user.plan||'free','usage:',user.aiUsage?.count||0);
+  let user=users[email]||{email,plan,aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
+  console.log('[QUOTA]',email,'plan:',plan,'usage:',user.aiUsage?.count||0);
 
-  const {limit,period}=getPlanQuota(user.plan);
+  const {limit,period}=getPlanQuota(plan);
   if(limit===Infinity) return{ok:true};
 
   const now=Date.now();
@@ -335,24 +343,21 @@ function checkAndDecrementQuota(email){
   }
 
   if(usage.count>=limit){
-    const planLabel=(user.plan||'free').charAt(0).toUpperCase()+(user.plan||'free').slice(1);
-    const msg=(!user.plan||user.plan==='free')
+    const msg=plan==='free'
       ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 300/month.'
       :`Pro plan limit (${limit}/${period}) reached. Contact support to discuss higher usage.`;
     return{ok:false,message:msg,code:'QUOTA_EXCEEDED'};
   }
 
   usage.count++;
-  users[email]={...user,aiUsage:usage};
+  users[email]={...user,plan,aiUsage:usage};
   saveUsers(users);
   return{ok:true,remaining:limit-usage.count};
 }
 
-// Middleware: Pro plan required (replaces former agency gate — only two plans exist: Free and Pro)
+// Middleware: Pro plan required (uses req.user.plan from authMiddleware — no disk read)
 function agencyMiddleware(req,res,next){
-  const users=loadUsers();
-  const user=users[req.user?.email];
-  const isPro=(user?.plan||'free').toLowerCase()==='pro'||user?.email===ADMIN_EMAIL;
+  const isPro=req.user?.plan==='pro'||req.user?.email===ADMIN_EMAIL;
   if(!isPro) return res.status(403).json({success:false,error:'Pro plan required',code:'PRO_REQUIRED'});
   next();
 }
@@ -383,6 +388,33 @@ app.post('/api/sync-user', authMiddleware, async(req,res)=>{
   });
   const users=loadUsers();
   res.json({success:true,plan:users[email]?.plan||'free',email});
+});
+
+// ── Admin: force-set a user to Pro (updates Supabase + user_metadata + users.json) ─────
+app.post('/api/admin/force-pro', authMiddleware, async(req,res)=>{
+  if(req.user.email!==ADMIN_EMAIL) return res.status(403).json({error:'Admin only'});
+  const targetEmail=(req.body.email||'').toLowerCase().trim();
+  if(!targetEmail) return res.status(400).json({error:'email required'});
+  // 1. Supabase profiles
+  const {data:rows,error:sbErr}=await supabase.from('profiles')
+    .update({is_pro:true,subscription_active:true})
+    .ilike('email',targetEmail).select('id');
+  if(sbErr) console.error('[FORCE-PRO] profiles error:',sbErr.message);
+  // 2. Supabase auth user_metadata
+  const userId=rows?.[0]?.id;
+  if(userId){
+    const {error:metaErr}=await supabase.auth.admin.updateUserById(userId,{user_metadata:{is_pro:true}});
+    if(metaErr) console.error('[FORCE-PRO] user_metadata error:',metaErr.message);
+  }
+  // 3. users.json
+  await withUsersMutex(()=>{
+    const users=loadUsers();
+    if(users[targetEmail]) users[targetEmail].plan='pro';
+    else users[targetEmail]={email:targetEmail,plan:'pro',aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
+    saveUsers(users);
+  });
+  console.log('[FORCE-PRO]',targetEmail,'-> pro, userId:',userId||'(not found in profiles)');
+  res.json({success:true,email:targetEmail,userId:userId||null,note:'User must log out and back in for the new token to reflect the plan change'});
 });
 
 // ── Health ─────────────────────────────────────────────────────────────────────
@@ -444,7 +476,7 @@ app.post('/ai-generate', async (req, res) => {
     console.log(`[AI-GENERATE] ✅ Access granted for ${userEmail} - isPro: true`);
 
     // C2: quota check
-    const quota=checkAndDecrementQuota(userEmail);
+    const quota=checkAndDecrementQuota(userEmail, req.user.plan);
     if(!quota.ok){
       return res.status(429).json({error:quota.message,code:quota.code});
     }
@@ -567,7 +599,7 @@ app.post('/ai-command', authMiddleware, async(req,res)=>{
     const { command, canvasState } = req.body;
     if(!command) return res.status(400).json({error:'No command'});
 
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok) return res.status(429).json({error:quota.message,code:quota.code});
 
     const system = `You are an AI assistant for ThumbFrame, a YouTube thumbnail editor.
@@ -634,7 +666,7 @@ Rules:
 // ── Background remover ─────────────────────────────────────────────────────────
 app.post('/remove-bg', authMiddleware, async(req,res)=>{
   try{
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok) return res.status(429).json({error:quota.message,code:quota.code});
 
     const imageInput = (req.body?.image || req.body?.imageUrl || '').toString().trim();
@@ -774,30 +806,18 @@ app.post('/auth/login', authRateLimit, async(req,res)=>{
 
 app.get('/auth/me', authMiddleware, async(req,res)=>{
   const email=req.user.email;
-  // Always sync plan from Supabase so paying users are never stuck on free
-  try{
-    const {data:profileData}=await supabase.from('profiles').select('is_pro').ilike('email',email).single();
-    const correctPlan=profileData?.is_pro?'pro':'free';
-    await withUsersMutex(()=>{
-      const users=loadUsers();
-      if(!users[email]){
-        users[email]={email,plan:correctPlan,aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
-        saveUsers(users);
-        console.log('[AUTH/ME] Created record for',email,'plan:',correctPlan);
-      } else if(users[email].plan!==correctPlan){
-        console.log('[AUTH/ME] Plan mismatch for',email,'— users.json says',users[email].plan,'Supabase says',correctPlan,'— updating');
-        users[email]={...users[email],plan:correctPlan};
-        saveUsers(users);
-      }
-    });
-  }catch(e){
-    console.error('[AUTH/ME] Supabase plan sync failed:',e.message);
-  }
-  const users=loadUsers();
-  const user=users[email];
-  if(!user) return res.status(404).json({error:'User not found'});
-  console.log('[AUTH/ME] Responding for',email,'plan:',user.plan||'free');
-  res.json({email:user.email,name:user.name,plan:user.plan||'free'});
+  // plan is authoritative from user_metadata (set by authMiddleware) — no extra Supabase call
+  const plan=req.user.plan;
+  // Keep users.json in sync for usage-count tracking
+  await withUsersMutex(()=>{
+    const users=loadUsers();
+    if(!users[email]) users[email]={email,plan,aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
+    else users[email]={...users[email],plan};
+    saveUsers(users);
+  });
+  const name=loadUsers()[email]?.name||email.split('@')[0];
+  console.log('[AUTH/ME]',email,'plan:',plan);
+  res.json({email,name,plan});
 });
 
 app.post('/brand-kit/upload-face', authMiddleware, async(req,res)=>{
@@ -1185,7 +1205,7 @@ app.post('/api/segment', authMiddleware, async(req,res)=>{
       return res.status(400).json({success:false,error:'Invalid image data',code:'INVALID_INPUT'});
     }
 
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok){
       return res.status(429).json({success:false,error:quota.message,code:quota.code});
     }
@@ -1253,7 +1273,7 @@ app.post('/api/enhance-expression', authMiddleware, async(req,res)=>{
       return res.status(400).json({success:false,error:'Missing faceCrop, mask, or instruction',code:'INVALID_INPUT'});
     }
 
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok){
       return res.status(429).json({success:false,error:quota.message,code:quota.code});
     }
@@ -1378,7 +1398,7 @@ app.post('/api/generate-text', authMiddleware, async(req,res)=>{
       return res.status(400).json({success:false,error:'Missing or invalid image',code:'INVALID_INPUT'});
     }
 
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok){
       return res.status(429).json({success:false,error:quota.message,code:quota.code});
     }
@@ -1467,7 +1487,7 @@ app.post('/api/analyze-composition', authMiddleware, async(req,res)=>{
       return res.status(400).json({success:false,error:'Missing or invalid image',code:'INVALID_INPUT'});
     }
 
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok){
       return res.status(429).json({success:false,error:quota.message,code:quota.code});
     }
@@ -1530,7 +1550,7 @@ app.post('/api/ctr-score-v2', authMiddleware, async(req,res)=>{
       return res.status(400).json({success:false,error:'Missing or invalid image',code:'INVALID_INPUT'});
     }
 
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok) return res.status(429).json({success:false,error:quota.message,code:quota.code});
 
     const[,imgBase64]=image.split(',');
@@ -1627,7 +1647,7 @@ app.post('/api/face-score', authMiddleware, async(req,res)=>{
     if(!image||!image.startsWith('data:image/')){
       return res.status(400).json({success:false,error:'Missing or invalid image',code:'INVALID_INPUT'});
     }
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok) return res.status(429).json({success:false,error:quota.message,code:quota.code});
 
     const[,rest]=image.split(',');
@@ -1735,7 +1755,7 @@ app.post('/api/color-grade', authMiddleware, async(req,res)=>{
       return res.status(400).json({success:false,error:`Unknown preset: ${preset}`,code:'INVALID_INPUT'});
     }
 
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok) return res.status(429).json({success:false,error:quota.message,code:quota.code});
 
     const[,imgBase64]=image.split(',');
@@ -1772,7 +1792,7 @@ app.post('/api/generate-background', authMiddleware, async(req,res)=>{
       return res.status(400).json({success:false,error:'Provide a niche or custom prompt',code:'INVALID_INPUT'});
     }
 
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok) return res.status(429).json({success:false,error:quota.message,code:quota.code});
 
     const {profile:bgNicheProfile}=getNicheProfile(req.user.email);
@@ -1938,7 +1958,7 @@ app.post('/api/style-transfer', authMiddleware, async(req,res)=>{
       return res.status(400).json({success:false,error:'Provide a preset name or referenceUrl',code:'INVALID_INPUT'});
     }
 
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok) return res.status(429).json({success:false,error:quota.message,code:quota.code});
 
     const[,imgBase64]=image.split(',');
@@ -1996,7 +2016,7 @@ app.post('/api/generate-variants', authMiddleware, async(req,res)=>{
       return res.status(400).json({success:false,error:'variantType must be 1–5',code:'INVALID_INPUT'});
     }
 
-    const quota=checkAndDecrementQuota(req.user.email);
+    const quota=checkAndDecrementQuota(req.user.email, req.user.plan);
     if(!quota.ok) return res.status(429).json({success:false,error:quota.message,code:quota.code});
 
     const {niche:storedNicheVar,profile:nicheProfileVar}=getNicheProfile(req.user.email);
@@ -2450,7 +2470,7 @@ app.post('/api/youtube/analyze', authMiddleware, async(req,res)=>{
   const user  = users[req.user.email];
   if(!user?.ytTokens) return res.status(403).json({success:false, error:'YouTube not connected', code:'YT_NOT_CONNECTED'});
 
-  const quota = checkAndDecrementQuota(req.user.email);
+  const quota = checkAndDecrementQuota(req.user.email, req.user.plan);
   if(!quota.ok) return res.status(429).json({success:false, error:quota.message, code:quota.code});
 
   const {videos} = req.body;

@@ -1012,7 +1012,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [remainingQuota,setRemainingQuota]             = useState(null); // M6: quota display
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
-  const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.is_admin));
+  const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.is_pro||user?.plan==='pro'));
   const [isLoading,setIsLoading]                       = useState(true);
   const [removeBgBusy,setRemoveBgBusy]                 = useState(false);
   const [segmentMasks,setSegmentMasks]                 = useState([]);
@@ -1583,15 +1583,9 @@ PHASE 4 — Toolbar button:
             : Promise.resolve({ data: null, error: null }),
           // 2. Brand kit
           supabase.from('brand_kits').select('*').eq('user_id', safeUser.id).limit(1),
-          // 3. Pro profile (cached 5 min in localStorage)
+          // 3. Pro profile — always fresh from Supabase (no cache, stale false breaks Pro users)
           safeUser?.email
-            ? (()=>{
-                try{
-                  const _c=localStorage.getItem(`sf_is_pro_${safeUser.email}`);
-                  if(_c){const _p=JSON.parse(_c);if(Date.now()<_p.exp)return Promise.resolve({data:{is_pro:_p.v},error:null});}
-                }catch(e){}
-                return supabase.from('profiles').select('is_pro').eq('email', safeUser.email).maybeSingle();
-              })()
+            ? supabase.from('profiles').select('is_pro').eq('email', safeUser.email).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
         ]);
 
@@ -1638,7 +1632,6 @@ PHASE 4 — Toolbar button:
               setIsProUser(false);
             }else{
               setIsProUser(!!profileData?.is_pro);
-              try{localStorage.setItem(`sf_is_pro_${safeUser.email}`,JSON.stringify({v:!!profileData?.is_pro,exp:Date.now()+5*60*1000}));}catch(e){}
             }
           }else{
             console.error('[PRO PROFILE] Promise rejected while fetching profiles.is_pro:', profileResult.reason);
