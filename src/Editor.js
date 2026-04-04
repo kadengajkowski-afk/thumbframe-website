@@ -1583,9 +1583,9 @@ PHASE 4 — Toolbar button:
             : Promise.resolve({ data: null, error: null }),
           // 2. Brand kit
           supabase.from('brand_kits').select('*').eq('user_id', safeUser.id).limit(1),
-          // 3. Pro profile — always fresh from Supabase (no cache, stale false breaks Pro users)
-          safeUser?.email
-            ? supabase.from('profiles').select('is_pro').eq('email', safeUser.email).maybeSingle()
+          // 3. Pro profile — query by user ID (UUID), not email, to match the profiles table PK
+          safeUser?.id
+            ? supabase.from('profiles').select('is_pro').eq('id', safeUser.id).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
         ]);
 
@@ -1816,6 +1816,11 @@ PHASE 4 — Toolbar button:
     if(!showFileTab)return;
     fetchSavedDesigns();
   },[fetchSavedDesigns, showFileTab]);
+
+  // Sync user.is_pro → isProUser whenever App.js async /auth/me response arrives
+  useEffect(()=>{
+    if(user?.is_pro===true||user?.plan==='pro') setIsProUser(true);
+  },[user?.is_pro, user?.plan]);
 
   // ✅ Window drag handlers — ONLY fire when draggingRef or resizingRef is set
   // This means sidebar sliders are completely unaffected

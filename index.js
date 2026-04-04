@@ -402,9 +402,29 @@ app.post('/api/sync-user', authMiddleware, async(req,res)=>{
   res.json({success:true,plan:users[email]?.plan||'free',email});
 });
 
-// ── Admin: force-set a user to Pro (updates Supabase + user_metadata + users.json) ─────
-app.post('/api/admin/force-pro', authMiddleware, async(req,res)=>{
-  if(req.user.email!==ADMIN_EMAIL) return res.status(403).json({error:'Admin only'});
+// ── Debug: show exactly what authMiddleware reads from the token ───────────────
+app.get('/api/debug-token', authMiddleware, (req,res)=>{
+  res.json({ user: req.user });
+});
+
+// ── Admin: force-set a user to Pro — accepts JWT auth OR a server-side secret key ──
+app.post('/api/admin/force-pro', async(req,res)=>{
+  // Allow either: valid admin JWT, or secret key in header/body for terminal use
+  const serverSecret = process.env.ADMIN_SECRET || 'tf-admin-2024';
+  const providedSecret = req.headers['x-admin-secret'] || req.body?.adminSecret;
+  let callerEmail = null;
+  if(providedSecret === serverSecret){
+    callerEmail = ADMIN_EMAIL; // trusted
+  } else {
+    // Fall back to JWT auth
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if(token){
+      const { data:{ user }, error } = await supabase.auth.getUser(token);
+      if(!error && user?.email === ADMIN_EMAIL) callerEmail = user.email;
+    }
+  }
+  if(!callerEmail) return res.status(403).json({error:'Admin only — provide admin JWT or x-admin-secret header'});
   const targetEmail=(req.body.email||'').toLowerCase().trim();
   if(!targetEmail) return res.status(400).json({error:'email required'});
   // 1. Supabase profiles
