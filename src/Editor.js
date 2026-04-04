@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState, memo, lazy, Suspense } from 'react';
 import BrushTool, { BrushOverlay } from './Brush';
 import supabase from './supabaseClient';
+import { createSaveEngine } from './saveEngine';
 import { saveAs } from 'file-saver';
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
@@ -817,6 +818,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const draftStateRef = useRef(null);
   const draftHydratedRef = useRef(false);
   const saveMetaRef = useRef({});
+  const saveEngineRef = useRef(null);
+  const localSavedAtRef = useRef(null);
   // Performance: Mouse tracking refs to avoid re-renders
   const mouseRef        = useRef({x:0,y:0});
   const lastRimLightRef = useRef(0);
@@ -831,6 +834,75 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
       if (rafId) cancelAnimationFrame(rafId);
     };
   }, []);
+
+  // ── Save Engine: init on mount, destroy on unmount ─────────────────────────
+  useEffect(() => {
+    const engine = createSaveEngine({
+      getSnapshot: () => {
+        if (!saveMetaRef.current) return null;
+        return {
+          ...saveMetaRef.current,
+          layers: layersRef.current,
+        };
+      },
+      onSaveStart: () => {
+        if (mountedRef.current) setLocalSaveStatus('saving');
+      },
+      onSaveEnd: ({ success, savedAt }) => {
+        if (!mountedRef.current) return;
+        if (success) {
+          localSavedAtRef.current = savedAt;
+          setLocalSaveStatus('saved');
+        } else {
+          setLocalSaveStatus('unsaved');
+        }
+      },
+      onDirty: () => {
+        if (mountedRef.current) setLocalSaveStatus('unsaved');
+      },
+    });
+    saveEngineRef.current = engine;
+    engine.startPeriodic();
+
+    // ── visibilitychange & blur: save when user leaves the tab/window ────────
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        engine.saveImmediate();
+      }
+    };
+    const handleBlur = () => { engine.saveImmediate(); };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+
+    // ── beforeunload: emergency save + warn if still dirty ──────────────────
+    const handleBeforeUnload = (e) => {
+      if (engine.isDirty()) {
+        engine.saveNow(); // best-effort sync attempt (IndexedDB)
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      engine.destroy();
+      saveEngineRef.current = null;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Document title: asterisk when unsaved ─────────────────────────────────
+  useEffect(() => {
+    const isUnsaved = localSaveStatus === 'unsaved';
+    const baseName  = designName || 'ThumbFrame';
+    document.title  = isUnsaved ? `* ${baseName} — ThumbFrame` : `${baseName} — ThumbFrame`;
+    return () => { document.title = 'ThumbFrame — YouTube Thumbnail Editor'; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localSaveStatus, designName]);
 
   const [platform,setPlatform]             = useState('youtube');
   const [activeTool,setActiveTool]         = useState('select');
@@ -1025,6 +1097,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [enhanceBusy,setEnhanceBusy]                   = useState(false);
   const [enhanceInstruction,setEnhanceInstruction]     = useState('open mouth more');
   const [saveStatus, setSaveStatus]                    = useState('Saved');
+  // localSaveStatus: 'saved' | 'saving' | 'unsaved'
+  const [localSaveStatus, setLocalSaveStatus]          = useState('saved');
   const [aiPrompt,setAiPrompt]                         = useState('');
   const [lastGeneratedImageUrl,setLastGeneratedImageUrl] = useState('');
   const [projectId,setProjectId]                       = useState(null);
@@ -1894,7 +1968,12 @@ PHASE 4 — Toolbar button:
         setShowAiBar(o=>!o);
         setTimeout(()=>aiCmdInputRef.current?.focus(),50);
       }
-      if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveDesign(designName);}
+      if((e.ctrlKey||e.metaKey)&&e.key==='s'){
+        e.preventDefault();
+        saveDesign(designName);
+        // Also flush local IndexedDB save immediately
+        saveEngineRef.current?.saveImmediate();
+      }
     };
     window.addEventListener('keydown',handler);
     return()=>window.removeEventListener('keydown',handler);
@@ -1942,7 +2021,7 @@ PHASE 4 — Toolbar button:
     triggerAutoSave();
   }
 
-  function updateLayer(id,updates){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,...updates}:l);pushHistoryDebounced(nl);return nl;});triggerAutoSave();}
+  function updateLayer(id,updates){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,...updates}:l);pushHistoryDebounced(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
   function updateLayerSilent(id,updates){setLayers(prev=>prev.map(l=>l.id===id?{...l,...updates}:l));}
   function updateLayerEffect(id,key,value){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l);pushHistory(nl);return nl;});triggerAutoSave();}
   function updateLayerEffectSilent(id,key,value){setLayers(prev=>prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l));}
@@ -1956,6 +2035,8 @@ PHASE 4 — Toolbar button:
       if(layers.length<=1) return; // can't delete if only layer
     }
     setLayers(prev=>{const nl=prev.filter(l=>l.id!==id);pushHistory(nl);return nl;});setSelectedId(null);triggerAutoSave();
+    // Layer delete is a significant action — save immediately
+    saveEngineRef.current?.saveImmediate();
   }
   function moveLayerUp(id){const idx=layers.findIndex(l=>l.id===id);if(idx>=layers.length-1)return;const nl=[...layers];[nl[idx],nl[idx+1]]=[nl[idx+1],nl[idx]];setLayers(nl);pushHistory(nl);triggerAutoSave();}
   function moveLayerDown(id){const idx=layers.findIndex(l=>l.id===id);if(idx<=0)return;const nl=[...layers];[nl[idx],nl[idx-1]]=[nl[idx-1],nl[idx]];setLayers(nl);pushHistory(nl);triggerAutoSave();}
@@ -3727,7 +3808,11 @@ PHASE 4 — Toolbar button:
       if(saveProjectRef.current){
         saveProjectRef.current({ silent:true });
       }
-    }, 1500);
+      // Also trigger local IndexedDB save
+      if(saveEngineRef.current){
+        saveEngineRef.current.markDirty('layerProperties');
+      }
+    }, 3000);
 
     debouncedSaveRef.current = currentDebouncer;
 
@@ -3746,6 +3831,9 @@ PHASE 4 — Toolbar button:
 
     // Keep latest draft in memory to avoid localStorage quota crashes.
     draftStateRef.current = currentState;
+
+    // Mark project as dirty so the save engine schedules a local save
+    saveEngineRef.current?.markDirty('projectMeta');
   },[aiPrompt, brightness, brandKitColors, buildProjectSnapshot, contrast, currentDesignId, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
 
   async function loadProject(d){
@@ -4183,6 +4271,8 @@ PHASE 4 — Toolbar button:
     setBgGenPrompt('');
     setActiveTool('select');
     setCmdLog('AI background applied');
+    // AI completion is a significant action — save immediately
+    saveEngineRef.current?.saveImmediate();
   }
 
   // ── Auto Color Grade & Pop ────────────────────────────────────────────────
@@ -4754,6 +4844,8 @@ PHASE 4 — Toolbar button:
               return nextLayers;
             });
             setSelectedId(id);
+            // Image import is a significant action — save immediately
+            saveEngineRef.current?.saveImmediate();
             // Fire-and-forget: run MediaPipe face detection on new image
             setTimeout(()=>runFaceDetectionOnComposite(),400);
           }catch(err){
@@ -5339,6 +5431,7 @@ PHASE 4 — Toolbar button:
 
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100vh',background:T.bg,color:T.text,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',overflow:'hidden'}}>
+      <style>{`@keyframes tf-pulse{0%,100%{opacity:1}50%{opacity:0.25}}`}</style>
 
       {showFileTab&&(
         <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'}} onClick={e=>{if(e.target===e.currentTarget)setShowFileTab(false);}}>
@@ -5725,26 +5818,43 @@ PHASE 4 — Toolbar button:
           );
         })()}
         <div style={{display:'flex',gap:4,alignItems:'center',flexShrink:0,marginLeft:'auto'}}>
-          {/* Save status pill */}
-          <div style={{
-            padding:'3px 9px',
-            borderRadius:6,
-            border:`1px solid ${
-              saveStatus==='Error'?`${T.danger}44`
-              :saveStatus==='Saving...'?`${T.warning}44`
-              :saveStatus==='Unsaved'?T.border
-              :`${T.success}33`}`,
-            background:saveStatus==='Error'?`${T.danger}12`
-              :saveStatus==='Saving...'?`${T.warning}12`
-              :saveStatus==='Unsaved'?'transparent'
-              :`${T.success}10`,
-            color:saveStatus==='Error'?T.danger
-              :saveStatus==='Saving...'?T.warning
-              :saveStatus==='Unsaved'?T.muted
-              :T.success,
-            fontSize:10,fontWeight:'600',letterSpacing:'0.2px',
-            minWidth:52,textAlign:'center',
-          }}>{saveStatus}</div>
+          {/* Save status indicator — dot (unsaved/saving) or checkmark (saved) */}
+          {(()=>{
+            // Derive display from both backend saveStatus and local IndexedDB localSaveStatus
+            const isUnsaved = localSaveStatus==='unsaved' || saveStatus==='Unsaved' || saveStatus==='Error';
+            const isSaving  = localSaveStatus==='saving'  || saveStatus==='Saving...';
+            const savedAt   = localSavedAtRef.current;
+            const tooltip   = isSaving ? 'Saving…'
+              : isUnsaved ? 'Unsaved changes'
+              : savedAt   ? `Saved at ${savedAt.toLocaleTimeString()}`
+              : 'Saved';
+            return(
+              <div
+                title={tooltip}
+                style={{
+                  display:'flex',alignItems:'center',gap:5,
+                  padding:'3px 9px',borderRadius:6,
+                  border:`1px solid ${isUnsaved?`${T.accent}44`:isSaving?`${T.warning}44`:`${T.success}33`}`,
+                  background:isUnsaved?`${T.accent}0d`:isSaving?`${T.warning}0d`:`${T.success}0d`,
+                  color:isUnsaved?T.accent:isSaving?T.warning:T.muted,
+                  fontSize:10,fontWeight:'600',letterSpacing:'0.2px',
+                  minWidth:52,textAlign:'center',cursor:'default',
+                  transition:'all 0.2s',
+                }}>
+                {isSaving
+                  ? <span style={{
+                      display:'inline-block',
+                      animation:'tf-pulse 0.9s ease-in-out infinite',
+                      color:T.warning,fontSize:8,
+                    }}>●</span>
+                  : isUnsaved
+                    ? <span style={{color:T.accent,fontSize:8}}>●</span>
+                    : <span style={{color:T.success,fontSize:10}}>✓</span>
+                }
+                <span>{isSaving?'Saving…':isUnsaved?'Unsaved':'Saved'}</span>
+              </div>
+            );
+          })()}
           {/* M6: Remaining quota display */}
           {remainingQuota!=null&&<div style={{padding:'3px 8px',borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:10,fontWeight:'600',letterSpacing:'0.2px'}} title="AI credits remaining">{remainingQuota} AI left</div>}
           {/* Undo / Redo */}
