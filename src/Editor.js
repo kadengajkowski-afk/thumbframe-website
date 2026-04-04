@@ -2614,6 +2614,8 @@ PHASE 4 — Toolbar button:
     if(!expressionScore?.bbox||enhanceBusy) return;
     setEnhanceBusy(true);
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       // Composite full canvas
       const flatCanvas=document.createElement('canvas');
       flatCanvas.width=p.preview.w;
@@ -2651,10 +2653,7 @@ PHASE 4 — Toolbar button:
 
       const res=await fetch(`${resolvedApiUrl}/api/enhance-expression`,{
         method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          ...(token?{'Authorization':`Bearer ${token}`}:{}),
-        },
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
         body:JSON.stringify({faceCrop,mask,instruction:enhanceInstruction}),
       });
       const data=await res.json();
@@ -3044,9 +3043,11 @@ PHASE 4 — Toolbar button:
   async function setNiche(niche){
     setNicheSaving(true);
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const tok = session?.access_token;
       const res=await fetch(`${resolvedApiUrl}/api/set-niche`,{
         method:'POST',
-        headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
         body:JSON.stringify({niche}),
       });
       const data=await res.json();
@@ -3062,8 +3063,10 @@ PHASE 4 — Toolbar button:
   // ── Feature K: YouTube History Intelligence ──────────────────────────────
   async function connectYouTube(){
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const tok = session?.access_token;
       const res=await fetch(`${resolvedApiUrl}/api/youtube/auth`,{
-        headers:{Authorization:`Bearer ${token}`}
+        headers:{'Authorization':`Bearer ${tok}`}
       });
       const data=await res.json();
       if(data.url) window.location.href=data.url;
@@ -3078,9 +3081,12 @@ PHASE 4 — Toolbar button:
     setYtHistProgress(10);
 
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const tok = session?.access_token;
+
       // Step 1: fetch thumbnails + stats
       const fetchRes=await fetch(`${resolvedApiUrl}/api/youtube/thumbnails`,{
-        headers:{Authorization:`Bearer ${token}`}
+        headers:{'Authorization':`Bearer ${tok}`}
       });
       const fetchData=await fetchRes.json();
       if(!fetchData.success) throw new Error(fetchData.error||'Fetch failed');
@@ -3094,7 +3100,7 @@ PHASE 4 — Toolbar button:
       // Step 2: analyze
       const analyzeRes=await fetch(`${resolvedApiUrl}/api/youtube/analyze`,{
         method:'POST',
-        headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
         body:JSON.stringify({videos:fetchData.videos}),
       });
       setYtHistProgress(90);
@@ -3153,8 +3159,10 @@ PHASE 4 — Toolbar button:
     if(!teamCreateName.trim()) return;
     setTeamBusy(true); setTeamError('');
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const tok = session?.access_token;
       const res=await fetch(`${resolvedApiUrl}/api/team/create`,{
-        method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
         body:JSON.stringify({name:teamCreateName.trim()}),
       });
       const d=await res.json();
@@ -3168,8 +3176,10 @@ PHASE 4 — Toolbar button:
     if(!teamInviteEmail.trim()||!teamData?.teamId) return;
     setTeamBusy(true); setTeamError('');
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const tok = session?.access_token;
       const res=await fetch(`${resolvedApiUrl}/api/team/invite`,{
-        method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
         body:JSON.stringify({teamId:teamData.teamId, inviteEmail:teamInviteEmail.trim()}),
       });
       const d=await res.json();
@@ -3181,8 +3191,10 @@ PHASE 4 — Toolbar button:
 
   async function addComment(xPct, yPct, text){
     if(!text.trim()||!designName) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const tok = session?.access_token;
     const res=await fetch(`${resolvedApiUrl}/api/comments/add`,{
-      method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
       body:JSON.stringify({projectId:designName, x:xPct, y:yPct, text:text.trim()}),
     });
     const d=await res.json();
@@ -3190,8 +3202,10 @@ PHASE 4 — Toolbar button:
   }
 
   async function resolveComment(commentId){
+    const { data: { session } } = await supabase.auth.getSession();
+    const tok = session?.access_token;
     const res=await fetch(`${resolvedApiUrl}/api/comments/${commentId}/resolve`,{
-      method:'PATCH', headers:{Authorization:`Bearer ${token}`},
+      method:'PATCH', headers:{'Authorization':`Bearer ${tok}`},
     });
     const d=await res.json();
     if(d.success) setComments(prev=>prev.map(c=>c.id===commentId?d.comment:c));
@@ -3199,8 +3213,10 @@ PHASE 4 — Toolbar button:
 
   async function replyToComment(commentId, text){
     if(!text.trim()) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const tok = session?.access_token;
     const res=await fetch(`${resolvedApiUrl}/api/comments/${commentId}/reply`,{
-      method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
       body:JSON.stringify({text}),
     });
     const d=await res.json();
@@ -3213,13 +3229,15 @@ PHASE 4 — Toolbar button:
   async function saveVersion(){
     if(!designName) return;
     setVersionBusy(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const tok = session?.access_token;
     // Flatten canvas to base64
     const flat=document.createElement('canvas');
     flat.width=p.preview.w; flat.height=p.preview.h;
     await renderLayersToCanvas(flat,layers);
     const canvasData=flat.toDataURL('image/jpeg',0.7);
     const res=await fetch(`${resolvedApiUrl}/api/projects/version`,{
-      method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
       body:JSON.stringify({projectId:designName, label:versionLabel||undefined, canvasData}),
     });
     const d=await res.json();
@@ -3232,8 +3250,10 @@ PHASE 4 — Toolbar button:
 
   async function restoreVersion(versionId){
     if(!window.confirm('Restore this version? Current canvas will be replaced.')) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const tok = session?.access_token;
     const res=await fetch(`${resolvedApiUrl}/api/projects/${encodeURIComponent(designName)}/versions/${versionId}`,{
-      headers:{Authorization:`Bearer ${token}`},
+      headers:{'Authorization':`Bearer ${tok}`},
     });
     const d=await res.json();
     if(d.success&&d.version?.canvasData){
@@ -3246,8 +3266,10 @@ PHASE 4 — Toolbar button:
   async function updateApprovalStatus(nextStatus){
     setApprovalStatus(nextStatus);
     if(!designName) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const tok = session?.access_token;
     await fetch(`${resolvedApiUrl}/api/projects/${encodeURIComponent(designName)}/status`,{
-      method:'PATCH', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+      method:'PATCH', headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
       body:JSON.stringify({status:nextStatus}),
     }).catch(()=>{});
   }
@@ -3259,6 +3281,9 @@ PHASE 4 — Toolbar button:
     if(aiVarBusy) return;
     setAiVarBusy(true);
     setAiVarSelected(null);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
 
     // Render current canvas to flat JPEG
     const flat=document.createElement('canvas');
@@ -3869,6 +3894,8 @@ PHASE 4 — Toolbar button:
     setCtrChecked(new Set());
     setCtrExpandedCat(null);
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const flat=document.createElement('canvas');
       flat.width=p.preview.w; flat.height=p.preview.h;
       await renderLayersToCanvas(flat,layers);
@@ -3877,7 +3904,7 @@ PHASE 4 — Toolbar button:
 
       const res=await fetch(`${resolvedApiUrl}/api/ctr-score-v2`,{
         method:'POST',
-        headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
         body:JSON.stringify({image:dataUrl,title:ctrTitle.trim()||undefined,niche:ctrNiche}),
       });
       const data=await res.json();
@@ -3902,6 +3929,8 @@ PHASE 4 — Toolbar button:
     setCompResult(null);
     setCompChecked(new Set());
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const flatCanvas=document.createElement('canvas');
       flatCanvas.width=p.preview.w;
       flatCanvas.height=p.preview.h;
@@ -3912,10 +3941,7 @@ PHASE 4 — Toolbar button:
 
       const res=await fetch(`${resolvedApiUrl}/api/analyze-composition`,{
         method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          ...(token?{'Authorization':`Bearer ${token}`}:{}),
-        },
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
         body:JSON.stringify({image:dataUrl,title:compVideoTitle.trim()||undefined}),
       });
       const data=await res.json();
@@ -3958,13 +3984,15 @@ PHASE 4 — Toolbar button:
     setAiTextLoading(true);
     setAiTextResults([]);
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const flatCanvas=document.createElement('canvas');
       flatCanvas.width=p.preview.w; flatCanvas.height=p.preview.h;
       await renderLayersToCanvas(flatCanvas,layers);
       const dataUrl=flatCanvas.toDataURL('image/jpeg',0.88);
       const res=await fetch(`${resolvedApiUrl}/api/generate-text`,{
         method:'POST',
-        headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
         body:JSON.stringify({
           title:aiTextTitle.trim()||undefined,
           niche:aiTextNiche.trim()||undefined,
@@ -4026,6 +4054,8 @@ PHASE 4 — Toolbar button:
     setStyleBusy(true);
     setStyleResult(null);
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       // Find bottom-most real image layer to process (preserve text/sticker layers above it)
       const imgLayer=[...layers].find(l=>
         (l.type==='image'||(l.type==='background'&&l.src))&&!l.isRimLight&&l.src
@@ -4043,7 +4073,7 @@ PHASE 4 — Toolbar button:
 
       const res=await fetch(`${resolvedApiUrl}/api/style-transfer`,{
         method:'POST',
-        headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
         body:JSON.stringify({
           image:imageDataUrl,
           preset:styleMode==='preset'?stylePreset:undefined,
@@ -4081,12 +4111,14 @@ PHASE 4 — Toolbar button:
     setBgGenPreview(null);
     setBgGenPrompt('');
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       // Check if selected layer is a cutout to composite
       const subjectLayer=selectedLayer?.type==='image'&&!selectedLayer?.isRimLight?selectedLayer:null;
 
       const res=await fetch(`${resolvedApiUrl}/api/generate-background`,{
         method:'POST',
-        headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
         body:JSON.stringify({
           niche:bgGenNiche,
           customPrompt:bgGenCustom.trim()||undefined,
@@ -4142,6 +4174,8 @@ PHASE 4 — Toolbar button:
 
     setCgBusy(true);
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       // Non-destructive: always grade from original, not from previously graded copy
       const sourceToGrade=cgOriginalSrc||imgLayer.src;
       const targetId=cgLayerId||imgLayer.id;
@@ -4154,7 +4188,7 @@ PHASE 4 — Toolbar button:
       const [data]=await Promise.all([
         fetch(`${resolvedApiUrl}/api/color-grade`,{
           method:'POST',
-          headers:{'Content-Type':'application/json',...(token?{'Authorization':`Bearer ${token}`}:{})},
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
           body:JSON.stringify({image:sourceToGrade,preset:cgPreset,intensity:cgIntensity}),
         }).then(r=>r.json()),
         new Promise(resolve=>setTimeout(resolve,380)), // minimum flash so it feels intentional
@@ -4366,6 +4400,8 @@ PHASE 4 — Toolbar button:
     setSegmentError('');
     setSegmentStatus('Rendering canvas...');
     try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const flatCanvas=document.createElement('canvas');
       flatCanvas.width=p.preview.w;
       flatCanvas.height=p.preview.h;
@@ -4376,10 +4412,7 @@ PHASE 4 — Toolbar button:
 
       const res=await fetch(`${resolvedApiUrl}/api/segment`,{
         method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          ...(token?{'Authorization':`Bearer ${token}`}:{}),
-        },
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
         body:JSON.stringify({image:imageDataUrl}),
       });
       const data=await res.json();
