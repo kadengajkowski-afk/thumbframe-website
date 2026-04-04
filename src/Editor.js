@@ -3,6 +3,7 @@ import BrushTool, { BrushOverlay } from './Brush';
 import supabase from './supabaseClient';
 import { createSaveEngine } from './saveEngine';
 import { saveAs } from 'file-saver';
+import { renderTextLayer, applyTextTransform } from './textRenderer';
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
 const BrandKitSetupModal = lazy(() => import('./BrandKit'));
@@ -16,9 +17,21 @@ const PLATFORMS = {
   linkedin:  { label:'LinkedIn',  width:1200, height:627,  preview:{ w:480, h:251 } },
 };
 
+// Curated YouTube-optimized fonts (shown with live preview in picker)
+const CURATED_FONTS = [
+  { family:'Anton',            label:'Anton',             weight:700 },
+  { family:'Bebas Neue',       label:'Bebas Neue',        weight:700 },
+  { family:'Bangers',          label:'Bangers',           weight:700 },
+  { family:'Oswald',           label:'Oswald',            weight:700 },
+  { family:'Russo One',        label:'Russo One',         weight:700 },
+  { family:'Permanent Marker', label:'Permanent Marker',  weight:700 },
+  { family:'Montserrat',       label:'Montserrat Black',  weight:900 },
+  { family:'Impact',           label:'Impact',            weight:700 },
+];
+
 const FONTS = [
-  'Anton','Burbank','Komika Axis','Bangers','Bebas Neue','Oswald',
-  'Impact','Arial Black','Arial','Georgia','Courier New','Verdana',
+  'Anton','Bebas Neue','Bangers','Oswald','Russo One','Permanent Marker','Montserrat',
+  'Burbank','Komika Axis','Impact','Arial Black','Arial','Georgia','Courier New','Verdana',
   'Trebuchet MS','Times New Roman','Comic Sans MS','Palatino',
   'Garamond','Tahoma','Lucida Console','Century Gothic','Candara',
   'Franklin Gothic Medium','Rockwell','Copperplate','Papyrus',
@@ -29,6 +42,12 @@ function resolveFontFamily(fontFamily){
   if(fontFamily==='Burbank') return 'Bangers, Anton, sans-serif';
   if(fontFamily==='Komika Axis') return 'Comic Neue, Bangers, cursive';
   if(fontFamily==='Anton') return 'Anton, sans-serif';
+  if(fontFamily==='Russo One') return "'Russo One', sans-serif";
+  if(fontFamily==='Permanent Marker') return "'Permanent Marker', cursive";
+  if(fontFamily==='Bebas Neue') return "'Bebas Neue', sans-serif";
+  if(fontFamily==='Montserrat') return "'Montserrat', sans-serif";
+  if(fontFamily==='Bangers') return 'Bangers, cursive';
+  if(fontFamily==='Oswald') return 'Oswald, sans-serif';
   return fontFamily;
 }
 
@@ -104,6 +123,7 @@ function drawProText(ctx, text, x, y, opts={}){
  * ensureFontLoaded — Wait for a Google Font to be ready before rendering.
  * Uses the native FontFace API. Falls back silently if the font isn't available.
  */
+// eslint-disable-next-line no-unused-vars
 async function ensureFontLoaded(fontFamily, weight=900){
   try{
     const resolved = resolveFontFamily(fontFamily).split(',')[0].trim().replace(/['"]/g,'');
@@ -215,19 +235,17 @@ function generateProjectId(){
 }
 
 const TEXT_TEMPLATES = [
-  // ── Premium Text Presets ────────────────────────────────────────────────
-  { label:'🔥 MrBeast Bold',  text:'WATCH THIS',        fontSize:62, fontFamily:'Anton',      fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:8,  shadowEnabled:true,  shadowBlur:28, shadowX:4, shadowY:4, shadowColor:'#000000', glowEnabled:false, glowColor:'#f97316', letterSpacing:3,  lineHeight:1.1, textAlign:'center' },
-  { label:'💎 Neon Glow',     text:'LIVE NOW',           fontSize:52, fontFamily:'Anton',      fontWeight:900, textColor:'#00FFFF', strokeColor:'#003333', strokeWidth:2,  shadowEnabled:false, shadowBlur:0,  shadowX:0, shadowY:0, shadowColor:'#000000', glowEnabled:true,  glowColor:'#00FFFF', letterSpacing:4,  lineHeight:1.2, textAlign:'center' },
-  { label:'🪙 Chrome',        text:'PREMIUM',            fontSize:54, fontFamily:'Bebas Neue', fontWeight:900, textColor:'#E8E8E8', strokeColor:'#666666', strokeWidth:3,  shadowEnabled:true,  shadowBlur:6,  shadowX:2, shadowY:3, shadowColor:'#333333', glowEnabled:false, glowColor:'#ffffff', letterSpacing:6,  lineHeight:1.2, textAlign:'center' },
-  { label:'🔴 Fire',          text:'GONE WRONG',         fontSize:56, fontFamily:'Anton',      fontWeight:900, textColor:'#FF4400', strokeColor:'#000000', strokeWidth:6,  shadowEnabled:false, shadowBlur:0,  shadowX:0, shadowY:0, shadowColor:'#000000', glowEnabled:true,  glowColor:'#FF6600', letterSpacing:2,  lineHeight:1.1, textAlign:'center' },
-  { label:'⚡ Glitch',        text:'ERROR 404',           fontSize:48, fontFamily:'Anton',      fontWeight:900, textColor:'#00FFFF', strokeColor:'#000000', strokeWidth:4,  shadowEnabled:true,  shadowBlur:0,  shadowX:3, shadowY:-2, shadowColor:'#FF0050', glowEnabled:false, glowColor:'#00FFFF', letterSpacing:2,  lineHeight:1.2, textAlign:'center' },
-  { label:'✨ Clean Pro',     text:'How I Did It',        fontSize:42, fontFamily:'Oswald',     fontWeight:700, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:0,  shadowEnabled:true,  shadowBlur:16, shadowX:0, shadowY:4, shadowColor:'rgba(0,0,0,0.8)', glowEnabled:false, glowColor:'#ffffff', letterSpacing:1,  lineHeight:1.3, textAlign:'left' },
-  { label:'🟣 Dark Drama',    text:'THE TRUTH',           fontSize:52, fontFamily:'Anton',      fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:7,  shadowEnabled:false, shadowBlur:0,  shadowX:0, shadowY:0, shadowColor:'#000000', glowEnabled:true,  glowColor:'#9333EA', letterSpacing:3,  lineHeight:1.1, textAlign:'center' },
-  { label:'🌸 Retro Pop',     text:'NEW VIDEO',           fontSize:48, fontFamily:'Anton',      fontWeight:900, textColor:'#FF69B4', strokeColor:'#000000', strokeWidth:5,  shadowEnabled:true,  shadowBlur:0,  shadowX:4, shadowY:4, shadowColor:'#4400FF', glowEnabled:false, glowColor:'#FF69B4', letterSpacing:2,  lineHeight:1.2, textAlign:'center' },
-  { label:'🚨 Breaking',      text:'BREAKING',            fontSize:58, fontFamily:'Anton',      fontWeight:900, textColor:'#FF0000', strokeColor:'#FFD700', strokeWidth:6,  shadowEnabled:true,  shadowBlur:24, shadowX:0, shadowY:0, shadowColor:'#FF0000', glowEnabled:true,  glowColor:'#FF0000', letterSpacing:4,  lineHeight:1.1, textAlign:'center' },
-  { label:'💰 Gold Luxury',   text:'$10,000',             fontSize:54, fontFamily:'Bebas Neue', fontWeight:900, textColor:'#FFD700', strokeColor:'#8B6914', strokeWidth:4,  shadowEnabled:true,  shadowBlur:20, shadowX:0, shadowY:0, shadowColor:'#FFD700', glowEnabled:true,  glowColor:'#FFD700', letterSpacing:3,  lineHeight:1.2, textAlign:'center' },
-  { label:'🦠 Viral',         text:'GONE WRONG',           fontSize:64, fontFamily:'Anton',      fontWeight:900, textColor:'#ffffff', strokeColor:'#000000', strokeWidth:12, shadowEnabled:false, shadowBlur:0,  shadowX:0, shadowY:0, shadowColor:'#000000', glowEnabled:false, glowColor:'#ffffff', letterSpacing:2,  lineHeight:1.0, textAlign:'left' },
-  { label:'💀 Exposed',       text:'THE TRUTH ABOUT',      fontSize:46, fontFamily:'Anton',      fontWeight:900, textColor:'#FF0000', strokeColor:'#ffffff', strokeWidth:8,  shadowEnabled:false, shadowBlur:0,  shadowX:0, shadowY:0, shadowColor:'#000000', glowEnabled:true,  glowColor:'#FF0000', letterSpacing:3,  lineHeight:1.1, textAlign:'center' },
+  // ── 10 Curated YouTube Presets ─────────────────────────────────────────
+  { label:'🔥 MrBeast Bold',   text:'WATCH THIS',       fontSize:62, fontFamily:'Anton',            fontWeight:900, textTransform:'uppercase', fillType:'solid',    textColor:'#ffffff', gradientColors:null,                 gradientAngle:0,  strokeColor:'#000000', strokeWidth:8,  textStrokes:[], shadowEnabled:true,  shadowBlur:28, shadowX:4,  shadowY:4,  shadowColor:'#000000',        glowEnabled:false, glowColor:'#f97316', letterSpacing:3,  lineHeight:1.1, textAlign:'center' },
+  { label:'⚙️ Clean Tech',      text:'HOW I BUILT THIS', fontSize:52, fontFamily:'Russo One',        fontWeight:700, textTransform:'uppercase', fillType:'gradient', textColor:'#00cfff', gradientColors:['#00cfff','#0055ff'], gradientAngle:90, strokeColor:'#000000', strokeWidth:3,  textStrokes:[], shadowEnabled:true,  shadowBlur:18, shadowX:0,  shadowY:4,  shadowColor:'rgba(0,0,0,0.8)', glowEnabled:false, glowColor:'#00cfff', letterSpacing:4,  lineHeight:1.2, textAlign:'center' },
+  { label:'🎮 Gaming Neon',     text:'NEW UPDATE',       fontSize:56, fontFamily:'Bangers',          fontWeight:700, textTransform:'uppercase', fillType:'gradient', textColor:'#ff00ff', gradientColors:['#ff00ff','#00ffff'], gradientAngle:45, strokeColor:'#000000', strokeWidth:4,  textStrokes:[], shadowEnabled:false, shadowBlur:0,  shadowX:0,  shadowY:0,  shadowColor:'#000000',        glowEnabled:true,  glowColor:'#ff00ff', letterSpacing:6,  lineHeight:1.1, textAlign:'center' },
+  { label:'💀 Horror',          text:'GONE WRONG',       fontSize:58, fontFamily:'Anton',            fontWeight:900, textTransform:'uppercase', fillType:'solid',    textColor:'#ff0000', gradientColors:null,                 gradientAngle:0,  strokeColor:'#ffffff', strokeWidth:6,  textStrokes:[{color:'#000',width:12,enabled:true}], shadowEnabled:true, shadowBlur:32, shadowX:0, shadowY:0, shadowColor:'#ff0000', glowEnabled:true, glowColor:'#ff0000', letterSpacing:2, lineHeight:1.1, textAlign:'center' },
+  { label:'✨ Minimalist',      text:'How I Did It',     fontSize:44, fontFamily:'Montserrat',       fontWeight:700, textTransform:'none',      fillType:'solid',    textColor:'#ffffff', gradientColors:null,                 gradientAngle:0,  strokeColor:'#000000', strokeWidth:0,  textStrokes:[], shadowEnabled:true,  shadowBlur:16, shadowX:0,  shadowY:4,  shadowColor:'rgba(0,0,0,0.8)', glowEnabled:false, glowColor:'#ffffff', letterSpacing:1,  lineHeight:1.3, textAlign:'left' },
+  { label:'⚡ Hype',            text:'INSANE MOMENT',    fontSize:60, fontFamily:'Bangers',          fontWeight:700, textTransform:'uppercase', fillType:'gradient', textColor:'#FFD700', gradientColors:['#FFD700','#FF4400'], gradientAngle:90, strokeColor:'#000000', strokeWidth:5,  textStrokes:[], shadowEnabled:false, shadowBlur:0,  shadowX:0,  shadowY:0,  shadowColor:'#000000',        glowEnabled:true,  glowColor:'#FF6600', letterSpacing:4,  lineHeight:1.1, textAlign:'center' },
+  { label:'🎬 Cinematic',       text:'PART 1',           fontSize:50, fontFamily:'Bebas Neue',       fontWeight:700, textTransform:'uppercase', fillType:'solid',    textColor:'#e0c880', gradientColors:null,                 gradientAngle:0,  strokeColor:'#000000', strokeWidth:2,  textStrokes:[], shadowEnabled:true,  shadowBlur:20, shadowX:2,  shadowY:4,  shadowColor:'rgba(0,0,0,0.95)', glowEnabled:false, glowColor:'#e0c880', letterSpacing:12, lineHeight:1.2, textAlign:'center' },
+  { label:'🛹 Street',          text:'NO CAP',           fontSize:58, fontFamily:'Permanent Marker', fontWeight:700, textTransform:'none',      fillType:'solid',    textColor:'#ffffff', gradientColors:null,                 gradientAngle:0,  strokeColor:'#000000', strokeWidth:6,  textStrokes:[], shadowEnabled:true,  shadowBlur:0,  shadowX:5,  shadowY:5,  shadowColor:'#000000',        glowEnabled:false, glowColor:'#ffffff', letterSpacing:0,  lineHeight:1.2, textAlign:'center' },
+  { label:'🌈 Kids',            text:'SURPRISE!',        fontSize:60, fontFamily:'Bangers',          fontWeight:700, textTransform:'uppercase', fillType:'gradient', textColor:'#ff69b4', gradientColors:['#ff69b4','#ffcc00'], gradientAngle:45, strokeColor:'#ffffff', strokeWidth:5,  textStrokes:[], shadowEnabled:true,  shadowBlur:6,  shadowX:3,  shadowY:3,  shadowColor:'#8800cc',        glowEnabled:false, glowColor:'#ff69b4', letterSpacing:3,  lineHeight:1.2, textAlign:'center' },
+  { label:'📚 Education',       text:'5 FACTS',          fontSize:54, fontFamily:'Montserrat',       fontWeight:900, textTransform:'uppercase', fillType:'gradient', textColor:'#00c9ff', gradientColors:['#00c9ff','#92fe9d'], gradientAngle:135,strokeColor:'#000000', strokeWidth:3,  textStrokes:[], shadowEnabled:true,  shadowBlur:12, shadowX:0,  shadowY:3,  shadowColor:'rgba(0,0,0,0.7)', glowEnabled:false, glowColor:'#00c9ff', letterSpacing:2,  lineHeight:1.2, textAlign:'center' },
 ];
 
 const SHAPES_BASIC = [
@@ -958,6 +976,14 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [textColor,setTextColor]           = useState('#ffffff');
   const [strokeColor,setStrokeColor]       = useState('#000000');
   const [strokeWidth,setStrokeWidth]       = useState(5);
+  const [textTransform,setTextTransform]   = useState('uppercase');
+  const [fillType,setFillType]             = useState('solid');
+  const [gradColor1,setGradColor1]         = useState('#ff6600');
+  const [gradColor2,setGradColor2]         = useState('#ffcc00');
+  const [gradAngle,setGradAngle]           = useState(0);
+  const [textStrokes,setTextStrokes]       = useState([]);
+  const [warpType,setWarpType]             = useState('none');
+  const [warpAmount,setWarpAmount]         = useState(30);
   const [fillColor,setFillColor]           = useState('#FF4500');
   const [brightness,setBrightness]         = useState(100);
   const [contrast,setContrast]             = useState(100);
@@ -2855,7 +2881,6 @@ PHASE 4 — Toolbar button:
       }
 
       else if(obj.type==='text'){
-        const scale=Math.min(scaleX,scaleY);
         const centerX=(obj.x+(obj.width||100)/2)*scaleX;
         const centerY=(obj.y+(obj.fontSize||48)/2)*scaleY;
         ctx.translate(centerX,centerY);
@@ -2863,21 +2888,8 @@ PHASE 4 — Toolbar button:
         ctx.translate(-centerX,-centerY);
         ctx.translate(obj.x*scaleX,obj.y*scaleY);
         if(obj.flipH||obj.flipV) ctx.scale(obj.flipH?-1:1,obj.flipV?-1:1);
-        const fs=(obj.fontSize||48)*scale;
-        await ensureFontLoaded(obj.fontFamily, obj.fontWeight||700);
-        ctx.font=`${obj.fontItalic?'italic ':''}${obj.fontWeight||700} ${fs}px ${resolveFontFamily(obj.fontFamily)}`;
-        // All text rendering via drawProText — shadow, glow, stroke, fill
-        drawProText(ctx, obj.text, 0, fs, {
-          fill:        obj.textColor||'#ffffff',
-          stroke:      obj.strokeColor||'#000000',
-          strokeWidth: (obj.strokeWidth||0)*scale,
-          glowColor:   obj.glowEnabled ? (obj.glowColor||'#f97316') : null,
-          glowBlur:    obj.glowEnabled ? 24*scale : 0,
-          shadowColor: obj.shadowEnabled ? (obj.shadowColor||'rgba(0,0,0,0.95)') : null,
-          shadowBlur:  obj.shadowEnabled ? (obj.shadowBlur||14)*scale : 0,
-          shadowX:     obj.shadowEnabled ? (obj.shadowX||2)*scale : 0,
-          shadowY:     obj.shadowEnabled ? (obj.shadowY||2)*scale : 0,
-        });
+        // opentype-powered rendering (gradient fill, precise letter spacing, multi-stroke)
+        await renderTextLayer(ctx, obj, scaleX, scaleY, drawProText);
       }
 
       else if(obj.type==='image'){
@@ -4764,7 +4776,12 @@ PHASE 4 — Toolbar button:
     setShadowColor(t.shadowColor||'#000000');setShadowBlur(t.shadowBlur||14);setShadowX(t.shadowX||2);setShadowY(t.shadowY||2);
     setGlowEnabled(t.glowEnabled||false);setGlowColor(t.glowColor||'#f97316');
     setLetterSpacing(t.letterSpacing||0);setLineHeight(t.lineHeight||1.2);setTextAlign(t.textAlign||'left');
-    addLayer({type:'text',text:t.text,fontSize:t.fontSize,fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,fontItalic:false,textColor:t.textColor,strokeColor:t.strokeColor,strokeWidth:t.strokeWidth,shadowEnabled:t.shadowEnabled,shadowColor:t.shadowColor||'#000000',shadowBlur:t.shadowBlur||14,shadowX:t.shadowX||2,shadowY:t.shadowY||2,glowEnabled:t.glowEnabled||false,glowColor:t.glowColor||'#f97316',arcEnabled:false,arcRadius:120,letterSpacing:t.letterSpacing||0,lineHeight:t.lineHeight||1.2,textAlign:t.textAlign||'left'});
+    setTextTransform(t.textTransform||'none');
+    setFillType(t.fillType||'solid');
+    if(t.gradientColors){setGradColor1(t.gradientColors[0]||'#ff6600');setGradColor2(t.gradientColors[1]||'#ffcc00');}
+    setGradAngle(t.gradientAngle||0);
+    setTextStrokes(t.textStrokes||[]);
+    addLayer({type:'text',text:t.text,fontSize:t.fontSize,fontFamily:t.fontFamily,fontWeight:t.fontWeight||700,fontItalic:false,textColor:t.textColor,strokeColor:t.strokeColor,strokeWidth:t.strokeWidth,shadowEnabled:t.shadowEnabled,shadowColor:t.shadowColor||'#000000',shadowBlur:t.shadowBlur||14,shadowX:t.shadowX||2,shadowY:t.shadowY||2,glowEnabled:t.glowEnabled||false,glowColor:t.glowColor||'#f97316',arcEnabled:false,arcRadius:120,letterSpacing:t.letterSpacing||0,lineHeight:t.lineHeight||1.2,textAlign:t.textAlign||'left',textTransform:t.textTransform||'none',fillType:t.fillType||'solid',gradientColors:t.gradientColors||null,gradientAngle:t.gradientAngle||0,textStrokes:t.textStrokes||[],warpType:t.warpType||'none',warpAmount:t.warpAmount||30});
   }
   function addText(){
     // ── Sprint 4: MrBeast-style defaults ──────────────────────────────────
@@ -4777,7 +4794,8 @@ PHASE 4 — Toolbar button:
     const nextShadowX=0;
     const nextShadowY=10;
     addRecentColor(nextTextColor);
-    addLayer({type:'text',text:textInput||'MY THUMBNAIL',fontSize,fontFamily:nextFontFamily,fontWeight:900,fontItalic,textColor:nextTextColor,strokeColor:nextStrokeColor,strokeWidth:nextStrokeWidth,shadowEnabled:true,shadowColor:nextShadowColor,shadowBlur:nextShadowBlur,shadowX:nextShadowX,shadowY:nextShadowY,glowEnabled,glowColor,arcEnabled,arcRadius,letterSpacing,lineHeight,textAlign});
+    const appliedText=applyTextTransform(textInput||'MY THUMBNAIL',textTransform);
+    addLayer({type:'text',text:appliedText,fontSize,fontFamily:nextFontFamily,fontWeight:900,fontItalic,textColor:nextTextColor,strokeColor:nextStrokeColor,strokeWidth:nextStrokeWidth,shadowEnabled:true,shadowColor:nextShadowColor,shadowBlur:nextShadowBlur,shadowX:nextShadowX,shadowY:nextShadowY,glowEnabled,glowColor,arcEnabled,arcRadius,letterSpacing,lineHeight,textAlign,textTransform,fillType,gradientColors:fillType==='gradient'?[gradColor1,gradColor2]:null,gradientAngle:gradAngle,textStrokes,warpType,warpAmount});
     setTextColor(nextTextColor);
     setFontFamily(nextFontFamily);
     setFontWeight(900);
@@ -5293,7 +5311,11 @@ PHASE 4 — Toolbar button:
     );
     if(obj.type==='text'){
       const ts=(()=>{const pts=[];if(obj.shadowEnabled)pts.push(`${obj.shadowX||2}px ${obj.shadowY||2}px ${obj.shadowBlur||14}px ${obj.shadowColor||'rgba(0,0,0,0.95)'}`);if(obj.glowEnabled)pts.push(`0 0 20px ${obj.glowColor||'#f97316'}`);return pts.length?pts.join(','):'none';})();
-      return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,userSelect:'none',...selStyle,...blendStyle,...flipStyle,...effectsStyle}}><span style={{fontFamily:resolveFontFamily(obj.fontFamily),fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:obj.textColor,WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',paintOrder:'stroke fill',textShadow:ts,whiteSpace:'nowrap',letterSpacing:`${obj.letterSpacing||0}px`,lineHeight:obj.lineHeight||1.2,display:'block'}}>{obj.arcEnabled?<ArcText obj={obj}/>:obj.text}</span>{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
+      const isGrad=obj.fillType==='gradient'&&Array.isArray(obj.gradientColors)&&obj.gradientColors.length>=2;
+      const gradCss=isGrad?{background:`linear-gradient(${obj.gradientAngle||0}deg,${obj.gradientColors.join(',')})`,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text'}:{};
+      const multiStrokeBox=(obj.textStrokes||[]).filter(s=>s.enabled&&s.width>0).sort((a,b)=>(b.width||0)-(a.width||0)).map(s=>`0 0 0 ${s.width}px ${s.color||'#000'}`).join(',');
+      const rawDisplayText=applyTextTransform(obj.text,obj.textTransform);
+      return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,userSelect:'none',...selStyle,...blendStyle,...flipStyle,...effectsStyle}}><span style={{fontFamily:resolveFontFamily(obj.fontFamily),fontSize:obj.fontSize,fontWeight:obj.fontWeight||700,fontStyle:obj.fontItalic?'italic':'normal',color:isGrad?undefined:(obj.textColor||'#ffffff'),WebkitTextStroke:obj.strokeWidth>0?`${obj.strokeWidth}px ${obj.strokeColor}`:'none',paintOrder:'stroke fill',textShadow:ts,whiteSpace:'pre-wrap',letterSpacing:`${obj.letterSpacing||0}px`,lineHeight:obj.lineHeight||1.2,display:'block',...(multiStrokeBox?{boxShadow:multiStrokeBox}:{}),...gradCss}}>{obj.arcEnabled?<ArcText obj={obj}/>:rawDisplayText}</span>{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
     }
     if(obj.type==='shape')return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,...selStyle,...blendStyle,...flipStyle,...effectsStyle}}>{renderShapeSVG(obj.shape,obj.fillColor,obj.strokeColor,obj.width,obj.height)}{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
     if(obj.type==='svg')return(<div key={obj.id} onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:obj.x,top:obj.y,zIndex,opacity:opacityVal,cursor,width:obj.width,height:obj.height,...selStyle,...blendStyle,...flipStyle,...effectsStyle}}><div style={{width:'100%',height:'100%'}} dangerouslySetInnerHTML={{__html:obj.svg}}/>{isSelected&&renderResizeHandles(obj)}<DelBtn/></div>);
@@ -7287,61 +7309,127 @@ PHASE 4 — Toolbar button:
 
             {activeTool==='text'&&(
               <div>
-                <span style={css.label}>Templates</span>
+                {/* ── Presets ──────────────────────────────────────────────── */}
+                <span style={css.label}>Presets</span>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:5,marginBottom:4}}>
                   {TEXT_TEMPLATES.map((t,i)=>(<button key={i} onClick={()=>applyTextTemplate(t)} style={{padding:'7px 6px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:10,cursor:'pointer',fontFamily:resolveFontFamily(t.fontFamily),fontWeight:t.fontWeight||700,textAlign:'center'}}>{t.label}</button>))}
                 </div>
+
+                {/* ── Font picker ───────────────────────────────────────────── */}
+                <span style={css.label}>Font</span>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:4,marginBottom:6}}>
+                  {CURATED_FONTS.map(f=>(<button key={f.family} onClick={()=>{setFontFamily(f.family);saveEngineRef.current?.markDirty('textContent');}} style={{padding:'8px 4px',borderRadius:6,border:`1.5px solid ${fontFamily===f.family?T.accent:T.border}`,background:fontFamily===f.family?`${T.accent}22`:T.input,color:T.text,fontSize:12,cursor:'pointer',fontFamily:resolveFontFamily(f.family),fontWeight:f.weight,textAlign:'center',overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{f.label}</button>))}
+                </div>
+                <select value={fontFamily} onChange={e=>{setFontFamily(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.input,marginBottom:6}}>{FONTS.map(f=><option key={f}>{f}</option>)}</select>
+
+                {/* ── Weight & Style ────────────────────────────────────────── */}
+                <span style={css.label}>Weight &amp; Style</span>
+                <div style={{display:'flex',gap:3,flexWrap:'wrap',marginBottom:6}}>
+                  {FONT_WEIGHTS.map(fw=>(<button key={fw.value} onClick={()=>{setFontWeight(fw.value);saveEngineRef.current?.markDirty('textContent');}} style={{padding:'4px 7px',borderRadius:4,border:`1px solid ${fontWeight===fw.value?T.accent:T.border}`,background:fontWeight===fw.value?T.accent:'transparent',color:fontWeight===fw.value?'#fff':T.text,fontSize:10,cursor:'pointer',fontWeight:fw.value}}>{fw.label}</button>))}
+                  <button onClick={()=>{setFontItalic(!fontItalic);saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(fontItalic),padding:'4px 8px',fontStyle:'italic',fontSize:11}}>I</button>
+                </div>
+
+                {/* ── Transform ────────────────────────────────────────────── */}
+                <span style={css.label}>Transform</span>
+                <div style={{display:'flex',gap:3,marginBottom:6}}>
+                  {[['none','Aa'],['uppercase','AA'],['lowercase','aa'],['capitalize','Ab']].map(([v,l])=>(<button key={v} onClick={()=>{setTextTransform(v);saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(textTransform===v),flex:1,fontSize:10,padding:'4px 2px'}}>{l}</button>))}
+                </div>
+
+                {/* ── Content ───────────────────────────────────────────────── */}
                 <span style={css.label}>Content</span>
                 <input value={textInput} onChange={e=>setTextInput(e.target.value)} style={css.input} placeholder="Enter text..."/>
-                <span style={css.label}>Font family</span>
-                <select value={fontFamily} onChange={e=>{setFontFamily(e.target.value);triggerAutoSave();}} style={css.input}>{FONTS.map(f=><option key={f}>{f}</option>)}</select>
-                <span style={css.label}>Font weight</span>
-                <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
-                  {FONT_WEIGHTS.map(fw=>(<button key={fw.value} onClick={()=>{setFontWeight(fw.value);triggerAutoSave();}} style={{padding:'4px 7px',borderRadius:4,border:`1px solid ${fontWeight===fw.value?T.accent:T.border}`,background:fontWeight===fw.value?T.accent:'transparent',color:fontWeight===fw.value?'#fff':T.text,fontSize:10,cursor:'pointer',fontWeight:fw.value}}>{fw.label}</button>))}
-                </div>
+
+                {/* ── Size, spacing, leading ────────────────────────────────── */}
                 <span style={css.label}>Size — {fontSize}px</span>
                 <div style={css.row}>
-                  <Slider min={8} max={120} value={fontSize} onChange={v=>setFontSize(v)} onCommit={triggerAutoSave} style={{flex:1}}/>
-                  <input type="number" value={fontSize} onChange={e=>setFontSize(Number(e.target.value))} onBlur={triggerAutoSave} style={{...css.input,width:50,padding:'5px 6px',textAlign:'center'}}/>
+                  <Slider min={8} max={200} value={fontSize} onChange={v=>setFontSize(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/>
+                  <input type="number" value={fontSize} onChange={e=>setFontSize(Number(e.target.value))} onBlur={()=>saveEngineRef.current?.markDirty('textContent')} style={{...css.input,width:50,padding:'5px 6px',textAlign:'center'}}/>
                 </div>
                 <span style={css.label}>Letter spacing — {letterSpacing}px</span>
-                <Slider min={-5} max={30} value={letterSpacing} onChange={v=>setLetterSpacing(v)} onCommit={triggerAutoSave} style={{width:'100%'}}/>
+                <Slider min={-20} max={200} value={letterSpacing} onChange={v=>setLetterSpacing(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{width:'100%'}}/>
                 <span style={css.label}>Line height — {lineHeight}</span>
-                <Slider min={0.8} max={3} step={0.1} value={lineHeight} onChange={v=>setLineHeight(v)} onCommit={triggerAutoSave} style={{width:'100%'}}/>
+                <Slider min={0.8} max={3} step={0.1} value={lineHeight} onChange={v=>setLineHeight(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{width:'100%'}}/>
+
+                {/* ── Alignment ─────────────────────────────────────────────── */}
                 <span style={css.label}>Alignment</span>
-                <div style={{display:'flex',gap:4}}>
-                  {[['left','Left'],['center','Center'],['right','Right']].map(([val,label])=>(<button key={val} onClick={()=>{setTextAlign(val);triggerAutoSave();}} style={{...css.iconBtn(textAlign===val),flex:1,textAlign:'center',fontSize:11}}>{label}</button>))}
+                <div style={{display:'flex',gap:4,marginBottom:6}}>
+                  {[['left','◀ Left'],['center','■ Center'],['right','Right ▶']].map(([val,label])=>(<button key={val} onClick={()=>{setTextAlign(val);saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(textAlign===val),flex:1,textAlign:'center',fontSize:10}}>{label}</button>))}
                 </div>
-                <span style={css.label}>Style</span>
-                <button onClick={()=>{setFontItalic(!fontItalic);triggerAutoSave();}} style={{...css.iconBtn(fontItalic),width:'100%',textAlign:'center',fontStyle:'italic'}}>Italic</button>
-                <span style={css.label}>Text color</span>
-                <input type="color" value={textColor} onChange={e=>{setTextColor(e.target.value);addRecentColor(e.target.value);triggerAutoSave();}} style={css.color}/>
+
+                {/* ── Fill ─────────────────────────────────────────────────── */}
+                <span style={css.label}>Fill</span>
+                <div style={{display:'flex',gap:4,marginBottom:6}}>
+                  {[['solid','Solid'],['gradient','Gradient']].map(([v,l])=>(<button key={v} onClick={()=>{setFillType(v);saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(fillType===v),flex:1,fontSize:10}}>{l}</button>))}
+                </div>
+                {fillType==='solid'&&(
+                  <input type="color" value={textColor} onChange={e=>{setTextColor(e.target.value);addRecentColor(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={css.color}/>
+                )}
+                {fillType==='gradient'&&(
+                  <div style={css.section}>
+                    <div style={css.row}><span style={{fontSize:10,color:T.muted,width:36}}>From</span><input type="color" value={gradColor1} onChange={e=>{setGradColor1(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>
+                    <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:36}}>To</span><input type="color" value={gradColor2} onChange={e=>{setGradColor2(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>
+                    <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:36}}>Angle</span><Slider min={0} max={360} value={gradAngle} onChange={v=>setGradAngle(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:28}}>{gradAngle}°</span></div>
+                  </div>
+                )}
+
+                {/* ── Primary stroke ────────────────────────────────────────── */}
                 <span style={css.label}>Outline</span>
                 <div style={css.row}>
-                  <input type="color" value={strokeColor} onChange={e=>{setStrokeColor(e.target.value);triggerAutoSave();}} style={{...css.color,width:44,flexShrink:0}}/>
-                  <Slider min={0} max={20} value={strokeWidth} onChange={v=>setStrokeWidth(v)} onCommit={triggerAutoSave} style={{flex:1}}/>
+                  <input type="color" value={strokeColor} onChange={e=>{setStrokeColor(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,width:44,flexShrink:0}}/>
+                  <Slider min={0} max={30} value={strokeWidth} onChange={v=>setStrokeWidth(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/>
                   <span style={{fontSize:10,color:T.muted,minWidth:24}}>{strokeWidth}px</span>
                 </div>
+
+                {/* ── Extra text strokes ────────────────────────────────────── */}
+                <span style={css.label}>Extra strokes</span>
+                <div style={css.section}>
+                  {textStrokes.map((st,idx)=>(
+                    <div key={idx} style={{...css.row,marginBottom:6}}>
+                      <input type="color" value={st.color||'#000000'} onChange={e=>{const ns=[...textStrokes];ns[idx]={...ns[idx],color:e.target.value};setTextStrokes(ns);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,width:32,height:24,flexShrink:0}}/>
+                      <Slider min={0} max={30} value={st.width||0} onChange={v=>{const ns=[...textStrokes];ns[idx]={...ns[idx],width:v};setTextStrokes(ns);}} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/>
+                      <span style={{fontSize:10,color:T.muted,minWidth:22}}>{st.width||0}px</span>
+                      <button onClick={()=>{setTextStrokes(prev=>prev.filter((_,i)=>i!==idx));saveEngineRef.current?.markDirty('textContent');}} style={{background:'transparent',border:'none',color:T.danger,cursor:'pointer',fontSize:14,padding:'0 2px'}}>×</button>
+                    </div>
+                  ))}
+                  {textStrokes.length<3&&(<button onClick={()=>setTextStrokes(prev=>[...prev,{color:'#000000',width:4,enabled:true}])} style={{...css.iconBtn(false),width:'100%',fontSize:10,marginTop:2}}>+ Add stroke</button>)}
+                </div>
+
+                {/* ── Drop shadow ───────────────────────────────────────────── */}
                 <span style={css.label}>Drop shadow</span>
                 <div style={css.section}>
-                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setShadowEnabled(!shadowEnabled);triggerAutoSave();}} style={css.iconBtn(shadowEnabled)}>{shadowEnabled?'On':'Off'}</button></div>
+                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setShadowEnabled(!shadowEnabled);saveEngineRef.current?.markDirty('textContent');}} style={css.iconBtn(shadowEnabled)}>{shadowEnabled?'On':'Off'}</button></div>
                   {shadowEnabled&&<>
-                    <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={shadowColor} onChange={e=>{setShadowColor(e.target.value);triggerAutoSave();}} style={{...css.color,height:28}}/></div>
-                    {[['Blur',shadowBlur,setShadowBlur,0,40],['X',shadowX,setShadowX,-20,20],['Y',shadowY,setShadowY,-20,20]].map(([l,v,sv,mn,mx])=>(<div key={l} style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:28}}>{l}</span><Slider min={mn} max={mx} value={v} onChange={sv} onCommit={triggerAutoSave} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:20,textAlign:'right'}}>{v}</span></div>))}
+                    <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={shadowColor} onChange={e=>{setShadowColor(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>
+                    {[['Blur',shadowBlur,setShadowBlur,0,40],['X',shadowX,setShadowX,-20,20],['Y',shadowY,setShadowY,-20,20]].map(([l,v,sv,mn,mx])=>(<div key={l} style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:28}}>{l}</span><Slider min={mn} max={mx} value={v} onChange={sv} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:20,textAlign:'right'}}>{v}</span></div>))}
                   </>}
                 </div>
+
+                {/* ── Glow ─────────────────────────────────────────────────── */}
                 <span style={css.label}>Glow</span>
                 <div style={css.section}>
-                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setGlowEnabled(!glowEnabled);triggerAutoSave();}} style={css.iconBtn(glowEnabled)}>{glowEnabled?'On':'Off'}</button></div>
-                  {glowEnabled&&<div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={glowColor} onChange={e=>{setGlowColor(e.target.value);triggerAutoSave();}} style={{...css.color,height:28}}/></div>}
+                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setGlowEnabled(!glowEnabled);saveEngineRef.current?.markDirty('textContent');}} style={css.iconBtn(glowEnabled)}>{glowEnabled?'On':'Off'}</button></div>
+                  {glowEnabled&&<div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={glowColor} onChange={e=>{setGlowColor(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>}
                 </div>
-                <span style={css.label}>Text on arc</span>
+
+                {/* ── Warp ─────────────────────────────────────────────────── */}
+                <span style={css.label}>Warp</span>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:3,marginBottom:6}}>
+                  {[['none','None'],['arc','Arc'],['wave','Wave'],['bulge','Bulge']].map(([v,l])=>(<button key={v} onClick={()=>{setWarpType(v);saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(warpType===v),fontSize:10,padding:'5px 4px'}}>{l}</button>))}
+                </div>
+                {warpType!=='none'&&<><span style={css.label}>Amount — {warpAmount}%</span><Slider min={0} max={100} value={warpAmount} onChange={v=>setWarpAmount(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{width:'100%'}}/></>}
+
+                {/* ── Arc (legacy) ──────────────────────────────────────────── */}
+                <span style={css.label}>Text on arc (legacy)</span>
                 <div style={css.section}>
-                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setArcEnabled(!arcEnabled);triggerAutoSave();}} style={css.iconBtn(arcEnabled)}>{arcEnabled?'On':'Off'}</button></div>
-                  {arcEnabled&&<><span style={{...css.label,marginTop:8}}>Radius — {arcRadius}px</span><Slider min={60} max={300} value={arcRadius} onChange={v=>setArcRadius(v)} onCommit={triggerAutoSave} style={{width:'100%'}}/></>}
+                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setArcEnabled(!arcEnabled);saveEngineRef.current?.markDirty('textContent');}} style={css.iconBtn(arcEnabled)}>{arcEnabled?'On':'Off'}</button></div>
+                  {arcEnabled&&<><span style={{...css.label,marginTop:8}}>Radius — {arcRadius}px</span><Slider min={60} max={300} value={arcRadius} onChange={v=>setArcRadius(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{width:'100%'}}/></>}
                 </div>
+
+                {/* ── Recent colors ─────────────────────────────────────────── */}
                 <span style={css.label}>Recent colors</span>
-                <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{recentColors.map((c,i)=>(<div key={i} onClick={()=>{setTextColor(c);triggerAutoSave();}} style={{width:20,height:20,borderRadius:4,background:c,cursor:'pointer',border:`1px solid ${T.border}`}}/>))}</div>
+                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6}}>{recentColors.map((c,i)=>(<div key={i} onClick={()=>{setTextColor(c);saveEngineRef.current?.markDirty('textContent');}} style={{width:20,height:20,borderRadius:4,background:c,cursor:'pointer',border:`1px solid ${T.border}`}}/>))}</div>
+
+                {/* ── Selected layer live edit ───────────────────────────────── */}
                 {selectedLayer?.type==='text'&&(<>
                   <span style={css.label}>Opacity — {selectedLayer.opacity??100}%</span>
                   <Slider min={0} max={100} value={selectedLayer.opacity??100}
@@ -7349,11 +7437,11 @@ PHASE 4 — Toolbar button:
                     onCommit={v=>updateLayer(selectedId,{opacity:v})}
                     style={{width:'100%'}}/>
                   <span style={css.label}>Live edit text</span>
-                  <input value={selectedLayer.text} onChange={e=>updateLayer(selectedId,{text:e.target.value})} onBlur={triggerAutoSave} style={css.input} placeholder="Edit text..."/>
+                  <input value={selectedLayer.text} onChange={e=>updateLayer(selectedId,{text:e.target.value})} onBlur={()=>saveEngineRef.current?.markDirty('textContent',selectedId)} style={css.input} placeholder="Edit text..."/>
                   <span style={css.label}>Letter spacing</span>
-                  <Slider min={-5} max={30} value={selectedLayer.letterSpacing||0}
+                  <Slider min={-20} max={200} value={selectedLayer.letterSpacing||0}
                     onChange={v=>updateLayerSilent(selectedId,{letterSpacing:v})}
-                    onCommit={v=>updateLayer(selectedId,{letterSpacing:v})}
+                    onCommit={v=>{updateLayer(selectedId,{letterSpacing:v});saveEngineRef.current?.markDirty('textContent',selectedId);}}
                     style={{width:'100%'}}/>
                 </>)}
                 <button onClick={addText} style={css.addBtn}>Add text</button>
