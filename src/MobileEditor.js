@@ -81,10 +81,15 @@ export default function MobileEditor({ user, token, apiUrl, onSwitchToDesktop })
     if(onProgress) onProgress(20);
     const res = await fetch(`${resolvedApiUrl}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+      headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
       body: JSON.stringify(body),
     });
     if(onProgress) onProgress(90);
+    // H9: check res.ok before parsing
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      throw new Error(err.error || res.statusText);
+    }
     const data = await res.json();
     if(onProgress) onProgress(100);
     return data;

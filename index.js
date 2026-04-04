@@ -23,6 +23,37 @@ const app        = express();
 const PORT       = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'thumbframe-secret-2024';
 
+// ── Admin config ────────────────────────────────────────────────────────────────
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'kadengajkowski@gmail.com';
+
+// ── Claude model config ─────────────────────────────────────────────────────────
+const CLAUDE_MODEL      = process.env.CLAUDE_MODEL      || 'claude-opus-4-20250514';
+const CLAUDE_FAST_MODEL = process.env.CLAUDE_FAST_MODEL || 'claude-opus-4-5';
+
+// ── Simple async mutex for users.json operations ────────────────────────────────
+let _usersMutex = Promise.resolve();
+function withUsersMutex(fn) {
+  _usersMutex = _usersMutex.then(fn).catch(fn);
+  return _usersMutex;
+}
+
+// ── Simple in-memory rate limiter for auth endpoints ───────────────────────────
+const authAttempts = new Map();
+function authRateLimit(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000; // 15 minutes
+  const maxAttempts = 10;
+  const attempts = authAttempts.get(ip) || { count: 0, resetAt: now + windowMs };
+  if (now > attempts.resetAt) { attempts.count = 0; attempts.resetAt = now + windowMs; }
+  attempts.count++;
+  authAttempts.set(ip, attempts);
+  if (attempts.count > maxAttempts) {
+    return res.status(429).json({ error: 'Too many attempts, try again later' });
+  }
+  next();
+}
+
 const openai     = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const resend     = new Resend(process.env.RESEND_API_KEY);
@@ -158,6 +189,7 @@ async function authMiddleware(req,res,next){
   }catch(err){
     console.error('[AUTH] Middleware error:', err.message);
     res.status(401).json({error: `Authentication error: ${err.message}`});
+    return;
   }
 }
 
@@ -171,6 +203,59 @@ function getPlanQuota(plan){
   }
 }
 
+// Read-only quota check — throws if exceeded, returns remaining info
+function checkQuota(email){
+  const users=loadUsers();
+  let user=users[email];
+  if(!user){
+    user={email,plan:'free',aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
+  }
+  const {limit,period}=getPlanQuota(user.plan);
+  if(limit===Infinity) return{ok:true,remaining:Infinity};
+
+  const now=Date.now();
+  let usage=user.aiUsage||{count:0,resetAt:0};
+  if(now>=(usage.resetAt||0)){
+    usage={count:0,resetAt:0};
+  }
+  if(usage.count>=limit){
+    const planLabel=(user.plan||'free').charAt(0).toUpperCase()+(user.plan||'free').slice(1);
+    const msg=(!user.plan||user.plan==='free')
+      ?'Free plan: 3 AI actions per day used. Upgrade to Starter for 50/month.'
+      :`${planLabel} plan limit (${limit}/${period}) reached. Upgrade to Agency for unlimited.`;
+    return{ok:false,message:msg,code:'QUOTA_EXCEEDED'};
+  }
+  return{ok:true,remaining:limit-usage.count};
+}
+
+// Decrement quota after a successful AI call
+function decrementQuota(email){
+  return withUsersMutex(()=>{
+    const users=loadUsers();
+    let user=users[email];
+    if(!user){
+      user={email,plan:'free',aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
+      users[email]=user;
+    }
+    const {limit,period}=getPlanQuota(user.plan);
+    if(limit===Infinity) return{ok:true};
+
+    const now=Date.now();
+    let usage=user.aiUsage||{count:0,resetAt:0};
+    if(now>=(usage.resetAt||0)){
+      const next=new Date();
+      if(period==='day'){next.setDate(next.getDate()+1);next.setHours(0,0,0,0);}
+      else{next.setMonth(next.getMonth()+1);next.setDate(1);next.setHours(0,0,0,0);}
+      usage={count:0,resetAt:next.getTime()};
+    }
+    usage.count++;
+    users[email]={...user,aiUsage:usage};
+    saveUsers(users);
+    return{ok:true,remaining:Math.max(0,limit-usage.count)};
+  });
+}
+
+// Legacy combined check+decrement (kept for backward compat, wraps mutex)
 function checkAndDecrementQuota(email){
   const users=loadUsers();
   let user=users[email];
@@ -213,22 +298,31 @@ function checkAndDecrementQuota(email){
 function agencyMiddleware(req,res,next){
   const users=loadUsers();
   const user=users[req.user?.email];
-  const isAgency=(user?.plan||'free').toLowerCase()==='agency'||user?.email==='kadengajkowski@gmail.com';
+  const isAgency=(user?.plan||'free').toLowerCase()==='agency'||user?.email===ADMIN_EMAIL;
   if(!isAgency) return res.status(403).json({success:false,error:'Agency plan required',code:'AGENCY_REQUIRED'});
   next();
 }
 
 // ── Sync user quota record on login ───────────────────────────────────────────
-app.post('/api/sync-user', authMiddleware, (req,res)=>{
+app.post('/api/sync-user', authMiddleware, async(req,res)=>{
   const email=req.user.email;
+  await withUsersMutex(async()=>{
+    const users=loadUsers();
+    if(!users[email]){
+      // Fetch plan from Supabase profiles table (M10)
+      let plan='free';
+      try{
+        const {data:profileData}=await supabase.from('profiles').select('is_pro').ilike('email',email).single();
+        if(profileData?.is_pro) plan='pro';
+      }catch(e){ /* ignore, default to free */ }
+      users[email]={email,plan,aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
+      saveUsers(users);
+      console.log('[SYNC-USER] Created quota record for:',email,'plan:',plan);
+    }
+  });
   const users=loadUsers();
-  if(!users[email]){
-    users[email]={email,plan:'free',aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
-    saveUsers(users);
-    console.log('[SYNC-USER] Created quota record for:',email);
-  }
   const user=users[email];
-  res.json({success:true,plan:user.plan||'free',email});
+  res.json({success:true,plan:user?.plan||'free',email});
 });
 
 // ── Health ─────────────────────────────────────────────────────────────────────
@@ -237,10 +331,20 @@ app.get('/',(req,res)=>res.json({status:'ThumbFrame API running',version:'3.0'})
 app.use('/brand-kit', createBrandKitRouter({ supabase, authMiddleware }));
 
 // ── Proxy image (CORS fix) ─────────────────────────────────────────────────────
-app.get('/proxy-image', async(req,res)=>{
+const PROXY_ALLOWED_DOMAINS = [
+  'fonts.gstatic.com','fonts.googleapis.com','storage.googleapis.com',
+  'i.imgur.com','images.unsplash.com','replicate.delivery',
+  'oaidalleapiprodscus.blob.core.windows.net',
+];
+app.get('/proxy-image', authMiddleware, async(req,res)=>{
   try{
     const {url}=req.query;
     if(!url) return res.status(400).json({error:'No URL'});
+    let hostname;
+    try{ hostname=new URL(url).hostname; }catch(e){ return res.status(400).json({error:'Invalid URL'}); }
+    if(!PROXY_ALLOWED_DOMAINS.some(d=>hostname===d||hostname.endsWith('.'+d))){
+      return res.status(403).json({error:'Domain not allowed'});
+    }
     const response=await fetch(url);
     const buffer=Buffer.from(await response.arrayBuffer());
     res.set('Content-Type',response.headers.get('content-type')||'image/png');
@@ -278,6 +382,12 @@ app.post('/ai-generate', async (req, res) => {
     }
 
     console.log(`[AI-GENERATE] ✅ Access granted for ${userEmail} - isPro: true`);
+
+    // C2: quota check
+    const quota=checkAndDecrementQuota(userEmail);
+    if(!quota.ok){
+      return res.status(429).json({error:quota.message,code:quota.code});
+    }
 
     let finalPrompt = prompt;
     let faceUrl = null;
@@ -392,10 +502,13 @@ app.post('/ai-generate', async (req, res) => {
 });
 
 // ── AI Command bar (Claude) ────────────────────────────────────────────────────
-app.post('/ai-command', async(req,res)=>{
+app.post('/ai-command', authMiddleware, async(req,res)=>{
   try{
     const { command, canvasState } = req.body;
     if(!command) return res.status(400).json({error:'No command'});
+
+    const quota=checkAndDecrementQuota(req.user.email);
+    if(!quota.ok) return res.status(429).json({error:quota.message,code:quota.code});
 
     const system = `You are an AI assistant for ThumbFrame, a YouTube thumbnail editor.
 The user gives you a plain-English command and the current canvas state.
@@ -435,7 +548,7 @@ Rules:
 - x/y positions are percentages of canvas width/height (0–100)`;
 
     const message = await anthropic.messages.create({
-      model:      'claude-opus-4-20250514',
+      model:      CLAUDE_MODEL,
       max_tokens: 800,
       system,
       messages:[{ role:'user', content:command }],
@@ -459,8 +572,11 @@ Rules:
 });
 
 // ── Background remover ─────────────────────────────────────────────────────────
-app.post('/remove-bg', async(req,res)=>{
+app.post('/remove-bg', authMiddleware, async(req,res)=>{
   try{
+    const quota=checkAndDecrementQuota(req.user.email);
+    if(!quota.ok) return res.status(429).json({error:quota.message,code:quota.code});
+
     const imageInput = (req.body?.image || req.body?.imageUrl || '').toString().trim();
     if(!imageInput){
       console.error('[REMOVE BG] 400 Missing image payload. Expected body.image (or imageUrl fallback).');
@@ -522,7 +638,7 @@ app.post('/remove-bg', async(req,res)=>{
 });
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
-app.post('/auth/signup', async(req,res)=>{
+app.post('/auth/signup', authRateLimit, async(req,res)=>{
   try{
     const {email,password,name}=req.body;
     if(!email||!password) return res.status(400).json({error:'Email and password required'});
@@ -579,7 +695,7 @@ app.post('/auth/signup', async(req,res)=>{
   }
 });
 
-app.post('/auth/login', async(req,res)=>{
+app.post('/auth/login', authRateLimit, async(req,res)=>{
   try{
     const {email,password}=req.body;
     if(!email||!password) return res.status(400).json({error:'Email and password required'});
@@ -633,15 +749,19 @@ app.post('/brand-kit/upload-face', authMiddleware, async(req,res)=>{
 });
 
 // ── Password reset ─────────────────────────────────────────────────────────────
-const resetTokens = {};
 
-app.post('/auth/forgot-password', async(req,res)=>{
+app.post('/auth/forgot-password', authRateLimit, async(req,res)=>{
   try{
     const {email}=req.body;
     const users=loadUsers();
     if(!users[email]) return res.json({success:true}); // Don't reveal if email exists
     const token=uuidv4();
-    resetTokens[token]={email,expires:Date.now()+3600000}; // 1 hour
+    // M2: store reset token in users.json instead of in-memory
+    await withUsersMutex(()=>{
+      const u=loadUsers();
+      if(u[email]) u[email].resetToken={token,expires:Date.now()+3600000};
+      saveUsers(u);
+    });
     try{
       await resend.emails.send({
         from:    'ThumbFrame <hello@thumbframe.com>',
@@ -676,14 +796,19 @@ app.post('/auth/forgot-password', async(req,res)=>{
 app.post('/auth/reset-password', async(req,res)=>{
   try{
     const {token,password}=req.body;
-    const reset=resetTokens[token];
+    // M2: read reset token from users.json
+    const users=loadUsers();
+    const userRecord=Object.values(users).find(u=>u.resetToken?.token===token);
+    const reset=userRecord?.resetToken;
     if(!reset||reset.expires<Date.now())
       return res.status(400).json({error:'Invalid or expired token'});
-    const users=loadUsers();
-    if(!users[reset.email]) return res.status(400).json({error:'User not found'});
-    users[reset.email].hash=await bcrypt.hash(password,10);
-    saveUsers(users);
-    delete resetTokens[token];
+    if(!users[userRecord.email]) return res.status(400).json({error:'User not found'});
+    await withUsersMutex(()=>{
+      const u=loadUsers();
+      u[userRecord.email].hash=bcrypt.hashSync(password,10);
+      delete u[userRecord.email].resetToken;
+      saveUsers(u);
+    });
     res.json({success:true});
   }catch(err){
     res.status(500).json({error:'Reset failed'});
@@ -691,30 +816,9 @@ app.post('/auth/reset-password', async(req,res)=>{
 });
 
 // ── Designs ────────────────────────────────────────────────────────────────────
-app.post('/designs/save', async (req,res)=>{
+app.post('/designs/save', authMiddleware, async (req,res)=>{
   try{
-    const authHeader = req.headers.authorization || '';
-    const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    
-    console.log('[AUTH] Token received start:', accessToken?.substring(0,5));
-    
-    if(!accessToken){
-      console.error('[AUTH] No token in Authorization header');
-      return res.status(401).json({error:'Missing authorization token'});
-    }
-
-    const { data:{ user }, error } = await supabase.auth.getUser(accessToken);
-    
-    if(error){
-      console.error('[AUTH] Token verification error:', error.message, error.code);
-      return res.status(401).json({error: `Token verification failed: ${error.message}`});
-    }
-    
-    if(!user){
-      console.error('[AUTH] Token valid but no user associated');
-      return res.status(401).json({error:'Token valid but user not found'});
-    }
-
+    const user = { email: req.user.email, id: req.userId };
     console.log('[AUTH] Token verified. User:', user.email, 'UID:', user.id);
 
     const body = req.body || {};
@@ -762,12 +866,10 @@ app.post('/designs/save', async (req,res)=>{
   }
 });
 
-app.get('/designs/list', async (req, res) => {
+app.get('/designs/list', authMiddleware, async (req, res) => {
   try {
-    const email = (req.query.email || '').toString().trim();
-    if (!email) {
-      return res.status(401).json({ error: 'Unauthorized: Email required' });
-    }
+    // C4: always use the authenticated user's email, ignore query param
+    const email = req.user.email;
 
     const { data, error } = await supabase
       .from('thumbnails')
@@ -870,7 +972,7 @@ app.delete('/designs/:id', authMiddleware, async (req,res)=>{
 });
 
 // ── Stripe checkout ────────────────────────────────────────────────────────────
-app.post('/checkout', async(req,res)=>{
+app.post('/checkout', authMiddleware, async(req,res)=>{
   try{
     console.log('[checkout] request started', {
       body: req.body,
@@ -988,13 +1090,11 @@ app.get('/success',(req,res)=>res.send(`
 // Keep Railway awake
 setInterval(()=>{
   fetch(`https://thumbframe-api-production.up.railway.app/`)
-    .then(()=>console.log('Keep-alive ping sent'))
-    .catch(()=>console.log('Keep-alive ping failed'));
+    .then(()=>{})
+    .catch(()=>{});
 }, 14 * 60 * 1000);
 
-app.post('/api/analyze-face', (req, res) => {
-  res.json({ faces: [{ x: 100, y: 50, w: 120, h: 120, score: 92 }] });
-});
+// L2: /api/analyze-face removed (was mock data only)
 
 // ── Smart Subject Detection — SAM 2 via Replicate ─────────────────────────────
 app.post('/api/segment', authMiddleware, async(req,res)=>{
@@ -1172,15 +1272,19 @@ app.get('/api/get-niche', authMiddleware, (req,res)=>{
   res.json({success:true, niche, profile, nicheSet:!!niche});
 });
 
-app.post('/api/set-niche', authMiddleware, (req,res)=>{
+app.post('/api/set-niche', authMiddleware, async(req,res)=>{
   const {niche}=req.body;
   if(!niche||!NICHE_PROFILES[niche]){
     return res.status(400).json({success:false,error:'Invalid niche. Must be one of: '+Object.keys(NICHE_PROFILES).join(', '),code:'INVALID_INPUT'});
   }
+  await withUsersMutex(()=>{
+    const users=loadUsers();
+    if(!users[req.user.email]) return;
+    users[req.user.email].niche=niche;
+    saveUsers(users);
+  });
   const users=loadUsers();
   if(!users[req.user.email]) return res.status(404).json({success:false,error:'User not found',code:'NOT_FOUND'});
-  users[req.user.email].niche=niche;
-  saveUsers(users);
   console.log(`[NICHE] ${req.user.email} set niche to "${niche}"`);
   res.json({success:true, niche, profile:NICHE_PROFILES[niche]});
 });
@@ -1235,7 +1339,7 @@ Output only the JSON array.`;
 
     console.log(`[AITEXT] Generating headlines for ${req.user.email}${title?` — "${title}"`:''}${niche?` [${niche}]`:''}`);
     const response=await anthropic.messages.create({
-      model:'claude-opus-4-20250514',
+      model:CLAUDE_MODEL,
       max_tokens:800,
       messages:[{
         role:'user',
@@ -1297,7 +1401,7 @@ app.post('/api/analyze-composition', authMiddleware, async(req,res)=>{
 
     console.log(`[COMP] Analyzing composition for ${req.user.email}${title?` — "${title}"`:''}`);
     const response=await anthropic.messages.create({
-      model:'claude-opus-4-20250514',
+      model:CLAUDE_MODEL,
       max_tokens:900,
       messages:[{
         role:'user',
@@ -1379,7 +1483,7 @@ Be honest, specific, and reference exactly what you observe in this image. Outpu
 
     console.log(`[CTRV2] Scoring for ${req.user.email}${title?` — "${title}"`:''}${niche?` [${niche}]`:''}`);
     const response=await anthropic.messages.create({
-      model:'claude-opus-4-20250514',
+      model:CLAUDE_MODEL,
       max_tokens:900,
       messages:[{role:'user',content:[
         {type:'image',source:{type:'base64',media_type,data:imgBase64}},
@@ -1449,7 +1553,7 @@ app.post('/api/face-score', authMiddleware, async(req,res)=>{
     const media_type=image.startsWith('data:image/png')?'image/png':'image/jpeg';
 
     const response=await anthropic.messages.create({
-      model:'claude-opus-4-20250514',
+      model:CLAUDE_MODEL,
       max_tokens:400,
       messages:[{role:'user',content:[
         {type:'image',source:{type:'base64',media_type,data:rest}},
@@ -1665,13 +1769,28 @@ const STYLE_PRESETS = {
   markrober: {label:'Mark Rober',        mood:'Vibrant & Bold',     colors:['#1d4ed8','#ef4444','#f59e0b','#10b981','#7c3aed'], modulate:{brightness:1.10,saturation:1.42,hue:3},  linear:[1.22,-14]},
 };
 
-function isSafeUrl(u){
+// L7: SVG attribute-injection escaping
+function escapeSvgText(str){
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function isSafeUrl(urlString){
   try{
-    const p=new URL(u);
-    if(p.protocol!=='https:') return false;
-    const h=p.hostname.toLowerCase();
-    if(['localhost','127.0.0.1','0.0.0.0','::1'].includes(h)) return false;
-    if(/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)) return false;
+    const u=new URL(urlString);
+    if(!['http:','https:'].includes(u.protocol)) return false;
+    const h=u.hostname.toLowerCase().replace(/[\[\]]/g,'');
+    if(h==='localhost') return false;
+    if(/^127\./.test(h)) return false;
+    if(/^10\./.test(h)) return false;
+    if(/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
+    if(/^192\.168\./.test(h)) return false;
+    if(/^169\.254\./.test(h)) return false;
+    // IPv6 private ranges
+    if(h==='::1'||h==='[::1]') return false;
+    if(/^(fc|fd)/i.test(h)) return false;
+    if(/^fe80/i.test(h)) return false;
+    // Block non-standard ports
+    if(u.port&&u.port!=='80'&&u.port!=='443') return false;
     if(h.endsWith('.local')||h.endsWith('.internal')||h.endsWith('.localdomain')) return false;
     return true;
   }catch{return false;}
@@ -1841,13 +1960,13 @@ app.post('/api/generate-variants', authMiddleware, async(req,res)=>{
       try{
         const nicheHint=nicheCtxVar?` Channel type: ${effectiveNicheVar}. ${nicheCtxVar}`:'';
         const aiRes=await anthropic.messages.create({
-          model:'claude-opus-4-5',max_tokens:60,
+          model:CLAUDE_FAST_MODEL,max_tokens:60,
           messages:[{role:'user',content:`Write 1 punchy YouTube thumbnail headline in ALL CAPS, max 5 words, no punctuation except !, for the video: "${title}".${nicheHint} Output the headline only, nothing else.`}],
         });
         const rawHl=aiRes.content[0]?.text?.trim().toUpperCase().replace(/['"]/g,'').slice(0,36);
         if(rawHl) headline=rawHl;
       }catch(e){ /* use fallback */ }
-      const safeText=headline.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const safeText=escapeSvgText(headline);
       const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><text x="56" y="660" font-size="88" font-family="Arial Black,Impact,sans-serif" font-weight="900" fill="#ffffff" stroke="#000000" stroke-width="7" stroke-linejoin="round" paint-order="stroke fill">${safeText}</text></svg>`;
       outBuf=await sharp(graded).composite([{input:Buffer.from(svg),blend:'over'}]).jpeg({quality:93}).toBuffer();
       label='Cool + New Text';
@@ -1856,7 +1975,7 @@ app.post('/api/generate-variants', authMiddleware, async(req,res)=>{
 
     else if(vt===4){
       const graded=await runColorGradePipeline(imageBuf,'cinematic',82);
-      const safeText=(title||'WATCH THIS').toUpperCase().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').slice(0,36);
+      const safeText=escapeSvgText((title||'WATCH THIS').toUpperCase().slice(0,36));
       const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><text x="1224" y="660" font-size="88" font-family="Arial Black,Impact,sans-serif" font-weight="900" text-anchor="end" fill="#ffffff" stroke="#000000" stroke-width="7" stroke-linejoin="round" paint-order="stroke fill">${safeText}</text></svg>`;
       outBuf=await sharp(graded).composite([{input:Buffer.from(svg),blend:'over'}]).jpeg({quality:93}).toBuffer();
       label='Cinematic + Right Text';
@@ -2032,6 +2151,16 @@ app.patch('/api/comments/:commentId/resolve', authMiddleware, (req,res)=>{
   for(const projectId of Object.keys(comments)){
     const idx=comments[projectId].findIndex(c=>c.id===req.params.commentId);
     if(idx>=0){
+      // H5: only author or team member can resolve
+      const comment=comments[projectId][idx];
+      if(comment.userId!==req.user.email){
+        const users=loadUsers();
+        const teams=loadTeams();
+        const teamId=users[req.user.email]?.teamId;
+        const team=teamId&&teams[teamId];
+        const isTeamMember=team&&team.members.some(m=>m.email===req.user.email);
+        if(!isTeamMember) return res.status(403).json({success:false,error:'Not authorized to resolve this comment'});
+      }
       comments[projectId][idx].resolved=!comments[projectId][idx].resolved;
       saveComments(comments);
       return res.json({success:true, comment:comments[projectId][idx]});
@@ -2241,7 +2370,7 @@ app.post('/api/youtube/analyze', authMiddleware, async(req,res)=>{
   if(!user?.ytTokens) return res.status(403).json({success:false, error:'YouTube not connected', code:'YT_NOT_CONNECTED'});
 
   const quota = checkAndDecrementQuota(req.user.email);
-  if(!quota.ok) return res.status(402).json({success:false, error:quota.message, code:quota.code});
+  if(!quota.ok) return res.status(429).json({success:false, error:quota.message, code:quota.code});
 
   const {videos} = req.body;
   if(!videos?.length) return res.status(400).json({success:false, error:'No videos provided'});
@@ -2287,7 +2416,7 @@ Return a JSON array of insight objects. Each insight must have:
 Return ONLY valid JSON array, no markdown, no preamble.`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-5-20251001',
+      model: CLAUDE_MODEL,
       max_tokens: 2048,
       messages: [{role:'user', content: prompt}],
     });

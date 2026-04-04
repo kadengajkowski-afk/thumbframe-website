@@ -569,7 +569,13 @@ function Dashboard({ setPage, user }) {
     setLoading(true);
     setLoadError('');
 
-    fetch(`${API_URL}/designs/list?email=${encodeURIComponent(userEmail)}`, { signal: controller.signal })
+    import('./supabaseClient').then(m => m.default.auth.getSession()).then(({data:{session}}) => {
+      const authToken = session?.access_token;
+      return fetch(`${API_URL}/designs/list`, {
+        signal: controller.signal,
+        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
+      });
+    })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((payload) => {
         const list = Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
@@ -936,10 +942,29 @@ export default function App() {
 
     loadSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
+      // H10: handle token refresh
+      if (event === 'TOKEN_REFRESHED' && session) {
+        setToken(session.access_token || null);
+        if (session.access_token) localStorage.setItem('sf_token', session.access_token);
+        return;
+      }
+
       if (session?.user) {
+        // H10: check token expiry
+        const expiresAt = session.expires_at ? session.expires_at * 1000 : 0;
+        if (expiresAt && expiresAt < Date.now()) {
+          supabase.auth.refreshSession().then(({data, error}) => {
+            if (error || !data?.session) {
+              supabase.auth.signOut();
+              setToken(null); setUser(null);
+              localStorage.removeItem('sf_token');
+            }
+          });
+          return;
+        }
         setToken(session.access_token || null);
         if (session.access_token) localStorage.setItem('sf_token', session.access_token);
         else localStorage.removeItem('sf_token');
@@ -983,12 +1008,18 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return;
-    fetch(`${API_BASE}/auth/me`, { headers: { authorization: `Bearer ${token}` } })
+    fetch(`${API_BASE}/auth/me`, { headers: { 'Authorization': `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(u => setUser(u))
+      .then(userData => setUser(prev => ({
+        ...prev,
+        email: userData.email,
+        name: userData.name,
+        is_pro: userData.plan === 'pro' || userData.plan === 'agency',
+        plan: userData.plan,
+      })))
       .catch(() => { setToken(null); localStorage.removeItem('sf_token'); });
-    
-    fetch(`${API_BASE}/brand-kit`, { headers: { authorization: `Bearer ${token}` } })
+
+    fetch(`${API_BASE}/brand-kit`, { headers: { 'Authorization': `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setBrandKit(data.brandKit))
       .catch(() => console.log('No brand kit yet'));

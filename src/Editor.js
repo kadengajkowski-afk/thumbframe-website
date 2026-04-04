@@ -1009,9 +1009,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [brandKitFace,setBrandKitFace]                 = useState(null);
   const [brandKitLoading,setBrandKitLoading]           = useState(false);
 
+  const [remainingQuota,setRemainingQuota]             = useState(null); // M6: quota display
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
-  const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.email==='kadengajkowski@gmail.com'));
+  const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.is_admin));
   const [isLoading,setIsLoading]                       = useState(true);
   const [removeBgBusy,setRemoveBgBusy]                 = useState(false);
   const [segmentMasks,setSegmentMasks]                 = useState([]);
@@ -1572,7 +1573,7 @@ PHASE 4 — Toolbar button:
         }
 
         // ── Fire ALL network requests in parallel ──
-        const isAdmin = safeUser?.is_admin || safeUser?.email === 'kadengajkowski@gmail.com';
+        const isAdmin = safeUser?.is_admin || safeUser?.is_admin;
         // fetchSavedDesigns is non-critical — fire in background, don't block canvas render
         fetchSavedDesigns().catch(()=>{});
         const [remoteDesignResult, brandKitResult, profileResult] = await Promise.allSettled([
@@ -2087,12 +2088,14 @@ PHASE 4 — Toolbar button:
         })),
       };
 
-      const res = await fetch('https://thumbframe-api-production.up.railway.app/ai-command',{
+      const { data: { session: aiCmdSession } } = await supabase.auth.getSession();
+      const aiCmdToken = aiCmdSession?.access_token;
+      const res = await fetch(`${resolvedApiUrl}/ai-command`,{
         method:  'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: {'Content-Type':'application/json','Authorization':`Bearer ${aiCmdToken}`},
         body:    JSON.stringify({ command:cmd, canvasState }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(()=>({}));
 
       if(data.error){
         setAiCmdLog(`Error: ${data.error}`);
@@ -2657,11 +2660,10 @@ PHASE 4 — Toolbar button:
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
         body:JSON.stringify({faceCrop,mask,instruction:enhanceInstruction}),
       });
-      const data=await res.json();
-
+      const data=await res.json().catch(()=>({}));
       if(!res.ok){
-        if(res.status===429){setCmdLog(data.error||'Quota exceeded.');return;}
-        throw new Error(data.error||'Enhancement failed');
+        if(res.status===429){setCmdLog(data?.error||'Quota exceeded.');return;}
+        throw new Error(data?.error||'Enhancement failed');
       }
       if(!data.success||!data.image) throw new Error('No image returned');
 
@@ -3046,6 +3048,12 @@ PHASE 4 — Toolbar button:
     try{
       const { data: { session } } = await supabase.auth.getSession();
       const tok = session?.access_token;
+      // H7: null guard — don't call API without a token
+      if(!tok){
+        setCmdLog('Please log in to set your niche.');
+        setNicheSaving(false);
+        return;
+      }
       const res=await fetch(`${resolvedApiUrl}/api/set-niche`,{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
@@ -3604,7 +3612,7 @@ PHASE 4 — Toolbar button:
       let persistedId = currentDesignIdRef.current;
       let persistedEditedAt = new Date().toISOString();
 
-      const response = await fetch('https://thumbframe-api-production.up.railway.app/designs/save', {
+      const response = await fetch(`${resolvedApiUrl}/designs/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
         body: JSON.stringify({
@@ -3701,6 +3709,7 @@ PHASE 4 — Toolbar button:
       // THIS MUST EXECUTE NO MATTER WHAT — releases the lock unconditionally.
       isSavingRef.current = false;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[buildSaveSignature, generateDesignThumbnail, setCurrentProjectId]);
 
   useEffect(()=>{
@@ -3918,6 +3927,7 @@ PHASE 4 — Toolbar button:
       }
       if(!data.success) throw new Error(data.error||'Invalid response');
       setCtrV2({...data,_ts:Date.now()});
+      if(data.remaining!=null) setRemainingQuota(data.remaining);
       setCmdLog(`CTR Score: ${data.overall}/100 — ${data.predicted_ctr_low}%–${data.predicted_ctr_high}% predicted CTR`);
     }catch(err){
       console.error('[CTRV2]',err);
@@ -4003,10 +4013,10 @@ PHASE 4 — Toolbar button:
           image:dataUrl,
         }),
       });
-      const data=await res.json();
+      const data=await res.json().catch(()=>({}));
       if(!res.ok){
-        if(res.status===429){setCmdLog(data.error||'Quota exceeded.');return;}
-        throw new Error(data.error||'Generation failed');
+        if(res.status===429){setCmdLog(data?.error||'Quota exceeded.');return;}
+        throw new Error(data?.error||'Generation failed');
       }
       if(!data.success) throw new Error(data.error||'Invalid response');
       setAiTextResults(data.options||[]);
@@ -4085,10 +4095,10 @@ PHASE 4 — Toolbar button:
           intensity:styleIntensity,
         }),
       });
-      const data=await res.json();
+      const data=await res.json().catch(()=>({}));
       if(!res.ok){
-        if(res.status===429){setCmdLog(data.error||'Quota exceeded.');return;}
-        throw new Error(data.error||'Style transfer failed');
+        if(res.status===429){setCmdLog(data?.error||'Quota exceeded.');return;}
+        throw new Error(data?.error||'Style transfer failed');
       }
       if(!data.success) throw new Error(data.error||'Invalid response');
 
@@ -4340,9 +4350,11 @@ PHASE 4 — Toolbar button:
         throw new Error('Failed to normalize source image');
       }
 
-      const res=await fetch('https://thumbframe-api-production.up.railway.app/remove-bg',{
+      const { data: { session: removeBgSession } } = await supabase.auth.getSession();
+      const removeBgToken = removeBgSession?.access_token;
+      const res=await fetch(`${resolvedApiUrl}/remove-bg`,{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${removeBgToken}`},
         body:JSON.stringify({image:base64Src}),
       });
       if(!res.ok) throw new Error(`Remove background request failed (${res.status})`);
@@ -4859,19 +4871,21 @@ PHASE 4 — Toolbar button:
         return;
       }
 
-      const hasProAccess = isProUser || token==='test-key-123' || user?.is_admin || user?.email==='kadengajkowski@gmail.com';
+      const hasProAccess = isProUser || token==='test-key-123' || user?.is_admin || user?.is_admin;
       const wantsProDownload = tier==='pro';
       const isActuallyPro = wantsProDownload && hasProAccess;
 
       if(wantsProDownload && !hasProAccess){
-        fetch('https://thumbframe-api-production.up.railway.app/checkout',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({email: user?.email, plan:'pro'}),
-        }).then(r=>r.json()).then(d=>{
-          if(d?.url)window.location.href=d.url;
-          else alert('Upgrade to Pro to unlock 4K downloads.');
-        }).catch(()=>alert('Upgrade to Pro to unlock 4K downloads.'));
+        supabase.auth.getSession().then(({data:{session:ckSess}})=>{
+          fetch(`${resolvedApiUrl}/checkout`,{
+            method:'POST',
+            headers:{'Content-Type':'application/json','Authorization':`Bearer ${ckSess?.access_token}`},
+            body:JSON.stringify({email: user?.email, plan:'pro'}),
+          }).then(r=>r.json()).then(d=>{
+            if(d?.url)window.location.href=d.url;
+            else alert('Upgrade to Pro to unlock 4K downloads.');
+          }).catch(()=>alert('Upgrade to Pro to unlock 4K downloads.'));
+        });
         return;
       }
 
@@ -4919,7 +4933,7 @@ PHASE 4 — Toolbar button:
   async function exportCanvas(format='png', transparent=false){
     // ✅ Free = 640×360 preview res, Pro = full resolution
     const isPro   = isProUser || token==='test-key-123';
-    const isAdmin = user?.email === 'kadengajkowski@gmail.com';
+    const isAdmin = user?.is_admin;
     const hasProAccess = isPro || isAdmin;
     const exportW = hasProAccess ? p.width  : Math.round(p.width  * 0.5);
     const exportH = hasProAccess ? p.height : Math.round(p.height * 0.5);
@@ -5646,7 +5660,7 @@ PHASE 4 — Toolbar button:
           <button
             onClick={()=>{
               const isPro=isProUser;
-              const isAdmin=user?.is_admin||user?.email==='kadengajkowski@gmail.com';
+              const isAdmin=user?.is_admin||user?.is_admin;
               if(!isPro&&!isAdmin){setShowPaywall(true);return;}
               setActiveTool('ai');
             }}
@@ -5725,6 +5739,8 @@ PHASE 4 — Toolbar button:
             fontSize:10,fontWeight:'600',letterSpacing:'0.2px',
             minWidth:52,textAlign:'center',
           }}>{saveStatus}</div>
+          {/* M6: Remaining quota display */}
+          {remainingQuota!=null&&<div style={{padding:'3px 8px',borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:10,fontWeight:'600',letterSpacing:'0.2px'}} title="AI credits remaining">{remainingQuota} AI left</div>}
           {/* Undo / Redo */}
           <div style={{display:'flex',gap:1,background:T.input,borderRadius:7,padding:'2px',border:`1px solid ${T.border}`}}>
             <button onClick={undo} disabled={historyIndex<=0}
@@ -5839,16 +5855,18 @@ PHASE 4 — Toolbar button:
           )}
           <button onClick={()=>{
             const isPro = isProUser;
-            const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
+            const isAdmin = user?.is_admin || user?.is_admin;
             if (isPro || isAdmin) {
               setShowAlreadyPro(true);
               return;
             }
-            fetch('https://thumbframe-api-production.up.railway.app/checkout',{
-              method:'POST',
-              headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({email: user?.email, plan:'pro'}),
-            }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
+            supabase.auth.getSession().then(({data:{session:ckSess2}})=>{
+              fetch(`${resolvedApiUrl}/checkout`,{
+                method:'POST',
+                headers:{'Content-Type':'application/json','Authorization':`Bearer ${ckSess2?.access_token}`},
+                body:JSON.stringify({email: user?.email, plan:'pro'}),
+              }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
+            });
           }}
             style={{
               padding:'6px 13px',borderRadius:7,
@@ -7800,7 +7818,7 @@ PHASE 4 — Toolbar button:
 
             {/* Feature L: Team Collaboration panel */}
             {activeTool==='team'&&(()=>{
-              const isAgency=user?.email==='kadengajkowski@gmail.com'||(user?.plan||'free').toLowerCase()==='agency';
+              const isAgency=user?.is_admin||(user?.plan||'free').toLowerCase()==='agency';
               if(!isAgency) return(
                 <div>
                   <span style={css.label}>Team Collaboration</span>
@@ -7863,7 +7881,7 @@ PHASE 4 — Toolbar button:
 
             {/* Feature L: Version History panel */}
             {activeTool==='versions'&&(()=>{
-              const isAgency=user?.email==='kadengajkowski@gmail.com'||(user?.plan||'free').toLowerCase()==='agency';
+              const isAgency=user?.is_admin||(user?.plan||'free').toLowerCase()==='agency';
               if(!isAgency) return(
                 <div>
                   <span style={css.label}>Version History</span>
@@ -7923,7 +7941,7 @@ PHASE 4 — Toolbar button:
 
             {/* Feature L: Comments panel */}
             {activeTool==='comments'&&(()=>{
-              const isAgency=user?.email==='kadengajkowski@gmail.com'||(user?.plan||'free').toLowerCase()==='agency';
+              const isAgency=user?.is_admin||(user?.plan||'free').toLowerCase()==='agency';
               if(!isAgency) return(
                 <div>
                   <span style={css.label}>Canvas Comments</span>
@@ -7990,7 +8008,7 @@ PHASE 4 — Toolbar button:
             })()}
 
             {activeTool==='ythistory'&&(()=>{
-              const isAgency = user?.email==='kadengajkowski@gmail.com' || (user?.plan||'free').toLowerCase()==='agency';
+              const isAgency = user?.is_admin || (user?.plan||'free').toLowerCase()==='agency';
               const IMPACT_COLOR = {high:T.accent, medium:'#f59e0b', low:T.muted};
               const CAT_ICON = {face:'◉',color:'◕',text:'✦',background:'◫',composition:'◈',channel:'▶'};
 
@@ -9991,7 +10009,7 @@ PHASE 4 — Toolbar button:
         id="ai-generate-btn"
         onClick={async()=>{
           const isPro = isProUser;
-          const isAdmin = user?.email === 'kadengajkowski@gmail.com';
+          const isAdmin = user?.is_admin;
           console.log(`Gating Check - isPro: ${isPro}, isAdmin: ${isAdmin}`);
           
           // SECURITY: Block non-Pro users from even attempting the fetch
@@ -10011,7 +10029,7 @@ PHASE 4 — Toolbar button:
               btn.textContent='Generate';btn.disabled=false;btn.style.opacity='1';
               return;
             }
-            const res=await fetch('https://thumbframe-api-production.up.railway.app/ai-generate',{
+            const res=await fetch(`${resolvedApiUrl}/ai-generate`,{
               method:'POST',
               headers:{
                 'Content-Type':'application/json',
@@ -10380,17 +10398,19 @@ PHASE 4 — Toolbar button:
             <button 
               onClick={()=>{
                 const isPro = isProUser;
-                const isAdmin = user?.is_admin || user?.email === 'kadengajkowski@gmail.com';
+                const isAdmin = user?.is_admin || user?.is_admin;
                 if (isPro || isAdmin) {
                   setShowPaywall(false);
                   setShowAlreadyPro(true);
                   return;
                 }
-                fetch('https://thumbframe-api-production.up.railway.app/checkout',{
-                  method:'POST',
-                  headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({email: user?.email, plan:'pro'}),
-                }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
+                supabase.auth.getSession().then(({data:{session:ckSess3}})=>{
+                  fetch(`${resolvedApiUrl}/checkout`,{
+                    method:'POST',
+                    headers:{'Content-Type':'application/json','Authorization':`Bearer ${ckSess3?.access_token}`},
+                    body:JSON.stringify({email: user?.email, plan:'pro'}),
+                  }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
+                });
               }}
               style={{
                 width:'100%',padding:'14px 24px',borderRadius:10,border:'none',
