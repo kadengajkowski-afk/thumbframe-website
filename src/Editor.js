@@ -5,6 +5,8 @@ import { createSaveEngine } from './saveEngine';
 import { saveAs } from 'file-saver';
 import { renderTextLayer, applyTextTransform } from './textRenderer';
 import { SHORTCUT_GROUPS, TOOL_SHORTCUT_MAP } from './shortcuts';
+import CurvesPanel, { CurveThumbnail } from './CurvesPanel';
+import { DEFAULT_CURVES, applyLUTSync } from './curvesUtils';
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
 const BrandKitSetupModal = lazy(() => import('./BrandKit'));
@@ -206,6 +208,29 @@ function applyPixelBlend(dstImageData, srcImageData, mode) {
     };
     worker.addEventListener('message', handler);
     worker.postMessage({ dst: dstBuf, src: srcBuf, mode }, [dstBuf, srcBuf]);
+  });
+}
+
+// Module-level curves worker singleton
+let _curvesWorker = null;
+function getCurvesWorker() {
+  if (!_curvesWorker) {
+    try { _curvesWorker = new Worker(new URL('./curvesWorker.js', import.meta.url)); }
+    catch(e) { console.warn('[curves] Worker init failed:', e); }
+  }
+  return _curvesWorker;
+}
+function applyCurvesLUT(imageData, curves) {
+  return new Promise(resolve => {
+    const worker = getCurvesWorker();
+    if (!worker) { resolve(applyLUTSync(imageData, curves)); return; }
+    const buf = imageData.data.buffer.slice(0);
+    const handler = e => {
+      worker.removeEventListener('message', handler);
+      resolve(new ImageData(new Uint8ClampedArray(e.data.pixels), imageData.width, imageData.height));
+    };
+    worker.addEventListener('message', handler);
+    worker.postMessage({ pixels: buf, curves }, [buf]);
   });
 }
 
@@ -762,9 +787,9 @@ function renderShapeSVG(shape,fillColor,strokeColor,width,height){
 
 let idCounter=1;
 function newId(){return idCounter++;}
-function getLayerIcon(obj){if(obj.type==='background')return'▣';if(obj.type==='text')return'T';if(obj.type==='shape')return'○';if(obj.type==='svg')return'◆';if(obj.type==='image')return'▤';return'▪';}
-function getLayerColor(obj){if(obj.type==='background')return obj.bgColor||'#f97316';if(obj.type==='text')return obj.textColor||'#fff';if(obj.type==='shape')return obj.fillColor||'#FF4500';return'#555';}
-function getLayerName(obj){if(obj.type==='background')return'Background';if(obj.type==='text')return obj.text?.slice(0,18)||'Text';if(obj.type==='shape')return(obj.shape?.charAt(0).toUpperCase()+obj.shape?.slice(1))||'Shape';if(obj.type==='svg')return obj.label||'Element';if(obj.type==='image')return'Image';return'Layer';}
+function getLayerIcon(obj){if(obj.type==='background')return'▣';if(obj.type==='text')return'T';if(obj.type==='shape')return'○';if(obj.type==='svg')return'◆';if(obj.type==='image')return'▤';if(obj.type==='curves')return'◑';return'▪';}
+function getLayerColor(obj){if(obj.type==='background')return obj.bgColor||'#f97316';if(obj.type==='text')return obj.textColor||'#fff';if(obj.type==='shape')return obj.fillColor||'#FF4500';if(obj.type==='curves')return'#f97316';return'#555';}
+function getLayerName(obj){if(obj.type==='background')return'Background';if(obj.type==='text')return obj.text?.slice(0,18)||'Text';if(obj.type==='shape')return(obj.shape?.charAt(0).toUpperCase()+obj.shape?.slice(1))||'Shape';if(obj.type==='svg')return obj.label||'Element';if(obj.type==='image')return'Image';if(obj.type==='curves')return'Curves';return'Layer';}
 
 function getSafeImageSrc(layer){
   const raw = (layer?.paintSrc || layer?.src || '').toString().trim();
@@ -2341,6 +2366,16 @@ PHASE 4 — Toolbar button:
   function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};});pushHistory(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
   function updateLayerEffectNestedSilent(id,ek,sk,value){setLayers(prev=>prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};}));}
   function updateLayerStrokes(id,newStrokes){updateLayerEffect(id,'strokes',newStrokes);}
+
+  function addCurvesLayer(){
+    const id=newId();
+    const layer={id,type:'curves',curves:DEFAULT_CURVES(),x:0,y:0,opacity:100,hidden:false,locked:false,blendMode:'normal',flipH:false,flipV:false,rotation:0,effects:{...defaultEffects()}};
+    setLayers(prev=>{const nl=[...prev,layer];pushHistory(nl);return nl;});
+    setSelectedId(id);
+    setActiveTool('curves');
+    triggerAutoSave();
+  }
+
   // ── Text panel helpers — keep panel state + selected layer in sync ────────
   function setTextProp(updates){if(selectedId&&layers.find(l=>l.id===selectedId)?.type==='text')updateLayer(selectedId,updates);}
   function setTextPropSilent(updates){if(selectedId&&layers.find(l=>l.id===selectedId)?.type==='text')updateLayerSilent(selectedId,updates);}
@@ -3346,6 +3381,13 @@ PHASE 4 — Toolbar button:
     for(const obj of layerArray){
       if(obj.hidden) continue;
       if(transparent && obj.type==='background') continue;
+
+      if(obj.type==='curves'){
+        const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const adjusted=await applyCurvesLUT(imgData,obj.curves||DEFAULT_CURVES());
+        ctx.putImageData(adjusted,0,0);
+        continue;
+      }
 
       const mode = obj.blendMode||'normal';
       const useWorker = WORKER_MODES.has(mode);
@@ -5745,6 +5787,14 @@ PHASE 4 — Toolbar button:
         </div>
       );
     }
+    if(obj.type==='curves')return(
+      <div key={obj.id} onMouseDown={e=>{e.stopPropagation();justSelectedRef.current=true;setSelectedId(obj.id);setActiveTool('curves');}}
+        style={{position:'absolute',left:4,top:4,zIndex,cursor:'pointer',pointerEvents:'auto'}}>
+        <CurveThumbnail curves={obj.curves||DEFAULT_CURVES()} size={32}/>
+        {isSelected&&<div style={{position:'absolute',inset:-2,border:`1.5px solid ${T.accent}`,borderRadius:4,pointerEvents:'none'}}/>}
+        <DelBtn/>
+      </div>
+    );
   }
 
   const css={
@@ -5840,6 +5890,7 @@ PHASE 4 — Toolbar button:
     null,
     {key:'background',label:'Background',   icon:'▨',   group:'Design'},
     {key:'effects',   label:'Effects',      icon:'✦',   group:'Design'},
+    {key:'curves',    label:'Curves',       icon:'◑',   group:'Design'},
     {key:'brandkit',  label:'Brand Kit',    icon:'◐',   group:'Design'},
     null,
     {key:'templates',   label:'Templates',    icon:'⊞',   group:'Analyze'},
@@ -8226,6 +8277,21 @@ PHASE 4 — Toolbar button:
                 onInjectSubject={()=>injectBrandSubject(brandKit||{face_image_url:brandKitFace,subject_url:brandKitFace,subject_image_url:brandKitFace})}
                 onApplyColor={applyBrandColorToSelected}
               /></Suspense>
+            )}
+
+            {(activeTool==='curves'||selectedLayer?.type==='curves')&&(
+              <div>
+                {selectedLayer?.type==='curves'?(
+                  <CurvesPanel
+                    curves={selectedLayer.curves||DEFAULT_CURVES()}
+                    onChange={c=>updateLayerSilent(selectedLayer.id,{curves:c})}
+                    onCommit={c=>updateLayer(selectedLayer.id,{curves:c})}
+                  />
+                ):(
+                  <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Add a Curves adjustment layer to non-destructively adjust tone and color for all layers below it.</div>
+                )}
+                <button onClick={addCurvesLayer} style={css.addBtn}>+ Add Curves Layer</button>
+              </div>
             )}
 
             {activeTool==='adjust'&&(
