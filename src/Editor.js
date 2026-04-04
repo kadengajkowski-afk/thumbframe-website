@@ -7,6 +7,7 @@ import { renderTextLayer, applyTextTransform } from './textRenderer';
 import { SHORTCUT_GROUPS, TOOL_SHORTCUT_MAP } from './shortcuts';
 import CurvesPanel, { CurveThumbnail } from './CurvesPanel';
 import { DEFAULT_CURVES, applyLUTSync } from './curvesUtils';
+import CommandPalette from './CommandPalette';
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
 const BrandKitSetupModal = lazy(() => import('./BrandKit'));
@@ -1030,6 +1031,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [showFileTab,setShowFileTab]       = useState(false);
   const [showDownload,setShowDownload]     = useState(false);
   const [showShortcutsModal,setShowShortcutsModal] = useState(false);
+  const [showCommandPalette,setShowCommandPalette] = useState(false);
   const [savedDesigns,setSavedDesigns]     = useState([]);
   const [galleryLoading,setGalleryLoading] = useState(false);
   const galleryLastFetchAt                 = useRef(0); // timestamp of last successful fetch
@@ -2216,7 +2218,8 @@ PHASE 4 — Toolbar button:
       if(ctrl&&(e.key==='+'||e.key==='=')){e.preventDefault();setZoom(z=>Math.min(16,+(z+0.1).toFixed(1)));return;}
       if(ctrl&&e.key==='-'){e.preventDefault();setZoom(z=>Math.max(0.25,+(z-0.1).toFixed(1)));return;}
       if(ctrl&&e.key==='0'){e.preventDefault();setZoom(1);setPanOffset({x:0,y:0});return;}
-      if(ctrl&&e.key==='k'){e.preventDefault();setCmdOpen(o=>!o);setTimeout(()=>cmdInputRef.current?.focus(),50);return;}
+      if(ctrl&&e.key==='k'){e.preventDefault();setShowCommandPalette(o=>!o);return;}
+      if(ctrl&&e.key==='p'){e.preventDefault();setShowCommandPalette(o=>!o);return;}
       if(ctrl&&e.key==='i'&&!e.shiftKey){e.preventDefault();setShowAiBar(o=>!o);setTimeout(()=>aiCmdInputRef.current?.focus(),50);return;}
       if(ctrl&&e.key==='s'){e.preventDefault();saveDesign(designName);saveEngineRef.current?.saveImmediate();return;}
       if(ctrl&&(e.key==='e'||e.key==='E')){e.preventDefault();setShowDownload(true);return;}
@@ -5455,6 +5458,53 @@ PHASE 4 — Toolbar button:
   }
   function onLayerDragEnd(){setLayerDragId(null);setLayerDragOver(null);}
 
+  function executePaletteCommand(id){
+    // Tools
+    if(id==='tool-select')   {setActiveTool('select');return;}
+    if(id==='tool-move')     {setActiveTool('move');return;}
+    if(id==='tool-text')     {setActiveTool('text');return;}
+    if(id==='tool-brush')    {setActiveTool('brush');return;}
+    if(id==='tool-freehand') {setActiveTool('freehand');return;}
+    if(id==='tool-crop')     {setActiveTool('crop');return;}
+    if(id==='tool-zoom')     {setActiveTool('zoom');return;}
+    if(id==='tool-lasso')    {setActiveTool('lasso');return;}
+    if(id==='tool-segment')  {setActiveTool('segment');return;}
+    if(id==='tool-removebg') {setActiveTool('removebg');return;}
+    if(id==='tool-effects')  {setActiveTool('effects');return;}
+    if(id==='tool-eyedropper'){setActiveTool('select');return;}
+    if(id==='tool-bggen')    {setActiveTool('bggen');return;}
+    // Filters → open colorgrade panel
+    if(id.startsWith('filter-')) {setActiveTool('colorgrade');return;}
+    // Adjustments
+    if(id==='adj-curves')    {addCurvesLayer();return;}
+    if(id==='adj-brightness'||id==='adj-hue') {setActiveTool('adjust');return;}
+    if(id==='adj-colorbal'||id==='adj-levels'||id==='adj-vibrance') {setActiveTool('colorgrade');return;}
+    // AI Features
+    if(id==='ai-pop'||id==='ai-style') {setActiveTool('style');return;}
+    if(id==='ai-bggen')  {setActiveTool('bggen');return;}
+    if(id==='ai-ctr')    {setActiveTool('ctr');return;}
+    if(id==='ai-aitext') {setActiveTool('aitext');return;}
+    if(id==='ai-face')   {setActiveTool('face');return;}
+    if(id==='ai-segment'){setActiveTool('segment');return;}
+    if(id==='ai-variants'){setActiveTool('ab');return;}
+    // Layer actions
+    if(id==='layer-new')      {setActiveTool('text');return;}
+    if(id==='layer-duplicate'){if(selectedId)duplicateLayer(selectedId);return;}
+    if(id==='layer-delete')   {if(selectedId)deleteLayer(selectedId);return;}
+    if(id==='layer-group'||id==='layer-merge'||id==='layer-flatten') {return;} // future
+    // File actions
+    if(id==='file-export-png'){exportCanvas('png');return;}
+    if(id==='file-export-jpg'){exportCanvas('jpg');return;}
+    if(id==='file-save')      {saveDesign(designName);saveEngineRef.current?.saveImmediate();return;}
+    if(id==='file-new')       {if(window.confirm('Start a new project? Unsaved changes will be lost.'))window.location.reload();return;}
+    // Canvas actions
+    if(id==='canvas-fit')  {setZoom(1);setPanOffset({x:0,y:0});return;}
+    if(id==='canvas-100')  {setZoom(1);setPanOffset({x:0,y:0});return;}
+    if(id==='canvas-fliph'){setLayers(prev=>prev.map(l=>l.type==='background'?l:{...l,flipH:!l.flipH}));return;}
+    if(id==='canvas-flipv'){setLayers(prev=>prev.map(l=>l.type==='background'?l:{...l,flipV:!l.flipV}));return;}
+    if(id==='canvas-shortcuts'){setShowShortcutsModal(true);return;}
+  }
+
   async function handleDownload({ tier='basic', transparent=transparentExport }={}){
     try{
       const target = document.getElementById('thumbnail-canvas');
@@ -6140,6 +6190,12 @@ PHASE 4 — Toolbar button:
           </div>
         </div>
       )}
+
+      <CommandPalette
+        open={showCommandPalette}
+        onClose={()=>setShowCommandPalette(false)}
+        onExecute={executePaletteCommand}
+      />
 
       {showDownload&&(
         <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'}} onClick={e=>{if(e.target===e.currentTarget)setShowDownload(false);}}>
