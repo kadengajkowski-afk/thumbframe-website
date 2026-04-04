@@ -1,13 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
-import MobileEditor from './MobileEditor';
-import MemesPanel from './Memes';
+import React, { useCallback, useEffect, useRef, useState, memo, lazy, Suspense } from 'react';
 import BrushTool, { BrushOverlay } from './Brush';
-import BrandKitSetupModal from './BrandKit';
-import SidebarBrandKit from './SidebarBrandKit';
 import supabase from './supabaseClient';
-import html2canvas from 'html2canvas';
-import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+const MobileEditor = lazy(() => import('./MobileEditor'));
+const MemesPanel = lazy(() => import('./Memes'));
+const BrandKitSetupModal = lazy(() => import('./BrandKit'));
+const SidebarBrandKit = lazy(() => import('./SidebarBrandKit'));
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
@@ -1575,18 +1573,24 @@ PHASE 4 — Toolbar button:
 
         // ── Fire ALL network requests in parallel ──
         const isAdmin = safeUser?.is_admin || safeUser?.email === 'kadengajkowski@gmail.com';
-        const [savedDesignsResult, remoteDesignResult, brandKitResult, profileResult] = await Promise.allSettled([
-          // 1. Saved designs list (Railway API)
-          fetchSavedDesigns(),
-          // 2. Remote design from Supabase (if URL has project ID)
+        // fetchSavedDesigns is non-critical — fire in background, don't block canvas render
+        fetchSavedDesigns().catch(()=>{});
+        const [remoteDesignResult, brandKitResult, profileResult] = await Promise.allSettled([
+          // 1. Remote design from Supabase (if URL has project ID)
           urlDesignId
             ? supabase.from('thumbnails').select('*').eq('id', urlDesignId).single()
             : Promise.resolve({ data: null, error: null }),
-          // 3. Brand kit
+          // 2. Brand kit
           supabase.from('brand_kits').select('*').eq('user_id', safeUser.id).limit(1),
-          // 4. Pro profile
+          // 3. Pro profile (cached 5 min in localStorage)
           safeUser?.email
-            ? supabase.from('profiles').select('is_pro').eq('email', safeUser.email).maybeSingle()
+            ? (()=>{
+                try{
+                  const _c=localStorage.getItem(`sf_is_pro_${safeUser.email}`);
+                  if(_c){const _p=JSON.parse(_c);if(Date.now()<_p.exp)return Promise.resolve({data:{is_pro:_p.v},error:null});}
+                }catch(e){}
+                return supabase.from('profiles').select('is_pro').eq('email', safeUser.email).maybeSingle();
+              })()
             : Promise.resolve({ data: null, error: null }),
         ]);
 
@@ -1617,10 +1621,6 @@ PHASE 4 — Toolbar button:
         }
 
         try{
-          if(savedDesignsResult.status==='rejected'){
-            console.error('Saved designs fetch failed:', savedDesignsResult.reason);
-          }
-
           if(safeToken==='test-key-123' || isAdmin){
             setIsProUser(true);
           }else if(profileResult.status==='fulfilled'){
@@ -1637,6 +1637,7 @@ PHASE 4 — Toolbar button:
               setIsProUser(false);
             }else{
               setIsProUser(!!profileData?.is_pro);
+              try{localStorage.setItem(`sf_is_pro_${safeUser.email}`,JSON.stringify({v:!!profileData?.is_pro,exp:Date.now()+5*60*1000}));}catch(e){}
             }
           }else{
             console.error('[PRO PROFILE] Promise rejected while fetching profiles.is_pro:', profileResult.reason);
@@ -3353,6 +3354,7 @@ PHASE 4 — Toolbar button:
     if(ready.length===0) return;
     setAiVarBusy(true);
     try{
+      const { default: JSZip } = await import('jszip');
       const zip=new JSZip();
       ready.forEach(v=>{
         const b64=v.base64.split(',')[1];
@@ -3383,6 +3385,7 @@ PHASE 4 — Toolbar button:
     }
 
     try{
+      const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
       for(const variant of abVariants){
         const dataUrl = await renderVariantToDataURL(variant.layers);
@@ -3488,6 +3491,7 @@ PHASE 4 — Toolbar button:
       ];
 
       // ── PHASE 1: exportCanvas(2) — 2560×1440 JPEG for each variant ───
+      const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
       for(const v of variants){
         console.log(`[SPRINT 5] Rendering variant ${v.id} at 2x (${p.width*2}×${p.height*2})…`);
@@ -4874,6 +4878,7 @@ PHASE 4 — Toolbar button:
       const scale = isActuallyPro ? 3 : 0.6;
       const imageQuality = isActuallyPro ? 1.0 : 0.5;
 
+      const { default: html2canvas } = await import('html2canvas');
       const capturedCanvas = await html2canvas(target, {
         backgroundColor: transparent ? null : '#000000',
         useCORS: true,
@@ -5198,7 +5203,7 @@ PHASE 4 — Toolbar button:
 
   // Feature M: Mobile Quick Editor — render parallel mobile experience on small screens
   if(isMobile){
-    return <MobileEditor user={user} token={token} apiUrl={apiUrl} onSwitchToDesktop={()=>setIsMobile(false)}/>;
+    return <Suspense fallback={null}><MobileEditor user={user} token={token} apiUrl={apiUrl} onSwitchToDesktop={()=>setIsMobile(false)}/></Suspense>;
   }
 
   if(isLoading){
@@ -7306,13 +7311,13 @@ PHASE 4 — Toolbar button:
             )}
 
             {activeTool==='memes'&&(
-              <MemesPanel theme={T} onAddSvg={addSvgSticker}
+              <Suspense fallback={null}><MemesPanel theme={T} onAddSvg={addSvgSticker}
                 onAddGif={(url,w,h)=>{
                   const aspect=w/h,cW=p.preview.w,cH=p.preview.h,ca=cW/cH;
                   let fw,fh;if(aspect>ca){fh=cH;fw=fh*aspect;}else{fw=cW;fh=fw/aspect;}
                   addLayer({type:'image',src:url,width:Math.round(fw),height:Math.round(fh),x:Math.round((cW-fw)/2),y:Math.round((cH-fh)/2),cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0});
                 }}
-              />
+              /></Suspense>
             )}
 
             {activeTool==='background'&&(
@@ -7337,7 +7342,7 @@ PHASE 4 — Toolbar button:
             )}
 
             {activeTool==='brandkit'&&(
-              <SidebarBrandKit
+              <Suspense fallback={null}><SidebarBrandKit
                 T={T}
                 user={user}
                 brandKit={brandKit}
@@ -7348,7 +7353,7 @@ PHASE 4 — Toolbar button:
                 onOpenSetup={()=>setShowBrandKitSetup(true)}
                 onInjectSubject={()=>injectBrandSubject(brandKit||{face_image_url:brandKitFace,subject_url:brandKitFace,subject_image_url:brandKitFace})}
                 onApplyColor={applyBrandColorToSelected}
-              />
+              /></Suspense>
             )}
 
             {activeTool==='adjust'&&(
@@ -10328,7 +10333,7 @@ PHASE 4 — Toolbar button:
         </div>
       )}
       {showBrandKitSetup && (
-        <BrandKitSetupModal
+        <Suspense fallback={null}><BrandKitSetupModal
           T={T}
           token={token}
           apiUrl={resolvedApiUrl}
@@ -10341,7 +10346,7 @@ PHASE 4 — Toolbar button:
           setBrandKitFace={setBrandKitFace}
           setShowBrandKitSetup={setShowBrandKitSetup}
           setCmdLog={setCmdLog}
-        />
+        /></Suspense>
       )}
 
       {/* Upgrade to Pro Modal */}
