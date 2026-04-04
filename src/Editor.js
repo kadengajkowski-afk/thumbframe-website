@@ -915,6 +915,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [showFileTab,setShowFileTab]       = useState(false);
   const [showDownload,setShowDownload]     = useState(false);
   const [savedDesigns,setSavedDesigns]     = useState([]);
+  const [galleryLoading,setGalleryLoading] = useState(false);
+  const galleryLastFetchAt                 = useRef(0); // timestamp of last successful fetch
   const [designName,setDesignName]         = useState('My Design');
   const [transparentExport,setTransparentExport] = useState(false);
   const [textInput,setTextInput]           = useState('MY THUMBNAIL');
@@ -1297,11 +1299,23 @@ PHASE 4 — Toolbar button:
   },[]);
 
   function persistSavedDesigns(nextDesign){
+    // Strip heavy fields — gallery only needs display metadata
+    const galleryItem = {
+      id:              nextDesign?.id,
+      currentDesignId: nextDesign?.currentDesignId || nextDesign?.id,
+      projectId:       nextDesign?.projectId       || nextDesign?.id,
+      name:            nextDesign?.name            || 'Untitled Project',
+      created:         nextDesign?.created         || new Date().toLocaleString(),
+      platform:        nextDesign?.platform        || 'youtube',
+      thumbnail:       nextDesign?.thumbnail       || null,
+      last_edited:     nextDesign?.last_edited     || new Date().toISOString(),
+    };
+
     setSavedDesigns(prevList=>{
       const list = Array.isArray(prevList) ? prevList : [];
-      const targetId = nextDesign?.id || nextDesign?.currentDesignId || nextDesign?.projectId || null;
+      const targetId = galleryItem.id;
       if(!targetId){
-        return [...list, nextDesign].slice(0,20);
+        return [...list, galleryItem].slice(0,20);
       }
 
       const existingIndex = list.findIndex(item => (
@@ -1311,19 +1325,10 @@ PHASE 4 — Toolbar button:
       ));
 
       if(existingIndex>=0){
-        return list.map((item, idx)=>idx===existingIndex
-          ? {
-              ...item,
-              ...nextDesign,
-              last_edited: nextDesign?.last_edited || new Date().toISOString(),
-            }
-          : item);
+        return list.map((item, idx)=>idx===existingIndex ? { ...item, ...galleryItem } : item);
       }
 
-      return [...list, {
-        ...nextDesign,
-        last_edited: nextDesign?.last_edited || new Date().toISOString(),
-      }].slice(0,20);
+      return [...list, galleryItem].slice(0,20);
     });
   }
 
@@ -1390,61 +1395,79 @@ PHASE 4 — Toolbar button:
     }
   },[p.preview.h, p.preview.w]);
 
-  const fetchSavedDesigns = useCallback(async ()=>{
+  const fetchSavedDesigns = useCallback(async ({ force = false } = {})=>{
     const userEmail = user?.email;
     if(!userEmail){
       setSavedDesigns([]);
       return;
     }
 
+    // Cache: skip refetch if data is fresh (< 30s old) and not forced
+    const now = Date.now();
+    if(!force && galleryLastFetchAt.current && (now - galleryLastFetchAt.current) < 30_000){
+      return;
+    }
+
+    console.time('gallery-load');
+    setGalleryLoading(true);
+
     try{
       const endpoint = `${resolvedApiUrl}/designs/list`;
+      console.time('gallery-load:session');
       const { data: { session: dlSess } } = await supabase.auth.getSession();
+      console.timeEnd('gallery-load:session');
       const dlToken = dlSess?.access_token;
+
+      console.time('gallery-load:fetch');
       const response = await fetch(endpoint, {
         headers: { 'Authorization': `Bearer ${dlToken}` },
       });
+      console.timeEnd('gallery-load:fetch');
+
       if(!response.ok){
         throw new Error(`Design list request failed (${response.status})`);
       }
 
+      console.time('gallery-load:parse');
       const payload = await response.json().catch(()=>[]);
+      console.timeEnd('gallery-load:parse');
+
       const rows = Array.isArray(payload)
         ? payload
         : (Array.isArray(payload?.data) ? payload.data : []);
 
-      const normalized = rows.map((row)=>{
+      console.time('gallery-load:normalize');
+      // Limit to 20 most recent — never hold full layer/blob data in gallery state
+      const normalized = rows.slice(0, 20).map((row)=>{
         const jsonData = row?.json_data;
-        const layersFromJson = Array.isArray(jsonData)
-          ? jsonData
-          : (Array.isArray(jsonData?.layers) ? jsonData.layers : []);
         const normalizedName =
           row?.name ||
           (typeof jsonData?.name==='string' && jsonData.name.trim() ? jsonData.name.trim() : '') ||
           'Untitled Project';
 
+        // Gallery only needs display metadata — no layers, no json_data, no base64 blobs
         return {
-          id:row?.id,
+          id:             row?.id,
           currentDesignId:row?.id,
-          projectId:row?.id,
-          name:normalizedName,
-          created:row?.last_edited ? new Date(row.last_edited).toLocaleString() : 'Just now',
-          platform:jsonData?.platform || row?.platform || 'youtube',
-          layers:layersFromJson,
-          brightness:jsonData?.brightness ?? row?.brightness ?? 100,
-          contrast:jsonData?.contrast ?? row?.contrast ?? 100,
-          saturation:jsonData?.saturation ?? row?.saturation ?? 100,
-          hue:jsonData?.hue ?? row?.hue ?? 0,
-          thumbnail:row?.thumbnail || null,
-          json_data:jsonData,
-          last_edited:row?.last_edited || null,
+          projectId:      row?.id,
+          name:           normalizedName,
+          created:        row?.last_edited ? new Date(row.last_edited).toLocaleString() : 'Just now',
+          platform:       jsonData?.platform || row?.platform || 'youtube',
+          thumbnail:      row?.thumbnail || null,
+          last_edited:    row?.last_edited || null,
+          // loadProject() will fetch full json_data from server when user clicks Open
         };
       });
+      console.timeEnd('gallery-load:normalize');
 
       setSavedDesigns(normalized);
+      galleryLastFetchAt.current = Date.now();
     }catch(err){
       console.error('[FETCH SAVED DESIGNS] Failed:', err);
       setSavedDesigns([]);
+    }finally{
+      setGalleryLoading(false);
+      console.timeEnd('gallery-load');
     }
   },[resolvedApiUrl, user?.email]);
 
@@ -1896,7 +1919,8 @@ PHASE 4 — Toolbar button:
 
   useEffect(()=>{
     if(!showFileTab)return;
-    fetchSavedDesigns();
+    // Force fetch when tab opens for the first time; use cache on rapid re-opens
+    fetchSavedDesigns({ force: galleryLastFetchAt.current === 0 });
   },[fetchSavedDesigns, showFileTab]);
 
   // Sync user.is_pro → isProUser whenever App.js async /auth/me response arrives
@@ -5483,14 +5507,34 @@ PHASE 4 — Toolbar button:
                 </button>
               </div>
               <div style={{flex:1,padding:'12px',overflowY:'auto'}}>
-                <div style={{fontSize:10,color:T.muted,fontWeight:'700',letterSpacing:'0.8px',textTransform:'uppercase',marginBottom:10}}>Saved ({savedDesigns.length})</div>
-                {savedDesigns.length===0&&<div style={{fontSize:12,color:T.muted,padding:'20px 0',textAlign:'center'}}>No saved designs yet.</div>}
-                {savedDesigns.map(d=>(
+                <div style={{fontSize:10,color:T.muted,fontWeight:'700',letterSpacing:'0.8px',textTransform:'uppercase',marginBottom:10,display:'flex',alignItems:'center',gap:8}}>
+                  Saved ({galleryLoading ? '…' : savedDesigns.length})
+                  {galleryLoading&&<span style={{display:'inline-block',animation:'tf-pulse 0.9s ease-in-out infinite',color:T.accent,fontSize:8}}>●</span>}
+                  {!galleryLoading&&<button onClick={()=>fetchSavedDesigns({force:true})} title="Refresh" style={{marginLeft:'auto',padding:'2px 7px',borderRadius:4,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:10,cursor:'pointer'}}>↻</button>}
+                </div>
+
+                {/* Skeleton cards shown instantly while loading */}
+                {galleryLoading&&[0,1,2,3].map(i=>(
+                  <div key={i} style={{padding:'10px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,marginBottom:8,display:'flex',alignItems:'center',gap:10,opacity:1-i*0.18}}>
+                    <div style={{width:56,height:32,borderRadius:4,background:T.border,flexShrink:0,animation:'tf-pulse 1.2s ease-in-out infinite'}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{height:11,borderRadius:3,background:T.border,width:'60%',marginBottom:6,animation:'tf-pulse 1.2s ease-in-out infinite'}}/>
+                      <div style={{height:9,borderRadius:3,background:T.border,width:'35%',animation:'tf-pulse 1.2s ease-in-out infinite'}}/>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Real cards after load */}
+                {!galleryLoading&&savedDesigns.length===0&&(
+                  <div style={{fontSize:12,color:T.muted,padding:'20px 0',textAlign:'center'}}>No saved designs yet.</div>
+                )}
+                {!galleryLoading&&savedDesigns.map(d=>(
                   <div key={d.id} style={{padding:'10px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.input,marginBottom:8,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
                     <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
-                      {d.thumbnail&&(
-                        <img src={d.thumbnail} alt="thumb" style={{width:56,height:32,objectFit:'cover',borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0}}/>
-                      )}
+                      {d.thumbnail
+                        ? <img src={d.thumbnail} alt="thumb" style={{width:56,height:32,objectFit:'cover',borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0}}/>
+                        : <div style={{width:56,height:32,borderRadius:4,background:T.border,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:T.muted}}>no preview</div>
+                      }
                       <div style={{minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:'600',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.name||'Untitled'}</div>
                         <div style={{fontSize:10,color:T.muted,marginTop:2}}>{d.created||'Just now'} · {d.platform||'youtube'}</div>
