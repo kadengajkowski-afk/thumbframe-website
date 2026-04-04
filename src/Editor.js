@@ -1058,6 +1058,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const historyDebounceRef                 = useRef(null);
   const [layerDragId,setLayerDragId]       = useState(null);
   const [layerDragOver,setLayerDragOver]   = useState(null);
+  const [smartGuides,setSmartGuides]       = useState({h:[],v:[]});   // active guide lines during drag
   const [brushTypeState,setBrushTypeState]             = useState('blur');
   const [brushSizeState,setBrushSizeState]             = useState(20);
   const [brushStrengthState,setBrushStrengthState]     = useState(50);
@@ -2025,6 +2026,39 @@ PHASE 4 — Toolbar button:
     if(user?.is_pro===true||user?.plan==='pro') setIsProUser(true);
   },[user?.is_pro, user?.plan]);
 
+  // ── Sync text panel state when a text layer is selected ──────────────────
+  useEffect(()=>{
+    if(!selectedId)return;
+    const layer=layersRef.current.find(l=>l.id===selectedId);
+    if(layer?.type!=='text')return;
+    if(layer.fontFamily) setFontFamily(layer.fontFamily);
+    if(layer.fontWeight) setFontWeight(layer.fontWeight);
+    setFontItalic(!!layer.fontItalic);
+    if(layer.fontSize) setFontSize(layer.fontSize);
+    if(layer.letterSpacing!==undefined) setLetterSpacing(layer.letterSpacing||0);
+    if(layer.lineHeight) setLineHeight(layer.lineHeight);
+    if(layer.textAlign) setTextAlign(layer.textAlign);
+    if(layer.textColor) setTextColor(layer.textColor);
+    if(layer.strokeColor) setStrokeColor(layer.strokeColor);
+    if(layer.strokeWidth!==undefined) setStrokeWidth(layer.strokeWidth||0);
+    setShadowEnabled(!!layer.shadowEnabled);
+    if(layer.shadowColor) setShadowColor(layer.shadowColor);
+    if(layer.shadowBlur!==undefined) setShadowBlur(layer.shadowBlur||0);
+    if(layer.shadowX!==undefined) setShadowX(layer.shadowX||0);
+    if(layer.shadowY!==undefined) setShadowY(layer.shadowY||0);
+    setGlowEnabled(!!layer.glowEnabled);
+    if(layer.glowColor) setGlowColor(layer.glowColor);
+    setArcEnabled(!!layer.arcEnabled);
+    if(layer.arcRadius) setArcRadius(layer.arcRadius);
+    setTextTransform(layer.textTransform||'none');
+    setFillType(layer.fillType||'solid');
+    if(Array.isArray(layer.gradientColors)&&layer.gradientColors.length>=2){setGradColor1(layer.gradientColors[0]);setGradColor2(layer.gradientColors[1]);}
+    if(layer.gradientAngle!==undefined) setGradAngle(layer.gradientAngle||0);
+    if(Array.isArray(layer.textStrokes)) setTextStrokes(layer.textStrokes);
+    setWarpType(layer.warpType||'none');
+    if(layer.warpAmount!==undefined) setWarpAmount(layer.warpAmount||30);
+  },[selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ✅ Window drag handlers — ONLY fire when draggingRef or resizingRef is set
   // This means sidebar sliders are completely unaffected
   useEffect(()=>{
@@ -2050,6 +2084,24 @@ PHASE 4 — Toolbar button:
       if(snapToGrid){x=Math.round(x/10)*10;y=Math.round(y/10)*10;}
       x=Math.max(-p.preview.w+10,Math.min(p.preview.w-10,x));
       y=Math.max(-p.preview.h+10,Math.min(p.preview.h-10,y));
+      // ── Smart guides ──────────────────────────────────────────────────────
+      const SNAP_DIST=6; // px threshold for snapping
+      const dragLayer=layersRef.current.find(l=>l.id===draggingRef.current);
+      const lw=dragLayer?.width||100, lh=dragLayer?.fontSize||dragLayer?.height||48;
+      // Guide sources: canvas center, other layers' edges and centers
+      const hGuides=[p.preview.h/2]; // canvas horizontal center
+      const vGuides=[p.preview.w/2]; // canvas vertical center
+      layersRef.current.forEach(l=>{
+        if(l.id===draggingRef.current||l.type==='background'||l.hidden)return;
+        const lw2=l.width||100, lh2=l.fontSize||l.height||48;
+        vGuides.push(l.x, l.x+lw2/2, l.x+lw2);
+        hGuides.push(l.y, l.y+lh2/2, l.y+lh2);
+      });
+      const snapV=vGuides.find(g=>Math.abs(x+lw/2-g)<SNAP_DIST)||vGuides.find(g=>Math.abs(x-g)<SNAP_DIST)||vGuides.find(g=>Math.abs(x+lw-g)<SNAP_DIST);
+      const snapH=hGuides.find(g=>Math.abs(y+lh/2-g)<SNAP_DIST)||hGuides.find(g=>Math.abs(y-g)<SNAP_DIST)||hGuides.find(g=>Math.abs(y+lh-g)<SNAP_DIST);
+      if(snapV!==undefined){if(Math.abs(x+lw/2-snapV)<SNAP_DIST)x=snapV-lw/2;else if(Math.abs(x-snapV)<SNAP_DIST)x=snapV;else x=snapV-lw;}
+      if(snapH!==undefined){if(Math.abs(y+lh/2-snapH)<SNAP_DIST)y=snapH-lh/2;else if(Math.abs(y-snapH)<SNAP_DIST)y=snapH;else y=snapH-lh;}
+      setSmartGuides({h:snapH!==undefined?[snapH]:[],v:snapV!==undefined?[snapV]:[]});
       setLayers(prev=>prev.map(l=>l.id===draggingRef.current?{...l,x,y}:l));
     }
     function onUp(){
@@ -2063,6 +2115,7 @@ PHASE 4 — Toolbar button:
       draggingRef.current=null;
       resizingRef.current=null;
       resizeStartRef.current=null;
+      setSmartGuides({h:[],v:[]});
       triggerAutoSave();
     }
     window.addEventListener('pointermove',onMove);
@@ -2149,6 +2202,9 @@ PHASE 4 — Toolbar button:
   function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};});pushHistory(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
   function updateLayerEffectNestedSilent(id,ek,sk,value){setLayers(prev=>prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};}));}
   function updateLayerStrokes(id,newStrokes){updateLayerEffect(id,'strokes',newStrokes);}
+  // ── Text panel helpers — keep panel state + selected layer in sync ────────
+  function setTextProp(updates){if(selectedId&&layers.find(l=>l.id===selectedId)?.type==='text')updateLayer(selectedId,updates);}
+  function setTextPropSilent(updates){if(selectedId&&layers.find(l=>l.id===selectedId)?.type==='text')updateLayerSilent(selectedId,updates);}
   function deleteLayer(id){
     const layer=layers.find(l=>l.id===id);
     if(!layer) return;
@@ -3041,8 +3097,23 @@ PHASE 4 — Toolbar button:
 
       else if(obj.type==='shape'){
         c.translate(obj.x*scaleX,obj.y*scaleY);
+        if(obj.rotation){
+          const sw2=obj.width*scaleX,sh2=obj.height*scaleY;
+          c.translate(sw2/2,sh2/2);c.rotate((obj.rotation||0)*Math.PI/180);c.translate(-sw2/2,-sh2/2);
+        }
         if(obj.flipH||obj.flipV) c.scale(obj.flipH?-1:1,obj.flipV?-1:1);
         const sw=obj.width*scaleX,sh=obj.height*scaleY;
+        // Apply effects: drop shadow
+        const shapeSh=obj.effects?.shadow;
+        if(shapeSh?.enabled){
+          const sr2=parseInt((shapeSh.color||'#000').slice(1,3),16)||0;
+          const sg2=parseInt((shapeSh.color||'#000').slice(3,5),16)||0;
+          const sb2=parseInt((shapeSh.color||'#000').slice(5,7),16)||0;
+          c.shadowColor=`rgba(${sr2},${sg2},${sb2},${(shapeSh.opacity??60)/100})`;
+          c.shadowOffsetX=(shapeSh.x||0)*scaleX;
+          c.shadowOffsetY=(shapeSh.y||0)*scaleY;
+          c.shadowBlur=(shapeSh.blur||12)*Math.min(scaleX,scaleY);
+        }
         c.fillStyle=obj.fillColor||'#FF4500';
         c.strokeStyle=obj.strokeColor||'#000';
         c.lineWidth=2*Math.min(scaleX,scaleY);
@@ -3056,6 +3127,28 @@ PHASE 4 — Toolbar button:
           c.rect(0,0,sw,sh);
         }
         c.fill();c.stroke();
+        c.shadowColor='transparent';c.shadowBlur=0;c.shadowOffsetX=0;c.shadowOffsetY=0;
+        // Glow pass for shapes
+        const shapeGlow=obj.effects?.glow;
+        if(shapeGlow?.enabled){
+          const glowBlur=(shapeGlow.blur||20)*Math.min(scaleX,scaleY);
+          const glowOpacity=(shapeGlow.opacity??80)/100;
+          const gh=shapeGlow.color||'#f97316';
+          const gr2=parseInt(gh.slice(1,3),16)||249,gg2=parseInt(gh.slice(3,5),16)||115,gb2=parseInt(gh.slice(5,7),16)||22;
+          c.save();
+          for(let pass=0;pass<3;pass++){
+            c.shadowColor=`rgba(${gr2},${gg2},${gb2},${glowOpacity})`;
+            c.shadowBlur=glowBlur*(pass+1)/3;
+            c.fillStyle=`rgba(${gr2},${gg2},${gb2},0)`;
+            c.beginPath();
+            if(obj.shape==='circle')c.ellipse(sw/2,sh/2,sw/2,sh/2,0,0,Math.PI*2);
+            else if(obj.shape==='rect'||obj.shape==='roundrect'){const r=obj.shape==='roundrect'?Math.min(sw,sh)*0.2:0;c.roundRect(0,0,sw,sh,r);}
+            else c.rect(0,0,sw,sh);
+            c.fill();
+          }
+          c.shadowColor='transparent';c.shadowBlur=0;
+          c.restore();
+        }
       }
     }
 
@@ -6685,6 +6778,18 @@ PHASE 4 — Toolbar button:
                   })}
                 </div>
 
+                {/* ── Smart guide overlay ───────────────────────────────── */}
+                {(smartGuides.h.length>0||smartGuides.v.length>0)&&(
+                  <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:9995,overflow:'visible'}}>
+                    {smartGuides.v.map((gx,i)=>(
+                      <line key={`v${i}`} x1={gx} y1={0} x2={gx} y2={p.preview.h} stroke="#f97316" strokeWidth="1" strokeDasharray="4,3" opacity="0.9"/>
+                    ))}
+                    {smartGuides.h.map((gy,i)=>(
+                      <line key={`h${i}`} x1={0} y1={gy} x2={p.preview.w} y2={gy} stroke="#f97316" strokeWidth="1" strokeDasharray="4,3" opacity="0.9"/>
+                    ))}
+                  </svg>
+                )}
+
                 {/* Lasso mask SVG overlay */}
                 {isLassoMode&&(
                   <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:10000}}>
@@ -7396,21 +7501,21 @@ PHASE 4 — Toolbar button:
                 {/* ── Font picker ───────────────────────────────────────────── */}
                 <span style={css.label}>Font</span>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:4,marginBottom:6}}>
-                  {CURATED_FONTS.map(f=>(<button key={f.family} onClick={()=>{setFontFamily(f.family);saveEngineRef.current?.markDirty('textContent');}} style={{padding:'8px 4px',borderRadius:6,border:`1.5px solid ${fontFamily===f.family?T.accent:T.border}`,background:fontFamily===f.family?`${T.accent}22`:T.input,color:T.text,fontSize:12,cursor:'pointer',fontFamily:resolveFontFamily(f.family),fontWeight:f.weight,textAlign:'center',overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{f.label}</button>))}
+                  {CURATED_FONTS.map(f=>(<button key={f.family} onClick={()=>{setFontFamily(f.family);setTextProp({fontFamily:f.family,fontWeight:f.weight});saveEngineRef.current?.markDirty('textContent');}} style={{padding:'8px 4px',borderRadius:6,border:`1.5px solid ${fontFamily===f.family?T.accent:T.border}`,background:fontFamily===f.family?`${T.accent}22`:T.input,color:T.text,fontSize:12,cursor:'pointer',fontFamily:resolveFontFamily(f.family),fontWeight:f.weight,textAlign:'center',overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{f.label}</button>))}
                 </div>
-                <select value={fontFamily} onChange={e=>{setFontFamily(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.input,marginBottom:6}}>{FONTS.map(f=><option key={f}>{f}</option>)}</select>
+                <select value={fontFamily} onChange={e=>{setFontFamily(e.target.value);setTextProp({fontFamily:e.target.value});saveEngineRef.current?.markDirty('textContent');}} style={{...css.input,marginBottom:6}}>{FONTS.map(f=><option key={f}>{f}</option>)}</select>
 
                 {/* ── Weight & Style ────────────────────────────────────────── */}
                 <span style={css.label}>Weight &amp; Style</span>
                 <div style={{display:'flex',gap:3,flexWrap:'wrap',marginBottom:6}}>
-                  {FONT_WEIGHTS.map(fw=>(<button key={fw.value} onClick={()=>{setFontWeight(fw.value);saveEngineRef.current?.markDirty('textContent');}} style={{padding:'4px 7px',borderRadius:4,border:`1px solid ${fontWeight===fw.value?T.accent:T.border}`,background:fontWeight===fw.value?T.accent:'transparent',color:fontWeight===fw.value?'#fff':T.text,fontSize:10,cursor:'pointer',fontWeight:fw.value}}>{fw.label}</button>))}
-                  <button onClick={()=>{setFontItalic(!fontItalic);saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(fontItalic),padding:'4px 8px',fontStyle:'italic',fontSize:11}}>I</button>
+                  {FONT_WEIGHTS.map(fw=>(<button key={fw.value} onClick={()=>{setFontWeight(fw.value);setTextProp({fontWeight:fw.value});saveEngineRef.current?.markDirty('textContent');}} style={{padding:'4px 7px',borderRadius:4,border:`1px solid ${fontWeight===fw.value?T.accent:T.border}`,background:fontWeight===fw.value?T.accent:'transparent',color:fontWeight===fw.value?'#fff':T.text,fontSize:10,cursor:'pointer',fontWeight:fw.value}}>{fw.label}</button>))}
+                  <button onClick={()=>{const ni=!fontItalic;setFontItalic(ni);setTextProp({fontItalic:ni});saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(fontItalic),padding:'4px 8px',fontStyle:'italic',fontSize:11}}>I</button>
                 </div>
 
                 {/* ── Transform ────────────────────────────────────────────── */}
                 <span style={css.label}>Transform</span>
                 <div style={{display:'flex',gap:3,marginBottom:6}}>
-                  {[['none','Aa'],['uppercase','AA'],['lowercase','aa'],['capitalize','Ab']].map(([v,l])=>(<button key={v} onClick={()=>{setTextTransform(v);saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(textTransform===v),flex:1,fontSize:10,padding:'4px 2px'}}>{l}</button>))}
+                  {[['none','Aa'],['uppercase','AA'],['lowercase','aa'],['capitalize','Ab']].map(([v,l])=>(<button key={v} onClick={()=>{setTextTransform(v);setTextProp({textTransform:v});saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(textTransform===v),flex:1,fontSize:10,padding:'4px 2px'}}>{l}</button>))}
                 </div>
 
                 {/* ── Content ───────────────────────────────────────────────── */}
@@ -7420,41 +7525,41 @@ PHASE 4 — Toolbar button:
                 {/* ── Size, spacing, leading ────────────────────────────────── */}
                 <span style={css.label}>Size — {fontSize}px</span>
                 <div style={css.row}>
-                  <Slider min={8} max={200} value={fontSize} onChange={v=>setFontSize(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/>
-                  <input type="number" value={fontSize} onChange={e=>setFontSize(Number(e.target.value))} onBlur={()=>saveEngineRef.current?.markDirty('textContent')} style={{...css.input,width:50,padding:'5px 6px',textAlign:'center'}}/>
+                  <Slider min={8} max={200} value={fontSize} onChange={v=>{setFontSize(v);setTextPropSilent({fontSize:v});}} onCommit={v=>{setTextProp({fontSize:v});saveEngineRef.current?.markDirty('textContent');}} style={{flex:1}}/>
+                  <input type="number" value={fontSize} onChange={e=>{const v=Number(e.target.value);setFontSize(v);setTextProp({fontSize:v});}} onBlur={()=>saveEngineRef.current?.markDirty('textContent')} style={{...css.input,width:50,padding:'5px 6px',textAlign:'center'}}/>
                 </div>
                 <span style={css.label}>Letter spacing — {letterSpacing}px</span>
-                <Slider min={-20} max={200} value={letterSpacing} onChange={v=>setLetterSpacing(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{width:'100%'}}/>
+                <Slider min={-20} max={200} value={letterSpacing} onChange={v=>{setLetterSpacing(v);setTextPropSilent({letterSpacing:v});}} onCommit={v=>{setTextProp({letterSpacing:v});saveEngineRef.current?.markDirty('textContent');}} style={{width:'100%'}}/>
                 <span style={css.label}>Line height — {lineHeight}</span>
-                <Slider min={0.8} max={3} step={0.1} value={lineHeight} onChange={v=>setLineHeight(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{width:'100%'}}/>
+                <Slider min={0.8} max={3} step={0.1} value={lineHeight} onChange={v=>{setLineHeight(v);setTextPropSilent({lineHeight:v});}} onCommit={v=>{setTextProp({lineHeight:v});saveEngineRef.current?.markDirty('textContent');}} style={{width:'100%'}}/>
 
                 {/* ── Alignment ─────────────────────────────────────────────── */}
                 <span style={css.label}>Alignment</span>
                 <div style={{display:'flex',gap:4,marginBottom:6}}>
-                  {[['left','◀ Left'],['center','■ Center'],['right','Right ▶']].map(([val,label])=>(<button key={val} onClick={()=>{setTextAlign(val);saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(textAlign===val),flex:1,textAlign:'center',fontSize:10}}>{label}</button>))}
+                  {[['left','◀ Left'],['center','■ Center'],['right','Right ▶']].map(([val,label])=>(<button key={val} onClick={()=>{setTextAlign(val);setTextProp({textAlign:val});saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(textAlign===val),flex:1,textAlign:'center',fontSize:10}}>{label}</button>))}
                 </div>
 
                 {/* ── Fill ─────────────────────────────────────────────────── */}
                 <span style={css.label}>Fill</span>
                 <div style={{display:'flex',gap:4,marginBottom:6}}>
-                  {[['solid','Solid'],['gradient','Gradient']].map(([v,l])=>(<button key={v} onClick={()=>{setFillType(v);saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(fillType===v),flex:1,fontSize:10}}>{l}</button>))}
+                  {[['solid','Solid'],['gradient','Gradient']].map(([v,l])=>(<button key={v} onClick={()=>{setFillType(v);setTextProp({fillType:v});saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(fillType===v),flex:1,fontSize:10}}>{l}</button>))}
                 </div>
                 {fillType==='solid'&&(
-                  <input type="color" value={textColor} onChange={e=>{setTextColor(e.target.value);addRecentColor(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={css.color}/>
+                  <input type="color" value={textColor} onChange={e=>{setTextColor(e.target.value);setTextProp({textColor:e.target.value});addRecentColor(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={css.color}/>
                 )}
                 {fillType==='gradient'&&(
                   <div style={css.section}>
-                    <div style={css.row}><span style={{fontSize:10,color:T.muted,width:36}}>From</span><input type="color" value={gradColor1} onChange={e=>{setGradColor1(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>
-                    <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:36}}>To</span><input type="color" value={gradColor2} onChange={e=>{setGradColor2(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>
-                    <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:36}}>Angle</span><Slider min={0} max={360} value={gradAngle} onChange={v=>setGradAngle(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:28}}>{gradAngle}°</span></div>
+                    <div style={css.row}><span style={{fontSize:10,color:T.muted,width:36}}>From</span><input type="color" value={gradColor1} onChange={e=>{setGradColor1(e.target.value);setTextProp({gradientColors:[e.target.value,gradColor2]});saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>
+                    <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:36}}>To</span><input type="color" value={gradColor2} onChange={e=>{setGradColor2(e.target.value);setTextProp({gradientColors:[gradColor1,e.target.value]});saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>
+                    <div style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:36}}>Angle</span><Slider min={0} max={360} value={gradAngle} onChange={v=>{setGradAngle(v);setTextPropSilent({gradientAngle:v});}} onCommit={v=>{setTextProp({gradientAngle:v});saveEngineRef.current?.markDirty('textContent');}} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:28}}>{gradAngle}°</span></div>
                   </div>
                 )}
 
                 {/* ── Primary stroke ────────────────────────────────────────── */}
                 <span style={css.label}>Outline</span>
                 <div style={css.row}>
-                  <input type="color" value={strokeColor} onChange={e=>{setStrokeColor(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,width:44,flexShrink:0}}/>
-                  <Slider min={0} max={30} value={strokeWidth} onChange={v=>setStrokeWidth(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/>
+                  <input type="color" value={strokeColor} onChange={e=>{setStrokeColor(e.target.value);setTextProp({strokeColor:e.target.value});saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,width:44,flexShrink:0}}/>
+                  <Slider min={0} max={30} value={strokeWidth} onChange={v=>{setStrokeWidth(v);setTextPropSilent({strokeWidth:v});}} onCommit={v=>{setTextProp({strokeWidth:v});saveEngineRef.current?.markDirty('textContent');}} style={{flex:1}}/>
                   <span style={{fontSize:10,color:T.muted,minWidth:24}}>{strokeWidth}px</span>
                 </div>
 
@@ -7463,49 +7568,49 @@ PHASE 4 — Toolbar button:
                 <div style={css.section}>
                   {textStrokes.map((st,idx)=>(
                     <div key={idx} style={{...css.row,marginBottom:6}}>
-                      <input type="color" value={st.color||'#000000'} onChange={e=>{const ns=[...textStrokes];ns[idx]={...ns[idx],color:e.target.value};setTextStrokes(ns);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,width:32,height:24,flexShrink:0}}/>
-                      <Slider min={0} max={30} value={st.width||0} onChange={v=>{const ns=[...textStrokes];ns[idx]={...ns[idx],width:v};setTextStrokes(ns);}} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/>
+                      <input type="color" value={st.color||'#000000'} onChange={e=>{const ns=[...textStrokes];ns[idx]={...ns[idx],color:e.target.value};setTextStrokes(ns);setTextProp({textStrokes:ns});saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,width:32,height:24,flexShrink:0}}/>
+                      <Slider min={0} max={30} value={st.width||0} onChange={v=>{const ns=[...textStrokes];ns[idx]={...ns[idx],width:v};setTextStrokes(ns);setTextPropSilent({textStrokes:ns});}} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/>
                       <span style={{fontSize:10,color:T.muted,minWidth:22}}>{st.width||0}px</span>
-                      <button onClick={()=>{setTextStrokes(prev=>prev.filter((_,i)=>i!==idx));saveEngineRef.current?.markDirty('textContent');}} style={{background:'transparent',border:'none',color:T.danger,cursor:'pointer',fontSize:14,padding:'0 2px'}}>×</button>
+                      <button onClick={()=>{const ns=textStrokes.filter((_,i)=>i!==idx);setTextStrokes(ns);setTextProp({textStrokes:ns});saveEngineRef.current?.markDirty('textContent');}} style={{background:'transparent',border:'none',color:T.danger,cursor:'pointer',fontSize:14,padding:'0 2px'}}>×</button>
                     </div>
                   ))}
-                  {textStrokes.length<3&&(<button onClick={()=>setTextStrokes(prev=>[...prev,{color:'#000000',width:4,enabled:true}])} style={{...css.iconBtn(false),width:'100%',fontSize:10,marginTop:2}}>+ Add stroke</button>)}
+                  {textStrokes.length<3&&(<button onClick={()=>{const ns=[...textStrokes,{color:'#000000',width:4,enabled:true}];setTextStrokes(ns);setTextProp({textStrokes:ns});}} style={{...css.iconBtn(false),width:'100%',fontSize:10,marginTop:2}}>+ Add stroke</button>)}
                 </div>
 
                 {/* ── Drop shadow ───────────────────────────────────────────── */}
                 <span style={css.label}>Drop shadow</span>
                 <div style={css.section}>
-                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setShadowEnabled(!shadowEnabled);saveEngineRef.current?.markDirty('textContent');}} style={css.iconBtn(shadowEnabled)}>{shadowEnabled?'On':'Off'}</button></div>
+                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{const ne=!shadowEnabled;setShadowEnabled(ne);setTextProp({shadowEnabled:ne});saveEngineRef.current?.markDirty('textContent');}} style={css.iconBtn(shadowEnabled)}>{shadowEnabled?'On':'Off'}</button></div>
                   {shadowEnabled&&<>
-                    <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={shadowColor} onChange={e=>{setShadowColor(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>
-                    {[['Blur',shadowBlur,setShadowBlur,0,40],['X',shadowX,setShadowX,-20,20],['Y',shadowY,setShadowY,-20,20]].map(([l,v,sv,mn,mx])=>(<div key={l} style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:28}}>{l}</span><Slider min={mn} max={mx} value={v} onChange={sv} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:20,textAlign:'right'}}>{v}</span></div>))}
+                    <div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={shadowColor} onChange={e=>{setShadowColor(e.target.value);setTextProp({shadowColor:e.target.value});saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>
+                    {[['Blur','shadowBlur',shadowBlur,setShadowBlur,0,40],['X','shadowX',shadowX,setShadowX,-20,20],['Y','shadowY',shadowY,setShadowY,-20,20]].map(([l,k,v,sv,mn,mx])=>(<div key={l} style={{...css.row,marginTop:4}}><span style={{fontSize:10,color:T.muted,width:28}}>{l}</span><Slider min={mn} max={mx} value={v} onChange={nv=>{sv(nv);setTextPropSilent({[k]:nv});}} onCommit={nv=>{setTextProp({[k]:nv});saveEngineRef.current?.markDirty('textContent');}} style={{flex:1}}/><span style={{fontSize:10,color:T.muted,minWidth:20,textAlign:'right'}}>{v}</span></div>))}
                   </>}
                 </div>
 
                 {/* ── Glow ─────────────────────────────────────────────────── */}
                 <span style={css.label}>Glow</span>
                 <div style={css.section}>
-                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setGlowEnabled(!glowEnabled);saveEngineRef.current?.markDirty('textContent');}} style={css.iconBtn(glowEnabled)}>{glowEnabled?'On':'Off'}</button></div>
-                  {glowEnabled&&<div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={glowColor} onChange={e=>{setGlowColor(e.target.value);saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>}
+                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{const ne=!glowEnabled;setGlowEnabled(ne);setTextProp({glowEnabled:ne});saveEngineRef.current?.markDirty('textContent');}} style={css.iconBtn(glowEnabled)}>{glowEnabled?'On':'Off'}</button></div>
+                  {glowEnabled&&<div style={{...css.row,marginTop:8}}><span style={{fontSize:10,color:T.muted,width:36}}>Color</span><input type="color" value={glowColor} onChange={e=>{setGlowColor(e.target.value);setTextProp({glowColor:e.target.value});saveEngineRef.current?.markDirty('textContent');}} style={{...css.color,height:28}}/></div>}
                 </div>
 
                 {/* ── Warp ─────────────────────────────────────────────────── */}
                 <span style={css.label}>Warp</span>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:3,marginBottom:6}}>
-                  {[['none','None'],['arc','Arc'],['wave','Wave'],['bulge','Bulge']].map(([v,l])=>(<button key={v} onClick={()=>{setWarpType(v);saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(warpType===v),fontSize:10,padding:'5px 4px'}}>{l}</button>))}
+                  {[['none','None'],['arc','Arc'],['wave','Wave'],['bulge','Bulge']].map(([v,l])=>(<button key={v} onClick={()=>{setWarpType(v);setTextProp({warpType:v});saveEngineRef.current?.markDirty('textContent');}} style={{...css.iconBtn(warpType===v),fontSize:10,padding:'5px 4px'}}>{l}</button>))}
                 </div>
-                {warpType!=='none'&&<><span style={css.label}>Amount — {warpAmount}%</span><Slider min={0} max={100} value={warpAmount} onChange={v=>setWarpAmount(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{width:'100%'}}/></>}
+                {warpType!=='none'&&<><span style={css.label}>Amount — {warpAmount}%</span><Slider min={0} max={100} value={warpAmount} onChange={v=>{setWarpAmount(v);setTextPropSilent({warpAmount:v});}} onCommit={v=>{setTextProp({warpAmount:v});saveEngineRef.current?.markDirty('textContent');}} style={{width:'100%'}}/></>}
 
                 {/* ── Arc (legacy) ──────────────────────────────────────────── */}
                 <span style={css.label}>Text on arc (legacy)</span>
                 <div style={css.section}>
-                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{setArcEnabled(!arcEnabled);saveEngineRef.current?.markDirty('textContent');}} style={css.iconBtn(arcEnabled)}>{arcEnabled?'On':'Off'}</button></div>
-                  {arcEnabled&&<><span style={{...css.label,marginTop:8}}>Radius — {arcRadius}px</span><Slider min={60} max={300} value={arcRadius} onChange={v=>setArcRadius(v)} onCommit={()=>saveEngineRef.current?.markDirty('textContent')} style={{width:'100%'}}/></>}
+                  <div style={css.row}><span style={{fontSize:11,color:T.muted,flex:1}}>Enabled</span><button onClick={()=>{const ne=!arcEnabled;setArcEnabled(ne);setTextProp({arcEnabled:ne});saveEngineRef.current?.markDirty('textContent');}} style={css.iconBtn(arcEnabled)}>{arcEnabled?'On':'Off'}</button></div>
+                  {arcEnabled&&<><span style={{...css.label,marginTop:8}}>Radius — {arcRadius}px</span><Slider min={60} max={300} value={arcRadius} onChange={v=>{setArcRadius(v);setTextPropSilent({arcRadius:v});}} onCommit={v=>{setTextProp({arcRadius:v});saveEngineRef.current?.markDirty('textContent');}} style={{width:'100%'}}/></>}
                 </div>
 
                 {/* ── Recent colors ─────────────────────────────────────────── */}
                 <span style={css.label}>Recent colors</span>
-                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6}}>{recentColors.map((c,i)=>(<div key={i} onClick={()=>{setTextColor(c);saveEngineRef.current?.markDirty('textContent');}} style={{width:20,height:20,borderRadius:4,background:c,cursor:'pointer',border:`1px solid ${T.border}`}}/>))}</div>
+                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6}}>{recentColors.map((c,i)=>(<div key={i} onClick={()=>{setTextColor(c);setTextProp({textColor:c});saveEngineRef.current?.markDirty('textContent');}} style={{width:20,height:20,borderRadius:4,background:c,cursor:'pointer',border:`1px solid ${T.border}`}}/>))}</div>
 
                 {/* ── Selected layer live edit ───────────────────────────────── */}
                 {selectedLayer?.type==='text'&&(<>
