@@ -92,23 +92,78 @@ app.post('/webhook', express.raw({ type:'application/json' }), async (req, res) 
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  if (event.type === 'customer.subscription.deleted') {
-    const customerId = event.data.object.customer;
-
-    if (customerId) {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_pro: false, subscription_active: false })
-        .eq('stripe_customer_id', customerId);
-
-      if (error) {
-        console.error('[WEBHOOK] Failed to revoke subscription for customer:', customerId, error.message);
+  // Helper: given a Stripe customer ID, resolve email then update Supabase + users.json
+  async function grantPro(customerEmail) {
+    if (!customerEmail) return;
+    const email = customerEmail.toLowerCase().trim();
+    // 1. Supabase
+    const { error: sbErr } = await supabase
+      .from('profiles')
+      .update({ is_pro: true, subscription_active: true })
+      .ilike('email', email);
+    if (sbErr) console.error('[WEBHOOK] Supabase grantPro failed:', email, sbErr.message);
+    // 2. users.json
+    await withUsersMutex(() => {
+      const users = loadUsers();
+      if (users[email]) {
+        users[email].plan = 'pro';
       } else {
-        console.log('[WEBHOOK] Subscription revoked for customer:', customerId);
+        users[email] = { email, plan: 'pro', aiUsage: { count: 0, resetAt: 0 }, created: new Date().toISOString() };
       }
-    } else {
-      console.warn('[WEBHOOK] customer.subscription.deleted missing customer ID');
+      saveUsers(users);
+      console.log('[WEBHOOK] grantPro: set plan=pro for', email);
+    });
+  }
+
+  async function revokePro(customerId) {
+    if (!customerId) return;
+    // Look up email from Supabase by stripe_customer_id
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('stripe_customer_id', customerId)
+      .single();
+    const email = profile?.email?.toLowerCase().trim();
+    // Supabase
+    const { error: sbErr } = await supabase
+      .from('profiles')
+      .update({ is_pro: false, subscription_active: false })
+      .eq('stripe_customer_id', customerId);
+    if (sbErr) console.error('[WEBHOOK] Supabase revokePro failed:', customerId, sbErr.message);
+    else console.log('[WEBHOOK] revokePro: Supabase updated for customer', customerId);
+    // users.json
+    if (email) {
+      await withUsersMutex(() => {
+        const users = loadUsers();
+        if (users[email]) { users[email].plan = 'free'; saveUsers(users); }
+        console.log('[WEBHOOK] revokePro: set plan=free for', email);
+      });
     }
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const email = session.customer_details?.email || session.customer_email;
+    console.log('[WEBHOOK] checkout.session.completed — email:', email, 'mode:', session.mode);
+    if (session.mode === 'subscription' && email) {
+      await grantPro(email);
+    }
+  } else if (event.type === 'customer.subscription.updated') {
+    const sub = event.data.object;
+    const status = sub.status;
+    console.log('[WEBHOOK] customer.subscription.updated — status:', status, 'customer:', sub.customer);
+    if (status === 'active' || status === 'trialing') {
+      // Resolve email from Stripe customer object
+      try {
+        const customer = await stripe.customers.retrieve(sub.customer);
+        if (customer?.email) await grantPro(customer.email);
+      } catch (e) { console.error('[WEBHOOK] stripe.customers.retrieve failed:', e.message); }
+    } else if (status === 'canceled' || status === 'unpaid' || status === 'past_due') {
+      await revokePro(sub.customer);
+    }
+  } else if (event.type === 'customer.subscription.deleted') {
+    console.log('[WEBHOOK] customer.subscription.deleted — customer:', event.data.object.customer);
+    await revokePro(event.data.object.customer);
   }
 
   return res.send({ received: true });
@@ -198,7 +253,6 @@ function getPlanQuota(plan){
   switch((plan||'free').toLowerCase()){
     case 'agency':  return{limit:Infinity, period:'month'};
     case 'pro':     return{limit:300,      period:'month'};
-    case 'starter': return{limit:50,       period:'month'};
     default:        return{limit:3,        period:'day'};
   }
 }
@@ -221,7 +275,7 @@ function checkQuota(email){
   if(usage.count>=limit){
     const planLabel=(user.plan||'free').charAt(0).toUpperCase()+(user.plan||'free').slice(1);
     const msg=(!user.plan||user.plan==='free')
-      ?'Free plan: 3 AI actions per day used. Upgrade to Starter for 50/month.'
+      ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 300/month or Agency for unlimited.'
       :`${planLabel} plan limit (${limit}/${period}) reached. Upgrade to Agency for unlimited.`;
     return{ok:false,message:msg,code:'QUOTA_EXCEEDED'};
   }
@@ -266,6 +320,7 @@ function checkAndDecrementQuota(email){
     saveUsers(users);
     console.log('[QUOTA] Auto-created quota record for existing user:',email);
   }
+  console.log('[QUOTA] checkAndDecrementQuota —',email,'plan:',user.plan||'free','usage:',user.aiUsage?.count||0);
 
   const {limit,period}=getPlanQuota(user.plan);
   if(limit===Infinity) return{ok:true};
@@ -283,7 +338,7 @@ function checkAndDecrementQuota(email){
   if(usage.count>=limit){
     const planLabel=(user.plan||'free').charAt(0).toUpperCase()+(user.plan||'free').slice(1);
     const msg=(!user.plan||user.plan==='free')
-      ?'Free plan: 3 AI actions per day used. Upgrade to Starter for 50/month.'
+      ?'Free plan: 3 AI actions per day used. Upgrade to Pro for 300/month or Agency for unlimited.'
       :`${planLabel} plan limit (${limit}/${period}) reached. Upgrade to Agency for unlimited.`;
     return{ok:false,message:msg,code:'QUOTA_EXCEEDED'};
   }
@@ -306,23 +361,29 @@ function agencyMiddleware(req,res,next){
 // ── Sync user quota record on login ───────────────────────────────────────────
 app.post('/api/sync-user', authMiddleware, async(req,res)=>{
   const email=req.user.email;
-  await withUsersMutex(async()=>{
+  let resolvedPlan='free';
+  try{
+    const {data:profileData}=await supabase.from('profiles').select('is_pro').ilike('email',email).single();
+    resolvedPlan=profileData?.is_pro?'pro':'free';
+  }catch(e){ console.warn('[SYNC-USER] Supabase plan fetch failed for',email,':',e.message); }
+
+  await withUsersMutex(()=>{
     const users=loadUsers();
-    if(!users[email]){
-      // Fetch plan from Supabase profiles table (M10)
-      let plan='free';
-      try{
-        const {data:profileData}=await supabase.from('profiles').select('is_pro').ilike('email',email).single();
-        if(profileData?.is_pro) plan='pro';
-      }catch(e){ /* ignore, default to free */ }
-      users[email]={email,plan,aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
-      saveUsers(users);
-      console.log('[SYNC-USER] Created quota record for:',email,'plan:',plan);
+    const existing=users[email];
+    const prevPlan=existing?.plan||'(none)';
+    if(!existing){
+      users[email]={email,plan:resolvedPlan,aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
+      console.log('[SYNC-USER] Created record for',email,'plan:',resolvedPlan);
+    } else if(existing.plan!==resolvedPlan){
+      users[email]={...existing,plan:resolvedPlan};
+      console.log('[SYNC-USER] Updated plan for',email,':',prevPlan,'->',resolvedPlan);
+    } else {
+      console.log('[SYNC-USER] Plan already correct for',email,':',resolvedPlan);
     }
+    saveUsers(users);
   });
   const users=loadUsers();
-  const user=users[email];
-  res.json({success:true,plan:user?.plan||'free',email});
+  res.json({success:true,plan:users[email]?.plan||'free',email});
 });
 
 // ── Health ─────────────────────────────────────────────────────────────────────
@@ -712,10 +773,31 @@ app.post('/auth/login', authRateLimit, async(req,res)=>{
   }
 });
 
-app.get('/auth/me', authMiddleware,(req,res)=>{
+app.get('/auth/me', authMiddleware, async(req,res)=>{
+  const email=req.user.email;
+  // Always sync plan from Supabase so paying users are never stuck on free
+  try{
+    const {data:profileData}=await supabase.from('profiles').select('is_pro').ilike('email',email).single();
+    const correctPlan=profileData?.is_pro?'pro':'free';
+    await withUsersMutex(()=>{
+      const users=loadUsers();
+      if(!users[email]){
+        users[email]={email,plan:correctPlan,aiUsage:{count:0,resetAt:0},created:new Date().toISOString()};
+        saveUsers(users);
+        console.log('[AUTH/ME] Created record for',email,'plan:',correctPlan);
+      } else if(users[email].plan!==correctPlan){
+        console.log('[AUTH/ME] Plan mismatch for',email,'— users.json says',users[email].plan,'Supabase says',correctPlan,'— updating');
+        users[email]={...users[email],plan:correctPlan};
+        saveUsers(users);
+      }
+    });
+  }catch(e){
+    console.error('[AUTH/ME] Supabase plan sync failed:',e.message);
+  }
   const users=loadUsers();
-  const user=users[req.user.email];
+  const user=users[email];
   if(!user) return res.status(404).json({error:'User not found'});
+  console.log('[AUTH/ME] Responding for',email,'plan:',user.plan||'free');
   res.json({email:user.email,name:user.name,plan:user.plan||'free'});
 });
 
