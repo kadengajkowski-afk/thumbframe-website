@@ -8,6 +8,8 @@ import { SHORTCUT_GROUPS, TOOL_SHORTCUT_MAP } from './shortcuts';
 import CurvesPanel, { CurveThumbnail } from './CurvesPanel';
 import { DEFAULT_CURVES, applyLUTSync } from './curvesUtils';
 import CommandPalette from './CommandPalette';
+import SelectionOverlay from './SelectionOverlay';
+import { rectMask, ellipseMask, pathMask, magicWandMask, combineMasks, invertMask, selectAllMask, maskBounds, featherMask } from './selectionUtils'; // eslint-disable-line no-unused-vars
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
 const BrandKitSetupModal = lazy(() => import('./BrandKit'));
@@ -1203,6 +1205,18 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
 
+  // ── Selection system ──────────────────────────────────────────────────────
+  const [selectionActive, setSelectionActive] = useState(false);
+  const selectionMaskRef = useRef(null);
+  const [selVersion, setSelVersion] = useState(0); // eslint-disable-line no-unused-vars
+  const [selFeather, setSelFeather] = useState(0);
+  const [selTolerance, setSelTolerance] = useState(32);
+  const [selAntiAlias, setSelAntiAlias] = useState(true); // eslint-disable-line no-unused-vars
+  const [selSubMode, setSelSubMode] = useState('rect'); // 'rect' | 'ellipse' for marquee
+  const selDrawRef = useRef(null); // drawing-in-progress state
+  const selPolyPointsRef = useRef([]); // eslint-disable-line no-unused-vars
+  const [selDrawState, setSelDrawState] = useState(null); // {type, x1,y1,x2,y2} | {type:'path',points} for live SVG
+
   const [showBrandKitSetup,setShowBrandKitSetup]       = useState(false);
   const [brandKit,setBrandKit]                         = useState(initialBrandKit||null);
   const [brandKitColors,setBrandKitColors]             = useState({primary:'#c45c2e',secondary:'#f97316'});
@@ -2213,8 +2227,8 @@ PHASE 4 — Toolbar button:
       if(ctrl&&e.key==='c'&&!e.shiftKey){if(selectedId){const l=layers.find(x=>x.id===selectedId);if(l)setClipboard(l);}return;}
       if(ctrl&&e.key==='v'){if(clipboard)duplicateLayerFromObj(clipboard);return;}
       if(ctrl&&e.key==='j'){e.preventDefault();if(selectedId)duplicateLayer(selectedId);return;}
-      if(ctrl&&e.key==='d'){e.preventDefault();setSelectedId(null);setSelectedIds(new Set());return;}
-      if(ctrl&&e.key==='a'){e.preventDefault();const ids=new Set(layers.filter(l=>l.type!=='background').map(l=>l.id));setSelectedIds(ids);return;}
+      if(ctrl&&e.key==='d'){e.preventDefault();setSelectedId(null);setSelectedIds(new Set());clearSel();return;}
+      if(ctrl&&e.key==='a'){e.preventDefault();if(['marquee','sel-lasso','sel-poly','sel-wand'].includes(activeTool)){selectAll();}else{const ids=new Set(layers.filter(l=>l.type!=='background').map(l=>l.id));setSelectedIds(ids);}return;}
       if(ctrl&&(e.key==='+'||e.key==='=')){e.preventDefault();setZoom(z=>Math.min(16,+(z+0.1).toFixed(1)));return;}
       if(ctrl&&e.key==='-'){e.preventDefault();setZoom(z=>Math.max(0.25,+(z-0.1).toFixed(1)));return;}
       if(ctrl&&e.key==='0'){e.preventDefault();setZoom(1);setPanOffset({x:0,y:0});return;}
@@ -2226,6 +2240,7 @@ PHASE 4 — Toolbar button:
       if(ctrl&&e.key==='t'){e.preventDefault();/* free transform: layer already has handles */return;}
       if(ctrl&&e.key==='/'){ e.preventDefault();setShowShortcutsModal(s=>!s);return;}
       if(ctrl&&e.shiftKey&&e.key==='i'){e.preventDefault();
+        if(selectionActive){invertSel();return;}
         // Invert selection: select all except current
         const allIds=new Set(layers.filter(l=>l.type!=='background').map(l=>l.id));
         if(selectedId) allIds.delete(selectedId);
@@ -2237,7 +2252,10 @@ PHASE 4 — Toolbar button:
       if(typing) return;
 
       // Escape — deselect / cancel
-      if(e.key==='Escape'){setSelectedId(null);setSelectedIds(new Set());setShowShortcutsModal(false);return;}
+      if(e.key==='Escape'){
+        if(activeTool==='sel-poly'&&selDrawRef.current){selDrawRef.current=null;setSelDrawState(null);selPolyPointsRef.current=[];return;}
+        setSelectedId(null);setSelectedIds(new Set());setShowShortcutsModal(false);return;
+      }
 
       // Delete / Backspace — delete selected layer
       if(e.key==='Delete'||e.key==='Backspace'){if(selectedId)deleteLayer(selectedId);return;}
@@ -2285,10 +2303,11 @@ PHASE 4 — Toolbar button:
 
       // Tool switches
       const toolMap={
-        'v':'select','m':'select','l':'lasso','w':'segment','c':'crop',
+        'v':'select','l':'lasso','w':'segment','c':'crop',
         'b':'brush','e':'freehand','t':'text','i':'rimlight',
         'g':'bggen','s':'segment','o':'effects','z':'zoom','h':'move',
       };
+      if(e.key==='m'||e.key==='M'){setActiveTool('marquee');return;}
       const dest=toolMap[e.key.toLowerCase()];
       if(dest){setActiveTool(dest);if(dest!=='lasso')setIsLassoMode(false);return;}
 
@@ -2377,6 +2396,41 @@ PHASE 4 — Toolbar button:
     setSelectedId(id);
     setActiveTool('curves');
     triggerAutoSave();
+  }
+
+  // ── Selection helpers ─────────────────────────────────────────────────────
+  function getSelMode(e){
+    if(e.shiftKey&&e.altKey)return'intersect';
+    if(e.shiftKey)return'add';
+    if(e.altKey)return'subtract';
+    return'new';
+  }
+
+  function applySelection(newMask,mode){
+    const combined=combineMasks(selectionMaskRef.current,newMask,mode);
+    const feathered=selFeather>0?featherMask(combined,p.preview.w,p.preview.h,selFeather):combined;
+    selectionMaskRef.current=feathered;
+    setSelectionActive(true);
+    setSelVersion(v=>v+1);
+  }
+
+  function clearSel(){
+    selectionMaskRef.current=null;
+    setSelectionActive(false);
+    setSelDrawState(null);
+    selPolyPointsRef.current=[];
+  }
+
+  function selectAll(){
+    selectionMaskRef.current=selectAllMask(p.preview.w,p.preview.h);
+    setSelectionActive(true);
+    setSelVersion(v=>v+1);
+  }
+
+  function invertSel(){
+    if(!selectionMaskRef.current)return;
+    selectionMaskRef.current=invertMask(selectionMaskRef.current);
+    setSelVersion(v=>v+1);
   }
 
   // ── Text panel helpers — keep panel state + selected layer in sync ────────
@@ -5938,6 +5992,11 @@ PHASE 4 — Toolbar button:
     {key:'segment',   label:'Smart Cutout', icon:'◎',  group:'Paint'},
     {key:'lasso',     label:'Lasso Mask',   icon:'✂️', group:'Paint'},
     null,
+    {key:'marquee',   label:'Marquee',      icon:'⬚',   group:'Select'},
+    {key:'sel-lasso', label:'Lasso Sel.',   icon:'⚯',   group:'Select'},
+    {key:'sel-poly',  label:'Poly Lasso',   icon:'⬡',   group:'Select'},
+    {key:'sel-wand',  label:'Magic Wand',   icon:'◌',   group:'Select'},
+    null,
     {key:'background',label:'Background',   icon:'▨',   group:'Design'},
     {key:'effects',   label:'Effects',      icon:'✦',   group:'Design'},
     {key:'curves',    label:'Curves',       icon:'◑',   group:'Design'},
@@ -6691,7 +6750,49 @@ PHASE 4 — Toolbar button:
         </div>}
 
         {/* Canvas */}
-        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:darkMode?'#080808':'#d0d0d0',overflow:'hidden',position:'relative',minHeight:isMobile?200:undefined}}
+        <div style={{flex:1,display:'flex',flexDirection:'column',background:darkMode?'#080808':'#d0d0d0',overflow:'hidden',position:'relative',minHeight:isMobile?200:undefined}}>
+          {/* ── Selection tool options bar ─────────────────────────────────── */}
+          {['marquee','sel-lasso','sel-poly','sel-wand'].includes(activeTool)&&(
+            <div style={{display:'flex',alignItems:'center',gap:12,padding:'6px 16px',background:'#0d0f14',borderBottom:'1px solid rgba(255,255,255,0.08)',fontSize:11,color:'rgba(255,255,255,0.7)',flexShrink:0,flexWrap:'wrap',zIndex:1}}>
+              <span style={{fontSize:10,color:'rgba(255,255,255,0.45)'}}>Shift=Add · Alt=Subtract · Shift+Alt=Intersect</span>
+              <div style={{width:1,height:18,background:'rgba(255,255,255,0.1)'}}/>
+              <label style={{display:'flex',alignItems:'center',gap:6,color:'rgba(255,255,255,0.6)',fontSize:11}}>
+                Feather
+                <input type="range" min={0} max={100} value={selFeather} onChange={e=>setSelFeather(+e.target.value)} style={{width:70,accentColor:'#f97316'}}/>
+                <span style={{width:24,color:'rgba(255,255,255,0.5)'}}>{selFeather}px</span>
+              </label>
+              {activeTool==='sel-wand'&&(
+                <label style={{display:'flex',alignItems:'center',gap:6,color:'rgba(255,255,255,0.6)',fontSize:11}}>
+                  Tolerance
+                  <input type="range" min={0} max={255} value={selTolerance} onChange={e=>setSelTolerance(+e.target.value)} style={{width:70,accentColor:'#f97316'}}/>
+                  <span style={{width:24,color:'rgba(255,255,255,0.5)'}}>{selTolerance}</span>
+                </label>
+              )}
+              {activeTool==='marquee'&&(
+                <>
+                  <div style={{width:1,height:18,background:'rgba(255,255,255,0.1)'}}/>
+                  {['rect','ellipse'].map(sm=>(
+                    <button key={sm} onClick={()=>setSelSubMode(sm)}
+                      style={{padding:'3px 8px',borderRadius:5,border:`1px solid ${selSubMode===sm?'#f97316':'rgba(255,255,255,0.15)'}`,background:selSubMode===sm?'rgba(249,115,22,0.15)':'transparent',color:selSubMode===sm?'#f97316':'rgba(255,255,255,0.6)',cursor:'pointer',fontSize:10,fontWeight:'600'}}>
+                      {sm==='rect'?'⬚ Rectangle':'⬭ Ellipse'}
+                    </button>
+                  ))}
+                </>
+              )}
+              {activeTool==='sel-poly'&&selDrawRef.current&&(
+                <span style={{color:'#f97316',fontSize:10}}>Click to add points · Click start point or double-click to close · Esc to cancel</span>
+              )}
+              {selectionActive&&(
+                <>
+                  <div style={{width:1,height:18,background:'rgba(255,255,255,0.1)'}}/>
+                  <span style={{color:'rgba(255,255,255,0.4)',fontSize:10}}>Selection active</span>
+                  <button onClick={clearSel} style={{padding:'3px 8px',borderRadius:5,border:'1px solid rgba(255,255,255,0.15)',background:'transparent',color:'rgba(255,255,255,0.5)',cursor:'pointer',fontSize:10}}>Deselect (Ctrl+D)</button>
+                  <button onClick={invertSel} style={{padding:'3px 8px',borderRadius:5,border:'1px solid rgba(255,255,255,0.15)',background:'transparent',color:'rgba(255,255,255,0.5)',cursor:'pointer',fontSize:10}}>Invert (Ctrl+Shift+I)</button>
+                </>
+              )}
+            </div>
+          )}
+          <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',position:'relative'}}
           onClick={(e)=>{
             // Click on canvas background (not on a layer) deselects
             if(e.target===e.currentTarget) setSelectedId(null);
@@ -6755,6 +6856,28 @@ PHASE 4 — Toolbar button:
             <div style={{transform:`scale(${zoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,transformOrigin:'center center',imageRendering:zoom>1?'pixelated':'high-quality'}}>
               <div id="thumbnail-canvas" ref={canvasRef}
                 onMouseMove={(e)=>{
+                  // ── Selection tool mouse move ────────────────────────────
+                  if(selDrawRef.current&&(activeTool==='marquee'||activeTool==='sel-lasso')){
+                    const rect=canvasRef.current.getBoundingClientRect();
+                    let x=(e.clientX-rect.left)/zoom;
+                    let y=(e.clientY-rect.top)/zoom;
+                    if(activeTool==='marquee'){
+                      if(e.shiftKey){const d=Math.max(Math.abs(x-selDrawRef.current.sx),Math.abs(y-selDrawRef.current.sy));x=selDrawRef.current.sx+(x>=selDrawRef.current.sx?d:-d);y=selDrawRef.current.sy+(y>=selDrawRef.current.sy?d:-d);}
+                      selDrawRef.current.ex=x; selDrawRef.current.ey=y;
+                      setSelDrawState({type:selDrawRef.current.type,x1:selDrawRef.current.sx,y1:selDrawRef.current.sy,x2:x,y2:y});
+                    } else if(activeTool==='sel-lasso'){
+                      selDrawRef.current.points.push({x,y});
+                      setSelDrawState({type:'lasso',points:[...selDrawRef.current.points]});
+                    }
+                    return;
+                  }
+                  if(selDrawRef.current&&activeTool==='sel-poly'){
+                    const rect=canvasRef.current.getBoundingClientRect();
+                    const x=(e.clientX-rect.left)/zoom;
+                    const y=(e.clientY-rect.top)/zoom;
+                    setSelDrawState(s=>s?{...s,cx:x,cy:y}:s);
+                    return;
+                  }
                   if(activeTool==='rimlight'){
                     const rect=canvasRef.current.getBoundingClientRect();
                     const cursor=document.getElementById('rim-cursor');
@@ -6804,6 +6927,51 @@ PHASE 4 — Toolbar button:
                   }
                 }}
                 onMouseDown={(e)=>{
+                  // ── Selection tools ──────────────────────────────────────
+                  if(activeTool==='marquee'||activeTool==='sel-lasso'||activeTool==='sel-poly'||activeTool==='sel-wand'){
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const rect=canvasRef.current.getBoundingClientRect();
+                    const x=(e.clientX-rect.left)/zoom;
+                    const y=(e.clientY-rect.top)/zoom;
+                    const mode=getSelMode(e);
+                    if(activeTool==='marquee'){
+                      selDrawRef.current={type:selSubMode==='ellipse'?'ellipse':'rect',sx:x,sy:y,ex:x,ey:y,mode};
+                      setSelDrawState({type:selSubMode==='ellipse'?'ellipse':'rect',x1:x,y1:y,x2:x,y2:y});
+                    } else if(activeTool==='sel-lasso'){
+                      selDrawRef.current={type:'lasso',points:[{x,y}],mode};
+                      setSelDrawState({type:'lasso',points:[{x,y}]});
+                    } else if(activeTool==='sel-poly'){
+                      if(!selDrawRef.current){
+                        selDrawRef.current={type:'poly',points:[{x,y}],mode};
+                        setSelDrawState({type:'poly',points:[{x,y}],cx:x,cy:y});
+                      } else {
+                        const pts=selDrawRef.current.points;
+                        const fp=pts[0];
+                        if(pts.length>2&&Math.hypot(x-fp.x,y-fp.y)<12){
+                          const mask=pathMask(pts,p.preview.w,p.preview.h);
+                          applySelection(mask,selDrawRef.current.mode);
+                          selDrawRef.current=null;
+                          setSelDrawState(null);
+                        } else {
+                          pts.push({x,y});
+                          setSelDrawState({type:'poly',points:[...pts],cx:x,cy:y});
+                        }
+                      }
+                      return;
+                    } else if(activeTool==='sel-wand'){
+                      const flatCanvas=document.createElement('canvas');
+                      flatCanvas.width=p.preview.w; flatCanvas.height=p.preview.h;
+                      renderLayersToCanvas(flatCanvas,layers).then(()=>{
+                        const ctx2=flatCanvas.getContext('2d');
+                        const imgData=ctx2.getImageData(0,0,p.preview.w,p.preview.h);
+                        const mask=magicWandMask(imgData,Math.round(x),Math.round(y),selTolerance);
+                        applySelection(mask,mode);
+                      });
+                      return;
+                    }
+                    return;
+                  }
                   if(activeTool==='rimlight'){
                     e.stopPropagation();
                     e.preventDefault();
@@ -6902,6 +7070,27 @@ PHASE 4 — Toolbar button:
                   }
                 }}
                 onMouseUp={(e)=>{
+                  // ── Selection tools mouse up ─────────────────────────────
+                  if(selDrawRef.current&&(activeTool==='marquee'||activeTool==='sel-lasso')){
+                    const draw=selDrawRef.current;
+                    selDrawRef.current=null;
+                    setSelDrawState(null);
+                    if(activeTool==='marquee'){
+                      const mx=Math.min(draw.sx,draw.ex),my=Math.min(draw.sy,draw.ey);
+                      const mw=Math.abs(draw.ex-draw.sx),mh=Math.abs(draw.ey-draw.sy);
+                      if(mw>2&&mh>2){
+                        const mask=draw.type==='ellipse'?ellipseMask(mx,my,mw,mh,p.preview.w,p.preview.h):rectMask(mx,my,mw,mh,p.preview.w,p.preview.h);
+                        applySelection(mask,draw.mode);
+                      }
+                    } else if(activeTool==='sel-lasso'){
+                      const pts=draw.points;
+                      if(pts.length>=3){
+                        const mask=pathMask(pts,p.preview.w,p.preview.h);
+                        applySelection(mask,draw.mode);
+                      }
+                    }
+                    return;
+                  }
                   if(activeTool==='rimlight'){
                     rimPaintingRef.current=false;
                     return;
@@ -6995,6 +7184,18 @@ PHASE 4 — Toolbar button:
                   }
                 }}
                 onClick={(e)=>{
+                  // ── Selection tools click ────────────────────────────────
+                  if(activeTool==='sel-poly'&&selDrawRef.current&&e.detail===2){
+                    const pts=selDrawRef.current.points;
+                    if(pts.length>=3){
+                      const mask=pathMask(pts,p.preview.w,p.preview.h);
+                      applySelection(mask,selDrawRef.current.mode);
+                      selDrawRef.current=null;
+                      setSelDrawState(null);
+                    }
+                    return;
+                  }
+                  if(['marquee','sel-lasso','sel-wand'].includes(activeTool)){return;}
                   if(activeTool==='rimlight') return;
                   if(activeTool==='lasso') return;
                   if(justSelectedRef.current){justSelectedRef.current=false;return;}
@@ -7106,6 +7307,61 @@ PHASE 4 — Toolbar button:
                     {smartGuides.h.map((gy,i)=>(
                       <line key={`h${i}`} x1={0} y1={gy} x2={p.preview.w} y2={gy} stroke="#FF6B00" strokeWidth="1" strokeDasharray="0" opacity="1"/>
                     ))}
+                  </svg>
+                )}
+
+                {/* ── Selection marching ants overlay ─────────────────── */}
+                <SelectionOverlay maskRef={selectionMaskRef} W={p.preview.w} H={p.preview.h} active={selectionActive}/>
+
+                {/* ── Live selection draw preview ──────────────────────── */}
+                {selDrawState&&(
+                  <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:10001,overflow:'visible'}}>
+                    {(selDrawState.type==='rect')&&(
+                      <rect
+                        x={Math.min(selDrawState.x1,selDrawState.x2)}
+                        y={Math.min(selDrawState.y1,selDrawState.y2)}
+                        width={Math.abs(selDrawState.x2-selDrawState.x1)}
+                        height={Math.abs(selDrawState.y2-selDrawState.y1)}
+                        fill="rgba(255,255,255,0.08)"
+                        stroke="#fff" strokeWidth="1"
+                        strokeDasharray="5,5"
+                      />
+                    )}
+                    {(selDrawState.type==='ellipse')&&(
+                      <ellipse
+                        cx={(selDrawState.x1+selDrawState.x2)/2}
+                        cy={(selDrawState.y1+selDrawState.y2)/2}
+                        rx={Math.abs(selDrawState.x2-selDrawState.x1)/2}
+                        ry={Math.abs(selDrawState.y2-selDrawState.y1)/2}
+                        fill="rgba(255,255,255,0.08)"
+                        stroke="#fff" strokeWidth="1"
+                        strokeDasharray="5,5"
+                      />
+                    )}
+                    {(selDrawState.type==='lasso'||selDrawState.type==='poly')&&selDrawState.points?.length>1&&(
+                      <>
+                        <polyline
+                          points={selDrawState.points.map(pt=>`${pt.x},${pt.y}`).join(' ')}
+                          fill="rgba(255,255,255,0.08)"
+                          stroke="#fff" strokeWidth="1"
+                          strokeDasharray="5,5" strokeLinejoin="round"
+                        />
+                        {selDrawState.type==='poly'&&selDrawState.cx!=null&&(
+                          <line
+                            x1={selDrawState.points[selDrawState.points.length-1].x}
+                            y1={selDrawState.points[selDrawState.points.length-1].y}
+                            x2={selDrawState.cx} y2={selDrawState.cy}
+                            stroke="rgba(255,255,255,0.5)" strokeWidth="1" strokeDasharray="4,4"
+                          />
+                        )}
+                        {selDrawState.type==='poly'&&selDrawState.points?.length>2&&(
+                          <circle
+                            cx={selDrawState.points[0].x} cy={selDrawState.points[0].y}
+                            r="5" fill="#f97316" stroke="#fff" strokeWidth="1.5"
+                          />
+                        )}
+                      </>
+                    )}
                   </svg>
                 )}
 
@@ -7503,6 +7759,7 @@ PHASE 4 — Toolbar button:
               </div>
             </div>
           )}
+          </div>{/* end inner canvas flex-center wrapper */}
         </div>
 
         {/* ✅ Right sidebar — stopPropagation on pointer events so sliders never leak to canvas */}
