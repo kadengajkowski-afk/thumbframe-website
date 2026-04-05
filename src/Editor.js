@@ -13635,6 +13635,8 @@ PHASE 4 — Toolbar button:
           const btn=document.getElementById('ai-generate-btn');
           if(!aiPrompt.trim()){alert('Enter a prompt first');return;}
           btn.textContent='Generating...';btn.disabled=true;btn.style.opacity='0.6';
+          const abortCtrl = new AbortController();
+          const genTimeout = setTimeout(() => abortCtrl.abort(), 90000);
           try{
             const { data: { session } } = await supabase.auth.getSession();
             if(!session?.access_token){
@@ -13642,7 +13644,7 @@ PHASE 4 — Toolbar button:
               btn.textContent='Generate';btn.disabled=false;btn.style.opacity='1';
               return;
             }
-            const res=await fetch(`${resolvedApiUrl}/ai-generate`,{
+            const res=await fetch(`${resolvedApiUrl}/api/generate-image`,{
               method:'POST',
               headers:{
                 'Content-Type':'application/json',
@@ -13650,36 +13652,51 @@ PHASE 4 — Toolbar button:
               },
               body:JSON.stringify({
                 prompt: aiPrompt,
-                face_image_url: brandKit?.face_image_url || brandKitFace || null,
+                size: '1792x1024',
+                style: 'vivid',
               }),
+              signal: abortCtrl.signal,
             });
+            clearTimeout(genTimeout);
             const data=await res.json();
-            if(data.error){
-              // Handle 403 from backend Pro check
-              if(res.status === 403){
-                alert('Upgrade to Pro to use AI generation');
-                setShowPaywall(true);
+            if(!data.success){
+              // Handle 403 / paywall
+              if(res.status === 403 || res.status === 429){
+                if(res.status === 403){ alert('Upgrade to Pro to use AI generation'); setShowPaywall(true); }
+                else { setCmdLog(data.error || 'Quota exceeded. Upgrade for more AI generations.'); }
               } else {
-                alert('Error: '+data.error);
+                showToastMsg(data.error || 'Generation failed. Please try again.', 'error');
               }
               btn.textContent='Generate';btn.disabled=false;btn.style.opacity='1';
               return;
             }
+            // Handle both URL and base64 response formats
+            let imageUrl;
+            if(data.format === 'url'){
+              imageUrl = data.image;
+            } else {
+              imageUrl = `data:image/png;base64,${data.image}`;
+            }
             const cW=p.preview.w,cH=p.preview.h;
             addLayer({
-              type:'image',src:data.image,
+              type:'image',src:imageUrl,
               width:cW,height:cH,x:0,y:0,
               cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
               imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
             });
-            setLastGeneratedImageUrl(data.image || '');
+            setLastGeneratedImageUrl(imageUrl);
             btn.textContent='✓ Added!';btn.style.background=T.success;
             setTimeout(()=>{
               btn.textContent='Generate';btn.disabled=false;
               btn.style.opacity='1';btn.style.background=T.warning;
             },2000);
           }catch(e){
-            alert('Failed — make sure API is running on port 5000');
+            clearTimeout(genTimeout);
+            if(e.name === 'AbortError' || e.name === 'TimeoutError'){
+              showToastMsg('Generation timed out. Try a simpler prompt or try again.', 'error');
+            } else {
+              showToastMsg(e.message || 'Generation failed. Please try again.', 'error');
+            }
             btn.textContent='Generate';btn.disabled=false;btn.style.opacity='1';
           }
         }}
