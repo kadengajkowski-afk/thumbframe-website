@@ -2,7 +2,8 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 
 // ─── Brush Overlay ─────────────────────────────────────────────────────────────
 export const BrushOverlay = forwardRef(function BrushOverlay(
-  { layer, onUpdate, brushType, brushSize, brushStrength, brushEdge, brushFlow, brushStabilizer, active, zoom, paintColor, paintAlpha, isMask },
+  { layer, onUpdate, brushType, brushSize, brushStrength, brushEdge, brushFlow, brushStabilizer, active, zoom, paintColor, paintAlpha, isMask,
+    pressureEnabled, pressureMapping, pressureCurve, pressureMin, pressureMax, onTabletDetected },
   ref
 ) {
   const canvasRef      = useRef(null);
@@ -17,6 +18,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   const loadedSrc      = useRef(null);
   const lastPressure   = useRef(1);
   const lastTime       = useRef(Date.now());
+  const rawPressureRef = useRef(0.5); // live tablet pressure from pointer events (0.5 for mouse)
   const lastHealPos    = useRef(null);
   const hasPainted     = useRef(false);
   const canvasScale    = useRef(1);
@@ -127,6 +129,26 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     return lastPressure.current;
   }
 
+  // ── Tablet pressure helpers ────────────────────────────────────────────────
+  function _applyPressureCurve(raw, curve, min, max) {
+    const minN = min / 100, maxN = max / 100;
+    const clamped = Math.max(minN, Math.min(maxN, raw));
+    const t = maxN > minN ? (clamped - minN) / (maxN - minN) : 0;
+    if (curve === 'exponential') return Math.pow(t, 2);
+    if (curve === 'logarithmic') return Math.sqrt(t);
+    return t; // linear
+  }
+
+  function getEffectivePressure(speedPressure) {
+    if (!pressureEnabled || pressureMapping === 'none') return speedPressure;
+    return _applyPressureCurve(
+      rawPressureRef.current,
+      pressureCurve || 'linear',
+      pressureMin ?? 0,
+      pressureMax ?? 100
+    );
+  }
+
   // ✅ PHASE 2: Stabilizer — smooth position lags behind mouse
   function getStabilizedPos(target) {
     const stab = brushStabilizer || 0;
@@ -184,7 +206,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applyBlurStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
+    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
     // ✅ PHASE 2: Flow separates how much paint per stamp from total opacity
     const s  = (brushStrength/100) * (brushFlow/100) * pressure;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
@@ -210,7 +232,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applySmearStamp(ctx, x, y, fromX, fromY, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
+    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.5;
     const dx = x-fromX, dy = y-fromY;
     if (Math.abs(dx)<0.5&&Math.abs(dy)<0.5) return;
@@ -236,7 +258,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applySharpenStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
+    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.12;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -261,7 +283,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }
 
   function applyAirbrushStamp(ctx, x, y, pressure) {
-    const r       = Math.round(brushSize*(zoom||1)*canvasScale.current);
+    const r       = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
     const flow    = brushFlow/100;
     const alpha   = (brushStrength/100)*flow*pressure*0.12;
     const density = Math.round(r*1.2);
@@ -285,7 +307,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }
 
   function applyEraserStamp(ctx, x, y, pressure) {
-    const r     = Math.round(brushSize*(zoom||1)*canvasScale.current);
+    const r     = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
     const alpha = (brushStrength/100)*(brushFlow/100)*pressure;
     ctx.save();
     ctx.globalCompositeOperation='destination-out';
@@ -304,7 +326,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   function applyCloneStamp(ctx, x, y, pressure) {
     if (!cloneSource.current) return;
-    const r=Math.round(brushSize*(zoom||1)*canvasScale.current), cs=cloneSource.current;
+    const r=Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current), cs=cloneSource.current;
     ctx.save();
     ctx.globalAlpha=(brushStrength/100)*(brushFlow/100)*pressure;
     ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.clip();
@@ -313,7 +335,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   }
 
   function applyPaintStamp(ctx, x, y, pressure, color, alpha) {
-    const r     = Math.round(brushSize*(zoom||1)*canvasScale.current);
+    const r     = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
     const a     = ((alpha||100)/100) * (brushStrength/100) * (brushFlow/100) * pressure;
     const hex   = (color||'#ff0000').replace('#','');
     const cr    = parseInt(hex.slice(0,2),16);
@@ -390,7 +412,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Dodge — brighten pixels
   function applyDodgeStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
+    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.4;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -414,7 +436,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Burn — darken pixels
   function applyBurnStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
+    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.4;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -640,7 +662,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // ✅ PHASE 3: Wet mix — picks up color from canvas and mixes like paint
   function applyWetMixStamp(ctx, x, y, pressure) {
     const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*(zoom||1)*canvasScale.current);
+    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
     const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.6;
     const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
     const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
@@ -695,19 +717,29 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     if (brushType==='fill')     applyFloodFill(ctx,x,y,paintColor);
   }
 
+  // Ref to hold pressure-scaled brush size multiplier, read by stamp functions
+  const pressureSizeMultRef = useRef(1);
+
   function paintStroke(pos) {
     if (!isReady.current||!canvasRef.current) return;
-    const ctx      = canvasRef.current.getContext('2d');
-    const pressure = getPressure(pos);
-    const stabbed  = getStabilizedPos(pos);
-    const r        = Math.round(brushSize*(zoom||1)*canvasScale.current);
-    const spacing  = Math.max(1, r*(brushEdge==='hard'?0.2:0.12));
+    const ctx         = canvasRef.current.getContext('2d');
+    const speedPres   = getPressure(pos);
+    const effPressure = getEffectivePressure(speedPres);
+    // Apply size pressure scaling via a ref readable by stamp functions
+    if (pressureEnabled && (pressureMapping === 'size' || pressureMapping === 'both')) {
+      pressureSizeMultRef.current = Math.max(0.05, 0.1 + 0.9 * effPressure);
+    } else {
+      pressureSizeMultRef.current = 1;
+    }
+    const stabbed = getStabilizedPos(pos);
+    const r       = Math.round(brushSize * pressureSizeMultRef.current * (zoom||1) * canvasScale.current);
+    const spacing = Math.max(1, r*(brushEdge==='hard'?0.2:0.12));
 
     if (lastPos.current) {
       const stamps = getStamps(lastPos.current, stabbed, spacing);
-      stamps.forEach(s=>paintStamp(ctx,s.x,s.y,lastPos.current.x,lastPos.current.y,pressure));
+      stamps.forEach(s=>paintStamp(ctx,s.x,s.y,lastPos.current.x,lastPos.current.y,effPressure));
     } else {
-      paintStamp(ctx,stabbed.x,stabbed.y,stabbed.x,stabbed.y,pressure);
+      paintStamp(ctx,stabbed.x,stabbed.y,stabbed.x,stabbed.y,effPressure);
     }
   }
 
@@ -827,6 +859,8 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     }
   }
 
+  // onPointerLeave is used inline below — this alias is kept for reference
+  // eslint-disable-next-line no-unused-vars
   function onMouseLeave(e) { updateCursor(0,0,false); onMouseUp(e); }
 
   if (!active||!layer?.src) return null;
@@ -836,19 +870,33 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       <div ref={cursorRef} style={{ display:'none', position:'absolute', pointerEvents:'none', zIndex:99999 }}/>
       <canvas
         ref={canvasRef}
-        onMouseDown={(e) => {
+        onPointerDown={(e) => {
+          // Capture pointer so move/up fire even if pointer leaves element
+          e.currentTarget.setPointerCapture(e.pointerId);
+          // Track tablet pressure
+          rawPressureRef.current = e.pressure;
+          // Tablet detection — pointerType 'pen' means drawing tablet
+          if (e.pointerType === 'pen' && onTabletDetected) onTabletDetected();
           // Show canvas on first interaction (not for mask — mask stays invisible)
           if (!isMask && canvasRef.current) canvasRef.current.style.opacity = '1';
           onMouseDown(e);
         }}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseLeave}
+        onPointerMove={(e) => {
+          // Update live pressure — for mouse this is always 0.5, for pen it's real
+          rawPressureRef.current = e.pressure;
+          onMouseMove(e);
+        }}
+        onPointerUp={(e) => {
+          rawPressureRef.current = e.pressure;
+          onMouseUp(e);
+        }}
+        onPointerLeave={(e) => { updateCursor(0,0,false); onMouseUp(e); }}
         style={{
           position:'absolute', top:0, left:0,
           width: '100%', height: '100%',
           cursor:'none', display:'block',
           userSelect:'none', WebkitUserSelect:'none',
+          touchAction:'none',
           pointerEvents:'auto',
           opacity: 0,
         }}
@@ -866,7 +914,39 @@ export default function BrushTool({
   onBrushTypeChange, onBrushSizeChange, onBrushStrengthChange,
   onBrushEdgeChange, onBrushFlowChange, onBrushStabilizerChange,
   onPaintColorChange, onPaintAlphaChange,
+  // Pressure props
+  pressureEnabled, pressureMapping, pressureCurve, pressureMin, pressureMax, tabletDetected,
+  onPressureEnabledChange, onPressureMappingChange, onPressureCurveChange,
+  onPressureMinChange, onPressureMaxChange,
 }) {
+  const pressureCurveCanvasRef = useRef(null);
+
+  // Draw curve preview whenever curve changes
+  useEffect(() => {
+    const el = pressureCurveCanvasRef.current;
+    if (!el || !pressureEnabled) return;
+    const ctx2 = el.getContext('2d');
+    ctx2.clearRect(0, 0, 60, 40);
+    ctx2.fillStyle = '#1a1a1a';
+    ctx2.fillRect(0, 0, 60, 40);
+    ctx2.strokeStyle = '#ff6a00';
+    ctx2.lineWidth = 1.5;
+    ctx2.beginPath();
+    for (let x = 0; x <= 60; x++) {
+      const t = x / 60;
+      let y;
+      if (pressureCurve === 'exponential') y = 1 - Math.pow(t, 2);
+      else if (pressureCurve === 'logarithmic') y = 1 - Math.sqrt(t);
+      else y = 1 - t;
+      if (x === 0) ctx2.moveTo(x, y * 40);
+      else ctx2.lineTo(x, y * 40);
+    }
+    ctx2.stroke();
+    ctx2.strokeStyle = '#444';
+    ctx2.lineWidth = 0.5;
+    ctx2.strokeRect(0, 0, 60, 40);
+  }, [pressureCurve, pressureEnabled]);
+
   const brushTypes = [
     { key:'blur',     label:'Blur',     icon:'◎', desc:'Softens — good for skin and backgrounds'      },
     { key:'smear',    label:'Smear',    icon:'≋', desc:'Drags pixels — blend edges naturally'         },
@@ -1050,6 +1130,66 @@ export default function BrushTool({
           }}/>
         </div>
       )}
+
+      {/* ── Pressure sensitivity (tablet) ───────────────────────────────── */}
+      <span style={css.label}>Pressure sensitivity</span>
+      <div style={{ ...css.section, marginTop:0 }}>
+        {tabletDetected && (
+          <div style={{ fontSize:10, color:'#4ade80', fontWeight:'600', marginBottom:6 }}>
+            ✓ Drawing tablet detected
+          </div>
+        )}
+        {!tabletDetected && (
+          <div style={{ fontSize:10, color:T.muted, marginBottom:6 }}>
+            Connect a drawing tablet to enable pressure sensitivity.
+          </div>
+        )}
+        <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', marginBottom:6 }}>
+          <input type="checkbox" checked={!!pressureEnabled} onChange={e=>onPressureEnabledChange&&onPressureEnabledChange(e.target.checked)} style={{ accentColor:'#ff6a00' }}/>
+          <span style={{ fontSize:11, color:T.text, fontWeight:'600' }}>Enable pressure</span>
+        </label>
+        {pressureEnabled && (
+          <div>
+            <div style={{ ...css.row, marginBottom:6 }}>
+              <span style={{ fontSize:10, color:T.muted, width:50 }}>Maps to</span>
+              <select value={pressureMapping||'both'} onChange={e=>onPressureMappingChange&&onPressureMappingChange(e.target.value)}
+                style={{ flex:1, background:'#222', color:'#fff', border:`1px solid ${T.border}`, borderRadius:4, padding:'3px 6px', fontSize:11 }}>
+                <option value="none">Nothing</option>
+                <option value="size">Size only</option>
+                <option value="opacity">Opacity only</option>
+                <option value="both">Size + Opacity</option>
+              </select>
+            </div>
+            <div style={{ ...css.row, marginBottom:8 }}>
+              <span style={{ fontSize:10, color:T.muted, width:50 }}>Curve</span>
+              <select value={pressureCurve||'linear'} onChange={e=>onPressureCurveChange&&onPressureCurveChange(e.target.value)}
+                style={{ flex:1, background:'#222', color:'#fff', border:`1px solid ${T.border}`, borderRadius:4, padding:'3px 6px', fontSize:11 }}>
+                <option value="linear">Linear</option>
+                <option value="exponential">Exponential (light touch)</option>
+                <option value="logarithmic">Logarithmic (easy full)</option>
+              </select>
+              <canvas ref={pressureCurveCanvasRef} width={60} height={40}
+                style={{ borderRadius:3, border:`1px solid ${T.border}`, flexShrink:0 }}/>
+            </div>
+            <div style={{ ...css.row, marginBottom:4 }}>
+              <span style={{ fontSize:10, color:T.muted, width:50 }}>Min %</span>
+              <input type="range" min={0} max={100} value={pressureMin??0}
+                onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
+                onChange={e=>onPressureMinChange&&onPressureMinChange(Number(e.target.value))}
+                style={{ flex:1, accentColor:'#ff6a00' }}/>
+              <span style={{ fontSize:10, color:T.muted, width:26, textAlign:'right' }}>{pressureMin??0}%</span>
+            </div>
+            <div style={{ ...css.row }}>
+              <span style={{ fontSize:10, color:T.muted, width:50 }}>Max %</span>
+              <input type="range" min={0} max={100} value={pressureMax??100}
+                onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
+                onChange={e=>onPressureMaxChange&&onPressureMaxChange(Number(e.target.value))}
+                style={{ flex:1, accentColor:'#ff6a00' }}/>
+              <span style={{ fontSize:10, color:T.muted, width:26, textAlign:'right' }}>{pressureMax??100}%</span>
+            </div>
+          </div>
+        )}
+      </div>
 
       <button onClick={()=>brushOverlayRef?.current?.undo()}
         style={{ width:'100%', padding:9, borderRadius:7, border:`1px solid ${T.border}`, background:'transparent', color:T.text, fontSize:12, cursor:'pointer', fontWeight:'600', marginTop:10 }}>

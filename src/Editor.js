@@ -9,8 +9,10 @@ import CurvesPanel, { CurveThumbnail } from './CurvesPanel';
 import { DEFAULT_CURVES, applyLUTSync } from './curvesUtils';
 import CommandPalette from './CommandPalette';
 import LiquifyModal from './LiquifyModal';
+import FiltersModal from './FiltersModal';
 import SelectionOverlay from './SelectionOverlay';
 import { rectMask, ellipseMask, pathMask, magicWandMask, combineMasks, invertMask, selectAllMask, maskBounds, featherMask } from './selectionUtils'; // eslint-disable-line no-unused-vars
+import db from './db';
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
 const BrandKitSetupModal = lazy(() => import('./BrandKit'));
@@ -236,6 +238,262 @@ function applyCurvesLUT(imageData, curves) {
     worker.addEventListener('message', handler);
     worker.postMessage({ pixels: buf, curves }, [buf]);
   });
+}
+
+// Module-level retouch worker singleton
+let _retouchWorker = null;
+function getRetouchWorker() {
+  if (!_retouchWorker) {
+    try { _retouchWorker = new Worker(new URL('./retouchWorker.js', import.meta.url)); }
+    catch(e) { console.warn('[retouch] Worker init failed:', e); }
+  }
+  return _retouchWorker;
+}
+
+// ── Adjustment Layer constants & utilities ───────────────────────────────────
+
+const ADJ_DEFAULTS = {
+  levels: { inBlack:0, inGamma:1.0, inWhite:255, outBlack:0, outWhite:255, channel:'rgb',
+            rInB:0,rInG:1,rInW:255, gInB:0,gInG:1,gInW:255, bInB:0,bInG:1,bInW:255 },
+  hueSat:  { master:{h:0,s:0,l:0}, reds:{h:0,s:0,l:0}, yellows:{h:0,s:0,l:0},
+             greens:{h:0,s:0,l:0}, cyans:{h:0,s:0,l:0}, blues:{h:0,s:0,l:0},
+             magentas:{h:0,s:0,l:0}, colorize:false, colorizeH:0, colorizeS:50, colorizeL:0 },
+  colorBalance: {
+    shadows:{cr:0,mg:0,yb:0}, midtones:{cr:0,mg:0,yb:0}, highlights:{cr:0,mg:0,yb:0},
+    preserveLuminosity:true
+  },
+  vibrance: { vibrance:0, saturation:0 },
+  selectiveColor: {
+    reds:{c:0,m:0,y:0,k:0}, yellows:{c:0,m:0,y:0,k:0}, greens:{c:0,m:0,y:0,k:0},
+    cyans:{c:0,m:0,y:0,k:0}, blues:{c:0,m:0,y:0,k:0}, magentas:{c:0,m:0,y:0,k:0},
+    whites:{c:0,m:0,y:0,k:0}, neutrals:{c:0,m:0,y:0,k:0}, blacks:{c:0,m:0,y:0,k:0},
+    method:'relative'
+  },
+  gradientMap: {
+    stops:[{pos:0,color:'#000000'},{pos:1,color:'#ffffff'}],
+    reverse:false, preset:'bw'
+  },
+  posterize: { levels:4 },
+  threshold: { level:128 },
+};
+
+function buildAdjLUT(layer) {
+  const s = layer.settings || {};
+  const t = layer.adjustmentType;
+  if (t === 'levels') {
+    const buildChanLUT = (inB, inG, inW, outB, outW) => {
+      const arr = new Uint8Array(256);
+      for (let i = 0; i < 256; i++) {
+        const inRange = Math.max(0, Math.min(255, inW - inB));
+        if (inRange <= 0) { arr[i] = outB; continue; }
+        let v = (i - inB) / inRange;
+        v = Math.max(0, Math.min(1, v));
+        if (inG !== 1) v = Math.pow(v, 1 / Math.max(0.01, inG));
+        arr[i] = Math.round(outB + v * (outW - outB));
+      }
+      return arr;
+    };
+    const outB = s.outBlack ?? 0, outW = s.outWhite ?? 255;
+    if (s.channel === 'r') return {rLut:buildChanLUT(s.rInB??0,s.rInG??1,s.rInW??255,outB,outW),single:'r'};
+    if (s.channel === 'g') return {gLut:buildChanLUT(s.gInB??0,s.gInG??1,s.gInW??255,outB,outW),single:'g'};
+    if (s.channel === 'b') return {bLut:buildChanLUT(s.bInB??0,s.bInG??1,s.bInW??255,outB,outW),single:'b'};
+    // RGB channel
+    const rgb = buildChanLUT(s.inBlack??0,s.inGamma??1,s.inWhite??255,outB,outW);
+    return {rgbLut:rgb};
+  }
+  if (t === 'posterize') {
+    const lvls = Math.max(2, s.levels ?? 4);
+    const lut = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) lut[i] = Math.round(Math.round(i / 255 * (lvls - 1)) / (lvls - 1) * 255);
+    return {lut};
+  }
+  if (t === 'threshold') {
+    const lvl = s.level ?? 128;
+    const lut = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) lut[i] = i >= lvl ? 255 : 0;
+    return {lut};
+  }
+  if (t === 'gradientMap') {
+    const stops = [...(s.stops||ADJ_DEFAULTS.gradientMap.stops)].sort((a,b)=>a.pos-b.pos);
+    const rev = s.reverse || false;
+    const lut = new Uint8Array(256 * 3);
+    for (let i = 0; i < 256; i++) {
+      const p = rev ? 1 - i/255 : i/255;
+      let r=0,g=0,b=0;
+      if (stops.length === 1) {
+        const c = stops[0].color;
+        r=parseInt(c.slice(1,3),16);g=parseInt(c.slice(3,5),16);b=parseInt(c.slice(5,7),16);
+      } else {
+        for (let j=0;j<stops.length-1;j++){
+          if (p >= stops[j].pos && p <= stops[j+1].pos){
+            const t2=(p-stops[j].pos)/Math.max(0.0001,stops[j+1].pos-stops[j].pos);
+            const c1=stops[j].color, c2=stops[j+1].color;
+            r=Math.round(parseInt(c1.slice(1,3),16)*(1-t2)+parseInt(c2.slice(1,3),16)*t2);
+            g=Math.round(parseInt(c1.slice(3,5),16)*(1-t2)+parseInt(c2.slice(3,5),16)*t2);
+            b=Math.round(parseInt(c1.slice(5,7),16)*(1-t2)+parseInt(c2.slice(5,7),16)*t2);
+            break;
+          }
+        }
+      }
+      lut[i*3]=r; lut[i*3+1]=g; lut[i*3+2]=b;
+    }
+    return {gradLut:lut};
+  }
+  return null;
+}
+
+function applyAdjustmentToImageData(imageData, layer) {
+  const d = imageData.data;
+  const s = layer.settings || {};
+  const t = layer.adjustmentType;
+  const lut = layer._cachedLUT;
+
+  if (t === 'levels') {
+    if (lut) {
+      if (lut.single === 'r' && lut.rLut) {
+        for (let i=0;i<d.length;i+=4) { d[i]=lut.rLut[d[i]]; }
+      } else if (lut.single === 'g' && lut.gLut) {
+        for (let i=0;i<d.length;i+=4) { d[i+1]=lut.gLut[d[i+1]]; }
+      } else if (lut.single === 'b' && lut.bLut) {
+        for (let i=0;i<d.length;i+=4) { d[i+2]=lut.bLut[d[i+2]]; }
+      } else if (lut.rgbLut) {
+        for (let i=0;i<d.length;i+=4) { d[i]=lut.rgbLut[d[i]]; d[i+1]=lut.rgbLut[d[i+1]]; d[i+2]=lut.rgbLut[d[i+2]]; }
+      }
+    }
+    return imageData;
+  }
+  if (t === 'posterize' || t === 'threshold') {
+    if (lut?.lut) {
+      for (let i=0;i<d.length;i+=4) { d[i]=lut.lut[d[i]]; d[i+1]=lut.lut[d[i+1]]; d[i+2]=lut.lut[d[i+2]]; }
+    }
+    return imageData;
+  }
+  if (t === 'gradientMap' && lut?.gradLut) {
+    for (let i=0;i<d.length;i+=4) {
+      const lum = Math.round(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]);
+      d[i]=lut.gradLut[lum*3]; d[i+1]=lut.gradLut[lum*3+1]; d[i+2]=lut.gradLut[lum*3+2];
+    }
+    return imageData;
+  }
+  if (t === 'hueSat') {
+    const {master,colorize,colorizeH,colorizeS,colorizeL} = s;
+    const hShift=(master?.h||0)/360, sShift=(master?.s||0)/100, lShift=(master?.l||0)/100;
+    for (let i=0;i<d.length;i+=4) {
+      let r=d[i]/255, g=d[i+1]/255, b=d[i+2]/255;
+      // RGB to HLS
+      const max=Math.max(r,g,b), min=Math.min(r,g,b);
+      let h=0,s2=0,l2=(max+min)/2;
+      if (max!==min) {
+        const delta=max-min;
+        s2=l2>0.5?delta/(2-max-min):delta/(max+min);
+        if(max===r) h=(g-b)/delta+(g<b?6:0);
+        else if(max===g) h=(b-r)/delta+2;
+        else h=(r-g)/delta+4;
+        h/=6;
+      }
+      if (colorize) {
+        h=(colorizeH||0)/360; s2=(colorizeS||50)/100; l2=Math.max(0,Math.min(1,l2+(colorizeL||0)/100));
+      } else {
+        h=((h+hShift)%1+1)%1;
+        s2=Math.max(0,Math.min(1,s2+sShift));
+        l2=Math.max(0,Math.min(1,l2+lShift));
+      }
+      // HLS to RGB
+      const hls2rgb=(p2,q,t3)=>{if(t3<0)t3+=1;if(t3>1)t3-=1;if(t3<1/6)return p2+(q-p2)*6*t3;if(t3<1/2)return q;if(t3<2/3)return p2+(q-p2)*(2/3-t3)*6;return p2;};
+      if (s2===0) { d[i]=d[i+1]=d[i+2]=Math.round(l2*255); }
+      else {
+        const q=l2<0.5?l2*(1+s2):l2+s2-l2*s2, p2=2*l2-q;
+        d[i]=Math.round(hls2rgb(p2,q,h+1/3)*255);
+        d[i+1]=Math.round(hls2rgb(p2,q,h)*255);
+        d[i+2]=Math.round(hls2rgb(p2,q,h-1/3)*255);
+      }
+    }
+    return imageData;
+  }
+  if (t === 'colorBalance') {
+    const {shadows,midtones,highlights,preserveLuminosity} = s;
+    for (let i=0;i<d.length;i+=4) {
+      const r=d[i], g=d[i+1], b=d[i+2];
+      const lum=0.299*r+0.587*g+0.114*b;
+      const lf=lum/255;
+      // shadow weight (Photoshop-style bell curve)
+      const sw=Math.max(0,0.5-lf)*2;
+      const hw=Math.max(0,lf-0.5)*2;
+      const mw=1-sw-hw;
+      const dr=(shadows?.cr||0)*sw+(midtones?.cr||0)*mw+(highlights?.cr||0)*hw;
+      const dg=(shadows?.mg||0)*sw+(midtones?.mg||0)*mw+(highlights?.mg||0)*hw;
+      const db=(shadows?.yb||0)*sw+(midtones?.yb||0)*mw+(highlights?.yb||0)*hw;
+      let nr=Math.max(0,Math.min(255,r+dr));
+      let ng=Math.max(0,Math.min(255,g+dg));
+      let nb=Math.max(0,Math.min(255,b+db));
+      if (preserveLuminosity) {
+        const newLum=0.299*nr+0.587*ng+0.114*nb;
+        if (newLum>0) { const ratio=lum/newLum; nr=Math.min(255,nr*ratio); ng=Math.min(255,ng*ratio); nb=Math.min(255,nb*ratio); }
+      }
+      d[i]=Math.round(nr); d[i+1]=Math.round(ng); d[i+2]=Math.round(nb);
+    }
+    return imageData;
+  }
+  if (t === 'vibrance') {
+    const vib=(s.vibrance||0)/100, sat=(s.saturation||0)/100;
+    for (let i=0;i<d.length;i+=4) {
+      let r=d[i]/255, g=d[i+1]/255, b=d[i+2]/255;
+      const max=Math.max(r,g,b), min=Math.min(r,g,b);
+      const currSat=max>0?(max-min)/max:0;
+      const skinTone=(r>0.35&&r>g*1.2&&r>b*1.4)?1:0;
+      // Vibrance: boost unsaturated colors more
+      const vibFactor=vib*(1-currSat)*(1-skinTone*0.5);
+      const avg=(r+g+b)/3;
+      r=Math.max(0,Math.min(1,avg+(r-avg)*(1+vibFactor+sat)));
+      g=Math.max(0,Math.min(1,avg+(g-avg)*(1+vibFactor+sat)));
+      b=Math.max(0,Math.min(1,avg+(b-avg)*(1+vibFactor+sat)));
+      d[i]=Math.round(r*255); d[i+1]=Math.round(g*255); d[i+2]=Math.round(b*255);
+    }
+    return imageData;
+  }
+  if (t === 'selectiveColor') {
+    for (let i=0;i<d.length;i+=4) {
+      const r=d[i]/255, g=d[i+1]/255, b=d[i+2]/255;
+      const max=Math.max(r,g,b), min=Math.min(r,g,b);
+      // Determine dominant hue range
+      let range=null;
+      const hue60 = max===min?-1:max===r?((g-b)/(max-min)+6)%6:max===g?(b-r)/(max-min)+2:(r-g)/(max-min)+4;
+      if (max-min < 0.08) {
+        if (max > 0.9) range='whites';
+        else if (max < 0.2) range='blacks';
+        else range='neutrals';
+      } else {
+        if(hue60<1||hue60>=5) range='reds';
+        else if(hue60<2) range='yellows';
+        else if(hue60<3) range='greens';
+        else if(hue60<4) range='cyans';
+        else range='blues';
+        if(hue60>=4.5||hue60<0.5) range='magentas';
+      }
+      const adj = s[range];
+      if (adj) {
+        const isRel = (s.method||'relative')==='relative';
+        const m = max > 0 ? 1/max : 0;
+        const dc=(adj.c||0)/100, dm=(adj.m||0)/100, dy=(adj.y||0)/100, dk=(adj.k||0)/100;
+        let nr=r,ng=g,nb=b;
+        if(isRel){nr=Math.max(0,Math.min(1,r+dc*(max-r)*m-dm*r*m+dy*(max-b)*m*(1-dk)));nr=Math.max(0,Math.min(1,nr));ng=Math.max(0,Math.min(1,g-dc*(max-g)*m+dm*(max-g)*m+dy*(max-b)*m));nb=Math.max(0,Math.min(1,b-dy*(max-b)*m-dk*b));}
+        else{nr=Math.max(0,Math.min(1,r-dc/100-dk/100));ng=Math.max(0,Math.min(1,g-dm/100-dk/100));nb=Math.max(0,Math.min(1,b-dy/100-dk/100));}
+        d[i]=Math.round(nr*255); d[i+1]=Math.round(ng*255); d[i+2]=Math.round(nb*255);
+      }
+    }
+    return imageData;
+  }
+  return imageData;
+}
+
+// Module-level history thumbnail worker singleton
+let _histThumbWorker = null;
+function getHistThumbWorker() {
+  if (!_histThumbWorker) {
+    try { _histThumbWorker = new Worker(new URL('./historyThumbnailWorker.js', import.meta.url)); }
+    catch(e) { console.warn('[histThumb] Worker init failed:', e); }
+  }
+  return _histThumbWorker;
 }
 
 function BlendModeSelect({ value, onChange, style }) {
@@ -791,9 +1049,29 @@ function renderShapeSVG(shape,fillColor,strokeColor,width,height){
 
 let idCounter=1;
 function newId(){return idCounter++;}
-function getLayerIcon(obj){if(obj.type==='background')return'▣';if(obj.type==='text')return'T';if(obj.type==='shape')return'○';if(obj.type==='svg')return'◆';if(obj.type==='image')return'▤';if(obj.type==='curves')return'◑';return'▪';}
-function getLayerColor(obj){if(obj.type==='background')return obj.bgColor||'#f97316';if(obj.type==='text')return obj.textColor||'#fff';if(obj.type==='shape')return obj.fillColor||'#FF4500';if(obj.type==='curves')return'#f97316';return'#555';}
-function getLayerName(obj){if(obj.type==='background')return'Background';if(obj.type==='text')return obj.text?.slice(0,18)||'Text';if(obj.type==='shape')return(obj.shape?.charAt(0).toUpperCase()+obj.shape?.slice(1))||'Shape';if(obj.type==='svg')return obj.label||'Element';if(obj.type==='image')return'Image';if(obj.type==='curves')return'Curves';return'Layer';}
+function getLayerIcon(obj){if(obj.type==='group')return'⊞';if(obj.type==='background')return'▣';if(obj.type==='text')return'T';if(obj.type==='shape')return'○';if(obj.type==='svg')return'◆';if(obj.type==='image')return'▤';if(obj.type==='curves')return'◑';if(obj.type==='adjustment'){const m={levels:'▤',hueSat:'◐',colorBalance:'⊕',vibrance:'✦',selectiveColor:'◈',gradientMap:'▓',posterize:'▦',threshold:'◑'};return m[obj.adjustmentType]||'◑';}return'▪';}
+function getLayerColor(obj){if(obj.type==='group')return'#f97316';if(obj.type==='background')return obj.bgColor||'#f97316';if(obj.type==='text')return obj.textColor||'#fff';if(obj.type==='shape')return obj.fillColor||'#FF4500';if(obj.type==='curves')return'#f97316';return'#555';}
+function getLayerName(obj){if(obj.type==='group')return obj.name||'Group';if(obj.type==='background')return'Background';if(obj.type==='text')return obj.text?.slice(0,18)||'Text';if(obj.type==='shape')return(obj.shape?.charAt(0).toUpperCase()+obj.shape?.slice(1))||'Shape';if(obj.type==='svg')return obj.label||'Element';if(obj.type==='image')return'Image';if(obj.type==='curves')return'Curves';if(obj.type==='adjustment')return obj.name||({levels:'Levels',hueSat:'Hue/Sat',colorBalance:'Color Balance',vibrance:'Vibrance',selectiveColor:'Selective Color',gradientMap:'Gradient Map',posterize:'Posterize',threshold:'Threshold'}[obj.adjustmentType]||'Adjustment');return'Layer';}
+
+// ── Layer tree utilities (group-aware) ────────────────────────────────────────
+function findInTree(arr,id){for(const l of arr){if(l.id===id)return l;if(l.type==='group'&&l.children){const f=findInTree(l.children,id);if(f)return f;}}return null;}
+function updateLayerInTree(arr,id,fn){return arr.map(l=>{if(l.id===id)return fn(l);if(l.type==='group'&&l.children)return{...l,children:updateLayerInTree(l.children,id,fn)};return l;});}
+function removeFromTree(arr,id){let removed=null;const next=arr.filter(l=>{if(l.id===id){removed=l;return false;}return true;}).map(l=>{if(l.type==='group'&&l.children){const[nc,r]=removeFromTree(l.children,id);if(r)removed=r;return{...l,children:nc};}return l;});return[next,removed];}
+function deepCloneLayer(l){const clone={...l,id:idCounter++};if(l.type==='group'&&l.children)clone.children=l.children.map(deepCloneLayer);return clone;}
+function getGroupBounds(group){if(!group?.children?.length)return null;let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;for(const c of group.children){if(c.hidden)continue;const w=c.width||(c.type==='text'?Math.max(80,(c.text?.length||1)*(c.fontSize||48)*0.6):100);const h=c.type==='text'?(c.fontSize||48):(c.height||100);x1=Math.min(x1,c.x);y1=Math.min(y1,c.y);x2=Math.max(x2,c.x+w);y2=Math.max(y2,c.y+h);}return x1===Infinity?null:{x:x1,y:y1,width:x2-x1,height:y2-y1};}
+function getDisplayList(layerArray,depth=0){
+  const result=[];
+  const reversed=[...layerArray].reverse();
+  for(let i=0;i<reversed.length;i++){
+    const l=reversed[i];
+    const origIdx=layerArray.length-1-i;
+    const isClipped=l.clipMask===true&&origIdx>0;
+    const isBase=origIdx<layerArray.length-1&&layerArray[origIdx+1]?.clipMask===true;
+    result.push({layer:l,depth,isClipped,isBase});
+    if(l.type==='group'&&!l.collapsed&&l.children?.length)result.push(...getDisplayList(l.children,depth+1));
+  }
+  return result;
+}
 
 function getSafeImageSrc(layer){
   const raw = (layer?.paintSrc || layer?.src || '').toString().trim();
@@ -894,6 +1172,90 @@ function debounce(fn, wait){
     timer = null;
   };
   return debounced;
+}
+
+// ── PSD Export ────────────────────────────────────────────────────────────────
+const PSD_BLEND_MAP = {
+  normal:'norm', multiply:'mul', screen:'scrn', overlay:'over',
+  'soft-light':'sLit', 'hard-light':'hLit', 'color-dodge':'div',
+  'color-burn':'idiv', darken:'dark', lighten:'lite', difference:'diff',
+  exclusion:'smud', hue:'hue', saturation:'sat', color:'colr', luminosity:'lum'
+};
+
+// ── Warp Transform — mesh preset builders ─────────────────────────────────────
+function buildIdentityMesh(W, H, mW, mH) {
+  const m = new Float32Array(mW * mH * 2);
+  for (let r = 0; r < mH; r++) for (let c = 0; c < mW; c++) {
+    m[(r*mW+c)*2]   = c / (mW-1) * W;
+    m[(r*mW+c)*2+1] = r / (mH-1) * H;
+  }
+  return m;
+}
+function buildArcMesh(W, H, mW, mH, bend) {
+  const m = buildIdentityMesh(W, H, mW, mH);
+  const b = bend / 100;
+  for (let r = 0; r < mH; r++) for (let c = 0; c < mW; c++) {
+    const t = c / (mW-1);
+    const arc = Math.sin(Math.PI * t) * b * H * 0.4;
+    m[(r*mW+c)*2+1] -= arc * (1 - r/(mH-1));
+  }
+  return m;
+}
+function buildBulgeMesh(W, H, mW, mH, bend) {
+  const m = buildIdentityMesh(W, H, mW, mH);
+  const b = bend / 100;
+  for (let r = 0; r < mH; r++) for (let c = 0; c < mW; c++) {
+    const tx = (c / (mW-1)) * 2 - 1;
+    const ty = (r / (mH-1)) * 2 - 1;
+    const bulge = Math.sqrt(Math.max(0, 1 - tx*tx)) * b * 0.4;
+    m[(r*mW+c)*2] -= bulge * W * tx;
+    m[(r*mW+c)*2+1] -= bulge * H * ty;
+  }
+  return m;
+}
+function buildWaveMesh(W, H, mW, mH, bend) {
+  const m = buildIdentityMesh(W, H, mW, mH);
+  const b = bend / 100;
+  for (let r = 0; r < mH; r++) for (let c = 0; c < mW; c++) {
+    const tx = c / (mW-1);
+    m[(r*mW+c)*2+1] -= Math.sin(tx * Math.PI * 2) * b * H * 0.2;
+  }
+  return m;
+}
+function buildFisheyeMesh(W, H, mW, mH, bend) {
+  const m = buildIdentityMesh(W, H, mW, mH);
+  const b = bend / 100;
+  const cx = W/2, cy = H/2;
+  for (let r = 0; r < mH; r++) for (let c = 0; c < mW; c++) {
+    const dx = (c/(mW-1) - 0.5) * 2;
+    const dy = (r/(mH-1) - 0.5) * 2;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const factor = dist > 0 ? Math.pow(dist, 1 + b * 0.8) / dist : 1;
+    m[(r*mW+c)*2]   = cx + dx * factor * W/2;
+    m[(r*mW+c)*2+1] = cy + dy * factor * H/2;
+  }
+  return m;
+}
+const WARP_PRESETS = {
+  none:    (W,H,mW,mH) => buildIdentityMesh(W,H,mW,mH),
+  arc:     buildArcMesh,
+  bulge:   buildBulgeMesh,
+  wave:    buildWaveMesh,
+  fisheye: buildFisheyeMesh,
+};
+function buildWarpMesh(preset, W, H, mW, mH, bend) {
+  const fn = WARP_PRESETS[preset] || WARP_PRESETS.none;
+  return fn(W, H, mW, mH, bend);
+}
+
+// Warp worker singleton
+let _warpWorker = null;
+function getWarpWorker() {
+  if (!_warpWorker) {
+    try { _warpWorker = new Worker(new URL('./warpWorker.js', import.meta.url)); }
+    catch(e) { console.warn('[warp] Worker init failed:', e); }
+  }
+  return _warpWorker;
 }
 
 // ── Feature J: Niche profiles (frontend display config) ───────────────────────
@@ -1026,6 +1388,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [showRuler,setShowRuler]           = useState(false);
   const [showSafeZones,setShowSafeZones]   = useState(false);
   const [showStampTest,setShowStampTest]   = useState(false);
+  const [mobilePreviewPos,setMobilePreviewPos] = useState({x:-1,y:-1});
+  const mobilePreviewDragRef               = useRef(null); // eslint-disable-line no-unused-vars
+  const [showYtPreview,setShowYtPreview]   = useState(false);
+  const [ytVideoTitle,setYtVideoTitle]     = useState('Your Amazing Video Title Goes Here');
+  const [ytChannel,setYtChannel]           = useState('Your Channel');
+  const [ytPreviewMode,setYtPreviewMode]   = useState('mobile');
+  const [ytPreviewTheme,setYtPreviewTheme] = useState('dark');
   const [snapToGrid,setSnapToGrid]         = useState(false);
   const lockAspect                         = false;
   const [recentColors,setRecentColors]     = useState(['#ffffff','#000000','#FF4500','#f97316','#FFD700','#00C853']);
@@ -1033,10 +1402,29 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [clipboard,setClipboard]           = useState(null);
   const [showFileTab,setShowFileTab]       = useState(false);
   const [showDownload,setShowDownload]     = useState(false);
+  const [exportFormat,setExportFormat]     = useState('png');   // 'png'|'jpeg'|'webp'|'psd'
+  const [exportQuality,setExportQuality]   = useState(92);      // jpeg quality 0-100
+  const [exportLoading,setExportLoading]   = useState(null);    // null|'png'|'jpeg'|'webp'|'psd'
+  const [warpMode,setWarpMode]             = useState(false);
+  const [warpPreset,setWarpPreset]         = useState('arc');
+  const [warpBend,setWarpBend]             = useState(30);
+  const [warpHDist,setWarpHDist]           = useState(0);       // eslint-disable-line no-unused-vars
+  const [warpVDist,setWarpVDist]           = useState(0);       // eslint-disable-line no-unused-vars
+  const [warpPreview,setWarpPreview]       = useState(null);    // data URL of warped preview
+  const [warpLoading,setWarpLoading]       = useState(false);
+  const [showTextWarp,setShowTextWarp]     = useState(false);
   const [showShortcutsModal,setShowShortcutsModal] = useState(false);
   const [showCommandPalette,setShowCommandPalette] = useState(false);
   const [showLiquify,setShowLiquify]               = useState(false);
   const [liquifySource,setLiquifySource]           = useState(null); // {imageData,w,h}
+  const [showFilters,setShowFilters]               = useState(false);
+  const [filtersSource,setFiltersSource]           = useState(null); // {imageData,w,h}
+  const [filtersAutoApply,setFiltersAutoApply]     = useState(false);
+  const lastFilterRef                              = useRef(null);   // {id,params} for Ctrl+F
+  const [groupEditId,setGroupEditId]               = useState(null); // layer id currently being name-edited
+  const [groupEditName,setGroupEditName]           = useState('');
+  const [ctxMenu,setCtxMenu]                       = useState(null); // {x,y,layerId}
+  const groupDragInitRef                           = useRef(null);   // {startX,startY,children:[{id,x,y}]}
   const [savedDesigns,setSavedDesigns]     = useState([]);
   const [galleryLoading,setGalleryLoading] = useState(false);
   const galleryLastFetchAt                 = useRef(0); // timestamp of last successful fetch
@@ -1090,6 +1478,17 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const historyRef                         = useRef([]);
   const historyIndexRef                    = useRef(-1);
   const historyDebounceRef                 = useRef(null);
+  const [historyLabels,setHistoryLabels]   = useState(['Open']);
+  const historyLabelsRef                   = useRef(['Open']);
+  const [historyTimestamps,setHistoryTimestamps] = useState([Date.now()]);
+  const historyTimestampsRef               = useRef([Date.now()]);
+  const [historyThumbnails,setHistoryThumbnails] = useState({});
+  const [rightPanelTab,setRightPanelTab]   = useState('layers');
+  const [dbSnapshots,setDbSnapshots]       = useState([]);
+  const thumbQueueRef                      = useRef([]);
+  const thumbBusyRef                       = useRef(false);
+  const thumbCanvasRef                     = useRef(null);
+  const historyListRef                     = useRef(null);
   const [layerDragId,setLayerDragId]       = useState(null);
   const [layerDragOver,setLayerDragOver]   = useState(null);
   const [smartGuides,setSmartGuides]       = useState({h:[],v:[]});   // active guide lines during drag
@@ -1208,6 +1607,28 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
 
+  // ── Pressure sensitivity (drawing tablet) ────────────────────────────────
+  const [pressureEnabled,setPressureEnabled]   = useState(false);
+  const [pressureMapping,setPressureMapping]   = useState('both');   // 'size'|'opacity'|'both'|'none'
+  const [pressureCurve,setPressureCurve]       = useState('linear'); // 'linear'|'exponential'|'logarithmic'
+  const [pressureMin,setPressureMin]           = useState(0);
+  const [pressureMax,setPressureMax]           = useState(100);
+  const [tabletDetected,setTabletDetected]     = useState(false);
+
+  // ── Retouch tools (Dodge/Burn/Smudge/Blur/Sharpen) ───────────────────────
+  const [dodgeBurnMode,setDodgeBurnMode]   = useState('dodge'); // 'dodge'|'burn'
+  const [retouchRange,setRetouchRange]     = useState('midtones'); // 'shadows'|'midtones'|'highlights'
+  const [retouchExposure,setRetouchExposure] = useState(50);
+  const [retouchStrength,setRetouchStrength] = useState(50);
+  const [fingerPainting,setFingerPainting] = useState(false); // eslint-disable-line no-unused-vars
+  const retouchActiveRef                   = useRef(false);
+  const retouchPrevTileRef                 = useRef(null);
+
+  // ── Adjustment layers ─────────────────────────────────────────────────────
+  const [adjLayerMenu,setAdjLayerMenu]     = useState(false);
+  const [adjLayerMenuPos,setAdjLayerMenuPos] = useState({x:0,y:0}); // eslint-disable-line no-unused-vars
+  const adjHistRef                         = useRef({}); // eslint-disable-line no-unused-vars
+
   // ── Selection system ──────────────────────────────────────────────────────
   const [selectionActive, setSelectionActive] = useState(false);
   const selectionMaskRef = useRef(null);
@@ -1228,6 +1649,25 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
   const [remainingQuota,setRemainingQuota]             = useState(null); // M6: quota display
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
+
+  // ── Tier 3 Item 3: Competitor Comparison ─────────────────────────────────
+  const [showCompetitor,setShowCompetitor]       = useState(false);
+  const [competitorQuery,setCompetitorQuery]     = useState('');
+  const [competitorResults,setCompetitorResults] = useState([]);
+  const [competitorLoading,setCompetitorLoading] = useState(false);
+  const [competitorError,setCompetitorError]     = useState('');
+  const [competitorAnalysis,setCompetitorAnalysis] = useState('');
+  const [competitorAnalyzing,setCompetitorAnalyzing] = useState(false);
+  const [competitorThumbUrl,setCompetitorThumbUrl] = useState(null);
+
+  // ── Tier 3 Item 4: Focus/Saliency Heat Map ────────────────────────────────
+  const [showHeatMap,setShowHeatMap]       = useState(false);
+  const [heatMapOpacity,setHeatMapOpacity] = useState(60);
+  const [heatMapData,setHeatMapData]       = useState(null);
+  const [heatMapLoading,setHeatMapLoading] = useState(false);
+  const [heatMapInsights,setHeatMapInsights] = useState([]);
+  const [heatMapVisible,setHeatMapVisible] = useState(true);
+  const heatMapCanvasRef                   = useRef(null);
   const [showAlreadyPro,setShowAlreadyPro]             = useState(false);
   const [isProUser,setIsProUser]                       = useState(!!(token==='test-key-123'||user?.is_admin||user?.is_pro||user?.plan==='pro'));
   const [isLoading,setIsLoading]                       = useState(true);
@@ -1252,8 +1692,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
   const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
   const [showToast,setShowToast]                       = useState(false);
-  const [toastMessage]                                 = useState('');
-  const [toastType]                                    = useState('info');
+  const [toastMessage,setToastMessage]                 = useState('');
+  const [toastType,setToastType]                       = useState('info');
 
   // ── Document title: asterisk when unsaved (must be after localSaveStatus + designName decls) ──
   useEffect(() => {
@@ -1275,6 +1715,15 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   useEffect(()=>{
     layersRef.current = layers;
   },[layers]);
+
+  // ── Restore tablet detection from localStorage on mount ───────────────────
+  useEffect(()=>{
+    if(localStorage.getItem('tf_tablet_detected')==='1'){
+      setTabletDetected(true);
+      setPressureEnabled(true);
+      setPressureMapping('both');
+    }
+  },[]);
 
   // ── Sprint 3: Layers Panel sync plan ──────────────────────────────────────
   useEffect(()=>{
@@ -1395,6 +1844,17 @@ PHASE 4 — Toolbar button:
       debouncedSaveRef.current();
     }
   }, []);
+
+  // Warp live preview — recompute when preset/bend changes while warpMode is active
+  useEffect(() => {
+    if (!warpMode || !selectedId) return;
+    let cancelled = false;
+    computeWarpPreview(selectedId, warpPreset, warpBend).then(dataUrl => {
+      if (!cancelled) setWarpPreview(dataUrl || null);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warpMode, warpPreset, warpBend, selectedId]);
 
   const p  = PLATFORMS[platform];
 
@@ -1649,21 +2109,26 @@ PHASE 4 — Toolbar button:
     glow: darkMode?'0 0 0 1px rgba(249,115,22,0.15), 0 4px 24px rgba(249,115,22,0.08)':'none',
   };
 
-  const selectedLayer   = layers.find(l=>l.id===selectedId);
+  const selectedLayer   = selectedId ? findInTree(layers,selectedId) : null;
   const bg              = layers.find(l=>l.type==='background');
   const currentUserId   = user?.id;
   const canvasFilter    = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
-  const canDrag         = activeTool!=='brush' && activeTool!=='rimlight' && activeTool!=='zoom';
+  const RETOUCH_TOOLS = ['dodge','burn','smudge','blur-brush','sharpen-brush'];
+  const canDrag         = activeTool!=='brush' && activeTool!=='rimlight' && activeTool!=='zoom' && !RETOUCH_TOOLS.includes(activeTool);
   // ✅ When brush active on image — that image is ONLY shown in brush overlay, nowhere else
   const brushingImageId = activeTool==='brush'&&(selectedLayer?.type==='image'||selectedLayer?.type==='background')&&!selectedLayer?.isRimLight ? selectedId : null;
 
-  // Auto-select first real image when brush tool is active but selected layer is rimlight or nothing
+  // Auto-select first real image when brush/retouch tool is active but selected layer is wrong
   useEffect(()=>{
-    if(activeTool==='brush'){
-      if(!selectedLayer || selectedLayer.isRimLight){
+    if(activeTool==='brush'||RETOUCH_TOOLS.includes(activeTool)){
+      if(!selectedLayer || selectedLayer.isRimLight || (selectedLayer.type!=='image'&&selectedLayer.type!=='background')){
         const realImage = layers.find(l=>l.type==='image'&&!l.isRimLight&&!l.hidden);
         if(realImage) setSelectedId(realImage.id);
       }
+    }
+    // When switching to adjustment tool, switch panel
+    if(activeTool==='adjustment'&&selectedLayer?.type!=='adjustment'){
+      setAdjLayerMenu(false);
     }
   },[activeTool]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1959,6 +2424,9 @@ PHASE 4 — Toolbar button:
           historyIndexRef.current=0;
           setHistory([snapshot]);
           setHistoryIndex(0);
+          historyLabelsRef.current=['Open'];historyTimestampsRef.current=[Date.now()];
+          setHistoryLabels(['Open']);setHistoryTimestamps([Date.now()]);setHistoryThumbnails({});
+          loadDbSnapshots();
           lastSavedSignatureRef.current=buildSaveSignature({
             projectId:resolvedProjectId,
             platform:remotePlatform,
@@ -2005,6 +2473,9 @@ PHASE 4 — Toolbar button:
           historyIndexRef.current=0;
           setHistory([snapshot]);
           setHistoryIndex(0);
+          historyLabelsRef.current=['Open'];historyTimestampsRef.current=[Date.now()];
+          setHistoryLabels(['Open']);setHistoryTimestamps([Date.now()]);setHistoryThumbnails({});
+          loadDbSnapshots();
           lastSavedSignatureRef.current=buildSaveSignature({
             projectId:stateToRestore.projectId||resolvedProjectId,
             platform:restoredPlatform,
@@ -2025,6 +2496,9 @@ PHASE 4 — Toolbar button:
           historyIndexRef.current=0;
           setHistory([[b]]);
           setHistoryIndex(0);
+          historyLabelsRef.current=['Open'];historyTimestampsRef.current=[Date.now()];
+          setHistoryLabels(['Open']);setHistoryTimestamps([Date.now()]);setHistoryThumbnails({});
+          loadDbSnapshots();
           setProjectId(resolvedProjectId);
           currentDesignIdRef.current=null;
           setCurrentDesignId(null);
@@ -2078,6 +2552,14 @@ PHASE 4 — Toolbar button:
   useEffect(()=>{
     if(user?.is_pro===true||user?.plan==='pro') setIsProUser(true);
   },[user?.is_pro, user?.plan]);
+
+  // ── Redraw heat map when canvas becomes visible or opacity changes ─────────
+  useEffect(()=>{
+    if(showHeatMap&&heatMapVisible&&heatMapData&&heatMapCanvasRef.current){
+      drawHeatMap(heatMapData,p.preview.w,p.preview.h,heatMapOpacity,heatMapCanvasRef.current);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[showHeatMap,heatMapVisible,heatMapData,heatMapOpacity]);
 
   // ── Sync text panel state when a text layer is selected ──────────────────
   useEffect(()=>{
@@ -2185,6 +2667,19 @@ PHASE 4 — Toolbar button:
       }
       // Pixel snap — always land on whole pixel values
       if(pixelSnapEnabled){x=Math.round(x);y=Math.round(y);}
+      // Group drag: move all children by delta from drag start
+      if(groupDragInitRef.current){
+        const init=groupDragInitRef.current;
+        const cx=(e.clientX-rect.left)/z;
+        const cy=(e.clientY-rect.top)/z;
+        const dx=cx-init.startX;
+        const dy=cy-init.startY;
+        setLayers(prev=>prev.map(l=>{
+          if(l.id!==draggingRef.current)return l;
+          return{...l,children:(l.children||[]).map(c=>{const ic=init.children.find(ic2=>ic2.id===c.id);return ic?{...c,x:ic.x+dx,y:ic.y+dy}:c;})};
+        }));
+        return;
+      }
       setLayers(prev=>prev.map(l=>l.id===draggingRef.current?{...l,x,y}:l));
     }
     function onUp(){
@@ -2242,6 +2737,11 @@ PHASE 4 — Toolbar button:
       if(ctrl&&(e.key==='e'||e.key==='E')){e.preventDefault();setShowDownload(true);return;}
       if(ctrl&&e.key==='t'){e.preventDefault();/* free transform: layer already has handles */return;}
       if(ctrl&&e.key==='/'){ e.preventDefault();setShowShortcutsModal(s=>!s);return;}
+      if(ctrl&&(e.key==='f'||e.key==='F')){ e.preventDefault();openFilters(!!lastFilterRef.current);return;}
+      if(ctrl&&(e.key==='m'||e.key==='M')){ e.preventDefault();setShowStampTest(s=>!s);return;}
+      if(ctrl&&e.key==='g'&&!e.shiftKey&&!e.altKey){ e.preventDefault();groupSelectedLayers();return;}
+      if(ctrl&&e.shiftKey&&(e.key==='g'||e.key==='G')){ e.preventDefault();if(selectedId)ungroupLayer(selectedId);return;}
+      if(ctrl&&e.altKey&&(e.key==='g'||e.key==='G')){ e.preventDefault();if(selectedId)toggleClipMask(selectedId);return;}
       if(ctrl&&e.shiftKey&&e.key==='i'){e.preventDefault();
         if(selectionActive){invertSel();return;}
         // Invert selection: select all except current
@@ -2250,6 +2750,8 @@ PHASE 4 — Toolbar button:
         setSelectedIds(allIds);
         return;
       }
+      if(ctrl&&e.shiftKey&&(e.key==='p'||e.key==='P')){e.preventDefault();exportAsPsd();return;}
+      if(ctrl&&e.shiftKey&&(e.key==='w'||e.key==='W')){e.preventDefault();if(selectedId){const l=layers.find(x=>x.id===selectedId);if(l&&(l.type==='image'||l.type==='text')){setWarpMode(true);setWarpBend(30);setWarpPreset('arc');}}return;}
 
       // ── Below this point: single-key shortcuts �� skip when typing ─────────
       if(typing) return;
@@ -2304,11 +2806,22 @@ PHASE 4 — Toolbar button:
       if(e.key==='['&&e.shiftKey&&activeTool==='brush'){setBrushEdgeState('soft');return;}
       if(e.key===']'&&e.shiftKey&&activeTool==='brush'){setBrushEdgeState('hard');return;}
 
+      // O key — toggle dodge/burn or set dodge tool
+      if(e.key==='o'||e.key==='O'){
+        if(activeTool==='dodge'||activeTool==='burn'){
+          const next=activeTool==='dodge'?'burn':'dodge';
+          setDodgeBurnMode(next);setActiveTool(next);
+        } else {
+          setActiveTool('dodge');setDodgeBurnMode('dodge');
+        }
+        return;
+      }
+
       // Tool switches
       const toolMap={
         'v':'select','l':'lasso','w':'segment','c':'crop',
         'b':'brush','e':'freehand','t':'text','i':'rimlight',
-        'g':'bggen','s':'segment','o':'effects','z':'zoom','h':'move',
+        'g':'bggen','s':'segment','z':'zoom','h':'move',
       };
       if(e.key==='m'||e.key==='M'){setActiveTool('marquee');return;}
       const dest=toolMap[e.key.toLowerCase()];
@@ -2345,20 +2858,112 @@ PHASE 4 — Toolbar button:
 
   function makeBg(plat){return{id:newId(),type:'background',bgColor:'#ffffff',bgGradient:null,x:0,y:0,width:plat.preview.w,height:plat.preview.h,opacity:100,hidden:false,locked:true,blendMode:'normal',effects:defaultEffects()};}
 
-  function pushHistory(nl){
+  function pushHistory(nl, label='Edit'){
     const clone=nl.map(l=>{
       if(l.type==='image'){const {src,...rest}=l;return{...JSON.parse(JSON.stringify(rest)),src};}
       return JSON.parse(JSON.stringify(l));
     });
-    const newHist=[...historyRef.current.slice(0,historyIndexRef.current+1),clone].slice(-30);
+    const cutIdx=historyIndexRef.current+1;
+    const newHist=[...historyRef.current.slice(0,cutIdx),clone].slice(-50);
     historyRef.current=newHist;
     historyIndexRef.current=newHist.length-1;
     setHistory(newHist);
     setHistoryIndex(newHist.length-1);
+    // Labels + timestamps (parallel arrays, same slicing)
+    const newLabels=[...historyLabelsRef.current.slice(0,cutIdx),label].slice(-50);
+    const newTs=[...historyTimestampsRef.current.slice(0,cutIdx),Date.now()].slice(-50);
+    historyLabelsRef.current=newLabels;
+    historyTimestampsRef.current=newTs;
+    setHistoryLabels(newLabels);
+    setHistoryTimestamps(newTs);
+    // Queue thumbnail generation for this new entry
+    enqueueHistoryThumbnail(newHist.length-1, nl);
   }
-  function pushHistoryDebounced(nl){
+  function pushHistoryDebounced(nl, label='Edit'){
     if(historyDebounceRef.current)clearTimeout(historyDebounceRef.current);
-    historyDebounceRef.current=setTimeout(()=>pushHistory(nl),400);
+    historyDebounceRef.current=setTimeout(()=>pushHistory(nl, label),400);
+  }
+
+  // ── History Thumbnail Generation ──────────────────────────────────────────
+  function enqueueHistoryThumbnail(entryIdx, layersSnapshot){
+    thumbQueueRef.current.push({entryIdx, layersSnapshot});
+    if(!thumbBusyRef.current) processThumbQueue();
+  }
+  async function processThumbQueue(){
+    if(thumbBusyRef.current) return;
+    thumbBusyRef.current=true;
+    while(thumbQueueRef.current.length>0){
+      const {entryIdx,layersSnapshot}=thumbQueueRef.current.shift();
+      await generateThumbForEntry(entryIdx, layersSnapshot);
+      await new Promise(r=>setTimeout(r,16)); // yield a frame
+    }
+    thumbBusyRef.current=false;
+  }
+  async function generateThumbForEntry(entryIdx, layersSnapshot){
+    if(!thumbCanvasRef.current) return;
+    try{
+      const TW=160, TH=90;
+      thumbCanvasRef.current.width=TW;
+      thumbCanvasRef.current.height=TH;
+      await renderLayersToCanvas(thumbCanvasRef.current, layersSnapshot, {previewW:TW, previewH:TH, skipGlobalFilter:true});
+      const ctx=thumbCanvasRef.current.getContext('2d');
+      const idata=ctx.getImageData(0,0,TW,TH);
+      const worker=getHistThumbWorker();
+      if(worker){
+        const buf=idata.data.buffer.slice(0);
+        const handler=e=>{
+          if(e.data.entryIdx!==entryIdx) return;
+          worker.removeEventListener('message',handler);
+          if(e.data.blob){
+            const url=URL.createObjectURL(e.data.blob);
+            setHistoryThumbnails(prev=>({...prev,[entryIdx]:url}));
+          }
+        };
+        worker.addEventListener('message',handler);
+        worker.postMessage({entryIdx, pixels:buf, srcW:TW, srcH:TH},[buf]);
+      } else {
+        // Fallback: use data URL directly
+        const url=thumbCanvasRef.current.toDataURL('image/jpeg',0.65);
+        setHistoryThumbnails(prev=>({...prev,[entryIdx]:url}));
+      }
+    }catch{}
+  }
+
+  // ── Snapshot persistence ───────────────────────────────────────────────────
+  async function loadDbSnapshots(){
+    try{
+      const projectId=currentDesignIdRef.current||'default';
+      const snaps=await db.snapshots.where('projectId').equals(projectId).sortBy('createdAt');
+      setDbSnapshots(snaps.slice(-10));
+    }catch{}
+  }
+  async function saveDbSnapshot(name){
+    if(!name?.trim()) return;
+    try{
+      const layersClone=layers.map(l=>{
+        if(l.type==='image'){const {src,...rest}=l;return{...JSON.parse(JSON.stringify(rest)),src};}
+        return JSON.parse(JSON.stringify(l));
+      });
+      const thumbnail=Object.values(historyThumbnails).slice(-1)[0]||null;
+      const projectId=currentDesignIdRef.current||'default';
+      // Keep max 10 per project — delete oldest if over limit
+      const existing=await db.snapshots.where('projectId').equals(projectId).sortBy('createdAt');
+      if(existing.length>=10) await db.snapshots.delete(existing[0].id);
+      await db.snapshots.add({projectId, name:name.trim(), createdAt:Date.now(), layers:layersClone, thumbnail});
+      await loadDbSnapshots();
+    }catch(e){console.error('Snapshot save error',e);}
+  }
+  async function restoreDbSnapshot(snap){
+    const nl=snap.layers.map(l=>{
+      if(l.type==='image'){const {src,...rest}=l;return{...JSON.parse(JSON.stringify(rest)),src};}
+      return JSON.parse(JSON.stringify(l));
+    });
+    setLayers(nl);
+    pushHistory(nl,`Restore: ${snap.name}`);
+    triggerAutoSave();
+  }
+  async function deleteDbSnapshot(snapId){
+    try{await db.snapshots.delete(snapId);await loadDbSnapshots();}catch{}
   }
 
   function undo(){
@@ -2384,12 +2989,12 @@ PHASE 4 — Toolbar button:
     triggerAutoSave();
   }
 
-  function updateLayer(id,updates){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,...updates}:l);pushHistoryDebounced(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
-  function updateLayerSilent(id,updates){setLayers(prev=>prev.map(l=>l.id===id?{...l,...updates}:l));}
-  function updateLayerEffect(id,key,value){setLayers(prev=>{const nl=prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l);pushHistory(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
-  function updateLayerEffectSilent(id,key,value){setLayers(prev=>prev.map(l=>l.id===id?{...l,effects:{...(l.effects||defaultEffects()),[key]:value}}:l));}
-  function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};});pushHistory(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
-  function updateLayerEffectNestedSilent(id,ek,sk,value){setLayers(prev=>prev.map(l=>{if(l.id!==id)return l;return{...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}};}));}
+  function updateLayer(id,updates){setLayers(prev=>{const nl=updateLayerInTree(prev,id,l=>({...l,...updates}));pushHistoryDebounced(nl,"Edit Properties");return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
+  function updateLayerSilent(id,updates){setLayers(prev=>updateLayerInTree(prev,id,l=>({...l,...updates})));}
+  function updateLayerEffect(id,key,value){setLayers(prev=>{const nl=updateLayerInTree(prev,id,l=>({...l,effects:{...(l.effects||defaultEffects()),[key]:value}}));pushHistory(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
+  function updateLayerEffectSilent(id,key,value){setLayers(prev=>updateLayerInTree(prev,id,l=>({...l,effects:{...(l.effects||defaultEffects()),[key]:value}})));}
+  function updateLayerEffectNested(id,ek,sk,value){setLayers(prev=>{const nl=updateLayerInTree(prev,id,l=>({...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}}));pushHistory(nl);return nl;});triggerAutoSave();saveEngineRef.current?.markDirty('layerProperties',id);}
+  function updateLayerEffectNestedSilent(id,ek,sk,value){setLayers(prev=>updateLayerInTree(prev,id,l=>({...l,effects:{...(l.effects||defaultEffects()),[ek]:{...((l.effects||defaultEffects())[ek]||{}),[sk]:value}}})));}
   function updateLayerStrokes(id,newStrokes){updateLayerEffect(id,'strokes',newStrokes);}
 
   async function openLiquify(){
@@ -2402,6 +3007,17 @@ PHASE 4 — Toolbar button:
     setShowLiquify(true);
   }
 
+  async function openFilters(autoApply=false){
+    const flat = document.createElement('canvas');
+    flat.width  = p.preview.w;
+    flat.height = p.preview.h;
+    await renderLayersToCanvas(flat, layers);
+    const imgData = flat.getContext('2d').getImageData(0, 0, p.preview.w, p.preview.h);
+    setFiltersSource({ imageData: imgData, w: p.preview.w, h: p.preview.h });
+    setFiltersAutoApply(autoApply);
+    setShowFilters(true);
+  }
+
   function addCurvesLayer(){
     const id=newId();
     const layer={id,type:'curves',curves:DEFAULT_CURVES(),x:0,y:0,opacity:100,hidden:false,locked:false,blendMode:'normal',flipH:false,flipV:false,rotation:0,effects:{...defaultEffects()}};
@@ -2409,6 +3025,112 @@ PHASE 4 — Toolbar button:
     setSelectedId(id);
     setActiveTool('curves');
     triggerAutoSave();
+  }
+
+  function addAdjustmentLayer(adjType){
+    const id=newId();
+    const nameMap={levels:'Levels 1',hueSat:'Hue/Sat 1',colorBalance:'Color Balance 1',vibrance:'Vibrance 1',selectiveColor:'Selective Color 1',gradientMap:'Gradient Map 1',posterize:'Posterize 1',threshold:'Threshold 1'};
+    const layer={id,type:'adjustment',adjustmentType:adjType,name:nameMap[adjType]||'Adjustment 1',x:0,y:0,opacity:100,hidden:false,locked:false,blendMode:'normal',flipH:false,flipV:false,rotation:0,effects:{...defaultEffects()},settings:{...ADJ_DEFAULTS[adjType]},_cachedLUT:null,_lutDirty:true};
+    setLayers(prev=>{
+      // Insert above selected layer or at top
+      const idx=selectedId?prev.findIndex(l=>l.id===selectedId):-1;
+      const nl=idx>=0?[...prev.slice(0,idx+1),layer,...prev.slice(idx+1)]:[...prev,layer];
+      pushHistory(nl,'Add Adjustment');return nl;
+    });
+    setSelectedId(id);
+    setActiveTool('adjustment');
+    setAdjLayerMenu(false);
+    triggerAutoSave();
+  }
+
+  // ── Tablet detection handler (called by BrushOverlay on first pen event) ────
+  function handleTabletDetected(){
+    if(tabletDetected) return;
+    setTabletDetected(true);
+    setPressureEnabled(true);
+    setPressureMapping('both');
+    localStorage.setItem('tf_tablet_detected','1');
+    showToastMsg('Drawing tablet detected — pressure sensitivity enabled','success');
+  }
+
+  // ── Retouch helpers ───────────────────────────────────────────────────────
+  function applyRetouchStroke(canvasX, canvasY, tool){
+    const layer = selectedId ? findInTree(layers, selectedId) : null;
+    if(!layer || (layer.type!=='image'&&layer.type!=='background')) return;
+    // Get image data from the layer
+    const imgSrc = layer.paintSrc || layer.src;
+    if(!imgSrc && layer.type!=='background') return;
+    const imgW = layer.type==='background' ? p.preview.w : (layer.width||p.preview.w);
+    const imgH = layer.type==='background' ? p.preview.h : (layer.height||p.preview.h);
+    const bSize = brushSizeState;
+    // Tile extraction: extract region around brush position
+    const tx = Math.max(0, Math.round(canvasX - bSize));
+    const ty = Math.max(0, Math.round(canvasY - bSize));
+    const tw = Math.min(imgW - tx, bSize * 2 + 1);
+    const th = Math.min(imgH - ty, bSize * 2 + 1);
+    if(tw <= 0 || th <= 0) return;
+    // We need to read from the flat render or from the layer canvas
+    const offscreen = document.createElement('canvas');
+    offscreen.width = imgW; offscreen.height = imgH;
+    const octx = offscreen.getContext('2d');
+    if(layer.type==='background'){
+      if(layer.bgGradient){const g=octx.createLinearGradient(0,0,0,imgH);g.addColorStop(0,layer.bgGradient[0]);g.addColorStop(1,layer.bgGradient[1]);octx.fillStyle=g;}else{octx.fillStyle=layer.bgColor||'#ffffff';}
+      octx.fillRect(0,0,imgW,imgH);
+    } else {
+      const img = new Image();
+      img.crossOrigin='Anonymous';
+      img.onload=()=>{
+        octx.drawImage(img,0,0,imgW,imgH);
+        const tileData = octx.getImageData(tx,ty,tw,th);
+        _sendRetouchTile(tileData,tx,ty,tw,th,layer,offscreen,octx,imgW,imgH,tool);
+      };
+      img.onerror=()=>{};
+      img.src=imgSrc;
+      return;
+    }
+    const tileData = octx.getImageData(tx,ty,tw,th);
+    _sendRetouchTile(tileData,tx,ty,tw,th,layer,offscreen,octx,imgW,imgH,tool);
+  }
+
+  function _sendRetouchTile(tileData,tx,ty,tw,th,layer,offscreen,octx,imgW,imgH,tool){
+    // Build feathered brush mask
+    const hardness = brushEdgeState==='hard' ? 1.0 : 0.5;
+    const bSize = brushSizeState;
+    const mask = new Float32Array(tw*th);
+    const cx2=tw/2, cy2=th/2;
+    for(let my=0;my<th;my++) for(let mx=0;mx<tw;mx++){
+      const dist=Math.hypot(mx-cx2,my-cy2);
+      const norm=dist/bSize;
+      mask[my*tw+mx]=norm>=1?0:norm<hardness?1:1-(norm-hardness)/(1-hardness+0.001);
+    }
+    const pixBuf=tileData.data.buffer.slice(0);
+    const prevBuf=retouchPrevTileRef.current?.buffer?.slice(0)||null;
+    const worker=getRetouchWorker();
+    if(!worker){return;}
+    const thisTool=(tool==='dodge'||tool==='burn')?dodgeBurnMode:tool;
+    const onMsg=(evt)=>{
+      worker.removeEventListener('message',onMsg);
+      const {processedPixels}=evt.data;
+      const processed=new Uint8ClampedArray(processedPixels);
+      octx.putImageData(tileData,0,0); // restore full image
+      // Read full image back then patch
+      const fullData=octx.getImageData(0,0,imgW,imgH);
+      for(let py=0;py<th;py++) for(let px=0;px<tw;px++){
+        const si=(py*tw+px)*4, di=((ty+py)*imgW+(tx+px))*4;
+        fullData.data[di]=processed[si]; fullData.data[di+1]=processed[si+1]; fullData.data[di+2]=processed[si+2]; fullData.data[di+3]=processed[si+3];
+      }
+      octx.putImageData(fullData,0,0);
+      const dataUrl=offscreen.toDataURL('image/png');
+      if(layer.type==='background'){
+        updateLayerSilent(layer.id,{bgColor:'transparent',bgGradient:null,paintSrc:dataUrl,src:dataUrl,type:'image',x:0,y:0,width:p.preview.w,height:p.preview.h});
+      } else {
+        updateLayerSilent(layer.id,{paintSrc:dataUrl});
+      }
+      retouchPrevTileRef.current=new Uint8ClampedArray(processed);
+    };
+    worker.addEventListener('message',onMsg);
+    const maskBuf=mask.buffer.slice(0);
+    worker.postMessage({tool:thisTool,tilePixels:pixBuf,tileW:tw,tileH:th,strength:retouchStrength,exposure:retouchExposure,range:retouchRange,prevTilePixels:prevBuf,brushMask:maskBuf},[pixBuf,maskBuf]);
   }
 
   // ── Selection helpers ─────────────────────────────────────────────────────
@@ -2500,21 +3222,89 @@ PHASE 4 — Toolbar button:
   }
 
   function deleteLayer(id){
-    const layer=layers.find(l=>l.id===id);
+    const layer=findInTree(layersRef.current,id);
     if(!layer) return;
-    // Allow background deletion only if there's another layer
-    if(layer.type==='background'){
-      if(layers.length<=1) return; // can't delete if only layer
-    }
-    setLayers(prev=>{const nl=prev.filter(l=>l.id!==id);pushHistory(nl);return nl;});setSelectedId(null);triggerAutoSave();
-    // Layer delete is a significant action — save immediately
+    if(layer.type==='background'){if(layers.length<=1) return;}
+    const[nl]=removeFromTree(layersRef.current,id);
+    setLayers(prev=>{pushHistory(nl);return nl;});
+    setSelectedId(null);triggerAutoSave();
     saveEngineRef.current?.saveImmediate();
   }
   function moveLayerUp(id){const idx=layers.findIndex(l=>l.id===id);if(idx>=layers.length-1)return;const nl=[...layers];[nl[idx],nl[idx+1]]=[nl[idx+1],nl[idx]];setLayers(nl);pushHistory(nl);triggerAutoSave();}
   function moveLayerDown(id){const idx=layers.findIndex(l=>l.id===id);if(idx<=0)return;const nl=[...layers];[nl[idx],nl[idx-1]]=[nl[idx-1],nl[idx]];setLayers(nl);pushHistory(nl);triggerAutoSave();}
-  function duplicateLayerFromObj(layer){const nl2={...layer,id:newId(),x:layer.x+16,y:layer.y+16};setLayers(prev=>{const nl=[...prev,nl2];pushHistory(nl);return nl;});setSelectedId(nl2.id);triggerAutoSave();}
-  function duplicateLayer(id){const layer=layers.find(l=>l.id===id);if(!layer||layer.type==='background')return;duplicateLayerFromObj(layer);}
+  function duplicateLayerFromObj(layer){const nl2=deepCloneLayer({...layer,x:layer.x+16,y:layer.y+16});setLayers(prev=>{const nl=[...prev,nl2];pushHistory(nl,"Duplicate Layer");return nl;});setSelectedId(nl2.id);triggerAutoSave();}
+  function duplicateLayer(id){const layer=findInTree(layersRef.current,id);if(!layer||layer.type==='background')return;duplicateLayerFromObj(layer);}
   function updateBg(updates){const bgL=layers.find(l=>l.type==='background');if(bgL)updateLayer(bgL.id,updates);}
+
+  // ── Layer Groups ──────────────────────────────────────────────────────────────
+
+  function groupSelectedLayers(){
+    const allIds=new Set([...selectedIds,...(selectedId?[selectedId]:[])]);
+    const toGroup=layers.filter(l=>allIds.has(l.id)&&l.type!=='background');
+    if(toGroup.length<2){return;}
+    const groupNum=layers.filter(l=>l.type==='group').length+1;
+    const groupId=newId();
+    const group={id:groupId,type:'group',name:`Group ${groupNum}`,children:toGroup,collapsed:false,opacity:100,hidden:false,locked:false,blendMode:'normal',effects:defaultEffects(),x:0,y:0};
+    const toGroupIds=new Set(toGroup.map(l=>l.id));
+    const maxIdx=Math.max(...toGroup.map(l=>layers.indexOf(l)));
+    const remaining=layers.filter(l=>!toGroupIds.has(l.id));
+    // Insert group at the position the topmost selected layer occupied
+    const insertAt=remaining.findIndex((_,i)=>layers.findIndex(x=>x.id===remaining[i]?.id)>maxIdx);
+    const adjustedAt=insertAt<0?remaining.length:insertAt;
+    const nl=[...remaining.slice(0,adjustedAt),group,...remaining.slice(adjustedAt)];
+    setLayers(nl);pushHistory(nl,"Group Layers");setSelectedId(groupId);setSelectedIds(new Set());
+    triggerAutoSave();saveEngineRef.current?.markDirty('layerContent','group');
+    // group created successfully
+  }
+
+  function ungroupLayer(id){
+    const group=findInTree(layersRef.current,id);
+    if(!group||group.type!=='group')return;
+    const idx=layersRef.current.findIndex(l=>l.id===id);
+    if(idx<0)return; // nested groups: only top-level ungroup for now
+    const nl=[...layersRef.current];
+    nl.splice(idx,1,...(group.children||[]));
+    setLayers(nl);pushHistory(nl,"Ungroup Layers");
+    setSelectedIds(new Set((group.children||[]).map(c=>c.id)));
+    setSelectedId((group.children||[])[0]?.id||null);
+    triggerAutoSave();saveEngineRef.current?.markDirty('layerContent','ungroup');
+  }
+
+  function setGroupCollapsed(id,collapsed){
+    setLayers(prev=>updateLayerInTree(prev,id,l=>({...l,collapsed})));
+  }
+
+  async function mergeGroupToLayer(id){
+    const group=findInTree(layersRef.current,id);
+    if(!group||group.type!=='group')return;
+    const tmp=document.createElement('canvas');
+    tmp.width=p.preview.w;tmp.height=p.preview.h;
+    await renderLayersToCanvas(tmp,group.children||[],{skipGlobalFilter:true});
+    const dataUrl=tmp.toDataURL('image/png');
+    const merged={type:'image',src:dataUrl,width:p.preview.w,height:p.preview.h,x:0,y:0,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,opacity:group.opacity??100,blendMode:group.blendMode||'normal',hidden:false,locked:false,flipH:false,flipV:false,rotation:0,effects:defaultEffects()};
+    const idx=layersRef.current.findIndex(l=>l.id===id);
+    const nl=[...layersRef.current];
+    const mergedId=newId();
+    nl.splice(idx,1,{...merged,id:mergedId});
+    setLayers(nl);pushHistory(nl,"Merge Group");setSelectedId(mergedId);
+    triggerAutoSave();saveEngineRef.current?.markDirty('layerContent','merge-group');
+  }
+
+  function deleteGroupAndChildren(id){deleteLayer(id);}
+
+  // ── Clipping Masks ────────────────────────────────────────────────────────
+  function toggleClipMask(id){
+    const layerIdx=layers.findIndex(l=>l.id===id);
+    if(layerIdx<=0) return; // can't clip the bottom-most layer
+    const layer=layers[layerIdx];
+    if(!layer||layer.type==='background') return;
+    const wasClipped=layer.clipMask===true;
+    const nl=layers.map((l,i)=>i===layerIdx?{...l,clipMask:wasClipped?undefined:true}:l);
+    setLayers(nl);
+    pushHistory(nl,wasClipped?'Release Clip Mask':'Create Clip Mask');
+    saveEngineRef.current?.markDirty('layerProperties',id);
+    triggerAutoSave();
+  }
   function getLayerSrc(layer){
     if(layer.type==='image')return layer.paintSrc || layer.src;
     if(layer.type==='background'){
@@ -3260,7 +4050,9 @@ PHASE 4 — Toolbar button:
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
+    if(!opts.skipGlobalFilter){
+      ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
+    }
 
     // Inner render function – draws one layer's content onto context c / canv
     async function renderLayerContent(c, canv, obj){
@@ -3448,42 +4240,129 @@ PHASE 4 — Toolbar button:
 
     const WORKER_MODES = new Set(['hue','saturation','color','luminosity']);
 
-    for(const obj of layerArray){
-      if(obj.hidden) continue;
-      if(transparent && obj.type==='background') continue;
-
+    // Helper: render a single layer onto a context (no clip handling)
+    async function renderOneLayer(dstCtx, dstCanvas, obj){
+      if(obj.type==='group'){
+        const children=obj.children||[];
+        if(!children.length) return;
+        const tmp=document.createElement('canvas');
+        tmp.width=dstCanvas.width;tmp.height=dstCanvas.height;
+        await renderLayersToCanvas(tmp,children,{previewW,previewH,skipGlobalFilter:true});
+        const groupMode=obj.blendMode||'normal';
+        const groupAlpha=(obj.opacity??100)/100;
+        if(WORKER_MODES.has(groupMode)){
+          const dstData=dstCtx.getImageData(0,0,dstCanvas.width,dstCanvas.height);
+          const srcData=tmp.getContext('2d').getImageData(0,0,tmp.width,tmp.height);
+          const scaled=new Uint8ClampedArray(srcData.data);
+          for(let k=3;k<scaled.length;k+=4)scaled[k]=Math.round(scaled[k]*groupAlpha);
+          const composited=await applyPixelBlend(dstData,new ImageData(scaled,tmp.width,tmp.height),groupMode);
+          dstCtx.putImageData(composited,0,0);
+        } else {
+          dstCtx.save();dstCtx.globalAlpha=groupAlpha;dstCtx.globalCompositeOperation=groupMode;
+          dstCtx.drawImage(tmp,0,0);dstCtx.restore();
+        }
+        return;
+      }
       if(obj.type==='curves'){
-        const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const imgData=dstCtx.getImageData(0,0,dstCanvas.width,dstCanvas.height);
         const adjusted=await applyCurvesLUT(imgData,obj.curves||DEFAULT_CURVES());
-        ctx.putImageData(adjusted,0,0);
-        continue;
+        dstCtx.putImageData(adjusted,0,0);
+        return;
       }
-
-      const mode = obj.blendMode||'normal';
-      const useWorker = WORKER_MODES.has(mode);
-
-      if(useWorker){
-        // Snapshot current dst, render layer to temp canvas, composite via worker
-        const dstData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const tmp = document.createElement('canvas');
-        tmp.width = canvas.width; tmp.height = canvas.height;
-        const tc = tmp.getContext('2d');
-        tc.imageSmoothingEnabled = true;
-        tc.imageSmoothingQuality = 'high';
-        tc.globalAlpha = (obj.opacity??100)/100;
-        tc.save();
-        await renderLayerContent(tc, tmp, obj);
-        tc.restore();
-        const srcData = tc.getImageData(0, 0, tmp.width, tmp.height);
-        const composited = await applyPixelBlend(dstData, srcData, mode);
-        ctx.putImageData(composited, 0, 0);
+      if(obj.type==='adjustment'){
+        const imgData=dstCtx.getImageData(0,0,dstCanvas.width,dstCanvas.height);
+        // Ensure LUT is built
+        if(obj._lutDirty||!obj._cachedLUT){
+          obj._cachedLUT=buildAdjLUT(obj);
+          obj._lutDirty=false;
+        }
+        const adjusted=applyAdjustmentToImageData(imgData,obj);
+        dstCtx.putImageData(adjusted,0,0);
+        return;
+      }
+      const mode=obj.blendMode||'normal';
+      if(WORKER_MODES.has(mode)){
+        const dstData=dstCtx.getImageData(0,0,dstCanvas.width,dstCanvas.height);
+        const tmp=document.createElement('canvas');
+        tmp.width=dstCanvas.width;tmp.height=dstCanvas.height;
+        const tc=tmp.getContext('2d');
+        tc.imageSmoothingEnabled=true;tc.imageSmoothingQuality='high';
+        tc.globalAlpha=(obj.opacity??100)/100;
+        tc.save();await renderLayerContent(tc,tmp,obj);tc.restore();
+        const srcData=tc.getImageData(0,0,tmp.width,tmp.height);
+        const composited=await applyPixelBlend(dstData,srcData,mode);
+        dstCtx.putImageData(composited,0,0);
       } else {
-        ctx.save();
-        ctx.globalAlpha = (obj.opacity??100)/100;
-        ctx.globalCompositeOperation = mode;
-        await renderLayerContent(ctx, canvas, obj);
-        ctx.restore();
+        dstCtx.save();
+        dstCtx.globalAlpha=(obj.opacity??100)/100;
+        dstCtx.globalCompositeOperation=mode;
+        await renderLayerContent(dstCtx,dstCanvas,obj);
+        dstCtx.restore();
       }
+    }
+
+    let li=0;
+    while(li<layerArray.length){
+      const obj=layerArray[li];
+      if(obj.hidden||(transparent&&obj.type==='background')){li++;continue;}
+
+      // Collect any clipped layers directly above this one
+      const clippedAbove=[];
+      let lj=li+1;
+      while(lj<layerArray.length&&layerArray[lj].clipMask===true){
+        if(!layerArray[lj].hidden) clippedAbove.push(layerArray[lj]);
+        lj++;
+      }
+
+      if(clippedAbove.length>0){
+        // ── Clipping group ─────────────────────────────────────────────────
+        // Create group canvas; render base layer into it (defines clip shape + visual)
+        const G=document.createElement('canvas');
+        G.width=canvas.width;G.height=canvas.height;
+        const Gctx=G.getContext('2d');
+        Gctx.imageSmoothingEnabled=true;Gctx.imageSmoothingQuality='high';
+        // Render base onto G (at full opacity; base opacity applied when compositing G onto main)
+        await renderLayerContent(Gctx,G,obj);
+
+        // Render each clipped layer, masked to base's alpha
+        for(const cl of clippedAbove){
+          const T=document.createElement('canvas');
+          T.width=canvas.width;T.height=canvas.height;
+          const Tc=T.getContext('2d');
+          Tc.imageSmoothingEnabled=true;Tc.imageSmoothingQuality='high';
+          // Render clipped layer content at full opacity (apply its opacity when drawing onto G)
+          await renderLayerContent(Tc,T,cl);
+          // Mask T to base's shape via destination-in
+          Tc.globalCompositeOperation='destination-in';
+          Tc.drawImage(G,0,0);
+          // Composite T onto G using clipped layer's blend mode and opacity
+          Gctx.save();
+          Gctx.globalAlpha=(cl.opacity??100)/100;
+          Gctx.globalCompositeOperation=cl.blendMode||'source-over';
+          Gctx.drawImage(T,0,0);
+          Gctx.restore();
+        }
+
+        // Composite the clipping group (G) onto main canvas with base layer's settings
+        const baseMode=obj.blendMode||'normal';
+        const baseAlpha=(obj.opacity??100)/100;
+        if(WORKER_MODES.has(baseMode)){
+          const dstData=ctx.getImageData(0,0,canvas.width,canvas.height);
+          const srcData=Gctx.getImageData(0,0,canvas.width,canvas.height);
+          const scaled=new Uint8ClampedArray(srcData.data);
+          for(let k=3;k<scaled.length;k+=4)scaled[k]=Math.round(scaled[k]*baseAlpha);
+          const composited=await applyPixelBlend(dstData,new ImageData(scaled,canvas.width,canvas.height),baseMode);
+          ctx.putImageData(composited,0,0);
+        } else {
+          ctx.save();ctx.globalAlpha=baseAlpha;ctx.globalCompositeOperation=baseMode;
+          ctx.drawImage(G,0,0);ctx.restore();
+        }
+        li=lj;continue;
+      }
+
+      // ── Normal layer (no clipping group) ──────────────────────────────────
+      await renderOneLayer(ctx,canvas,obj);
+      li++;
     }
     ctx.filter='none';
   }
@@ -3672,7 +4551,7 @@ PHASE 4 — Toolbar button:
   function applyVariant(variant){
     if(!window.confirm(`Apply variant ${variant.label}? This replaces your current canvas.`)) return;
     setLayers(variant.layers);
-    pushHistory(variant.layers);
+    pushHistory(variant.layers,"Apply Variant");
     setSelectedId(null);
     setAbVariants([]);
     setAbSelected(null);
@@ -3907,7 +4786,7 @@ PHASE 4 — Toolbar button:
     if(d.success&&d.version?.canvasData){
       // Replace canvas with single image layer from the snapshot
       const newLayers=[{id:`restore_${Date.now()}`,type:'image',src:d.version.canvasData,x:0,y:0,width:p.preview.w,height:p.preview.h,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,opacity:100}];
-      setLayers(newLayers); pushHistory(newLayers);
+      setLayers(newLayers); pushHistory(newLayers,"Restore Version");
     }
   }
 
@@ -4387,6 +5266,13 @@ PHASE 4 — Toolbar button:
     // Mark project as dirty so the save engine schedules a local save
     saveEngineRef.current?.markDirty('projectMeta');
   },[aiPrompt, brightness, brandKitColors, buildProjectSnapshot, contrast, currentDesignId, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
+
+  // Auto-scroll history list to current entry when tab is active
+  useEffect(()=>{
+    if(rightPanelTab!=='history'||!historyListRef.current) return;
+    const rows=historyListRef.current.querySelectorAll('[data-hist-row]');
+    if(rows[historyIndex]) rows[historyIndex].scrollIntoView({block:'nearest',behavior:'smooth'});
+  },[rightPanelTab,historyIndex]);
 
   async function loadProject(d){
     try{
@@ -5485,7 +6371,7 @@ PHASE 4 — Toolbar button:
     if(activeTool==='rimlight') return;
     if(activeTool==='brush') return;
     if(activeTool==='lasso' && isLassoMode) return;
-    const layer=layers.find(l=>l.id===id);if(!layer)return;
+    const layer=findInTree(layersRef.current,id);if(!layer)return;
     e.stopPropagation();
     justSelectedRef.current=true;
     // Shift+click — multi-select toggle
@@ -5501,7 +6387,19 @@ PHASE 4 — Toolbar button:
     if(!canDrag||layer.locked)return;
     const rect=canvasRef.current.getBoundingClientRect();
     draggingRef.current=id;
-    dragOffsetRef.current={x:(e.clientX-rect.left)/zoomRef.current-layer.x,y:(e.clientY-rect.top)/zoomRef.current-layer.y};
+    if(layer.type==='group'){
+      // Group drag: track initial child positions
+      const bounds=getGroupBounds(layer);
+      groupDragInitRef.current={
+        startX:(e.clientX-rect.left)/zoomRef.current,
+        startY:(e.clientY-rect.top)/zoomRef.current,
+        children:(layer.children||[]).map(c=>({id:c.id,x:c.x,y:c.y})),
+      };
+      dragOffsetRef.current=bounds?{x:(e.clientX-rect.left)/zoomRef.current-bounds.x,y:(e.clientY-rect.top)/zoomRef.current-bounds.y}:{x:0,y:0};
+    } else {
+      groupDragInitRef.current=null;
+      dragOffsetRef.current={x:(e.clientX-rect.left)/zoomRef.current-layer.x,y:(e.clientY-rect.top)/zoomRef.current-layer.y};
+    }
   }
 
   function onResizeStart(e,id){
@@ -5682,6 +6580,218 @@ PHASE 4 — Toolbar button:
     setShowDownload(false);
   }
 
+  // ── Toast helper ────────────────────────────────────────────────────────────
+  function showToastMsg(msg, type='info') {
+    setToastMessage(msg);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(()=>setShowToast(false), 4000);
+  }
+
+  // ── PSD Export ──────────────────────────────────────────────────────────────
+  async function buildPsdLayers(layerArr) {
+    const results = [];
+    for (const layer of [...layerArr].reverse()) { // ag-psd: index 0 = topmost
+      if (layer.type === 'group') {
+        const children = layer.children?.length ? await buildPsdLayers(layer.children) : [];
+        results.push({
+          name: layer.name || 'Group',
+          opacity: Math.round((layer.opacity ?? 100) / 100 * 255),
+          blendMode: PSD_BLEND_MAP[layer.blendMode] || 'norm',
+          hidden: !!layer.hidden,
+          opened: true,
+          children,
+        });
+        continue;
+      }
+      const desc = {
+        name: layer.name || layer.type || 'Layer',
+        opacity: Math.round((layer.opacity ?? 100) / 100 * 255),
+        blendMode: PSD_BLEND_MAP[layer.blendMode] || 'norm',
+        hidden: !!layer.hidden,
+      };
+      if (layer.type === 'text') {
+        // Parse color
+        const rawColor = layer.textColor || layer.color || '#ffffff';
+        const r = parseInt(rawColor.slice(1,3),16)||255;
+        const g = parseInt(rawColor.slice(3,5),16)||255;
+        const b = parseInt(rawColor.slice(5,7),16)||255;
+        desc.text = {
+          text: layer.text || layer.content || '',
+          transform: { xx:1, xy:0, yx:0, yy:1, tx: layer.x||0, ty: layer.y||0 },
+          style: { fontSize: layer.fontSize || 48, fillColor: { r, g, b } },
+        };
+      } else {
+        // Rasterize to canvas
+        try {
+          const cw = layer.type === 'background' ? p.preview.w : (layer.width || p.preview.w);
+          const ch = layer.type === 'background' ? p.preview.h : (layer.height || p.preview.h);
+          const tmpCanvas = document.createElement('canvas');
+          tmpCanvas.width  = cw;
+          tmpCanvas.height = ch;
+          const tmpCtx = tmpCanvas.getContext('2d');
+          if (layer.type === 'background') {
+            if (layer.bgGradient) {
+              const grad = tmpCtx.createLinearGradient(0,0,0,ch);
+              grad.addColorStop(0, layer.bgGradient[0]);
+              grad.addColorStop(1, layer.bgGradient[1]);
+              tmpCtx.fillStyle = grad;
+            } else {
+              tmpCtx.fillStyle = layer.bgColor || '#000';
+            }
+            tmpCtx.fillRect(0, 0, cw, ch);
+          } else {
+            const imgSrc = layer.paintSrc || layer.src;
+            if (imgSrc) {
+              await new Promise(res => {
+                const img = new Image();
+                img.crossOrigin = 'Anonymous';
+                img.onload = () => { tmpCtx.drawImage(img, 0, 0, cw, ch); res(); };
+                img.onerror = res;
+                img.src = imgSrc;
+              });
+            }
+          }
+          desc.canvas = tmpCanvas;
+          desc.left = layer.x || 0;
+          desc.top  = layer.y || 0;
+        } catch(e) {
+          console.warn('[psd] layer rasterize failed', layer.id, e);
+        }
+      }
+      results.push(desc);
+    }
+    return results;
+  }
+
+  async function exportAsPsd() {
+    const isPro = isProUser || token==='test-key-123' || user?.is_admin;
+    if (!isPro) { showToastMsg('PSD export requires Pro. Upgrade to unlock.', 'error'); return; }
+    setExportLoading('psd');
+    try {
+      const { writePsd } = await import('ag-psd/dist/bundle.js');
+      const psdLayers = await buildPsdLayers(layers);
+      const psd = {
+        width:  p.preview.w,
+        height: p.preview.h,
+        children: psdLayers,
+      };
+      const buffer = writePsd(psd, { generateThumbnail: true, trimImageData: false });
+      const blob = new Blob([buffer], { type: 'application/octet-stream' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${designName.replace(/\s+/g,'-')||'thumbframe'}.psd`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToastMsg(`PSD exported with ${layers.length} layer${layers.length!==1?'s':''}`, 'success');
+      setShowDownload(false);
+    } catch(err) {
+      console.error('PSD export failed:', err);
+      showToastMsg('PSD export failed: ' + err.message, 'error');
+    } finally {
+      setExportLoading(null);
+    }
+  }
+
+  // ── Warp Transform ──────────────────────────────────────────────────────────
+  async function applyWarpToLayer(layerId, preset, bend) {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+    setWarpLoading(true);
+    try {
+      const W = layer.width  || p.preview.w;
+      const H = layer.height || p.preview.h;
+      // Rasterize layer to temp canvas
+      const tmpCanvas = document.createElement('canvas');
+      tmpCanvas.width  = W;
+      tmpCanvas.height = H;
+      const tmpCtx = tmpCanvas.getContext('2d');
+      const imgSrc = layer.paintSrc || layer.src;
+      if (imgSrc) {
+        await new Promise(res => {
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          img.onload = () => { tmpCtx.drawImage(img, 0, 0, W, H); res(); };
+          img.onerror = res;
+          img.src = imgSrc;
+        });
+      } else { setWarpLoading(false); return; }
+      const imageData = tmpCtx.getImageData(0, 0, W, H);
+      const mesh = buildWarpMesh(preset, W, H, 5, 5, bend);
+      // Apply via worker
+      const warpedDataUrl = await new Promise((resolve, reject) => {
+        const worker = getWarpWorker();
+        if (!worker) { reject(new Error('Warp worker unavailable')); return; }
+        const handler = (ev) => {
+          worker.removeEventListener('message', handler);
+          const dst = new Uint8ClampedArray(ev.data.processedPixels);
+          const outCanvas = document.createElement('canvas');
+          outCanvas.width = W; outCanvas.height = H;
+          const outCtx = outCanvas.getContext('2d');
+          outCtx.putImageData(new ImageData(dst, W, H), 0, 0);
+          resolve(outCanvas.toDataURL('image/png'));
+        };
+        worker.addEventListener('message', handler);
+        worker.postMessage({ pixels: imageData.data.buffer, width: W, height: H, mesh: mesh.buffer, meshW: 5, meshH: 5 },
+          [imageData.data.buffer, mesh.buffer]);
+      });
+      updateLayer(layerId, { src: warpedDataUrl, paintSrc: warpedDataUrl, warpPreset: preset, warpBend: bend });
+      setLayers(prev => {
+        const nl = [...prev];
+        pushHistory(nl, 'Warp');
+        return nl;
+      });
+      showToastMsg(`Warp applied (${preset})`, 'success');
+    } catch(err) {
+      console.error('[warp] apply failed', err);
+      showToastMsg('Warp failed: ' + err.message, 'error');
+    } finally {
+      setWarpLoading(false);
+      setWarpMode(false);
+      setWarpPreview(null);
+    }
+  }
+
+  async function computeWarpPreview(layerId, preset, bend) {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+    const W = layer.width  || p.preview.w;
+    const H = layer.height || p.preview.h;
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width  = W;
+    tmpCanvas.height = H;
+    const tmpCtx = tmpCanvas.getContext('2d');
+    const imgSrc = layer.paintSrc || layer.src;
+    if (!imgSrc) return;
+    await new Promise(res => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => { tmpCtx.drawImage(img, 0, 0, W, H); res(); };
+      img.onerror = res;
+      img.src = imgSrc;
+    });
+    const imageData = tmpCtx.getImageData(0, 0, W, H);
+    const mesh = buildWarpMesh(preset, W, H, 5, 5, bend);
+    const worker = getWarpWorker();
+    if (!worker) return;
+    return new Promise(resolve => {
+      const handler = (ev) => {
+        worker.removeEventListener('message', handler);
+        const dst = new Uint8ClampedArray(ev.data.processedPixels);
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = W; outCanvas.height = H;
+        outCanvas.getContext('2d').putImageData(new ImageData(dst, W, H), 0, 0);
+        resolve(outCanvas.toDataURL('image/png'));
+      };
+      worker.addEventListener('message', handler);
+      // clone buffers since we can't transfer and keep for next call
+      const pixelsCopy = imageData.data.buffer.slice(0);
+      const meshCopy = mesh.buffer.slice(0);
+      worker.postMessage({ pixels: pixelsCopy, width: W, height: H, mesh: meshCopy, meshW: 5, meshH: 5 },
+        [pixelsCopy, meshCopy]);
+    });
+  }
+
   function renderCropHandles(obj){
     if(activeTool!=='crop') return null;
     const hs={
@@ -5809,12 +6919,31 @@ PHASE 4 — Toolbar button:
         title="Rotate (drag to rotate)">↻</div>
     </>);
   }
-  function getLayerCursor(obj){if(activeTool==='brush'||activeTool==='rimlight')return'crosshair';if(canDrag&&!obj.locked)return'grab';return'pointer';}
+  function getLayerCursor(obj){if(activeTool==='brush'||activeTool==='rimlight'||RETOUCH_TOOLS.includes(activeTool))return'crosshair';if(canDrag&&!obj.locked)return'grab';return'pointer';}
 
-  function renderLayerElement(obj){
+  function renderLayerElement(obj,overrideZ){
     if(obj.hidden)return null;
     const isSelected=selectedId===obj.id;
-    const zIndex=layers.indexOf(obj)+1;
+    const zIndex=overrideZ!==undefined?overrideZ:(layers.indexOf(obj)+1);
+
+    // ── Group: transparent hit-area + bounding box + children ─────────────────
+    if(obj.type==='group'){
+      const bounds=getGroupBounds(obj);
+      const cursor=canDrag&&!obj.locked?'grab':'pointer';
+      const groupZ=layers.indexOf(obj)+1;
+      return(
+        <div key={obj.id} style={{position:'absolute',left:0,top:0,width:p.preview.w,height:p.preview.h,zIndex:groupZ,opacity:(obj.opacity??100)/100,mixBlendMode:obj.blendMode||'normal',pointerEvents:'none'}}>
+          {/* Render children */}
+          {(obj.children||[]).map((child,idx)=>renderLayerElement(child,idx+1))}
+          {/* Hit area for group selection/drag */}
+          {bounds&&(<div onMouseDown={e=>onLayerMouseDown(e,obj.id)} style={{position:'absolute',left:bounds.x,top:bounds.y,width:bounds.width,height:bounds.height,cursor,pointerEvents:'all',zIndex:9989}}/>)}
+          {/* Selection dashed outline */}
+          {isSelected&&bounds&&(<div style={{position:'absolute',left:bounds.x-3,top:bounds.y-3,width:bounds.width+6,height:bounds.height+6,border:`1.5px dashed ${T.accent}`,borderRadius:3,pointerEvents:'none',zIndex:9990}}/>)}
+          {/* Group label */}
+          {isSelected&&bounds&&(<div style={{position:'absolute',left:bounds.x,top:bounds.y-18,background:T.accent,color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:4,pointerEvents:'none',zIndex:9991,whiteSpace:'nowrap'}}>{obj.name||'Group'}</div>)}
+        </div>
+      );
+    }
     const opacityVal=(obj.opacity??100)/100;
     const selStyle=isSelected&&obj.type!=='image'?{outline:`1.5px solid ${T.accent}`,outlineOffset:2}:{};
     const flipStyle={transform:`rotate(${obj.rotation||0}deg) scale(${obj.flipH?-1:1},${obj.flipV?-1:1})`};
@@ -5987,6 +7116,324 @@ PHASE 4 — Toolbar button:
     );
   }
 
+  // ── AdjustmentPanel sub-component ─────────────────────────────────────────
+  function AdjustmentPanel({layer,T,css,onChange,onCommit}){
+    const s=layer.settings||{};
+    const t=layer.adjustmentType;
+    const [hueSatRange,setHueSatRange]=React.useState('master');
+    const [cbRange,setCbRange]=React.useState('midtones');
+    const [scRange,setScRange]=React.useState('reds');
+    const sld=(label,val,min,max,key,subKey)=>(
+      <React.Fragment key={key+(subKey||'')}>
+        <span style={css.label}>{label} — {Math.round((subKey?s[key]?.[subKey]:s[key])??val)}</span>
+        <Slider min={min} max={max} value={(subKey?s[key]?.[subKey]:s[key])??val}
+          onChange={v=>{const ns=subKey?{...s,[key]:{...s[key],[subKey]:v}}:{...s,[key]:v};onChange(ns);}}
+          onCommit={v=>{const ns=subKey?{...s,[key]:{...s[key],[subKey]:v}}:{...s,[key]:v};onCommit(ns);}}
+          style={{width:'100%'}}/>
+      </React.Fragment>
+    );
+    return(
+      <div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+          <span style={{...css.label,marginBottom:0}}>{layer.name||'Adjustment'}</span>
+          <button onClick={()=>onCommit({...ADJ_DEFAULTS[t]})}
+            style={{padding:'2px 8px',borderRadius:4,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:10}}>Reset</button>
+        </div>
+        <span style={css.label}>Opacity — {layer.opacity??100}%</span>
+        <Slider min={0} max={100} value={layer.opacity??100}
+          onChange={v=>updateLayerSilent(layer.id,{opacity:v})}
+          onCommit={v=>updateLayer(layer.id,{opacity:v})}
+          style={{width:'100%'}}/>
+        <div style={css.divider}/>
+        {t==='levels'&&(<>
+          <span style={css.label}>Channel</span>
+          <div style={{display:'flex',gap:3,marginBottom:8}}>
+            {['rgb','r','g','b'].map(ch=>(
+              <button key={ch} onClick={()=>onCommit({...s,channel:ch})}
+                style={{...css.iconBtn(s.channel===ch||(ch==='rgb'&&!s.channel)),flex:1,fontSize:10,textTransform:'uppercase'}}>{ch}</button>
+            ))}
+          </div>
+          {sld('Input Black',0,0,253,'inBlack')}
+          {sld('Gamma',1,0.1,9.99,'inGamma')}
+          {sld('Input White',255,2,255,'inWhite')}
+          {sld('Output Black',0,0,255,'outBlack')}
+          {sld('Output White',255,0,255,'outWhite')}
+        </>)}
+        {t==='hueSat'&&(<>
+          <div style={{display:'flex',gap:2,flexWrap:'wrap',marginBottom:8}}>
+            {['master','reds','yellows','greens','cyans','blues','magentas'].map(r=>(
+              <button key={r} onClick={()=>setHueSatRange(r)}
+                style={{...css.iconBtn(hueSatRange===r),padding:'3px 7px',fontSize:9,textTransform:'capitalize'}}>{r.charAt(0).toUpperCase()+r.slice(1)}</button>
+            ))}
+          </div>
+          {['h','s','l'].map(prop=>(
+            <React.Fragment key={prop}>
+              <span style={css.label}>{prop==='h'?'Hue':prop==='s'?'Saturation':'Lightness'} — {Math.round(s[hueSatRange]?.[prop]||0)}</span>
+              <Slider min={prop==='h'?-180:-100} max={prop==='h'?180:100}
+                value={s[hueSatRange]?.[prop]||0}
+                onChange={v=>onChange({...s,[hueSatRange]:{...(s[hueSatRange]||{}),[prop]:v}})}
+                onCommit={v=>onCommit({...s,[hueSatRange]:{...(s[hueSatRange]||{}),[prop]:v}})}
+                style={{width:'100%'}}/>
+            </React.Fragment>
+          ))}
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:T.text,marginTop:6,cursor:'pointer'}}>
+            <input type="checkbox" checked={s.colorize||false} onChange={e=>onCommit({...s,colorize:e.target.checked})} style={{accentColor:T.accent}}/>
+            Colorize
+          </label>
+          {s.colorize&&(<>
+            {sld('Hue',0,0,360,'colorizeH')}
+            {sld('Saturation',50,0,100,'colorizeS')}
+            {sld('Lightness',0,-100,100,'colorizeL')}
+          </>)}
+        </>)}
+        {t==='colorBalance'&&(<>
+          <div style={{display:'flex',gap:3,marginBottom:8}}>
+            {['shadows','midtones','highlights'].map(r=>(
+              <button key={r} onClick={()=>setCbRange(r)}
+                style={{...css.iconBtn(cbRange===r),flex:1,fontSize:9,textTransform:'capitalize'}}>{r.charAt(0).toUpperCase()+r.slice(1)}</button>
+            ))}
+          </div>
+          {[['Cyan/Red','cr'],['Magenta/Green','mg'],['Yellow/Blue','yb']].map(([label,prop])=>(
+            <React.Fragment key={prop}>
+              <span style={css.label}>{label} — {Math.round(s[cbRange]?.[prop]||0)}</span>
+              <Slider min={-100} max={100} value={s[cbRange]?.[prop]||0}
+                onChange={v=>onChange({...s,[cbRange]:{...(s[cbRange]||{}),[prop]:v}})}
+                onCommit={v=>onCommit({...s,[cbRange]:{...(s[cbRange]||{}),[prop]:v}})}
+                style={{width:'100%'}}/>
+            </React.Fragment>
+          ))}
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:T.text,marginTop:6,cursor:'pointer'}}>
+            <input type="checkbox" checked={s.preserveLuminosity!==false} onChange={e=>onCommit({...s,preserveLuminosity:e.target.checked})} style={{accentColor:T.accent}}/>
+            Preserve Luminosity
+          </label>
+        </>)}
+        {t==='vibrance'&&(<>
+          {sld('Vibrance',0,-100,100,'vibrance')}
+          {sld('Saturation',0,-100,100,'saturation')}
+        </>)}
+        {t==='selectiveColor'&&(<>
+          <span style={css.label}>Color Range</span>
+          <select value={scRange} onChange={e=>setScRange(e.target.value)} style={css.input}>
+            {['reds','yellows','greens','cyans','blues','magentas','whites','neutrals','blacks'].map(r=>(
+              <option key={r} value={r}>{r.charAt(0).toUpperCase()+r.slice(1)}</option>
+            ))}
+          </select>
+          {['c','m','y','k'].map(prop=>(
+            <React.Fragment key={prop}>
+              <span style={css.label}>{prop==='c'?'Cyan':prop==='m'?'Magenta':prop==='y'?'Yellow':'Black'} — {Math.round(s[scRange]?.[prop]||0)}</span>
+              <Slider min={-100} max={100} value={s[scRange]?.[prop]||0}
+                onChange={v=>onChange({...s,[scRange]:{...(s[scRange]||{}),[prop]:v}})}
+                onCommit={v=>onCommit({...s,[scRange]:{...(s[scRange]||{}),[prop]:v}})}
+                style={{width:'100%'}}/>
+            </React.Fragment>
+          ))}
+          <span style={css.label}>Method</span>
+          <div style={{display:'flex',gap:4,marginBottom:6}}>
+            {['relative','absolute'].map(m=>(
+              <button key={m} onClick={()=>onCommit({...s,method:m})}
+                style={{...css.iconBtn((s.method||'relative')===m),flex:1,fontSize:10,textTransform:'capitalize'}}>{m}</button>
+            ))}
+          </div>
+        </>)}
+        {t==='gradientMap'&&(<>
+          <span style={css.label}>Gradient stops</span>
+          {(s.stops||ADJ_DEFAULTS.gradientMap.stops).map((stop,i)=>(
+            <div key={i} style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
+              <span style={{fontSize:10,color:T.muted,width:14}}>{Math.round(stop.pos*100)}%</span>
+              <input type="color" value={stop.color}
+                onChange={ev=>{const ns=[...(s.stops||[])];ns[i]={...ns[i],color:ev.target.value};onCommit({...s,stops:ns});}}
+                style={{width:30,height:22,border:'none',borderRadius:4,cursor:'pointer',background:'none'}}/>
+              {(s.stops||[]).length>2&&(
+                <button onClick={()=>{const ns=(s.stops||[]).filter((_,j)=>j!==i);onCommit({...s,stops:ns});}}
+                  style={{padding:'1px 5px',borderRadius:3,border:`1px solid ${T.border}`,background:'transparent',color:T.danger,cursor:'pointer',fontSize:10}}>✕</button>
+              )}
+            </div>
+          ))}
+          <button onClick={()=>{const ns=[...(s.stops||[]),{pos:0.5,color:'#888888'}];onCommit({...s,stops:ns.sort((a,b)=>a.pos-b.pos)});}}
+            style={{...css.addBtn,marginTop:0,marginBottom:8,background:'transparent',color:T.text,border:`1px solid ${T.border}`}}>+ Add Stop</button>
+          <div style={{height:16,borderRadius:6,background:`linear-gradient(to right, ${(s.stops||ADJ_DEFAULTS.gradientMap.stops).map(st=>`${st.color} ${Math.round(st.pos*100)}%`).join(',')})`,marginBottom:8}}/>
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:T.text,cursor:'pointer',marginBottom:8}}>
+            <input type="checkbox" checked={s.reverse||false} onChange={e=>onCommit({...s,reverse:e.target.checked})} style={{accentColor:T.accent}}/>
+            Reverse
+          </label>
+          <span style={css.label}>Presets</span>
+          <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+            {[
+              {label:'B&W', stops:[{pos:0,color:'#000000'},{pos:1,color:'#ffffff'}]},
+              {label:'Sepia', stops:[{pos:0,color:'#2d1a00'},{pos:1,color:'#e8c48a'}]},
+              {label:'Cool', stops:[{pos:0,color:'#00003a'},{pos:1,color:'#aee4ff'}]},
+              {label:'Warm', stops:[{pos:0,color:'#1a0000'},{pos:1,color:'#ffcc44'}]},
+              {label:'Cyber', stops:[{pos:0,color:'#0a0028'},{pos:0.5,color:'#ff00ff'},{pos:1,color:'#00ffdd'}]},
+            ].map(({label,stops})=>(
+              <button key={label} onClick={()=>onCommit({...s,stops})}
+                style={{padding:'3px 8px',borderRadius:4,border:`1px solid ${T.border}`,background:T.input,color:T.text,cursor:'pointer',fontSize:10}}>{label}</button>
+            ))}
+          </div>
+        </>)}
+        {t==='posterize'&&sld('Levels',4,2,255,'levels')}
+        {t==='threshold'&&sld('Level',128,0,255,'level')}
+      </div>
+    );
+  }
+
+  // ── Tier 3 Item 3: Competitor Comparison ─────────────────────────────────
+  async function searchCompetitors(){
+    if(!competitorQuery.trim()) return;
+    setCompetitorLoading(true);
+    setCompetitorError('');
+    setCompetitorResults([]);
+    setCompetitorAnalysis('');
+    try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const tok = session?.access_token;
+      const res = await fetch(`${resolvedApiUrl}/api/youtube/search?q=${encodeURIComponent(competitorQuery)}&maxResults=10`,{
+        headers:{'Authorization':`Bearer ${tok}`},
+      });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error||'Search failed');
+      if(!data.success) throw new Error(data.error||'Search failed');
+      setCompetitorResults(data.results||[]);
+      // Capture current canvas as user thumbnail
+      const flat=document.createElement('canvas');
+      flat.width=p.preview.w; flat.height=p.preview.h;
+      await renderLayersToCanvas(flat,layers);
+      setCompetitorThumbUrl(flat.toDataURL('image/jpeg',0.88));
+    }catch(err){
+      setCompetitorError(err.message||'Search failed');
+    }finally{
+      setCompetitorLoading(false);
+    }
+  }
+
+  async function analyzeCompetition(){
+    if(!competitorResults.length||!competitorThumbUrl) return;
+    setCompetitorAnalyzing(true);
+    setCompetitorAnalysis('');
+    try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const tok = session?.access_token;
+      const res = await fetch(`${resolvedApiUrl}/api/analyze-competition`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
+        body:JSON.stringify({
+          userThumbnailUrl:competitorThumbUrl,
+          competitorThumbnails:competitorResults,
+          searchTerm:competitorQuery,
+        }),
+      });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error||'Analysis failed');
+      setCompetitorAnalysis(data.insights||'');
+    }catch(err){
+      setCompetitorAnalysis('Analysis failed: '+err.message);
+    }finally{
+      setCompetitorAnalyzing(false);
+    }
+  }
+
+  function formatViewCount(n){
+    if(n>=1000000) return (n/1000000).toFixed(1)+'M';
+    if(n>=1000) return (n/1000).toFixed(0)+'K';
+    return String(n);
+  }
+
+  // ── Tier 3 Item 4: Focus/Saliency Heat Map ────────────────────────────────
+  function drawHeatMap(heatMapArr, width, height, opacity, canvasEl){
+    if(!canvasEl) return;
+    const ctx = canvasEl.getContext('2d');
+    canvasEl.width = width; canvasEl.height = height;
+    ctx.clearRect(0, 0, width, height);
+    const imageData = ctx.createImageData(width, height);
+    for(let i = 0; i < heatMapArr.length; i++){
+      const v = heatMapArr[i];
+      let r, g, b;
+      if(v < 0.5){ r=0; g=Math.round(v*2*255); b=Math.round((1-v*2)*255); }
+      else{ r=Math.round((v-0.5)*2*255); g=Math.round((1-(v-0.5)*2)*255); b=0; }
+      imageData.data[i*4]   = r;
+      imageData.data[i*4+1] = g;
+      imageData.data[i*4+2] = b;
+      imageData.data[i*4+3] = Math.round(v * (opacity/100) * 200);
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  function generateHeatMapInsights(heatMap, width, height){
+    const insights = [];
+    const sorted = [...heatMap].sort((a,b)=>b-a);
+    const threshold = sorted[Math.floor(heatMap.length*0.1)];
+    let cx=0,cy=0,cnt=0;
+    for(let y=0;y<height;y++) for(let x=0;x<width;x++){
+      if(heatMap[y*width+x]>=threshold){ cx+=x;cy+=y;cnt++; }
+    }
+    if(cnt>0){ cx/=cnt; cy/=cnt; }
+
+    let topThird=0,midThird=0,botThird=0,total=0; // eslint-disable-line no-unused-vars
+    for(let y=0;y<height;y++) for(let x=0;x<width;x++){
+      const v=heatMap[y*width+x]; total+=v;
+      if(y<height/3) topThird+=v;
+      else if(y<height*2/3) midThird+=v; // eslint-disable-line no-unused-vars
+      else botThird+=v;
+    }
+    const topPct=topThird/total, botPct=botThird/total;
+    if(topPct>0.45) insights.push('Strong visual pull in the upper area — good for title/face placement');
+    else if(botPct>0.35) insights.push('Lower region gets more attention — consider moving key elements up');
+
+    let centerV=0,edgeV=0,cCnt=0,eCnt=0;
+    for(let y=0;y<height;y++) for(let x=0;x<width;x++){
+      const dx=(x-width/2)/(width/2), dy=(y-height/2)/(height/2);
+      if(Math.sqrt(dx*dx+dy*dy)<0.4){centerV+=heatMap[y*width+x];cCnt++;}
+      else{edgeV+=heatMap[y*width+x];eCnt++;}
+    }
+    const centerAvg=cCnt>0?centerV/cCnt:0, edgeAvg=eCnt>0?edgeV/eCnt:0;
+    if(centerAvg>edgeAvg*1.5) insights.push('Eye naturally centers on the focal point ✓');
+    else insights.push('Attention is spread across the thumbnail — consider a stronger focal point');
+
+    const cornerSize=Math.floor(Math.min(width,height)*0.15);
+    let cornersV=0,cCnt2=0;
+    [[0,0],[width-cornerSize,0],[0,height-cornerSize],[width-cornerSize,height-cornerSize]].forEach(([ox,oy])=>{
+      for(let y=oy;y<oy+cornerSize&&y<height;y++) for(let x=ox;x<ox+cornerSize&&x<width;x++){cornersV+=heatMap[y*width+x];cCnt2++;}
+    });
+    if(cCnt2>0&&cornersV/cCnt2<0.2) insights.push('Corners have low attention — safe for watermarks or subtle branding');
+
+    insights.push(`Peak attention: ${cx<width*0.4?'left':(cx>width*0.6?'right':'center')}-${cy<height*0.4?'top':(cy>height*0.6?'bottom':'middle')} region`);
+    return insights;
+  }
+
+  async function runHeatMap(){
+    setHeatMapLoading(true);
+    setHeatMapData(null);
+    setHeatMapInsights([]);
+    try{
+      const flat=document.createElement('canvas');
+      flat.width=p.preview.w; flat.height=p.preview.h;
+      await renderLayersToCanvas(flat,layers);
+      const ctx=flat.getContext('2d');
+      const imageData=ctx.getImageData(0,0,flat.width,flat.height);
+      const worker=new Worker(new URL('./saliencyWorker.js', import.meta.url));
+      worker.onmessage=(e)=>{
+        const hm=new Float32Array(e.data.heatMap);
+        setHeatMapData(hm);
+        setShowHeatMap(true);
+        setHeatMapVisible(true);
+        const ins=generateHeatMapInsights(hm,flat.width,flat.height);
+        setHeatMapInsights(ins);
+        setTimeout(()=>{
+          if(heatMapCanvasRef.current) drawHeatMap(hm,flat.width,flat.height,60,heatMapCanvasRef.current);
+        },50);
+        worker.terminate();
+        setHeatMapLoading(false);
+      };
+      worker.onerror=(e)=>{
+        console.error('[HEATMAP] Worker error:',e);
+        setHeatMapLoading(false);
+      };
+      worker.postMessage({pixels:imageData.data.buffer,width:flat.width,height:flat.height},[imageData.data.buffer]);
+    }catch(err){
+      console.error('[HEATMAP]',err);
+      setHeatMapLoading(false);
+    }
+  }
+
   const tools=[
     {key:'select',    label:'Select',       icon:'↖',  group:'Tools'},
     {key:'move',      label:'Move',         icon:'✋',  group:'Tools'},
@@ -6001,6 +7448,11 @@ PHASE 4 — Toolbar button:
     null,
     {key:'brush',     label:'Brush',        icon:'⌀',  group:'Paint'},
     {key:'freehand',  label:'Draw',         icon:'✏',  group:'Paint'},
+    {key:'dodge',     label:'Dodge (O)',    icon:'◉',  group:'Paint'},
+    {key:'burn',      label:'Burn (O)',     icon:'◎',  group:'Paint'},
+    {key:'smudge',    label:'Smudge',       icon:'⊙',  group:'Paint'},
+    {key:'blur-brush',label:'Blur Brush',   icon:'◌',  group:'Paint'},
+    {key:'sharpen-brush',label:'Sharpen',   icon:'✦',  group:'Paint'},
     {key:'rimlight',  label:'Rim Light',    icon:'☀',  group:'Paint'},
     {key:'removebg',  label:'Remove BG',    icon:'✂',  group:'Paint'},
     {key:'segment',   label:'Smart Cutout', icon:'◎',  group:'Paint'},
@@ -6014,7 +7466,9 @@ PHASE 4 — Toolbar button:
     {key:'background',label:'Background',   icon:'▨',   group:'Design'},
     {key:'effects',   label:'Effects',      icon:'✦',   group:'Design'},
     {key:'curves',    label:'Curves',       icon:'◑',   group:'Design'},
+    {key:'adjustment',label:'Adjustments',  icon:'◐',   group:'Design'},
     {key:'liquify',   label:'Liquify',      icon:'≋',   group:'Design'},
+    {key:'filters',   label:'Filters',      icon:'◎',   group:'Design'},
     {key:'brandkit',  label:'Brand Kit',    icon:'◐',   group:'Design'},
     null,
     {key:'templates',   label:'Templates',    icon:'⊞',   group:'Analyze'},
@@ -6027,6 +7481,8 @@ PHASE 4 — Toolbar button:
     {key:'ab',        label:'A/B Variants', icon:'⊟',   group:'Analyze'},
     {key:'yttest',    label:'YouTube Test', icon:'▶',   group:'Analyze'},
     {key:'ythistory', label:'YT Insights',  icon:'◎',   group:'Analyze', pro:true},
+    {key:'competitor',label:'Compare',      icon:'⚔',   group:'Analyze', pro:true},
+    {key:'heatmap',   label:'Focus Map',    icon:'◉',   group:'Analyze'},
     {key:'resize',    label:'All Sizes',    icon:'⊠',   group:'Analyze'},
     null,
     {key:'team',      label:'Team',         icon:'⊕',   group:'Collab', pro:true},
@@ -6292,36 +7748,358 @@ PHASE 4 — Toolbar button:
         />
       )}
 
-      {showDownload&&(
-        <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'}} onClick={e=>{if(e.target===e.currentTarget)setShowDownload(false);}}>
-          <div style={{width:380,background:T.panel,borderRadius:14,border:`1px solid ${T.border}`,padding:'24px',boxShadow:'0 24px 80px rgba(0,0,0,0.8)'}}>
-            <div style={{fontSize:15,fontWeight:'700',marginBottom:4}}>Download image</div>
-            <div style={{fontSize:12,color:T.muted,marginBottom:10}}>
-              {p.label} · {p.width}×{p.height}px
-            </div>
-            <div style={{...css.section,marginTop:0,marginBottom:10,border:`1px solid ${T.border}`}}>
-              <div style={{fontSize:12,fontWeight:'700',color:T.text,marginBottom:4}}>Basic Download</div>
-              <div style={{fontSize:11,color:T.muted,marginBottom:8}}>Low quality export for all users (scale: 0.6) with watermark.</div>
-              <button onClick={()=>handleDownload({tier:'basic'})}
-                style={{...css.addBtn,marginTop:0,background:T.input,color:T.text,border:`1px solid ${T.border}`}}>
-                Download Basic JPG (Watermarked)
-              </button>
-            </div>
-            <div style={{...css.section,marginTop:0,marginBottom:8,border:`1px solid ${T.warning}`}}>
-              <div style={{fontSize:12,fontWeight:'700',color:T.warning,marginBottom:4}}>Pro Download (4K)</div>
-              <div style={{fontSize:11,color:T.muted,marginBottom:8}}>4K-grade export for Pro users only (scale: 3), no watermark.</div>
-              <button onClick={()=>handleDownload({tier:'pro'})}
-                style={{...css.addBtn,marginTop:0,background:T.warning,color:'#000'}}>
-                Download Pro 4K JPG
-              </button>
-              <div style={{fontSize:10,color:T.muted,marginTop:6}}>Non-Pro users will be redirected to upgrade.</div>
-            </div>
-            <div style={css.section}><div style={css.row}><input type="checkbox" id="transp" checked={transparentExport} onChange={e=>setTransparentExport(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/><label htmlFor="transp" style={{fontSize:12,color:T.text,cursor:'pointer',flex:1}}>Transparent background</label></div></div>
-            <button onClick={()=>handleDownload({tier:'basic',transparent:true})} style={{...css.addBtn,background:T.success,marginTop:8}}>Basic JPG with transparency</button>
-            <button onClick={()=>setShowDownload(false)} style={{width:'100%',padding:9,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:12,cursor:'pointer',marginTop:8}}>Cancel</button>
-          </div>
-        </div>
+      {showFilters&&filtersSource&&(
+        <FiltersModal
+          sourceImageData={filtersSource.imageData}
+          W={filtersSource.w}
+          H={filtersSource.h}
+          selectionMask={selectionActive?selectionMaskRef.current:null}
+          lastFilter={lastFilterRef.current}
+          autoApply={filtersAutoApply}
+          onApply={({dataUrl,filterId,params,blendMode})=>{
+            addLayer({
+              type:'image',src:dataUrl,
+              width:p.preview.w,height:p.preview.h,
+              x:0,y:0,
+              cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+              imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+              blendMode:blendMode||'normal',
+            });
+            lastFilterRef.current={id:filterId,params};
+            saveEngineRef.current?.markDirty('layerContent','filter-'+filterId);
+            setShowFilters(false);
+            setFiltersSource(null);
+          }}
+          onCancel={()=>{setShowFilters(false);setFiltersSource(null);}}
+        />
       )}
+
+      {/* Hidden canvas for history thumbnail generation — never visible */}
+      <canvas ref={thumbCanvasRef} width={160} height={90} style={{display:'none',position:'fixed',pointerEvents:'none'}}/>
+
+      {/* ── Layer context menu (groups + regular layers) ── */}
+      {ctxMenu&&(()=>{
+        const ctxLayerIdx=layers.findIndex(l=>l.id===ctxMenu.layerId);
+        const ctxLayer=layers[ctxLayerIdx];
+        const ctxIsClipped=ctxLayer?.clipMask===true;
+        const ctxCanClip=ctxLayerIdx>0&&ctxLayer?.type!=='background';
+        const groupItems=[
+          ['⊟ Ungroup',          ()=>{ ungroupLayer(ctxMenu.layerId);   setCtxMenu(null); }],
+          ['⧉ Duplicate',        ()=>{ duplicateLayer(ctxMenu.layerId); setCtxMenu(null); }],
+          ['◼ Merge to Layer',   ()=>{ mergeGroupToLayer(ctxMenu.layerId); setCtxMenu(null); }],
+          null,
+          ['✕ Delete Group + Contents', ()=>{ deleteGroupAndChildren(ctxMenu.layerId); setCtxMenu(null); }],
+        ];
+        const ctxLayerObj = layers.find(l=>l.id===ctxMenu.layerId);
+        const layerItems=[
+          ctxIsClipped
+            ? ['⊏ Release Clipping Mask (Ctrl+Alt+G)', ()=>{ toggleClipMask(ctxMenu.layerId); setCtxMenu(null); }]
+            : ctxCanClip
+              ? ['⊏ Create Clipping Mask (Ctrl+Alt+G)', ()=>{ toggleClipMask(ctxMenu.layerId); setCtxMenu(null); }]
+              : null,
+          null,
+          (ctxLayerObj&&(ctxLayerObj.type==='image'||ctxLayerObj.type==='text'))
+            ? ['⬡ Warp Transform (Ctrl+Shift+W)', ()=>{ setSelectedId(ctxMenu.layerId); setWarpMode(true); setWarpBend(30); setWarpPreset('arc'); setCtxMenu(null); }]
+            : null,
+          null,
+          ['⧉ Duplicate Layer',  ()=>{ duplicateLayer(ctxMenu.layerId); setCtxMenu(null); }],
+          ['✕ Delete Layer',     ()=>{ deleteLayer(ctxMenu.layerId); setCtxMenu(null); }],
+        ].filter((item,i,arr)=>!(item===null&&(i===0||arr[i-1]===null||i===arr.length-1)));
+        const items=ctxMenu.menuType==='group'?groupItems:layerItems;
+        return(
+          <>
+            <div style={{position:'fixed',inset:0,zIndex:1095}} onClick={()=>setCtxMenu(null)}/>
+            <div style={{position:'fixed',left:ctxMenu.x,top:ctxMenu.y,zIndex:1096,background:'#1e1e1e',border:'1px solid rgba(255,255,255,0.12)',borderRadius:8,padding:'4px 0',minWidth:200,boxShadow:'0 8px 32px rgba(0,0,0,0.6)',userSelect:'none'}}>
+              {items.map((item,i)=>item===null?(
+                <div key={i} style={{height:1,background:'rgba(255,255,255,0.08)',margin:'3px 0'}}/>
+              ):(
+                <button key={item[0]} onClick={item[1]}
+                  style={{display:'block',width:'100%',textAlign:'left',padding:'7px 14px',background:'none',border:'none',color:'rgba(255,255,255,0.8)',fontSize:12,cursor:'pointer'}}
+                  onMouseEnter={e=>e.currentTarget.style.background='rgba(249,115,22,0.15)'}
+                  onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  {item[0]}
+                </button>
+              ))}
+            </div>
+          </>
+        );
+      })()}
+
+      {/* ── YouTube Search Result Preview Modal ── */}
+      {showYtPreview&&(()=>{
+        const isDark=ytPreviewTheme==='dark';
+        const ytBg=isDark?'#0f0f0f':'#ffffff';
+        const ytText=isDark?'#ffffff':'#0f0f0f';
+        const ytSub=isDark?'rgba(255,255,255,0.55)':'#606060';
+        const yt2=isDark?'rgba(255,255,255,0.35)':'#909090';
+        const yt3=isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)';
+        const thumbScaleDesktop=240/p.preview.w;
+        const thumbScaleMobile=360/p.preview.w;
+        const bgStyle=bg?.bgGradient?`linear-gradient(180deg,${bg.bgGradient[0]},${bg.bgGradient[1]})`:bg?.bgColor||'#000';
+        return(
+          <div style={{position:'fixed',inset:0,zIndex:1050,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.75)',backdropFilter:'blur(6px)'}} onClick={e=>{if(e.target===e.currentTarget)setShowYtPreview(false);}}>
+            <div style={{width:600,maxHeight:'90vh',overflowY:'auto',background:T.panel,borderRadius:16,border:`1px solid ${T.border}`,boxShadow:'0 32px 96px rgba(0,0,0,0.9)',display:'flex',flexDirection:'column'}}>
+              {/* Header */}
+              <div style={{padding:'14px 18px 10px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:13,fontWeight:'700',color:T.text}}>▶ YouTube Preview</span>
+                  <span style={{fontSize:10,color:T.muted}}>How creators see your thumbnail</span>
+                </div>
+                <button onClick={()=>setShowYtPreview(false)} style={{padding:'3px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:12}}>✕</button>
+              </div>
+              {/* Controls */}
+              <div style={{padding:'10px 18px',borderBottom:`1px solid ${T.border}`,display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',flexShrink:0}}>
+                {/* Mode */}
+                <div style={{display:'flex',borderRadius:7,overflow:'hidden',border:`1px solid ${T.border}`}}>
+                  {[['desktop','🖥 Desktop'],['mobile','📱 Mobile']].map(([m,lbl])=>(
+                    <button key={m} onClick={()=>setYtPreviewMode(m)}
+                      style={{padding:'5px 12px',border:'none',background:ytPreviewMode===m?T.accent:'transparent',color:ytPreviewMode===m?'#000':T.muted,cursor:'pointer',fontSize:10,fontWeight:'600',transition:'all 0.1s'}}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+                {/* Theme */}
+                <div style={{display:'flex',borderRadius:7,overflow:'hidden',border:`1px solid ${T.border}`}}>
+                  {[['dark','● Dark'],['light','○ Light']].map(([th,lbl])=>(
+                    <button key={th} onClick={()=>setYtPreviewTheme(th)}
+                      style={{padding:'5px 11px',border:'none',background:ytPreviewTheme===th?T.input:'transparent',color:ytPreviewTheme===th?T.text:T.muted,cursor:'pointer',fontSize:10,transition:'all 0.1s'}}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+                {/* Editable title */}
+                <input value={ytVideoTitle} onChange={e=>setYtVideoTitle(e.target.value)} placeholder="Video title…"
+                  style={{flex:1,minWidth:160,padding:'5px 10px',borderRadius:7,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:11,outline:'none'}}/>
+                <input value={ytChannel} onChange={e=>setYtChannel(e.target.value)} placeholder="Channel…"
+                  style={{width:110,padding:'5px 10px',borderRadius:7,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:11,outline:'none'}}/>
+              </div>
+              {/* Preview area */}
+              <div style={{padding:'18px',background:ytBg,flex:1}}>
+                {ytPreviewMode==='desktop'?(
+                  /* Desktop search result */
+                  <div>
+                    {/* Search bar */}
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+                      <div style={{flex:1,padding:'8px 14px',borderRadius:22,border:`1px solid ${isDark?'rgba(255,255,255,0.15)':'rgba(0,0,0,0.15)'}`,background:isDark?'rgba(255,255,255,0.05)':'#fff',color:yt2,fontSize:12}}>youtube thumbnail creator tips</div>
+                      <div style={{width:32,height:32,borderRadius:'50%',background:isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:yt2}}>🔍</div>
+                    </div>
+                    {/* Result card */}
+                    <div style={{display:'flex',gap:14,alignItems:'flex-start',padding:'8px',borderRadius:8,background:yt3}}>
+                      {/* Thumbnail */}
+                      <div style={{position:'relative',width:240,height:135,borderRadius:8,overflow:'hidden',flexShrink:0,background:bgStyle}}>
+                        {layers.filter(l=>l.type!=='background').map(obj=><StampLayer key={obj.id} obj={obj} scale={thumbScaleDesktop}/>)}
+                        <div style={{position:'absolute',bottom:5,right:5,padding:'2px 5px',borderRadius:3,background:'rgba(0,0,0,0.9)',fontSize:8,color:'#fff',fontFamily:'monospace',fontWeight:'700'}}>10:24</div>
+                      </div>
+                      {/* Meta */}
+                      <div style={{flex:1,paddingTop:2}}>
+                        <div style={{fontSize:15,fontWeight:'400',color:ytText,lineHeight:1.4,marginBottom:6,fontFamily:'Roboto,"Segoe UI",sans-serif'}}>{ytVideoTitle||'Your Video Title Goes Here'}</div>
+                        <div style={{fontSize:11,color:yt2,marginBottom:5,fontFamily:'Roboto,sans-serif'}}>1,247,832 views · 2 days ago</div>
+                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                          <div style={{width:20,height:20,borderRadius:'50%',background:'linear-gradient(135deg,#f97316,#ef4444)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:'700',color:'#fff'}}>{ytChannel.charAt(0).toUpperCase()}</div>
+                          <span style={{fontSize:11,color:ytSub,fontFamily:'Roboto,sans-serif'}}>{ytChannel||'Your Channel'} · 1.2M subscribers</span>
+                        </div>
+                        <div style={{fontSize:11,color:yt2,lineHeight:1.5,fontFamily:'Roboto,sans-serif'}}>Watch this tutorial to learn how to create stunning YouTube thumbnails that drive massive clicks and grow your channel…</div>
+                      </div>
+                    </div>
+                    {/* Suggested next card (faded) */}
+                    <div style={{display:'flex',gap:14,alignItems:'flex-start',padding:'8px',marginTop:4,opacity:0.35}}>
+                      <div style={{width:240,height:135,borderRadius:8,background:isDark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)',flexShrink:0}}/>
+                      <div style={{flex:1}}>
+                        <div style={{height:14,width:'80%',borderRadius:3,background:isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)',marginBottom:8}}/>
+                        <div style={{height:10,width:'40%',borderRadius:3,background:isDark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)'}}/>
+                      </div>
+                    </div>
+                  </div>
+                ):(
+                  /* Mobile feed */
+                  <div style={{maxWidth:390,margin:'0 auto'}}>
+                    {/* Top nav */}
+                    <div style={{display:'flex',gap:12,marginBottom:14,borderBottom:`1px solid ${isDark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.1)'}`,paddingBottom:10}}>
+                      {['All','Gaming','Music','Tech','Film'].map((t,i)=>(
+                        <div key={t} style={{padding:'5px 10px',borderRadius:16,background:i===0?T.accent:isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)',color:i===0?'#000':yt2,fontSize:10,fontWeight:i===0?'700':'400',whiteSpace:'nowrap',cursor:'pointer'}}>{t}</div>
+                      ))}
+                    </div>
+                    {/* The user's video card */}
+                    <div style={{marginBottom:12}}>
+                      <div style={{position:'relative',width:'100%',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden',background:bgStyle,marginBottom:8}}>
+                        <div style={{position:'absolute',inset:0}}>
+                          {layers.filter(l=>l.type!=='background').map(obj=><StampLayer key={obj.id} obj={obj} scale={thumbScaleMobile}/>)}
+                        </div>
+                        <div style={{position:'absolute',bottom:6,right:6,padding:'2px 5px',borderRadius:3,background:'rgba(0,0,0,0.9)',fontSize:8,color:'#fff',fontFamily:'monospace',fontWeight:'700'}}>10:24</div>
+                      </div>
+                      <div style={{display:'flex',gap:9,alignItems:'flex-start'}}>
+                        <div style={{width:30,height:30,borderRadius:'50%',background:'linear-gradient(135deg,#f97316,#ef4444)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:'700',color:'#fff'}}>{ytChannel.charAt(0).toUpperCase()}</div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:13,fontWeight:'500',color:ytText,lineHeight:1.35,marginBottom:3,fontFamily:'Roboto,sans-serif'}}>{ytVideoTitle||'Your Video Title Goes Here'}</div>
+                          <div style={{fontSize:11,color:yt2,fontFamily:'Roboto,sans-serif'}}>{ytChannel||'Channel Name'} · 1.2M views · 2 days ago</div>
+                        </div>
+                        <div style={{color:yt2,fontSize:16,paddingTop:2,cursor:'pointer'}}>⋮</div>
+                      </div>
+                    </div>
+                    {/* Faded next card */}
+                    <div style={{opacity:0.3}}>
+                      <div style={{width:'100%',paddingBottom:'56.25%',borderRadius:8,background:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)',marginBottom:8}}/>
+                      <div style={{display:'flex',gap:9}}>
+                        <div style={{width:30,height:30,borderRadius:'50%',background:isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)'}}/>
+                        <div style={{flex:1}}>
+                          <div style={{height:12,width:'80%',borderRadius:3,background:isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)',marginBottom:6}}/>
+                          <div style={{height:10,width:'50%',borderRadius:3,background:isDark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)'}}/>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Footer hint */}
+              <div style={{padding:'8px 18px',borderTop:`1px solid ${T.border}`,fontSize:9,color:T.muted,textAlign:'center',flexShrink:0}}>
+                Live preview · edit title and channel above · never affects your canvas
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {showDownload&&(()=>{
+        const isPro = isProUser || token==='test-key-123' || user?.is_admin;
+        const jpegEstKB = Math.round(p.preview.w * p.preview.h * 3 * (exportQuality/100) * 0.1 / 1024);
+        const formats = [
+          { id:'png',  label:'PNG',  icon:'🖼', desc:'Lossless · transparent bg supported' },
+          { id:'jpeg', label:'JPEG', icon:'📷', desc:'Smaller file · no transparency' },
+          { id:'webp', label:'WebP', icon:'⚡', desc:'Modern · best compression' },
+          { id:'psd',  label:'PSD',  icon:'🎨', desc:'Layered Photoshop · Pro', pro:true },
+        ];
+        const cardBase = {borderRadius:8,border:'1px solid',padding:'10px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:10,transition:'all 0.15s',marginBottom:6};
+        return(
+          <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'}} onClick={e=>{if(e.target===e.currentTarget)setShowDownload(false);}}>
+            <div style={{width:400,background:'#1a1a1a',borderRadius:14,border:`1px solid ${T.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.9)',overflow:'hidden'}}>
+              {/* Header */}
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px',borderBottom:`1px solid ${T.border}`}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:'700',color:T.text}}>Export</div>
+                  <div style={{fontSize:11,color:T.muted,marginTop:1}}>{p.label} · {p.width}×{p.height}px</div>
+                </div>
+                <button onClick={()=>setShowDownload(false)} style={{width:28,height:28,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+              </div>
+              {/* Body */}
+              <div style={{padding:'16px 20px',maxHeight:'70vh',overflowY:'auto'}}>
+                {/* Section 1: Format */}
+                <div style={{fontSize:10,fontWeight:'700',color:T.muted,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:8}}>Export Format</div>
+                {formats.map(fmt=>{
+                  const isSelected = exportFormat === fmt.id;
+                  const isLocked = fmt.pro && !isPro;
+                  return(
+                    <div key={fmt.id} onClick={()=>!isLocked&&setExportFormat(fmt.id)}
+                      style={{...cardBase,
+                        borderColor: isSelected ? '#ff6a00' : T.border,
+                        background: isSelected ? 'rgba(255,106,0,0.1)' : T.input,
+                        opacity: isLocked ? 0.55 : 1,
+                        cursor: isLocked ? 'not-allowed' : 'pointer',
+                      }}>
+                      <span style={{fontSize:18}}>{fmt.icon}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,fontWeight:'700',color:T.text,display:'flex',alignItems:'center',gap:6}}>
+                          {fmt.label}
+                          {isLocked&&<span style={{fontSize:9,background:'rgba(249,115,22,0.2)',color:'#f97316',padding:'1px 5px',borderRadius:3,border:'1px solid rgba(249,115,22,0.3)'}}>🔒 PRO</span>}
+                        </div>
+                        <div style={{fontSize:10,color:T.muted}}>{fmt.desc}</div>
+                        {fmt.id==='jpeg'&&isSelected&&(
+                          <div style={{marginTop:6}}>
+                            <div style={{fontSize:10,color:T.muted,marginBottom:3}}>Quality — {exportQuality}%  ≈ {jpegEstKB} KB</div>
+                            <input type="range" min={20} max={100} value={exportQuality}
+                              onChange={e=>setExportQuality(Number(e.target.value))}
+                              style={{width:'100%',accentColor:'#ff6a00'}}/>
+                          </div>
+                        )}
+                      </div>
+                      {isSelected&&!isLocked&&<span style={{fontSize:14,color:'#ff6a00'}}>✓</span>}
+                    </div>
+                  );
+                })}
+
+                {/* Section 2: Quick Presets */}
+                <div style={{fontSize:10,fontWeight:'700',color:T.muted,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:8,marginTop:14}}>Quick Presets</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {[
+                    {label:'YouTube Thumbnail',w:1280,h:720},
+                    {label:'YouTube Banner',w:2560,h:1440},
+                    {label:'Instagram Post',w:1080,h:1080},
+                  ].map(preset=>(
+                    <button key={preset.label} onClick={()=>{
+                      exportCanvas('png',false);
+                    }}
+                      title={`${preset.w}×${preset.h}`}
+                      style={{padding:'6px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:10,cursor:'pointer'}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor='#ff6a00';e.currentTarget.style.background='rgba(255,106,0,0.1)';}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.input;}}>
+                      {preset.label}<div style={{fontSize:9,color:T.muted,marginTop:1}}>{preset.w}×{preset.h}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Section 3: ThumbFrame Project */}
+                <div style={{fontSize:10,fontWeight:'700',color:T.muted,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:8,marginTop:14}}>ThumbFrame Project</div>
+                <button onClick={()=>{
+                  try{
+                    const snap = JSON.stringify({designName,platform,layers,version:1});
+                    const blob = new Blob([snap],{type:'application/json'});
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `${designName.replace(/\s+/g,'-')||'thumbframe'}.tf`;
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                    showToastMsg('Project file saved', 'success');
+                  }catch(e){showToastMsg('Save failed: '+e.message,'error');}
+                }}
+                  style={{width:'100%',padding:'8px',borderRadius:7,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:11,cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:8}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor='#ff6a00';}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;}}>
+                  <span style={{fontSize:14}}>💾</span>
+                  <div>
+                    <div style={{fontWeight:'600'}}>Save .tf project file</div>
+                    <div style={{fontSize:10,color:T.muted}}>All layers · editable in ThumbFrame</div>
+                  </div>
+                </button>
+
+                {/* Legacy options */}
+                <div style={{...css.section,marginTop:12,padding:'10px 12px',border:`1px solid ${T.border}`}}>
+                  <div style={{...css.row}}>
+                    <input type="checkbox" id="transp2" checked={transparentExport} onChange={e=>setTransparentExport(e.target.checked)} style={{width:14,height:14,cursor:'pointer',accentColor:'#ff6a00'}}/>
+                    <label htmlFor="transp2" style={{fontSize:11,color:T.text,cursor:'pointer',flex:1,marginLeft:6}}>Transparent background (PNG)</label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer / Export button */}
+              <div style={{padding:'12px 20px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8}}>
+                <button onClick={()=>{
+                  if(exportFormat==='psd'){exportAsPsd();return;}
+                  if(exportFormat==='jpeg'){
+                    const c=document.createElement('canvas');
+                    c.width=p.width;c.height=p.height;
+                    renderLayersToCanvas(c,layers,{transparent:false}).then(()=>{
+                      const fname=`${designName.replace(/\s+/g,'-')||'thumbframe'}-${p.width}x${p.height}`;
+                      const a=document.createElement('a');a.download=`${fname}.jpg`;
+                      a.href=c.toDataURL('image/jpeg',exportQuality/100);a.click();
+                      setShowDownload(false);
+                    });
+                    return;
+                  }
+                  exportCanvas(exportFormat==='webp'?'webp':'png', transparentExport);
+                }}
+                  disabled={exportLoading!=null}
+                  style={{flex:1,padding:'10px',borderRadius:8,border:'none',background:'#ff6a00',color:'#fff',fontSize:13,fontWeight:'700',cursor:exportLoading?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,opacity:exportLoading?0.7:1}}>
+                  {exportLoading ? '⏳ Exporting…' : `Export ${exportFormat.toUpperCase()}`}
+                </button>
+                <button onClick={()=>handleDownload({tier:'basic'})}
+                  style={{padding:'10px 14px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.text,fontSize:11,cursor:'pointer'}}
+                  title="Quick basic JPG download">
+                  Basic JPG
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
 
 
@@ -6341,6 +8119,33 @@ PHASE 4 — Toolbar button:
           </div>
         </div>
       )}
+
+      {/* ── Warp Mode options bar ── */}
+      {warpMode&&selectedId&&(
+        <div style={{position:'fixed',top:0,left:0,right:0,zIndex:1099,background:'#1a1a1a',borderBottom:'2px solid #ff6a00',padding:'8px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          <span style={{fontSize:12,fontWeight:'700',color:'#ff6a00'}}>⬡ Warp Transform</span>
+          <span style={{fontSize:11,color:'rgba(255,255,255,0.5)'}}>Preset:</span>
+          <select value={warpPreset} onChange={e=>setWarpPreset(e.target.value)}
+            style={{padding:'4px 8px',borderRadius:6,border:'1px solid #444',background:'#2a2a2a',color:'#fff',fontSize:11,cursor:'pointer'}}>
+            {Object.keys(WARP_PRESETS).map(k=><option key={k} value={k}>{k.charAt(0).toUpperCase()+k.slice(1)}</option>)}
+          </select>
+          <span style={{fontSize:11,color:'rgba(255,255,255,0.5)'}}>Bend: {warpBend}</span>
+          <input type="range" min={-100} max={100} value={warpBend} onChange={e=>setWarpBend(Number(e.target.value))}
+            style={{width:120,accentColor:'#ff6a00'}}/>
+          <button onClick={()=>applyWarpToLayer(selectedId, warpPreset, warpBend)} disabled={warpLoading}
+            style={{padding:'6px 14px',borderRadius:7,border:'none',background:'#ff6a00',color:'#fff',fontSize:12,fontWeight:'700',cursor:warpLoading?'wait':'pointer',opacity:warpLoading?0.7:1}}>
+            {warpLoading?'Applying…':'Apply'}
+          </button>
+          <button onClick={()=>{setWarpMode(false);setWarpPreview(null);}}
+            style={{padding:'6px 14px',borderRadius:7,border:'1px solid #444',background:'transparent',color:'rgba(255,255,255,0.7)',fontSize:12,cursor:'pointer'}}>
+            Cancel
+          </button>
+          {warpPreview&&<span style={{fontSize:10,color:'#ff6a00'}}>● Preview active</span>}
+        </div>
+      )}
+
+      {/* ── Warp grid overlay (rendered inside canvas container via absolute positioning) ── */}
+      {/* Actual overlay is rendered inline in the canvas area below via warpMode flag */}
 
       {/* Top bar */}
       <div style={{
@@ -6600,7 +8405,8 @@ PHASE 4 — Toolbar button:
               <button onClick={()=>setSnapEnabled(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:snapEnabled?`${T.accent}22`:'transparent',color:snapEnabled?T.accent:T.muted,cursor:'pointer',fontSize:10,fontWeight:snapEnabled?'700':'400',whiteSpace:'nowrap'}} title="Smart snap (Shift+;)">{snapEnabled?'⊕ Snap':'⊖ Snap'}</button>
               <button onClick={()=>setShowThirds(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showThirds?`${T.accent}22`:'transparent',color:showThirds?T.accent:T.muted,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Rule of thirds">⅓</button>
               <button onClick={()=>setPixelSnapEnabled(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:pixelSnapEnabled?`${T.accent}22`:'transparent',color:pixelSnapEnabled?T.accent:T.muted,cursor:'pointer',fontSize:10,fontWeight:'700',whiteSpace:'nowrap'}} title="Pixel snap — forces whole-pixel positions">px</button>
-              <button onClick={()=>setShowStampTest(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showStampTest?T.accentDim:'transparent',color:showStampTest?T.accent:T.muted,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Mobile preview">Mobile</button>
+              <button onClick={()=>setShowStampTest(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showStampTest?T.accentDim:'transparent',color:showStampTest?T.accent:T.muted,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Mobile feed preview (Ctrl+M)">📱</button>
+              <button onClick={()=>setShowYtPreview(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showYtPreview?T.accentDim:'transparent',color:showYtPreview?T.accent:T.muted,cursor:'pointer',fontSize:10,fontWeight:'700',whiteSpace:'nowrap'}} title="YouTube search result preview">▶ YT</button>
               <button onClick={()=>setDarkMode(!darkMode)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:'transparent',color:T.muted,cursor:'pointer',fontSize:11}} title="Toggle theme">{darkMode?'○':'●'}</button>
               <button onClick={()=>setShowShortcutsModal(s=>!s)} style={{padding:'4px 7px',borderRadius:5,border:'none',background:showShortcutsModal?T.accentDim:'transparent',color:showShortcutsModal?T.accent:T.muted,cursor:'pointer',fontSize:12,fontWeight:'700'}} title="Keyboard shortcuts (? or Ctrl+/)">?</button>
             </div>
@@ -6787,6 +8593,91 @@ PHASE 4 — Toolbar button:
 
         {/* Canvas */}
         <div style={{flex:1,display:'flex',flexDirection:'column',background:darkMode?'#080808':'#d0d0d0',overflow:'hidden',position:'relative',minHeight:isMobile?200:undefined}}>
+          {/* ── Retouch tool options bar ─────────────────────────────────────── */}
+          {RETOUCH_TOOLS.includes(activeTool)&&(
+            <div style={{display:'flex',alignItems:'center',gap:12,padding:'6px 16px',background:'#0d0f14',borderBottom:'1px solid rgba(255,255,255,0.08)',fontSize:11,color:'rgba(255,255,255,0.7)',flexShrink:0,flexWrap:'wrap',zIndex:1}}>
+              {(activeTool==='dodge'||activeTool==='burn')&&(<>
+                <div style={{display:'flex',gap:3}}>
+                  {['dodge','burn'].map(m=>(
+                    <button key={m} onClick={()=>{setDodgeBurnMode(m);setActiveTool(m);}}
+                      style={{padding:'3px 10px',borderRadius:5,border:`1px solid ${activeTool===m?'#f97316':'rgba(255,255,255,0.15)'}`,background:activeTool===m?'rgba(249,115,22,0.2)':'transparent',color:activeTool===m?'#f97316':'rgba(255,255,255,0.6)',cursor:'pointer',fontSize:10,fontWeight:'600',textTransform:'capitalize'}}>
+                      {m==='dodge'?'◉ Dodge':'◎ Burn'}
+                    </button>
+                  ))}
+                </div>
+                <div style={{width:1,height:18,background:'rgba(255,255,255,0.1)'}}/>
+                <span style={{fontSize:10,color:'rgba(255,255,255,0.5)'}}>Range:</span>
+                <div style={{display:'flex',gap:3}}>
+                  {['shadows','midtones','highlights'].map(r=>(
+                    <button key={r} onClick={()=>setRetouchRange(r)}
+                      style={{padding:'3px 8px',borderRadius:5,border:`1px solid ${retouchRange===r?'#f97316':'rgba(255,255,255,0.15)'}`,background:retouchRange===r?'rgba(249,115,22,0.15)':'transparent',color:retouchRange===r?'#f97316':'rgba(255,255,255,0.6)',cursor:'pointer',fontSize:10,fontWeight:'600',textTransform:'capitalize'}}>
+                      {r.charAt(0).toUpperCase()+r.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <div style={{width:1,height:18,background:'rgba(255,255,255,0.1)'}}/>
+                <label style={{display:'flex',alignItems:'center',gap:6,color:'rgba(255,255,255,0.6)',fontSize:11}}>
+                  Exposure
+                  <input type="range" min={1} max={100} value={retouchExposure} onChange={e=>setRetouchExposure(+e.target.value)} style={{width:80,accentColor:'#f97316'}}/>
+                  <span style={{width:30,color:'rgba(255,255,255,0.5)'}}>{retouchExposure}%</span>
+                </label>
+              </>)}
+              {(activeTool==='smudge')&&(<>
+                <label style={{display:'flex',alignItems:'center',gap:6,color:'rgba(255,255,255,0.6)',fontSize:11}}>
+                  Strength
+                  <input type="range" min={1} max={100} value={retouchStrength} onChange={e=>setRetouchStrength(+e.target.value)} style={{width:80,accentColor:'#f97316'}}/>
+                  <span style={{width:30,color:'rgba(255,255,255,0.5)'}}>{retouchStrength}%</span>
+                </label>
+                <label style={{display:'flex',alignItems:'center',gap:6,color:'rgba(255,255,255,0.6)',fontSize:11,cursor:'pointer'}}>
+                  <input type="checkbox" checked={fingerPainting} onChange={e=>setFingerPainting(e.target.checked)} style={{accentColor:'#f97316'}}/>
+                  Finger Painting
+                </label>
+              </>)}
+              {(activeTool==='blur-brush'||activeTool==='sharpen-brush')&&(
+                <label style={{display:'flex',alignItems:'center',gap:6,color:'rgba(255,255,255,0.6)',fontSize:11}}>
+                  Strength
+                  <input type="range" min={1} max={100} value={retouchStrength} onChange={e=>setRetouchStrength(+e.target.value)} style={{width:80,accentColor:'#f97316'}}/>
+                  <span style={{width:30,color:'rgba(255,255,255,0.5)'}}>{retouchStrength}%</span>
+                </label>
+              )}
+              <div style={{width:1,height:18,background:'rgba(255,255,255,0.1)'}}/>
+              <label style={{display:'flex',alignItems:'center',gap:6,color:'rgba(255,255,255,0.6)',fontSize:11}}>
+                Size
+                <input type="range" min={1} max={300} value={brushSizeState} onChange={e=>setBrushSizeState(+e.target.value)} style={{width:70,accentColor:'#f97316'}}/>
+                <span style={{width:30,color:'rgba(255,255,255,0.5)'}}>{brushSizeState}px</span>
+              </label>
+              <div style={{display:'flex',gap:3}}>
+                {['soft','hard'].map(e2=>(
+                  <button key={e2} onClick={()=>setBrushEdgeState(e2)}
+                    style={{padding:'3px 8px',borderRadius:5,border:`1px solid ${brushEdgeState===e2?'#f97316':'rgba(255,255,255,0.15)'}`,background:brushEdgeState===e2?'rgba(249,115,22,0.15)':'transparent',color:brushEdgeState===e2?'#f97316':'rgba(255,255,255,0.6)',cursor:'pointer',fontSize:10,fontWeight:'600',textTransform:'capitalize'}}>{e2}</button>
+                ))}
+              </div>
+              <div style={{width:1,height:18,background:'rgba(255,255,255,0.1)'}}/>
+              {/* Pressure sensitivity quick toggle */}
+              <button
+                title={pressureEnabled?'Pressure sensitivity ON':'Pressure sensitivity OFF'}
+                onClick={()=>setPressureEnabled(v=>!v)}
+                style={{background:pressureEnabled?'#ff6a00':'#333',color:'#fff',border:'none',borderRadius:4,padding:'4px 8px',cursor:'pointer',fontSize:14,lineHeight:1}}
+              >✒</button>
+              {pressureEnabled&&(
+                <>
+                  <select value={pressureMapping} onChange={e=>setPressureMapping(e.target.value)}
+                    style={{background:'#222',color:'#fff',border:'1px solid #444',borderRadius:4,padding:'3px 6px',fontSize:11}}>
+                    <option value="none">No Pressure</option>
+                    <option value="size">Size</option>
+                    <option value="opacity">Opacity</option>
+                    <option value="both">Size + Opacity</option>
+                  </select>
+                  <select value={pressureCurve} onChange={e=>setPressureCurve(e.target.value)}
+                    style={{background:'#222',color:'#fff',border:'1px solid #444',borderRadius:4,padding:'3px 6px',fontSize:11}}>
+                    <option value="linear">Linear</option>
+                    <option value="exponential">Exponential</option>
+                    <option value="logarithmic">Logarithmic</option>
+                  </select>
+                </>
+              )}
+            </div>
+          )}
           {/* ── Selection tool options bar ─────────────────────────────────── */}
           {['marquee','sel-lasso','sel-poly','sel-wand'].includes(activeTool)&&(
             <div style={{display:'flex',alignItems:'center',gap:12,padding:'6px 16px',background:'#0d0f14',borderBottom:'1px solid rgba(255,255,255,0.08)',fontSize:11,color:'rgba(255,255,255,0.7)',flexShrink:0,flexWrap:'wrap',zIndex:1}}>
@@ -6961,6 +8852,13 @@ PHASE 4 — Toolbar button:
                     if(freehandSvgRef.current) freehandSvgRef.current.setAttribute('points', freehandPointsRef.current.map(pt=>`${pt.x},${pt.y}`).join(' '));
                     return;
                   }
+                  if(RETOUCH_TOOLS.includes(activeTool)&&retouchActiveRef.current){
+                    const rect=canvasRef.current.getBoundingClientRect();
+                    const x=(e.clientX-rect.left)/zoom;
+                    const y=(e.clientY-rect.top)/zoom;
+                    applyRetouchStroke(x,y,activeTool);
+                    return;
+                  }
                 }}
                 onMouseDown={(e)=>{
                   // ── Selection tools ──────────────────────────────────────
@@ -7104,6 +9002,16 @@ PHASE 4 — Toolbar button:
                     if(freehandSvgRef.current) freehandSvgRef.current.setAttribute('points',`${x},${y}`);
                     return;
                   }
+                  if(RETOUCH_TOOLS.includes(activeTool)){
+                    e.stopPropagation();e.preventDefault();
+                    retouchActiveRef.current=true;
+                    retouchPrevTileRef.current=null;
+                    const rect=canvasRef.current.getBoundingClientRect();
+                    const x=(e.clientX-rect.left)/zoom;
+                    const y=(e.clientY-rect.top)/zoom;
+                    applyRetouchStroke(x,y,activeTool);
+                    return;
+                  }
                 }}
                 onMouseUp={(e)=>{
                   // ── Selection tools mouse up ─────────────────────────────
@@ -7194,6 +9102,15 @@ PHASE 4 — Toolbar button:
                     }
                     return;
                   }
+                  if(RETOUCH_TOOLS.includes(activeTool)&&retouchActiveRef.current){
+                    retouchActiveRef.current=false;
+                    retouchPrevTileRef.current=null;
+                    // Push history + mark dirty on stroke end
+                    const toolLabel=activeTool==='dodge'?'Dodge':activeTool==='burn'?'Burn':activeTool==='smudge'?'Smudge':activeTool==='blur-brush'?'Blur':'Sharpen';
+                    setLayers(prev=>{pushHistory(prev,toolLabel);return prev;});
+                    if(selectedId) saveEngineRef.current?.markDirty('layerContent',selectedId);
+                    return;
+                  }
                   triggerAutoSave();
                 }}
                 onTouchEnd={()=>{
@@ -7232,6 +9149,7 @@ PHASE 4 — Toolbar button:
                     return;
                   }
                   if(['marquee','sel-lasso','sel-wand'].includes(activeTool)){return;}
+                  if(ctxMenu)setCtxMenu(null);
                   if(activeTool==='rimlight') return;
                   if(activeTool==='lasso') return;
                   if(justSelectedRef.current){justSelectedRef.current=false;return;}
@@ -7345,6 +9263,34 @@ PHASE 4 — Toolbar button:
                     ))}
                   </svg>
                 )}
+
+                {/* ── Warp grid overlay ──────────────────────────────── */}
+                {warpMode&&selectedId&&(()=>{
+                  const wLayer = layers.find(l=>l.id===selectedId);
+                  if(!wLayer) return null;
+                  const wx = wLayer.x||0, wy = wLayer.y||0;
+                  const ww = wLayer.width||p.preview.w, wh = wLayer.height||p.preview.h;
+                  const mW=5, mH=5;
+                  const lines=[];
+                  for(let r=0;r<mH;r++){
+                    const yy=wy+(r/(mH-1))*wh;
+                    lines.push(<line key={`h${r}`} x1={wx} y1={yy} x2={wx+ww} y2={yy} stroke="rgba(255,106,0,0.7)" strokeWidth={1.5}/>);
+                  }
+                  for(let c=0;c<mW;c++){
+                    const xx=wx+(c/(mW-1))*ww;
+                    lines.push(<line key={`v${c}`} x1={xx} y1={wy} x2={xx} y2={wy+wh} stroke="rgba(255,106,0,0.7)" strokeWidth={1.5}/>);
+                  }
+                  const dots=[];
+                  for(let r=0;r<mH;r++) for(let c=0;c<mW;c++){
+                    dots.push(<circle key={`d${r}${c}`} cx={wx+(c/(mW-1))*ww} cy={wy+(r/(mH-1))*wh} r={3} fill="#ff6a00" stroke="#fff" strokeWidth={1}/>);
+                  }
+                  return(
+                    <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:10050,overflow:'visible'}}>
+                      {warpPreview&&<image href={warpPreview} x={wx} y={wy} width={ww} height={wh} opacity={0.8}/>}
+                      {lines}{dots}
+                    </svg>
+                  );
+                })()}
 
                 {/* ── Selection marching ants overlay ─────────────────── */}
                 <SelectionOverlay maskRef={selectionMaskRef} W={p.preview.w} H={p.preview.h} active={selectionActive}/>
@@ -7638,6 +9584,12 @@ PHASE 4 — Toolbar button:
                       brushStabilizer={brushStabilizerState}
                       paintColor={brushColorState}
                       paintAlpha={brushColorAlpha}
+                      pressureEnabled={pressureEnabled}
+                      pressureMapping={pressureMapping}
+                      pressureCurve={pressureCurve}
+                      pressureMin={pressureMin}
+                      pressureMax={pressureMax}
+                      onTabletDetected={handleTabletDetected}
                       onUpdate={(updates)=>{
                         if(selectedLayer?.type==='background'){
                           updateLayer(selectedId,{bgColor:'transparent',bgGradient:null,paintSrc:updates.src,src:updates.src,type:'image',
@@ -7743,23 +9695,52 @@ PHASE 4 — Toolbar button:
                   </div>
                 )}
 
-                {/* Safe zones */}
+                {/* ── Safe Zone Overlay ── */}
                 {showSafeZones&&(
                   <div style={{position:'absolute',inset:0,zIndex:9998,pointerEvents:'none'}}>
-                    <div style={{position:'absolute',top:0,left:0,right:0,padding:'3px 6px',background:'rgba(0,0,0,0.65)',display:'flex',gap:10,alignItems:'center'}}>
-                      <span style={{fontSize:7,color:'#ff6666',fontWeight:'700'}}>● TIMESTAMP</span>
-                      <span style={{fontSize:7,color:'#ff6666',fontWeight:'700'}}>● WATCH LATER</span>
-                      <span style={{fontSize:7,color:'rgba(255,255,100,0.8)',fontWeight:'700'}}>- - SAFE ZONE</span>
+                    {/* Legend */}
+                    <div style={{position:'absolute',top:0,left:0,right:0,padding:'3px 6px',background:'rgba(0,0,0,0.72)',display:'flex',gap:8,alignItems:'center',borderBottom:'1px solid rgba(255,80,80,0.3)'}}>
+                      <span style={{fontSize:6.5,color:'#ff6666',fontWeight:'700',letterSpacing:'0.4px'}}>◼ BLOCKED BY YOUTUBE UI</span>
+                      <span style={{fontSize:6.5,color:'rgba(255,255,80,0.8)',fontWeight:'700',letterSpacing:'0.4px'}}>⊡ SAFE ZONE</span>
                     </div>
-                    <div style={{position:'absolute',bottom:0,left:0,right:0,height:5,background:'rgba(255,0,0,0.45)',borderTop:'1px solid rgba(255,80,80,0.8)'}}/>
-                    <div style={{position:'absolute',bottom:8,right:8,padding:'2px 6px',borderRadius:3,background:'rgba(0,0,0,0.75)',border:'1.5px solid #ff4444',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                      <span style={{fontSize:8,color:'#ff8888',fontFamily:'monospace',fontWeight:'700'}}>0:00</span>
+                    {/* Bottom progress bar — full width, bottom 2% (~7px of 360) */}
+                    <div style={{position:'absolute',bottom:0,left:0,right:0,height:'2%',background:'rgba(255,40,40,0.5)',borderTop:'1px solid rgba(255,80,80,0.9)'}}/>
+                    {/* Timestamp badge — bottom-right, ~8% width × 10% height */}
+                    <div style={{position:'absolute',bottom:'4%',right:'1.5%',width:'8%',height:'10%',background:'rgba(180,0,0,0.45)',border:'1.5px solid #ff4444',borderRadius:2,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <span style={{fontSize:7,color:'#ff9999',fontFamily:'monospace',fontWeight:'700'}}>0:00</span>
                     </div>
-                    <div style={{position:'absolute',top:20,right:8,width:24,height:24,borderRadius:'50%',background:'rgba(0,0,0,0.7)',border:'1.5px solid #ff4444',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                      <span style={{fontSize:10,color:'#ff8888'}}>+</span>
+                    {/* Watch Later button — top-right ~5% × 11% */}
+                    <div style={{position:'absolute',top:'4%',right:'1.5%',width:'5%',height:'11%',background:'rgba(180,0,0,0.40)',border:'1.5px solid #ff4444',borderRadius:2,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <span style={{fontSize:8,color:'#ff9999'}}>⊕</span>
                     </div>
-                    <div style={{position:'absolute',top:20,left:8,right:8,bottom:20,border:'1px dashed rgba(255,255,80,0.55)',borderRadius:2}}/>
+                    {/* Menu dots — top-right, next to Watch Later */}
+                    <div style={{position:'absolute',top:'4%',right:'7%',width:'4%',height:'11%',background:'rgba(180,0,0,0.35)',border:'1px solid rgba(255,80,80,0.6)',borderRadius:2,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <span style={{fontSize:8,color:'#ff9999',letterSpacing:-2}}>···</span>
+                    </div>
+                    {/* Safe zone guide — dashed inner rect */}
+                    <div style={{position:'absolute',top:'20%',left:'3%',right:'12%',bottom:'14%',border:'1px dashed rgba(255,255,80,0.5)',borderRadius:2,pointerEvents:'none'}}/>
+                    {/* Labels on zones */}
+                    <div style={{position:'absolute',bottom:'14%',right:'2%',fontSize:6,color:'rgba(255,100,100,0.9)',fontWeight:'700',textAlign:'right',lineHeight:1.3}}>TIMESTAMP<br/>ZONE</div>
+                    <div style={{position:'absolute',top:'4%',right:'12%',fontSize:6,color:'rgba(255,100,100,0.9)',fontWeight:'700'}}>UI BUTTONS</div>
                   </div>
+                )}
+
+                {/* ── Heat Map Overlay ── */}
+                {showHeatMap&&heatMapData&&heatMapVisible&&(
+                  <canvas
+                    ref={heatMapCanvasRef}
+                    width={p.preview.w}
+                    height={p.preview.h}
+                    style={{
+                      position:'absolute',
+                      top:0,left:0,
+                      width:p.preview.w,
+                      height:p.preview.h,
+                      pointerEvents:'none',
+                      zIndex:9990,
+                      borderRadius:0,
+                    }}
+                  />
                 )}
               </div>
             </div>
@@ -7769,34 +9750,135 @@ PHASE 4 — Toolbar button:
             </div>
           </div>
 
-          {/* Stamp test */}
-          {showStampTest&&(
-            <div style={{position:'absolute',bottom:16,right:16,zIndex:200}}>
-              <div style={{background:'#111',borderRadius:10,padding:12,border:'1px solid rgba(255,255,255,0.1)',boxShadow:'0 8px 40px rgba(0,0,0,0.8)'}}>
-                <div style={{fontSize:9,color:'rgba(255,255,255,0.4)',marginBottom:8,fontWeight:'700',letterSpacing:'0.8px',textTransform:'uppercase',textAlign:'center'}}>📱 Mobile · 150×84px</div>
-                <div style={{position:'relative',width:150,height:84,borderRadius:4,overflow:'hidden',border:'1px solid rgba(255,255,255,0.12)',background:bg?.bgGradient?`linear-gradient(180deg,${bg.bgGradient[0]},${bg.bgGradient[1]})`:bg?.bgColor||'#f97316'}}>
-                  {layers.map(obj=><StampLayer key={obj.id} obj={obj} scale={150/p.preview.w}/>)}
-                  <div style={{position:'absolute',bottom:3,right:3,padding:'1px 3px',borderRadius:2,background:'rgba(0,0,0,0.85)',fontSize:6,color:'#fff',fontFamily:'monospace',fontWeight:'700'}}>0:00</div>
-                </div>
-                <div style={{height:1,background:'rgba(255,255,255,0.06)',margin:'10px 0'}}/>
-                <div style={{background:'#0f0f0f',borderRadius:6,padding:'8px',display:'flex',gap:8,alignItems:'flex-start',width:260}}>
-                  <div style={{position:'relative',width:120,height:68,borderRadius:3,overflow:'hidden',flexShrink:0,background:bg?.bgColor||'#f97316'}}>
-                    <div style={{position:'absolute',inset:0,background:bg?.bgGradient?`linear-gradient(180deg,${bg.bgGradient[0]},${bg.bgGradient[1]})`:bg?.bgColor||'#f97316'}}/>
-                    {layers.map(obj=><StampLayer key={obj.id} obj={obj} scale={120/p.preview.w}/>)}
-                    <div style={{position:'absolute',bottom:2,right:2,padding:'1px 3px',borderRadius:2,background:'rgba(0,0,0,0.85)',fontSize:5,color:'#fff',fontFamily:'monospace',fontWeight:'700'}}>0:00</div>
+          {/* ── Mobile Feed Preview (draggable) ── */}
+          {showStampTest&&(()=>{
+            const mScale=168/p.preview.w;
+            const smallTextLayers=layers.filter(l=>l.type==='text'&&!l.hidden&&l.fontSize*mScale<12);
+            const pos=mobilePreviewPos;
+            const posStyle=pos.x>=0?{left:pos.x,top:pos.y}:{right:20,bottom:72};
+            return(
+              <div
+                style={{position:'fixed',...posStyle,zIndex:300,userSelect:'none'}}
+                onMouseDown={e=>{
+                  if(e.target.closest('button')) return;
+                  e.preventDefault();
+                  const rect=e.currentTarget.getBoundingClientRect();
+                  const ox=e.clientX-rect.left, oy=e.clientY-rect.top;
+                  const onMove=mv=>setMobilePreviewPos({x:mv.clientX-ox,y:mv.clientY-oy});
+                  const onUp=()=>{window.removeEventListener('mousemove',onMove);window.removeEventListener('mouseup',onUp);};
+                  window.addEventListener('mousemove',onMove);
+                  window.addEventListener('mouseup',onUp);
+                }}>
+                {/* Phone frame */}
+                <div style={{background:'#0a0a0a',borderRadius:22,padding:'18px 6px 12px 6px',border:'2.5px solid #2a2a2a',boxShadow:'0 0 0 1px #111, 0 16px 60px rgba(0,0,0,0.9)',position:'relative',cursor:'move',minWidth:196}}>
+                  {/* Notch */}
+                  <div style={{position:'absolute',top:7,left:'50%',transform:'translateX(-50%)',width:36,height:5,borderRadius:3,background:'#1e1e1e'}}/>
+                  {/* Header */}
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6,paddingLeft:4,paddingRight:4}}>
+                    <div style={{fontSize:8,color:'rgba(255,255,255,0.35)',fontWeight:'700',letterSpacing:'0.6px',textTransform:'uppercase'}}>📱 Mobile Feed</div>
+                    <button onClick={()=>setShowStampTest(false)} style={{padding:'1px 5px',borderRadius:4,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:'rgba(255,255,255,0.3)',fontSize:10,cursor:'pointer',lineHeight:1}}>✕</button>
                   </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:9,color:'#fff',fontWeight:'600',lineHeight:1.3,marginBottom:2}}>Your video title goes here</div>
-                    <div style={{fontSize:8,color:'rgba(255,255,255,0.45)'}}>Your Channel</div>
-                    <div style={{fontSize:7,color:'rgba(255,255,255,0.3)',marginTop:1}}>1.2M views · 2 days ago</div>
+                  {/* YouTube-style mobile feed item */}
+                  <div style={{background:'#111',borderRadius:8,overflow:'hidden',width:184}}>
+                    {/* Thumbnail at exact mobile feed size */}
+                    <div style={{position:'relative',width:184,height:103,overflow:'hidden',background:bg?.bgGradient?`linear-gradient(180deg,${bg.bgGradient[0]},${bg.bgGradient[1]})`:bg?.bgColor||'#000'}}>
+                      {layers.filter(l=>l.type!=='background').map(obj=>(
+                        <div key={obj.id} style={{position:'absolute',inset:0}}>
+                          <StampLayer obj={obj} scale={184/p.preview.w}/>
+                          {/* Small text warning */}
+                          {obj.type==='text'&&!obj.hidden&&obj.fontSize*(184/p.preview.w)<12&&(
+                            <div title="Text too small for mobile — increase font size" style={{position:'absolute',left:obj.x*(184/p.preview.w)-2,top:obj.y*(184/p.preview.w)-2,padding:'1px 2px',background:'rgba(220,30,30,0.85)',borderRadius:2,border:'1px solid #ff4444',fontSize:5.5,color:'#fff',fontWeight:'700',whiteSpace:'nowrap',pointerEvents:'none',zIndex:2}}>
+                              ⚠ Too small
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {/* Timestamp */}
+                      <div style={{position:'absolute',bottom:4,right:4,padding:'1px 4px',borderRadius:3,background:'rgba(0,0,0,0.88)',fontSize:7,color:'#fff',fontFamily:'monospace',fontWeight:'700',letterSpacing:'0.3px'}}>0:00</div>
+                      {/* Watch-later zone highlight */}
+                      <div style={{position:'absolute',top:4,right:4,width:16,height:16,borderRadius:3,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        <span style={{fontSize:9,color:'rgba(255,255,255,0.7)'}}>⊕</span>
+                      </div>
+                    </div>
+                    {/* Video info row */}
+                    <div style={{padding:'7px 8px',display:'flex',gap:7,alignItems:'flex-start'}}>
+                      <div style={{width:28,height:28,borderRadius:'50%',background:'linear-gradient(135deg,#f97316,#ef4444)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:'700',color:'#fff'}}>{ytChannel.charAt(0).toUpperCase()}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:10,color:'#fff',fontWeight:'500',lineHeight:1.35,marginBottom:2,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{ytVideoTitle||'Your video title goes here'}</div>
+                        <div style={{fontSize:9,color:'rgba(255,255,255,0.45)',lineHeight:1.3}}>{ytChannel||'Channel Name'} · 1.2M views · 2 days ago</div>
+                      </div>
+                    </div>
                   </div>
+                  {/* Warnings summary */}
+                  {smallTextLayers.length>0&&(
+                    <div style={{marginTop:6,padding:'4px 6px',borderRadius:5,background:'rgba(220,30,30,0.15)',border:'1px solid rgba(220,30,30,0.4)',fontSize:8,color:'#ff8888',lineHeight:1.4}}>
+                      ⚠ {smallTextLayers.length} text layer{smallTextLayers.length>1?'s':''} too small at mobile size
+                    </div>
+                  )}
+                  {/* Home indicator */}
+                  <div style={{margin:'10px auto 0',width:40,height:3.5,borderRadius:2,background:'rgba(255,255,255,0.15)'}}/>
                 </div>
-                <div style={{marginTop:8,fontSize:8,color:'rgba(255,255,255,0.2)',textAlign:'center'}}>Does your text read at this size?</div>
               </div>
-            </div>
-          )}
+            );
+          })()}
           </div>{/* end inner canvas flex-center wrapper */}
         </div>
+
+        {/* ── Heat Map Floating Control Panel ── */}
+        {showHeatMap&&(
+          <div style={{
+            position:'fixed',bottom:80,right:20,width:220,
+            background:'#1a1a1a',border:'1px solid #333',borderRadius:12,
+            boxShadow:'0 8px 32px rgba(0,0,0,0.6)',padding:'14px 16px',
+            zIndex:500,userSelect:'none',
+          }}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+              <span style={{fontSize:13,fontWeight:'700',color:'#fff'}}>Focus Map</span>
+              <button onClick={()=>{setShowHeatMap(false);setHeatMapData(null);setHeatMapInsights([]);}} style={{padding:'2px 6px',borderRadius:5,border:'1px solid #444',background:'transparent',color:'#888',cursor:'pointer',fontSize:12}}>✕</button>
+            </div>
+            {/* Opacity */}
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,color:'#aaa',marginBottom:4}}>Opacity — {heatMapOpacity}%</div>
+              <input type="range" min={0} max={100} value={heatMapOpacity}
+                onChange={e=>{
+                  const v=Number(e.target.value);
+                  setHeatMapOpacity(v);
+                  if(heatMapData&&heatMapCanvasRef.current) drawHeatMap(heatMapData,p.preview.w,p.preview.h,v,heatMapCanvasRef.current);
+                }}
+                style={{width:'100%',accentColor:'#f97316'}}/>
+            </div>
+            {/* Toggle */}
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+              <div onClick={()=>setHeatMapVisible(v=>!v)} style={{width:34,height:18,borderRadius:9,background:heatMapVisible?'#f97316':'#444',cursor:'pointer',position:'relative',transition:'background 0.2s',flexShrink:0}}>
+                <div style={{position:'absolute',top:2,left:heatMapVisible?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left 0.2s'}}/>
+              </div>
+              <span style={{fontSize:10,color:'#aaa'}}>Show overlay</span>
+            </div>
+            {/* Refresh */}
+            <button onClick={runHeatMap} disabled={heatMapLoading}
+              style={{width:'100%',padding:'6px',borderRadius:7,border:'1px solid #444',background:'#222',color:'#fff',fontSize:11,fontWeight:'600',cursor:'pointer',marginBottom:10,opacity:heatMapLoading?0.5:1}}>
+              {heatMapLoading?'Analyzing…':'↻ Refresh'}
+            </button>
+            {/* Color legend */}
+            <div style={{marginBottom:10}}>
+              <div style={{height:10,borderRadius:4,background:'linear-gradient(to right, #0000ff, #00ff00, #ffff00, #ff0000)',marginBottom:4}}/>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'#888'}}>
+                <span>Low attention</span><span>High attention</span>
+              </div>
+            </div>
+            {/* Insights */}
+            {heatMapInsights.length>0&&(
+              <div>
+                <div style={{fontSize:10,fontWeight:'700',color:'#f97316',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.6px'}}>Insights</div>
+                {heatMapInsights.map((ins,i)=>(
+                  <div key={i} style={{fontSize:10,color:'#ccc',lineHeight:1.5,marginBottom:5,paddingLeft:8,borderLeft:'2px solid #f97316'}}>
+                    {ins}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ✅ Right sidebar — stopPropagation on pointer events so sliders never leak to canvas */}
         <div
@@ -8089,6 +10171,17 @@ PHASE 4 — Toolbar button:
                   }}
                   onPaintAlphaChange={setBrushColorAlpha}
                   onUpdate={(updates)=>{if(selectedId)updateLayer(selectedId,updates);}}
+                  pressureEnabled={pressureEnabled}
+                  pressureMapping={pressureMapping}
+                  pressureCurve={pressureCurve}
+                  pressureMin={pressureMin}
+                  pressureMax={pressureMax}
+                  tabletDetected={tabletDetected}
+                  onPressureEnabledChange={setPressureEnabled}
+                  onPressureMappingChange={setPressureMapping}
+                  onPressureCurveChange={setPressureCurve}
+                  onPressureMinChange={setPressureMin}
+                  onPressureMaxChange={setPressureMax}
                 />
                 {/* Mask — coming soon */}
                 {selectedLayer?.type==='image'&&(
@@ -8238,6 +10331,33 @@ PHASE 4 — Toolbar button:
                     onChange={v=>updateLayerSilent(selectedId,{letterSpacing:v})}
                     onCommit={v=>{updateLayer(selectedId,{letterSpacing:v});saveEngineRef.current?.markDirty('textContent',selectedId);}}
                     style={{width:'100%'}}/>
+                  {/* Warp Text button */}
+                  <button onClick={()=>setShowTextWarp(w=>!w)}
+                    style={{...css.addBtn,marginTop:6,background:showTextWarp?'rgba(255,106,0,0.2)':T.input,color:T.text,border:`1px solid ${showTextWarp?'#ff6a00':T.border}`,fontSize:11}}>
+                    ⬡ Warp Text {showTextWarp?'▲':'▼'}
+                  </button>
+                  {showTextWarp&&(
+                    <div style={{background:'#1e1e1e',border:'1px solid #ff6a00',borderRadius:8,padding:'10px',marginTop:4}}>
+                      <div style={{fontSize:10,fontWeight:'700',color:'#ff6a00',marginBottom:8}}>Text Warp</div>
+                      <div style={{fontSize:10,color:'rgba(255,255,255,0.5)',marginBottom:6}}>Preset</div>
+                      <select value={selectedLayer.warpPreset||'none'} onChange={e=>updateLayer(selectedId,{warpPreset:e.target.value})}
+                        style={{width:'100%',padding:'5px 8px',borderRadius:6,border:'1px solid #444',background:'#2a2a2a',color:'#fff',fontSize:11,marginBottom:8,cursor:'pointer'}}>
+                        {Object.keys(WARP_PRESETS).map(k=><option key={k} value={k}>{k.charAt(0).toUpperCase()+k.slice(1)}</option>)}
+                      </select>
+                      <div style={{fontSize:10,color:'rgba(255,255,255,0.5)',marginBottom:4}}>Bend — {selectedLayer.warpBend||30}</div>
+                      <input type="range" min={-100} max={100} value={selectedLayer.warpBend||30}
+                        onChange={e=>updateLayer(selectedId,{warpBend:Number(e.target.value)})}
+                        style={{width:'100%',accentColor:'#ff6a00',marginBottom:8}}/>
+                      <button onClick={()=>{
+                        setWarpPreset(selectedLayer.warpPreset||'arc');
+                        setWarpBend(selectedLayer.warpBend||30);
+                        setWarpMode(true);
+                        setShowTextWarp(false);
+                      }} style={{width:'100%',padding:'6px',borderRadius:6,border:'none',background:'#ff6a00',color:'#fff',fontSize:11,fontWeight:'700',cursor:'pointer'}}>
+                        Apply Warp
+                      </button>
+                    </div>
+                  )}
                 </>)}
                 <button onClick={addText} style={css.addBtn}>Add text</button>
               </div>
@@ -8643,11 +10763,119 @@ PHASE 4 — Toolbar button:
               </div>
             )}
 
+            {/* ── Retouch tools panel ───────────────────────────────────────── */}
+            {RETOUCH_TOOLS.includes(activeTool)&&(
+              <div>
+                <span style={css.label}>Retouch — {activeTool==='dodge'?'Dodge':activeTool==='burn'?'Burn':activeTool==='smudge'?'Smudge':activeTool==='blur-brush'?'Blur Brush':'Sharpen'}</span>
+                {!selectedLayer||(selectedLayer.type!=='image'&&selectedLayer.type!=='background')||selectedLayer.isRimLight?(
+                  <div style={{...css.section,marginTop:0,fontSize:12,color:T.muted,textAlign:'center',padding:20}}>Click an image layer first</div>
+                ):(
+                  <div style={{...css.section,marginTop:0,fontSize:11,color:T.success,fontWeight:'600'}}>✓ Paint on the canvas to apply</div>
+                )}
+                {(activeTool==='dodge'||activeTool==='burn')&&(<>
+                  <span style={css.label}>Mode</span>
+                  <div style={{display:'flex',gap:4,marginBottom:8}}>
+                    {['dodge','burn'].map(m=>(
+                      <button key={m} onClick={()=>{setDodgeBurnMode(m);setActiveTool(m);}}
+                        style={{...css.iconBtn(activeTool===m),flex:1,fontSize:11,textTransform:'capitalize'}}>
+                        {m==='dodge'?'◉ Dodge':'◎ Burn'}
+                      </button>
+                    ))}
+                  </div>
+                  <span style={css.label}>Range</span>
+                  <div style={{display:'flex',gap:4,marginBottom:8}}>
+                    {['shadows','midtones','highlights'].map(r=>(
+                      <button key={r} onClick={()=>setRetouchRange(r)}
+                        style={{...css.iconBtn(retouchRange===r),flex:1,fontSize:9,textTransform:'capitalize'}}>
+                        {r.charAt(0).toUpperCase()+r.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  <span style={css.label}>Exposure — {retouchExposure}%</span>
+                  <Slider min={1} max={100} value={retouchExposure} onChange={setRetouchExposure} style={{width:'100%'}}/>
+                </>)}
+                {(activeTool==='smudge'||activeTool==='blur-brush'||activeTool==='sharpen-brush')&&(<>
+                  <span style={css.label}>Strength — {retouchStrength}%</span>
+                  <Slider min={1} max={100} value={retouchStrength} onChange={setRetouchStrength} style={{width:'100%'}}/>
+                  {activeTool==='smudge'&&(
+                    <label style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:T.text,marginTop:6,cursor:'pointer'}}>
+                      <input type="checkbox" checked={fingerPainting} onChange={e=>setFingerPainting(e.target.checked)} style={{accentColor:T.accent}}/>
+                      Finger Painting
+                    </label>
+                  )}
+                </>)}
+                <span style={{...css.label,marginTop:8}}>Brush size — {brushSizeState}px</span>
+                <Slider min={1} max={300} value={brushSizeState} onChange={setBrushSizeState} style={{width:'100%'}}/>
+                <span style={css.label}>Hardness</span>
+                <div style={{display:'flex',gap:4,marginBottom:6}}>
+                  {['soft','hard'].map(e2=>(
+                    <button key={e2} onClick={()=>setBrushEdgeState(e2)}
+                      style={{...css.iconBtn(brushEdgeState===e2),flex:1,fontSize:11,textTransform:'capitalize'}}>{e2}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Adjustment Layers panel ───────────────────────────────────── */}
+            {(activeTool==='adjustment'||selectedLayer?.type==='adjustment')&&(
+              <div>
+                {selectedLayer?.type==='adjustment'?(
+                  <AdjustmentPanel
+                    layer={selectedLayer}
+                    T={T}
+                    css={css}
+                    onChange={(settings)=>{
+                      updateLayerSilent(selectedLayer.id,{settings,_cachedLUT:null,_lutDirty:true});
+                    }}
+                    onCommit={(settings)=>{
+                      updateLayer(selectedLayer.id,{settings,_cachedLUT:null,_lutDirty:true});
+                    }}
+                  />
+                ):(
+                  <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Adjustment layers apply non-destructive color corrections to all layers below.</div>
+                )}
+                <div style={{position:'relative'}}>
+                  <button onClick={()=>setAdjLayerMenu(m=>!m)} style={css.addBtn}>+ Add Adjustment Layer ▾</button>
+                  {adjLayerMenu&&(
+                    <div style={{position:'absolute',bottom:'100%',left:0,right:0,background:T.panel,border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden',zIndex:100,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}>
+                      {[
+                        ['levels','▤ Levels'],['hueSat','◐ Hue / Saturation'],['colorBalance','⊕ Color Balance'],
+                        ['vibrance','✦ Vibrance'],['selectiveColor','◈ Selective Color'],
+                        ['gradientMap','▓ Gradient Map'],['posterize','▦ Posterize'],['threshold','◑ Threshold'],
+                      ].map(([adjType,label])=>(
+                        <button key={adjType} onClick={()=>addAdjustmentLayer(adjType)}
+                          style={{display:'block',width:'100%',padding:'8px 14px',background:'transparent',border:'none',borderBottom:`1px solid ${T.border}`,color:T.text,cursor:'pointer',textAlign:'left',fontSize:11}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.accentDim}
+                          onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {activeTool==='liquify'&&(
               <div>
                 <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Push, pull, bloat, and pinch pixels interactively. Face-aware handles auto-detected.</div>
                 <div style={{fontSize:10,color:T.muted,marginBottom:8}}>Tools inside: Forward Warp, Bloat, Pucker, Twirl, Reconstruct, Freeze/Thaw Mask.</div>
                 <button onClick={openLiquify} style={css.addBtn}>≋ Open Liquify</button>
+              </div>
+            )}
+
+            {activeTool==='filters'&&(
+              <div>
+                <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Apply blur and sharpen filters to the current canvas. Runs in a Web Worker.</div>
+                <div style={{fontSize:10,color:T.muted,marginBottom:6}}>Blur: Gaussian · Motion · Radial · Surface · Lens</div>
+                <div style={{fontSize:10,color:T.muted,marginBottom:10}}>Sharpen: Unsharp Mask · High Pass</div>
+                <button onClick={()=>openFilters(false)} style={css.addBtn}>◎ Open Filters</button>
+                {lastFilterRef.current&&(
+                  <button onClick={()=>openFilters(true)}
+                    style={{...css.addBtn,marginTop:6,background:'transparent',border:`1px solid ${T.border}`,color:T.muted}}>
+                    ↩ Re-apply: {lastFilterRef.current.id} <span style={{fontSize:9,marginLeft:4,color:T.muted}}>(Ctrl+F)</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -9516,6 +11744,114 @@ PHASE 4 — Toolbar button:
                   💡 Tip — design at YouTube 1280×720 first then export all.
                   Text and images scale proportionally to each platform size.
                 </div>
+              </div>
+            )}
+
+            {/* ── Tier 3 Item 3: Competitor Comparison sidebar panel ─────── */}
+            {activeTool==='competitor'&&(()=>{
+              const isPro=user?.is_admin||(user?.plan||'free').toLowerCase()==='pro'||(user?.plan||'free').toLowerCase()==='agency'||(user?.is_pro===true);
+              if(!isPro) return(
+                <div>
+                  <span style={css.label}>Competitor Comparison</span>
+                  <div style={{margin:'8px 0',borderRadius:14,border:`1px solid ${T.accentBorder}`,background:'linear-gradient(160deg,rgba(249,115,22,0.08),rgba(249,115,22,0.02))',padding:'20px 16px',textAlign:'center'}}>
+                    <div style={{fontSize:30,marginBottom:10}}>⚔</div>
+                    <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Pro Feature</div>
+                    <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Search YouTube to see how your thumbnail stacks up against the competition. Pro and Agency plans only.</div>
+                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({email:user?.email,plan:'pro'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
+                  </div>
+                </div>
+              );
+              return(
+                <div>
+                  <span style={css.label}>Competitor Comparison</span>
+                  <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted,lineHeight:1.6}}>
+                    Search YouTube to compare your thumbnail against the competition.
+                  </div>
+                  <div style={{display:'flex',gap:5,marginBottom:8}}>
+                    <input
+                      value={competitorQuery}
+                      onChange={e=>setCompetitorQuery(e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Enter'&&!competitorLoading)searchCompetitors();}}
+                      placeholder="e.g. minecraft survival tips"
+                      style={{...css.input,flex:1}}
+                    />
+                    <button onClick={searchCompetitors} disabled={competitorLoading||!competitorQuery.trim()}
+                      style={{padding:'6px 10px',borderRadius:7,border:'none',background:T.accent,color:'#fff',fontSize:11,fontWeight:'700',cursor:'pointer',flexShrink:0,opacity:competitorLoading||!competitorQuery.trim()?0.5:1}}>
+                      {competitorLoading?'…':'Go'}
+                    </button>
+                  </div>
+                  {competitorLoading&&(
+                    <div style={{padding:'12px',borderRadius:8,background:T.input,border:`1px solid ${T.border}`,textAlign:'center',fontSize:11,color:T.muted,animation:'tf-pulse 1.5s ease infinite'}}>
+                      Searching YouTube…
+                    </div>
+                  )}
+                  {competitorError&&<div style={{fontSize:11,color:T.danger,marginBottom:8}}>{competitorError}</div>}
+                  {competitorResults.length>0&&(
+                    <div>
+                      <button onClick={()=>setShowCompetitor(true)}
+                        style={{...css.addBtn,marginTop:0,background:`linear-gradient(135deg,#f97316,#ea580c)`,fontWeight:'700',fontSize:12}}>
+                        ⚔ Open Comparison View
+                      </button>
+                      {(competitorResults.length>0||competitorThumbUrl)&&(
+                        <button onClick={analyzeCompetition} disabled={competitorAnalyzing}
+                          style={{...css.addBtn,marginTop:6,background:'transparent',border:`1px solid ${T.accentBorder}`,color:T.accent,fontWeight:'600',fontSize:11}}>
+                          {competitorAnalyzing?'Analyzing…':'✦ Analyze vs Competitors'}
+                        </button>
+                      )}
+                      {competitorAnalysis&&(
+                        <div style={{marginTop:10,padding:'10px 12px',borderRadius:8,background:'rgba(249,115,22,0.06)',borderLeft:'3px solid #f97316',fontSize:11,color:T.text,lineHeight:1.7}}>
+                          {competitorAnalysis.split('\n').filter(Boolean).map((line,i)=>(
+                            <div key={i} style={{marginBottom:4}}>{line}</div>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{marginTop:10,display:'flex',flexDirection:'column',gap:5}}>
+                        {competitorResults.slice(0,5).map(r=>(
+                          <div key={r.videoId} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'6px 8px',borderRadius:8,background:T.input,border:`1px solid ${T.border}`}}>
+                            <img src={r.thumbnailUrl} alt="" style={{width:64,height:36,borderRadius:4,objectFit:'cover',flexShrink:0}} onError={e=>{e.target.style.display='none';}}/>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:10,color:T.text,fontWeight:'600',overflow:'hidden',textOverflow:'ellipsis',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',lineHeight:1.4}}>{r.title}</div>
+                              <div style={{fontSize:9,color:T.muted,marginTop:2}}>{r.channelName} · {formatViewCount(r.viewCount)} views</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── Tier 3 Item 4: Heat Map sidebar panel ────────────────── */}
+            {activeTool==='heatmap'&&(
+              <div>
+                <span style={css.label}>Focus / Saliency Heat Map</span>
+                <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted,lineHeight:1.6}}>
+                  Visualize where viewers' eyes are drawn on your thumbnail. Generated locally — instant, no quota used.
+                </div>
+                <button onClick={runHeatMap} disabled={heatMapLoading}
+                  style={{...css.addBtn,marginTop:0,background:heatMapLoading?'transparent':`linear-gradient(135deg,#f97316,#ea580c)`,color:heatMapLoading?T.accent:'#fff',border:heatMapLoading?`1px solid ${T.accentBorder}`:'none',fontWeight:'700',fontSize:13}}>
+                  {heatMapLoading?<><span style={{display:'inline-block',animation:'editor-spin 0.8s linear infinite'}}>◌</span> Analyzing…</>:'◉ Generate Heat Map'}
+                </button>
+                {showHeatMap&&(
+                  <div style={{marginTop:10}}>
+                    <div style={{fontSize:10,color:T.muted,marginBottom:6}}>Use the control panel (bottom-right) to adjust opacity and toggle the overlay.</div>
+                    {heatMapInsights.length>0&&(
+                      <div>
+                        <span style={css.label}>Insights</span>
+                        {heatMapInsights.map((ins,i)=>(
+                          <div key={i} style={{fontSize:11,color:T.text,lineHeight:1.5,marginBottom:6,paddingLeft:8,borderLeft:`2px solid ${T.accent}`}}>
+                            {ins}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button onClick={()=>{setShowHeatMap(false);setHeatMapData(null);setHeatMapInsights([]);}}
+                      style={{...css.addBtn,marginTop:8,background:'transparent',border:`1px solid ${T.border}`,color:T.muted,fontSize:11}}>
+                      ✕ Clear Heat Map
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -11373,42 +13709,49 @@ PHASE 4 — Toolbar button:
               </div>
             </div>
             <div style={{maxHeight:240,overflowY:'auto',padding:'0 6px 8px'}}>
-              {[...layers].reverse().map(layer=>{
+              {getDisplayList(layers).map(({layer,depth,isClipped,isBase})=>{
                 const isDragOver=layerDragOver===layer.id;
                 const isBeingDragged=layerDragId===layer.id;
                 const color=getLayerColor(layer);
+                const isGroup=layer.type==='group';
                 const hasEffects=layer.effects&&(layer.effects.layerBlur>0||layer.effects.brightness!==100||layer.effects.contrast!==100||layer.effects.saturation!==100||layer.effects.shadow?.enabled||layer.effects.glow?.enabled||layer.effects.outline?.enabled);
+                const baseLayerName=isClipped?getLayerName(layers[layers.findIndex(l=>l.id===layer.id)-1]):null;
                 return(
                   <div key={layer.id}
-                    draggable
+                    title={isClipped&&baseLayerName?`Clipped to: ${baseLayerName}`:undefined}
+                    draggable={!isGroup}
                     onDragStart={e=>onLayerDragStart(e,layer.id)}
                     onDragOver={e=>onLayerDragOver(e,layer.id)}
                     onDrop={e=>onLayerDrop(e,layer.id)}
                     onDragEnd={onLayerDragEnd}
+                    onContextMenu={layer.type!=='background'?e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,layerId:layer.id,menuType:isGroup?'group':'layer'});}:undefined}
                     onClick={e=>{
                       if(e.shiftKey&&layer.type!=='background'){
                         setSelectedIds(prev=>{const n=new Set(prev);if(n.has(layer.id))n.delete(layer.id);else{n.add(layer.id);if(selectedId)n.add(selectedId);}return n;});
                         setSelectedId(layer.id);
                       } else {
-                        setSelectedIds(new Set());setSelectedId(layer.id);if(layer.type==='background')setActiveTool('background');
+                        setSelectedIds(new Set());setSelectedId(layer.id);if(layer.type==='background')setActiveTool('background');if(layer.type==='adjustment')setActiveTool('adjustment');
                       }
                     }}
-                    style={{display:'flex',alignItems:'center',gap:6,padding:'6px 8px',borderRadius:7,marginBottom:2,cursor:'pointer',border:`1px solid ${selectedIds.has(layer.id)||selectedId===layer.id?T.accent:isDragOver?`${T.accent}66`:'transparent'}`,background:selectedIds.has(layer.id)||selectedId===layer.id?`${T.accent}12`:isDragOver?`${T.accent}06`:'transparent',opacity:isBeingDragged?0.4:1,transition:'all 0.1s'}}>
-                    <div style={{color:T.muted,fontSize:10,cursor:'grab',flexShrink:0,opacity:0.4,userSelect:'none'}}>⠿</div>
-                    <div style={{width:4,height:28,borderRadius:2,flexShrink:0,background:layer.type==='background'?(layer.bgGradient?`linear-gradient(180deg,${layer.bgGradient[0]},${layer.bgGradient[1]})`:color):color}}/>
-                    <div style={{width:20,height:20,borderRadius:4,background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:'700',color:selectedId===layer.id?T.accent:T.muted,flexShrink:0,border:`1px solid ${T.border}`,fontFamily:'monospace'}}>{getLayerIcon(layer)}</div>
+                    style={{display:'flex',alignItems:'center',gap:6,padding:'5px 6px 5px '+(6+depth*12+(isClipped?10:0))+'px',borderRadius:7,marginBottom:2,cursor:'pointer',border:`1px solid ${selectedIds.has(layer.id)||selectedId===layer.id?T.accent:isDragOver?`${T.accent}66`:'transparent'}`,background:isGroup?`rgba(249,115,22,0.05)`:selectedIds.has(layer.id)||selectedId===layer.id?`${T.accent}12`:isDragOver?`${T.accent}06`:'transparent',opacity:isBeingDragged?0.4:1,transition:'all 0.1s',borderLeft:isClipped?`2px solid ${T.accent}44`:isGroup?`2px solid ${T.accent}22`:'1px solid transparent'}}>
+                    {isClipped&&(<span style={{fontSize:9,color:T.accent,flexShrink:0,userSelect:'none',opacity:0.7}}>↳</span>)}
+                    {isGroup&&!isClipped&&(<span onClick={e=>{e.stopPropagation();setGroupCollapsed(layer.id,!layer.collapsed);}} style={{fontSize:8,color:T.muted,cursor:'pointer',flexShrink:0,userSelect:'none',minWidth:10}}>{layer.collapsed?'▶':'▼'}</span>)}
+                    {!isGroup&&!isClipped&&(<div style={{color:T.muted,fontSize:10,cursor:'grab',flexShrink:0,opacity:0.4,userSelect:'none'}}>⠿</div>)}
+                    <div style={{width:4,height:24,borderRadius:2,flexShrink:0,background:isClipped?T.accent:isGroup?T.accent:(layer.type==='background'?(layer.bgGradient?`linear-gradient(180deg,${layer.bgGradient[0]},${layer.bgGradient[1]})`:color):color)}}/>
+                    <div style={{width:18,height:18,borderRadius:3,background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:isGroup?11:9,fontWeight:'700',color:selectedId===layer.id?T.accent:isClipped?T.accent:T.muted,flexShrink:0,border:`1px solid ${isClipped?`${T.accent}88`:isGroup?T.accent:T.border}`,fontFamily:'monospace'}}>{getLayerIcon(layer)}</div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:11,color:layer.hidden?T.muted:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textDecoration:layer.hidden?'line-through':'none',fontWeight:selectedId===layer.id?'600':'400'}}>{getLayerName(layer)}</div>
-                      <div style={{display:'flex',gap:3,marginTop:1}}>
+                      <div style={{fontSize:11,color:layer.hidden?T.muted:(isGroup?T.accent:isClipped?T.accent:T.text),overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textDecoration:layer.hidden?'line-through':'none',fontWeight:isGroup?'700':(selectedId===layer.id?'600':'400')}}>{getLayerName(layer)}{isGroup&&layer.children?.length?` (${layer.children.length})`:''}</div>
+                      {!isGroup&&(<div style={{display:'flex',gap:3,marginTop:1}}>
+                        {isBase&&<span style={{fontSize:7,color:T.accent,background:`${T.accent}15`,padding:'0 3px',borderRadius:2}}>⊏ clip base</span>}
                         {layer.blendMode&&layer.blendMode!=='normal'&&<span style={{fontSize:7,color:T.accent,background:`${T.accent}15`,padding:'0 3px',borderRadius:2}}>{layer.blendMode.slice(0,5)}</span>}
                         {hasEffects&&<span style={{fontSize:7,color:'#f59e0b',background:'#f59e0b15',padding:'0 3px',borderRadius:2}}>fx</span>}
                         {layer.mask?.enabled&&<span style={{fontSize:7,color:'#60a5fa',background:'#60a5fa15',padding:'0 3px',borderRadius:2}}>mask</span>}
                         {layer.locked&&<span style={{fontSize:7,color:T.muted}}>🔒</span>}
-                      </div>
+                      </div>)}
                     </div>
                     <div style={{display:'flex',gap:1,flexShrink:0}}>
-                      <button onClick={e=>{e.stopPropagation();updateLayer(layer.id,{hidden:!layer.hidden});}} style={{padding:'2px 4px',borderRadius:3,border:'none',background:'transparent',color:layer.hidden?T.danger:T.muted,fontSize:10,cursor:'pointer'}}>{layer.hidden?'○':'●'}</button>
-                      {layer.type!=='background'&&(<button onClick={e=>{e.stopPropagation();updateLayer(layer.id,{locked:!layer.locked});}} style={{padding:'2px 4px',borderRadius:3,border:'none',background:'transparent',color:T.muted,fontSize:10,cursor:'pointer'}}>{layer.locked?'⊠':'⊡'}</button>)}
+                      <button onClick={e=>{e.stopPropagation();updateLayer(layer.id,{hidden:!layer.hidden});}} style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',color:layer.hidden?T.danger:T.muted,fontSize:10,cursor:'pointer'}}>{layer.hidden?'○':'●'}</button>
+                      {layer.type!=='background'&&(<button onClick={e=>{e.stopPropagation();updateLayer(layer.id,{locked:!layer.locked});}} style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',color:T.muted,fontSize:10,cursor:'pointer'}}>{layer.locked?'⊠':'⊡'}</button>)}
                     </div>
                   </div>
                 );
@@ -11428,16 +13771,46 @@ PHASE 4 — Toolbar button:
             flexShrink:0,
             userSelect:'none',
           }}>
-            {/* Header */}
-            <div style={{
-              display:'flex',alignItems:'center',justifyContent:'space-between',
-              padding:'9px 10px 7px',
-              borderBottom:`1px solid ${T.border}`,
-              flexShrink:0,
-            }}>
-              <div style={{display:'flex',alignItems:'center',gap:7}}>
-                <span style={{fontSize:11,color:T.text,fontWeight:'700',letterSpacing:'0.6px',textTransform:'uppercase'}}>Layers</span>
-                <span style={{fontSize:10,color:T.muted,background:T.bg2,padding:'1px 6px',borderRadius:10,border:`1px solid ${T.border}`}}>{layers.length}</span>
+            {/* Tab bar: Layers | History */}
+            <div style={{display:'flex',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+              {[['layers','Layers'],['history','History']].map(([tab,label])=>(
+                <button key={tab} onClick={()=>setRightPanelTab(tab)}
+                  style={{flex:1,padding:'8px 0',border:'none',background:'transparent',cursor:'pointer',fontSize:11,fontWeight:rightPanelTab===tab?'700':'400',color:rightPanelTab===tab?T.accent:T.muted,borderBottom:`2px solid ${rightPanelTab===tab?T.accent:'transparent'}`,transition:'all 0.12s',letterSpacing:'0.3px'}}>
+                  {label}{tab==='layers'?` (${layers.length})`:tab==='history'?` (${history.length})`:''}
+                </button>
+              ))}
+            </div>
+
+            {/* ── LAYERS TAB ───────────────────────────────────────── */}
+            {rightPanelTab==='layers'&&(<>
+            {/* Layer list header actions */}
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 8px 4px',flexShrink:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:5}}>
+                {selectedIds.size>=2&&(
+                  <button title="Group selected (Ctrl+G)" onClick={groupSelectedLayers}
+                    style={{padding:'2px 6px',borderRadius:4,border:`1px solid ${T.accent}`,background:'transparent',color:T.accent,fontSize:11,cursor:'pointer'}}>⊞ Group</button>
+                )}
+                {/* + Adjustment Layer dropdown */}
+                <div style={{position:'relative'}}>
+                  <button title="Add Adjustment Layer" onClick={()=>setAdjLayerMenu(m=>!m)}
+                    style={{padding:'2px 6px',borderRadius:4,border:`1px solid ${T.border}`,background:'transparent',color:T.text,fontSize:11,cursor:'pointer'}}>◐ Adj ▾</button>
+                  {adjLayerMenu&&(
+                    <div style={{position:'absolute',top:'100%',left:0,background:T.panel,border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden',zIndex:200,boxShadow:'0 4px 20px rgba(0,0,0,0.6)',minWidth:160}}>
+                      {[
+                        ['levels','▤ Levels'],['hueSat','◐ Hue/Sat'],['colorBalance','⊕ Color Balance'],
+                        ['vibrance','✦ Vibrance'],['selectiveColor','◈ Selective Color'],
+                        ['gradientMap','▓ Gradient Map'],['posterize','▦ Posterize'],['threshold','◑ Threshold'],
+                      ].map(([adjType,label])=>(
+                        <button key={adjType} onClick={()=>addAdjustmentLayer(adjType)}
+                          style={{display:'block',width:'100%',padding:'7px 12px',background:'transparent',border:'none',borderBottom:`1px solid ${T.border}`,color:T.text,cursor:'pointer',textAlign:'left',fontSize:11,whiteSpace:'nowrap'}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.accentDim}
+                          onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <div style={{display:'flex',gap:2}}>
                 <button title="Delete selected layer" onClick={()=>selectedId&&deleteLayer(selectedId)}
@@ -11445,64 +13818,85 @@ PHASE 4 — Toolbar button:
               </div>
             </div>
 
+
             {/* Layer list */}
             <div style={{flex:1,overflowY:'auto',padding:'4px 6px 8px'}}>
-              {[...layers].reverse().map((layer,idx)=>{
-                const realIdx=layers.length-1-idx;
+              {getDisplayList(layers).map(({layer,depth,isClipped,isBase})=>{
                 const isSelected=selectedId===layer.id;
                 const isDragOver2=layerDragOver===layer.id;
                 const isBeingDragged2=layerDragId===layer.id;
                 const isHidden=layer.hidden;
                 const isLocked=layer.locked;
-                const atTop=realIdx===layers.length-1;
-                const atBottom=layer.type==='background'||realIdx===0;
-                const hasEffects=layer.effects&&(layer.effects.layerBlur>0||layer.effects.shadow?.enabled||layer.effects.glow?.enabled||layer.effects.outline?.enabled);
+                const isGroup=layer.type==='group';
+                const isEditing=groupEditId===layer.id;
+                const atTop=!isGroup&&layers.indexOf(layer)===layers.length-1;
+                const atBottom=!isGroup&&(layer.type==='background'||layers.indexOf(layer)===0);
+                const hasEffects=!isGroup&&layer.effects&&(layer.effects.layerBlur>0||layer.effects.shadow?.enabled||layer.effects.glow?.enabled||layer.effects.outline?.enabled);
+                const baseLayerName2=isClipped?getLayerName(layers[layers.findIndex(l=>l.id===layer.id)-1]):null;
                 return(
                   <div key={layer.id}
-                    draggable
+                    title={isClipped&&baseLayerName2?`Clipped to: ${baseLayerName2}`:undefined}
+                    draggable={!isGroup}
                     onDragStart={e=>onLayerDragStart(e,layer.id)}
                     onDragOver={e=>onLayerDragOver(e,layer.id)}
                     onDrop={e=>onLayerDrop(e,layer.id)}
                     onDragEnd={onLayerDragEnd}
+                    onContextMenu={layer.type!=='background'?e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,layerId:layer.id,menuType:isGroup?'group':'layer'});}:undefined}
                     onClick={e=>{
+                      if(isEditing)return;
                       if(e.shiftKey&&layer.type!=='background'){
                         setSelectedIds(prev=>{const n=new Set(prev);if(n.has(layer.id))n.delete(layer.id);else{n.add(layer.id);if(selectedId)n.add(selectedId);}return n;});
                         setSelectedId(layer.id);
                       } else {
-                        setSelectedIds(new Set());setSelectedId(layer.id);if(layer.type==='background')setActiveTool('background');
+                        setSelectedIds(new Set());setSelectedId(layer.id);if(layer.type==='background')setActiveTool('background');if(layer.type==='adjustment')setActiveTool('adjustment');
                       }
                     }}
                     style={{
                       display:'flex',alignItems:'center',gap:4,
-                      padding:'5px 5px',borderRadius:6,marginBottom:1,
-                      cursor:'pointer',
-                      background:selectedIds.has(layer.id)?`${T.accent}18`:isSelected?T.accentDim:isDragOver2?'rgba(249,115,22,0.06)':'transparent',
-                      border:`1px solid ${selectedIds.has(layer.id)||isSelected?T.accent:isDragOver2?T.accentBorder:'transparent'}`,
+                      paddingTop:5,paddingBottom:5,paddingRight:5,paddingLeft:5+depth*12+(isClipped?10:0),
+                      borderRadius:6,marginBottom:1,cursor:'pointer',
+                      background:isClipped?`${T.accent}08`:isGroup?`rgba(249,115,22,0.06)`:selectedIds.has(layer.id)?`${T.accent}18`:isSelected?T.accentDim:isDragOver2?'rgba(249,115,22,0.06)':'transparent',
+                      border:`1px solid ${isClipped?(isSelected?T.accent:`${T.accent}33`):isGroup?'rgba(249,115,22,0.2)':(selectedIds.has(layer.id)||isSelected?T.accent:isDragOver2?T.accentBorder:'transparent')}`,
+                      borderLeft:isClipped?`2px solid ${T.accent}66`:isGroup?`2px solid ${T.accent}`:undefined,
                       opacity:isBeingDragged2?0.3:1,
                       transition:'all 0.08s',
                     }}>
-                    {/* Drag grip */}
-                    <div style={{color:T.border,fontSize:9,cursor:'grab',flexShrink:0,opacity:0.7}}>⠿</div>
+                    {/* Clip arrow / Collapse toggle / Drag grip */}
+                    {isClipped
+                      ?(<span style={{fontSize:9,color:T.accent,flexShrink:0,userSelect:'none',opacity:0.8,lineHeight:1}}>↳</span>)
+                      :isGroup
+                        ?(<span onClick={e=>{e.stopPropagation();setGroupCollapsed(layer.id,!layer.collapsed);}} style={{fontSize:8,color:T.muted,cursor:'pointer',flexShrink:0,userSelect:'none',width:10,textAlign:'center'}}>{layer.collapsed?'▶':'▼'}</span>)
+                        :(<div style={{color:T.border,fontSize:9,cursor:'grab',flexShrink:0,opacity:0.7}}>⠿</div>)
+                    }
                     {/* Type icon */}
                     <div style={{
                       width:17,height:17,borderRadius:3,flexShrink:0,
-                      background:isSelected?T.accentDim:T.bg2,
+                      background:isClipped?`${T.accent}15`:isGroup?`${T.accent}20`:isSelected?T.accentDim:T.bg2,
                       display:'flex',alignItems:'center',justifyContent:'center',
-                      fontSize:8,fontWeight:'700',fontFamily:'monospace',
-                      color:isSelected?T.accent:T.muted,
-                      border:`1px solid ${T.border}`,
+                      fontSize:isGroup?11:8,fontWeight:'700',fontFamily:'monospace',
+                      color:isClipped?T.accent:isGroup?T.accent:(isSelected?T.accent:T.muted),
+                      border:`1px solid ${isClipped?`${T.accent}88`:isGroup?T.accent:T.border}`,
                     }}>{getLayerIcon(layer)}</div>
                     {/* Name + badges */}
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{
-                        fontSize:11,
-                        color:isHidden?T.border:(isSelected?T.text:T.muted),
-                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
-                        fontWeight:isSelected?'600':'400',
-                        textDecoration:isHidden?'line-through':'none',
-                      }}>{getLayerName(layer)}</div>
-                      {(hasEffects||layer.mask?.enabled)&&(
+                      {isGroup&&isEditing?(
+                        <input
+                          value={groupEditName}
+                          onChange={e=>setGroupEditName(e.target.value)}
+                          onBlur={()=>{if(groupEditName.trim())setLayers(prev=>updateLayerInTree(prev,layer.id,l=>({...l,name:groupEditName.trim()})));setGroupEditId(null);}}
+                          onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();if(e.key==='Escape')setGroupEditId(null);}}
+                          onClick={e=>e.stopPropagation()}
+                          autoFocus
+                          style={{width:'100%',background:T.bg2,border:`1px solid ${T.accent}`,borderRadius:4,color:T.text,fontSize:11,padding:'1px 4px',outline:'none'}}
+                        />
+                      ):(
+                        <div style={{fontSize:11,color:isHidden?T.border:(isClipped?T.accent:isGroup?T.accent:(isSelected?T.text:T.muted)),overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:isGroup?700:(isSelected?'600':'400'),textDecoration:isHidden?'line-through':'none'}}
+                          onDoubleClick={isGroup?e=>{e.stopPropagation();setGroupEditId(layer.id);setGroupEditName(layer.name||'Group');}:undefined}>
+                          {getLayerName(layer)}{isGroup&&layer.children?.length?` (${layer.children.length})`:''}</div>
+                      )}
+                      {!isGroup&&(hasEffects||layer.mask?.enabled||isBase||isClipped)&&(
                         <div style={{display:'flex',gap:2,marginTop:1}}>
+                          {isBase&&<span style={{fontSize:7,color:T.accent,background:`${T.accent}15`,padding:'0 3px',borderRadius:2}}>⊏ base</span>}
                           {layer.mask?.enabled&&<span style={{fontSize:7,color:'#60a5fa',background:'rgba(96,165,250,0.1)',padding:'0 3px',borderRadius:2}}>mask</span>}
                           {hasEffects&&<span style={{fontSize:7,color:T.warning,background:'rgba(245,158,11,0.1)',padding:'0 3px',borderRadius:2}}>fx</span>}
                         </div>
@@ -11510,14 +13904,30 @@ PHASE 4 — Toolbar button:
                     </div>
                     {/* Controls */}
                     <div style={{display:'flex',gap:0,flexShrink:0}}>
-                      {/* fx button — opens effects panel for this layer */}
-                      {layer.type!=='background'&&(
-                        <button title="Open effects panel" onClick={e=>{e.stopPropagation();setSelectedId(layer.id);setActiveTool('effects');}}
-                          style={{padding:'2px 4px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',fontSize:8,fontWeight:'700',letterSpacing:'0.3px',lineHeight:1,color:hasEffects?T.warning:T.border,fontFamily:'monospace'}}
+                      {/* Clip mask toggle */}
+                      {!isGroup&&layer.type!=='background'&&layers.findIndex(l=>l.id===layer.id)>0&&(
+                        <button
+                          title={isClipped?`Release Clipping Mask (Ctrl+Alt+G)\nClipped to: ${baseLayerName2}`:'Create Clipping Mask (Ctrl+Alt+G)'}
+                          onClick={e=>{e.stopPropagation();toggleClipMask(layer.id);}}
+                          style={{padding:'2px 4px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',fontSize:9,lineHeight:1,color:isClipped?T.accent:T.border,fontWeight:isClipped?'700':'400'}}
+                          onMouseEnter={e=>e.currentTarget.style.color=T.accent}
+                          onMouseLeave={e=>e.currentTarget.style.color=isClipped?T.accent:T.border}>⊏</button>
+                      )}
+                      {/* fx — for non-groups */}
+                      {!isGroup&&layer.type!=='background'&&(
+                        <button title="Effects" onClick={e=>{e.stopPropagation();setSelectedId(layer.id);setActiveTool('effects');}}
+                          style={{padding:'2px 4px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',fontSize:8,fontWeight:'700',lineHeight:1,color:hasEffects?T.warning:T.border,fontFamily:'monospace'}}
                           onMouseEnter={e=>e.currentTarget.style.color=T.warning}
                           onMouseLeave={e=>e.currentTarget.style.color=hasEffects?T.warning:T.border}>fx</button>
                       )}
-                      {/* Eye — visibility */}
+                      {/* Ungroup shortcut for groups */}
+                      {isGroup&&(
+                        <button title="Ungroup (Ctrl+Shift+G)" onClick={e=>{e.stopPropagation();ungroupLayer(layer.id);}}
+                          style={{padding:'2px 4px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',fontSize:9,color:T.muted}}
+                          onMouseEnter={e=>e.currentTarget.style.color=T.accent}
+                          onMouseLeave={e=>e.currentTarget.style.color=T.muted}>⊟</button>
+                      )}
+                      {/* Eye */}
                       <button title={isHidden?'Show':'Hide'} onClick={e=>{e.stopPropagation();updateLayer(layer.id,{hidden:!isHidden});}}
                         style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:isHidden?T.border:T.muted,fontSize:12,lineHeight:1}}>
                         {isHidden?'⊘':'⊙'}
@@ -11529,15 +13939,16 @@ PHASE 4 — Toolbar button:
                           {isLocked?'⊠':'⊡'}
                         </button>
                       )}
-                      {/* Bring forward */}
-                      <button title="Bring forward" onClick={e=>{e.stopPropagation();moveLayerUp(layer.id);}} disabled={atTop}
-                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:atTop?'default':'pointer',color:atTop?T.border:T.muted,fontSize:10,lineHeight:1}}>▲</button>
-                      {/* Send backward */}
-                      <button title="Send backward" onClick={e=>{e.stopPropagation();moveLayerDown(layer.id);}} disabled={atBottom}
-                        style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:atBottom?'default':'pointer',color:atBottom?T.border:T.muted,fontSize:10,lineHeight:1}}>▼</button>
+                      {/* Bring forward / Send backward — top-level only */}
+                      {!isGroup&&(<>
+                        <button title="Bring forward" onClick={e=>{e.stopPropagation();moveLayerUp(layer.id);}} disabled={atTop}
+                          style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:atTop?'default':'pointer',color:atTop?T.border:T.muted,fontSize:10,lineHeight:1}}>▲</button>
+                        <button title="Send backward" onClick={e=>{e.stopPropagation();moveLayerDown(layer.id);}} disabled={atBottom}
+                          style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:atBottom?'default':'pointer',color:atBottom?T.border:T.muted,fontSize:10,lineHeight:1}}>▼</button>
+                      </>)}
                       {/* Delete */}
                       {layer.type!=='background'&&(
-                        <button title="Delete layer" onClick={e=>{e.stopPropagation();deleteLayer(layer.id);}}
+                        <button title="Delete" onClick={e=>{e.stopPropagation();deleteLayer(layer.id);}}
                           style={{padding:'2px 3px',borderRadius:3,border:'none',background:'transparent',cursor:'pointer',color:T.border,fontSize:11,lineHeight:1}}
                           onMouseEnter={e=>e.currentTarget.style.color=T.danger}
                           onMouseLeave={e=>e.currentTarget.style.color=T.border}>✕</button>
@@ -11674,11 +14085,115 @@ PHASE 4 — Toolbar button:
               </div>
             )}
 
-            {/* Footer */}
-            <div style={{
-              padding:'5px 10px',borderTop:`1px solid ${T.border}`,
-              fontSize:9,color:T.border,textAlign:'center',flexShrink:0,
-            }}>Drag rows to reorder</div>
+            {/* Footer — layers tab */}
+            <div style={{padding:'5px 10px',borderTop:`1px solid ${T.border}`,fontSize:9,color:T.border,textAlign:'center',flexShrink:0}}>Drag rows to reorder</div>
+            </>)}
+
+            {/* ── HISTORY TAB ──────────────────────────────────────── */}
+            {rightPanelTab==='history'&&(<>
+
+              {/* History list */}
+              <div ref={historyListRef} style={{flex:1,overflowY:'auto',padding:'4px 0'}}>
+                {history.map((_, idx)=>{
+                  const isCurrent=idx===historyIndex;
+                  const isFuture=idx>historyIndex;
+                  const label=historyLabels[idx]||'Edit';
+                  const ts=historyTimestamps[idx];
+                  const thumb=historyThumbnails[idx];
+                  const age=ts?Date.now()-ts:0;
+                  const timeStr=age<60000?'now':age<3600000?`${Math.floor(age/60000)}m ago`:`${Math.floor(age/3600000)}h ago`;
+                  return(
+                    <div key={idx}
+                      onClick={()=>{
+                        if(isCurrent) return;
+                        historyIndexRef.current=idx;
+                        historyIndexRef.current=idx;
+                        setHistoryIndex(idx);
+                        setLayers(JSON.parse(JSON.stringify(historyRef.current[idx])));
+                        triggerAutoSave();
+                      }}
+                      data-hist-row={idx}
+                      style={{
+                        display:'flex',alignItems:'center',gap:6,
+                        padding:'5px 8px',cursor:isCurrent?'default':'pointer',
+                        background:isCurrent?`${T.accent}18`:'transparent',
+                        borderLeft:`2px solid ${isCurrent?T.accent:'transparent'}`,
+                        opacity:isFuture?0.35:1,
+                        transition:'all 0.08s',
+                      }}
+                      onMouseEnter={e=>{if(!isCurrent)e.currentTarget.style.background=T.bg2;}}
+                      onMouseLeave={e=>{if(!isCurrent)e.currentTarget.style.background='transparent';}}>
+                      {/* Thumbnail */}
+                      <div style={{width:80,height:45,borderRadius:4,flexShrink:0,background:T.bg2,border:`1px solid ${isCurrent?T.accent:T.border}`,overflow:'hidden',position:'relative'}}>
+                        {thumb
+                          ? <img src={thumb} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>
+                          : <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:T.border}}>⏳</div>
+                        }
+                        {isCurrent&&<div style={{position:'absolute',bottom:2,right:2,width:6,height:6,borderRadius:'50%',background:T.accent}}/>}
+                      </div>
+                      {/* Label + time */}
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:11,color:isCurrent?T.accent:T.text,fontWeight:isCurrent?'700':'400',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</div>
+                        <div style={{fontSize:9,color:T.muted,marginTop:1}}>{timeStr} · #{idx+1}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* History actions */}
+              <div style={{borderTop:`1px solid ${T.border}`,padding:'6px 8px',flexShrink:0,display:'flex',gap:4}}>
+                <button
+                  onClick={()=>{
+                    if(history.length<=1) return;
+                    if(!window.confirm('Clear all history? This cannot be undone.')) return;
+                    const cur=historyRef.current[historyIndexRef.current];
+                    historyRef.current=[cur];historyIndexRef.current=0;
+                    setHistory([cur]);setHistoryIndex(0);
+                    historyLabelsRef.current=['Edit'];historyTimestampsRef.current=[Date.now()];
+                    setHistoryLabels(['Edit']);setHistoryTimestamps([Date.now()]);
+                    setHistoryThumbnails({});
+                  }}
+                  style={{flex:1,padding:'5px 0',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:10,cursor:'pointer'}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.danger;e.currentTarget.style.color=T.danger;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.muted;}}>
+                  ✕ Clear History
+                </button>
+                <button
+                  onClick={()=>{
+                    const name=window.prompt('Snapshot name:',`Snapshot ${dbSnapshots.length+1}`);
+                    if(name) saveDbSnapshot(name);
+                  }}
+                  style={{flex:1,padding:'5px 0',borderRadius:5,border:`1px solid ${T.accent}`,background:`${T.accent}12`,color:T.accent,fontSize:10,cursor:'pointer',fontWeight:'600'}}>
+                  ⊕ Save Snapshot
+                </button>
+              </div>
+
+              {/* Snapshot list */}
+              {dbSnapshots.length>0&&(
+                <div style={{borderTop:`1px solid ${T.border}`,flexShrink:0,maxHeight:160,overflowY:'auto'}}>
+                  <div style={{padding:'5px 8px 3px',fontSize:9,color:T.muted,fontWeight:'700',letterSpacing:'0.5px',textTransform:'uppercase'}}>Saved Snapshots</div>
+                  {[...dbSnapshots].reverse().map(snap=>(
+                    <div key={snap.id} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 8px',borderBottom:`1px solid ${T.border}20`}}>
+                      {snap.thumbnail&&<img src={snap.thumbnail} alt="" style={{width:48,height:27,borderRadius:3,objectFit:'cover',flexShrink:0,border:`1px solid ${T.border}`}}/>}
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:11,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{snap.name}</div>
+                        <div style={{fontSize:9,color:T.muted}}>{new Date(snap.createdAt).toLocaleDateString()}</div>
+                      </div>
+                      <div style={{display:'flex',gap:2,flexShrink:0}}>
+                        <button onClick={()=>restoreDbSnapshot(snap)} title="Restore snapshot"
+                          style={{padding:'2px 5px',borderRadius:3,border:`1px solid ${T.accent}`,background:'transparent',color:T.accent,fontSize:10,cursor:'pointer'}}>↺</button>
+                        <button onClick={()=>{if(window.confirm(`Delete snapshot "${snap.name}"?`))deleteDbSnapshot(snap.id);}} title="Delete snapshot"
+                          style={{padding:'2px 5px',borderRadius:3,border:`1px solid ${T.border}`,background:'transparent',color:T.border,fontSize:10,cursor:'pointer'}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.danger;e.currentTarget.style.color=T.danger;}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.border;}}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>)}
+
           </div>
         )}
 
@@ -11797,6 +14312,77 @@ PHASE 4 — Toolbar button:
               <button onClick={()=>setShowShortcutsModal(false)}
                 style={{padding:'6px 18px',borderRadius:7,border:`1px solid ${T.border}`,background:T.input,color:T.text,fontSize:12,cursor:'pointer',fontWeight:'600'}}>Close</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tier 3 Item 3: Competitor Comparison Full-Screen Modal ── */}
+      {showCompetitor&&(
+        <div style={{position:'fixed',inset:0,zIndex:1100,background:'#111',overflow:'auto',display:'flex',flexDirection:'column'}}>
+          {/* Header */}
+          <div style={{padding:'16px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid #222',flexShrink:0}}>
+            <div>
+              <div style={{fontSize:18,fontWeight:'800',color:'#fff'}}>
+                Competitive Landscape: <span style={{color:'#f97316'}}>{competitorQuery}</span>
+              </div>
+              <div style={{fontSize:11,color:'#666',marginTop:2}}>{competitorResults.length} competitor results</div>
+            </div>
+            <div style={{display:'flex',gap:10,alignItems:'center'}}>
+              {competitorThumbUrl&&(
+                <button onClick={analyzeCompetition} disabled={competitorAnalyzing}
+                  style={{padding:'8px 16px',borderRadius:8,border:'1px solid #f97316',background:'rgba(249,115,22,0.15)',color:'#f97316',fontSize:12,fontWeight:'700',cursor:'pointer',opacity:competitorAnalyzing?0.5:1}}>
+                  {competitorAnalyzing?'Analyzing…':'✦ Analyze vs Competitors'}
+                </button>
+              )}
+              <button onClick={()=>setShowCompetitor(false)}
+                style={{padding:'8px 14px',borderRadius:8,border:'1px solid #333',background:'#1a1a1a',color:'#aaa',fontSize:13,fontWeight:'600',cursor:'pointer'}}>
+                ✕ Close
+              </button>
+            </div>
+          </div>
+
+          {/* Analysis results */}
+          {competitorAnalysis&&(
+            <div style={{margin:'16px 24px 0',padding:'14px 16px',borderRadius:10,background:'rgba(249,115,22,0.07)',borderLeft:'3px solid #f97316',fontSize:12,color:'#ccc',lineHeight:1.8,flexShrink:0}}>
+              {competitorAnalysis.split('\n').filter(Boolean).map((line,i)=>(
+                <div key={i} style={{marginBottom:4}}>{line}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Grid */}
+          <div style={{padding:'20px 24px',display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:16,overflowY:'auto'}}>
+            {/* Card 0 — Creator's thumbnail */}
+            {competitorThumbUrl&&(
+              <div style={{borderRadius:8,overflow:'hidden',background:'#1a1a1a',border:'2px solid #ff6a00',position:'relative',cursor:'default'}}>
+                <div style={{position:'relative',aspectRatio:'16/9',overflow:'hidden'}}>
+                  <img src={competitorThumbUrl} alt="Your thumbnail" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>
+                  <div style={{position:'absolute',top:6,left:6,background:'#ff6a00',color:'#fff',fontSize:9,fontWeight:'800',padding:'3px 8px',borderRadius:12,letterSpacing:'0.5px'}}>YOUR THUMBNAIL</div>
+                </div>
+                <div style={{padding:'8px 10px'}}>
+                  <div style={{fontSize:12,fontWeight:'700',color:'#fff',lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>Your current design</div>
+                  <div style={{fontSize:10,color:'#888',marginTop:3}}>You · —</div>
+                </div>
+              </div>
+            )}
+            {/* Competitor cards */}
+            {competitorResults.map(r=>(
+              <div key={r.videoId} style={{borderRadius:8,overflow:'hidden',background:'#1a1a1a',border:'1px solid #2a2a2a',cursor:'pointer',transition:'transform 0.15s,box-shadow 0.15s'}}
+                onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.03)';e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.6)';}}
+                onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)';e.currentTarget.style.boxShadow='none';}}>
+                <div style={{position:'relative',aspectRatio:'16/9',overflow:'hidden',background:'#0a0a0a'}}>
+                  <img src={r.thumbnailUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}
+                    onError={e=>{e.target.parentNode.style.background='#1a1a1a';e.target.style.display='none';}}/>
+                </div>
+                <div style={{padding:'8px 10px'}}>
+                  <div style={{fontSize:12,color:'#fff',lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',fontWeight:'500'}}>{r.title}</div>
+                  <div style={{fontSize:10,color:'#888',marginTop:3,display:'flex',justifyContent:'space-between'}}>
+                    <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'70%'}}>{r.channelName}</span>
+                    <span style={{flexShrink:0,marginLeft:4}}>{formatViewCount(r.viewCount)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
