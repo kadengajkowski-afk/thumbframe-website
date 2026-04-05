@@ -1690,7 +1690,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [currentDesignId,setCurrentDesignId]           = useState(null);
   const setCurrentProjectId = setCurrentDesignId;
 
-  const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Design:true,Analyze:true,File:true,Canvas:true});
+  const [expandedCategories,setExpandedCategories]     = useState({Tools:true,Create:true,Paint:true,Select:true,Design:true,Analyze:true,File:true,Canvas:true});
   const [showToast,setShowToast]                       = useState(false);
   const [toastMessage,setToastMessage]                 = useState('');
   const [toastType,setToastType]                       = useState('info');
@@ -2759,6 +2759,7 @@ PHASE 4 — Toolbar button:
       // Escape — deselect / cancel
       if(e.key==='Escape'){
         if(activeTool==='sel-poly'&&selDrawRef.current){selDrawRef.current=null;setSelDrawState(null);selPolyPointsRef.current=[];return;}
+        if(selectionActive){clearSel();return;}
         setSelectedId(null);setSelectedIds(new Set());setShowShortcutsModal(false);return;
       }
 
@@ -3107,7 +3108,7 @@ PHASE 4 — Toolbar button:
     const prevBuf=retouchPrevTileRef.current?.buffer?.slice(0)||null;
     const worker=getRetouchWorker();
     if(!worker){return;}
-    const thisTool=(tool==='dodge'||tool==='burn')?dodgeBurnMode:tool;
+    const thisTool=(tool==='dodge'||tool==='burn')?dodgeBurnMode:tool==='blur-brush'?'blur':tool==='sharpen-brush'?'sharpen':tool;
     const onMsg=(evt)=>{
       worker.removeEventListener('message',onMsg);
       const {processedPixels}=evt.data;
@@ -6371,6 +6372,8 @@ PHASE 4 — Toolbar button:
     if(activeTool==='rimlight') return;
     if(activeTool==='brush') return;
     if(activeTool==='lasso' && isLassoMode) return;
+    if(RETOUCH_TOOLS.includes(activeTool)) return;
+    if(activeTool==='marquee'||activeTool==='sel-lasso'||activeTool==='sel-poly'||activeTool==='sel-wand') return;
     const layer=findInTree(layersRef.current,id);if(!layer)return;
     e.stopPropagation();
     justSelectedRef.current=true;
@@ -9205,11 +9208,13 @@ PHASE 4 — Toolbar button:
                        activeTool==='rimlight'?(rimPickingColor?'crosshair':'crosshair'):
                        activeTool==='zoom'?'zoom-in':
                        (activeTool==='lasso'&&isLassoMode)?'crosshair':
+                       RETOUCH_TOOLS.includes(activeTool)?'crosshair':
+                       (activeTool==='marquee'||activeTool==='sel-lasso'||activeTool==='sel-poly'||activeTool==='sel-wand')?'crosshair':
                        'default'}}>
 
                 <div style={{position:'absolute',inset:0,filter:canvasFilter,zIndex:0}}>
                   <div style={{position:'absolute',inset:0,
-                    pointerEvents: (activeTool==='brush'||activeTool==='zoom'||activeTool==='freehand'||(activeTool==='lasso'&&isLassoMode)) ? 'none' : 'auto',
+                    pointerEvents: (activeTool==='brush'||activeTool==='zoom'||activeTool==='freehand'||(activeTool==='lasso'&&isLassoMode)||RETOUCH_TOOLS.includes(activeTool)||activeTool==='marquee'||activeTool==='sel-lasso'||activeTool==='sel-poly'||activeTool==='sel-wand') ? 'none' : 'auto',
                   }}>
                     <CanvasLayerRenderer layers={layers} renderLayerElement={renderLayerElement} />
                   </div>
@@ -10457,7 +10462,7 @@ PHASE 4 — Toolbar button:
                 {/* Panel header */}
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px 6px'}}>
                   <span style={{fontSize:11,fontWeight:'700',color:T.text,letterSpacing:'0.7px',textTransform:'uppercase'}}>Layer Effects</span>
-                  {selectedLayer&&selectedLayer.type!=='background'&&(
+                  {selectedLayer&&selectedLayer.type!=='background'&&selectedLayer.type!=='adjustment'&&selectedLayer.type!=='curves'&&(
                     <button onClick={()=>updateLayer(selectedId,{effects:defaultEffects()})}
                       style={{fontSize:9,color:T.muted,background:'transparent',border:`1px solid ${T.border}`,cursor:'pointer',padding:'2px 7px',borderRadius:3,letterSpacing:'0.3px'}}
                       onMouseEnter={e=>e.currentTarget.style.color=T.danger}
@@ -10467,10 +10472,10 @@ PHASE 4 — Toolbar button:
                   )}
                 </div>
 
-                {!selectedLayer||selectedLayer.type==='background'?(
+                {!selectedLayer||selectedLayer.type==='background'||selectedLayer.type==='adjustment'||selectedLayer.type==='curves'?(
                   <div style={{textAlign:'center',padding:'28px 16px'}}>
                     <div style={{fontSize:22,opacity:0.2,marginBottom:10}}>⬡</div>
-                    <div style={{fontSize:12,color:T.muted,lineHeight:1.6}}>Select a layer<br/>to apply effects</div>
+                    <div style={{fontSize:12,color:T.muted,lineHeight:1.6}}>{selectedLayer?.type==='adjustment'||selectedLayer?.type==='curves'?'Effects cannot be applied to adjustment layers':<>Select a layer<br/>to apply effects</>}</div>
                   </div>
                 ):(()=>{
                   const fx=selectedLayer.effects||defaultEffects();
@@ -10753,8 +10758,9 @@ PHASE 4 — Toolbar button:
                 {selectedLayer?.type==='curves'?(
                   <CurvesPanel
                     curves={selectedLayer.curves||DEFAULT_CURVES()}
-                    onChange={c=>updateLayerSilent(selectedLayer.id,{curves:c})}
-                    onCommit={c=>updateLayer(selectedLayer.id,{curves:c})}
+                    onChangeSilent={c=>updateLayerSilent(selectedLayer.id,{curves:c})}
+                    onChange={c=>updateLayer(selectedLayer.id,{curves:c})}
+                    T={T}
                   />
                 ):(
                   <div style={{...css.section,marginTop:0,fontSize:11,color:T.muted}}>Add a Curves adjustment layer to non-destructively adjust tone and color for all layers below it.</div>
