@@ -12229,11 +12229,13 @@ PHASE 4 — Toolbar button:
                 </button>
 
                 {/* 2×3 grid — original + 5 variants */}
-                {(aiVariants.length>0)&&(
+                {(aiVarBusy||aiVariants.some(v=>v?.base64))&&(
                   <div style={{marginTop:14}}>
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
                       {Array.from({length:6}).map((_,idx)=>{
                         const v=aiVariants[idx];
+                        // Don't render empty/failed slots when not actively generating
+                        if(!v?.base64&&idx>0&&!aiVarBusy) return null;
                         const isSelected=aiVarSelected===idx&&idx>0;
                         const isOriginal=idx===0;
                         const isLoading=!v&&idx>0&&aiVarBusy;
