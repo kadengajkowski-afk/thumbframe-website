@@ -2,8 +2,9 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 
 // ─── Brush Overlay ─────────────────────────────────────────────────────────────
 export const BrushOverlay = forwardRef(function BrushOverlay(
-  { layer, onUpdate, brushType, brushSize, brushStrength, brushEdge, brushFlow, brushStabilizer, active, zoom, paintColor, paintAlpha, isMask,
-    pressureEnabled, pressureMapping, pressureCurve, pressureMin, pressureMax, onTabletDetected },
+  { layer, onUpdate, brushType, brushSize, brushStrength, brushEdge, brushFlow, brushStabilizer, brushSmoothing, active, zoom, paintColor, paintAlpha, isMask,
+    pressureEnabled, pressureMapping, pressureCurve, pressureMin, pressureMax, onTabletDetected,
+    selectionMaskRef, selectionActive },
   ref
 ) {
   const canvasRef      = useRef(null);
@@ -25,6 +26,14 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   const originalImg    = useRef(null);
 
   const lastZoom       = useRef(null);
+
+  // ── Stroke preview canvas — prevents alpha accumulation during a single stroke ──
+  const strokePreviewCanvasRef = useRef(null);
+  // ── Coalesced-event input queue + rAF render decoupling ──────────────────────
+  const strokePointsRef    = useRef([]);
+  const renderPendingRef   = useRef(false);
+  const lastSmoothedPoint  = useRef(null);
+  const strokeDistRef      = useRef(0);
 
   useImperativeHandle(ref, () => ({
     undo() {
@@ -720,6 +729,154 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
   // Ref to hold pressure-scaled brush size multiplier, read by stamp functions
   const pressureSizeMultRef = useRef(1);
 
+  // ── Gradient dab — proper radial-gradient brush stamp for paint/eraser ────────
+  function renderGradientDab(ctx, x, y, size, hardness, r, g, b, alpha) {
+    const radius = size / 2;
+    if (radius < 0.5) return;
+    const grd = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    const innerStop = Math.max(0, Math.min(0.99, hardness));
+    grd.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+    if (innerStop > 0) grd.addColorStop(innerStop, `rgba(${r},${g},${b},${alpha})`);
+    grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── Stroke smoothing — exponential moving average ─────────────────────────────
+  function smoothPoint(curr, last, factor) {
+    if (!last) return curr;
+    return {
+      x: last.x + (curr.x - last.x) * (1 - factor),
+      y: last.y + (curr.y - last.y) * (1 - factor),
+      pressure: curr.pressure,
+    };
+  }
+
+  // ── Stroke interpolation — fill gaps between sampled points ──────────────────
+  // eslint-disable-next-line no-unused-vars
+  function interpolateStroke(p1, p2, spacing) {
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < 0.1) return [];
+    const steps = Math.max(1, Math.floor(dist / spacing));
+    const pts = [];
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      pts.push({
+        x: p1.x + dx*t, y: p1.y + dy*t,
+        pressure: p1.pressure + (p2.pressure - p1.pressure)*t,
+      });
+    }
+    return pts;
+  }
+
+  // ── Flush queued stroke points (called from rAF) ──────────────────────────────
+  function flushStrokePoints() {
+    renderPendingRef.current = false;
+    const pts = strokePointsRef.current.splice(0);
+    if (!pts.length || !isReady.current || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx    = canvas.getContext('2d');
+    // For paint/eraser we use the stroke preview canvas; for pixel-ops we use main canvas
+    const isPaintType = brushType === 'paint' || brushType === 'eraser';
+    const renderCtx   = isPaintType && strokePreviewCanvasRef.current
+      ? strokePreviewCanvasRef.current.getContext('2d')
+      : ctx;
+
+    const smoothFactor = ((brushSmoothing ?? 40) / 100) * 0.85;
+
+    for (const rawPt of pts) {
+      // Apply smoothing
+      const smoothed = smoothPoint(rawPt, lastSmoothedPoint.current, smoothFactor);
+      lastSmoothedPoint.current = smoothed;
+
+      const speedPres   = getPressure(smoothed);
+      const effPressure = getEffectivePressure(speedPres);
+
+      if (pressureEnabled && (pressureMapping === 'size' || pressureMapping === 'both')) {
+        pressureSizeMultRef.current = Math.max(0.05, 0.1 + 0.9 * effPressure);
+      } else {
+        pressureSizeMultRef.current = 1;
+      }
+
+      const r2      = Math.round(brushSize * pressureSizeMultRef.current * (zoom||1) * canvasScale.current);
+      const spacing = Math.max(1, r2 * (brushEdge === 'hard' ? 0.2 : 0.25));
+
+      if (lastPos.current) {
+        const stamps = getStamps(lastPos.current, smoothed, spacing);
+        for (const s of stamps) {
+          if (isPaintType) {
+            // Use gradient dab on stroke preview canvas
+            const hexColor = (paintColor || '#ff0000').replace('#', '');
+            const cr = parseInt(hexColor.slice(0,2), 16);
+            const cg = parseInt(hexColor.slice(2,4), 16);
+            const cb2 = parseInt(hexColor.slice(4,6), 16);
+            const hardness = brushEdge === 'hard' ? 0.95 : 0.0;
+            if (brushType === 'eraser') {
+              renderCtx.save();
+              renderCtx.globalCompositeOperation = 'destination-out';
+              renderGradientDab(renderCtx, s.x, s.y, r2 * 2, hardness, 0, 0, 0,
+                (brushStrength/100) * (brushFlow/100) * effPressure);
+              renderCtx.restore();
+            } else {
+              const alpha = ((paintAlpha||100)/100) * (brushStrength/100) * (brushFlow/100) * effPressure;
+              renderGradientDab(renderCtx, s.x, s.y, r2 * 2, hardness, cr, cg, cb2, alpha);
+            }
+          } else {
+            paintStamp(ctx, s.x, s.y, lastPos.current.x, lastPos.current.y, effPressure);
+          }
+        }
+      } else {
+        if (isPaintType) {
+          const hexColor = (paintColor || '#ff0000').replace('#', '');
+          const cr = parseInt(hexColor.slice(0,2), 16);
+          const cg = parseInt(hexColor.slice(2,4), 16);
+          const cb2 = parseInt(hexColor.slice(4,6), 16);
+          const hardness = brushEdge === 'hard' ? 0.95 : 0.0;
+          if (brushType === 'eraser') {
+            renderCtx.save();
+            renderCtx.globalCompositeOperation = 'destination-out';
+            renderGradientDab(renderCtx, smoothed.x, smoothed.y, pressureSizeMultRef.current * brushSize * (zoom||1) * canvasScale.current * 2,
+              hardness, 0, 0, 0, (brushStrength/100) * (brushFlow/100));
+            renderCtx.restore();
+          } else {
+            renderGradientDab(renderCtx, smoothed.x, smoothed.y, pressureSizeMultRef.current * brushSize * (zoom||1) * canvasScale.current * 2,
+              hardness, cr, cg, cb2, ((paintAlpha||100)/100) * (brushStrength/100) * (brushFlow/100));
+          }
+        } else {
+          paintStamp(ctx, smoothed.x, smoothed.y, smoothed.x, smoothed.y, effPressure);
+        }
+      }
+      lastPos.current = smoothed;
+    }
+
+    // If using stroke preview canvas, composite it onto the main canvas at brushOpacity
+    if (isPaintType && strokePreviewCanvasRef.current) {
+      // Apply selection mask to stroke preview canvas if active
+      if (selectionActive && selectionMaskRef?.current) {
+        const spc  = strokePreviewCanvasRef.current;
+        const sctx = spc.getContext('2d');
+        const idata = sctx.getImageData(0, 0, spc.width, spc.height);
+        const m = selectionMaskRef.current;
+        for (let i = 0; i < m.length; i++) {
+          idata.data[i*4+3] = Math.round(idata.data[i*4+3] * m[i] / 255);
+        }
+        sctx.putImageData(idata, 0, 0);
+      }
+      // Composite preview onto main canvas for real-time display (doesn't accumulate alpha)
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Redraw original image first
+      if (originalImg.current) {
+        ctx.drawImage(originalImg.current, 0, 0, canvas.width, canvas.height);
+      }
+      ctx.drawImage(strokePreviewCanvasRef.current, 0, 0);
+    }
+  }
+
+  // eslint-disable-next-line no-unused-vars
   function paintStroke(pos) {
     if (!isReady.current||!canvasRef.current) return;
     const ctx         = canvasRef.current.getContext('2d');
@@ -791,34 +948,48 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     lastPressure.current = 1;
     lastTime.current     = Date.now();
     stabPos.current      = null;
+    lastSmoothedPoint.current = null;
+    strokeDistRef.current = 0;
+    strokePointsRef.current = [];
+
+    // Initialize stroke preview canvas for paint/eraser types
+    const isPaintType = brushType === 'paint' || brushType === 'eraser';
+    if (isPaintType && canvasRef.current) {
+      const c = document.createElement('canvas');
+      c.width  = canvasRef.current.width;
+      c.height = canvasRef.current.height;
+      strokePreviewCanvasRef.current = c;
+    } else {
+      strokePreviewCanvasRef.current = null;
+    }
+
     const pos = getPos(e);
     lastPos.current = pos;
     if (brushType === 'heal') {
-      const pos = getPos(e);
       lastHealPos.current = pos;
       lastPos.current = pos;
-      saveSnap();
-      isPainting.current = true;
-      lastPressure.current = 1;
-      lastTime.current = Date.now();
-      stabPos.current = null;
       if (isReady.current && canvasRef.current) {
         const ctx = canvasRef.current.getContext('2d');
         applyHealStamp(ctx, pos.x, pos.y, 1.0);
       }
       return;
     }
-    paintStroke(pos);
+    // Queue the initial point
+    strokePointsRef.current.push({ x: pos.x, y: pos.y, pressure: rawPressureRef.current > 0 ? rawPressureRef.current : 0.5 });
+    if (!renderPendingRef.current) {
+      renderPendingRef.current = true;
+      requestAnimationFrame(flushStrokePoints);
+    }
   }
 
   function onMouseMove(e) {
     e.preventDefault();
-    const pos = getPos(e);
     updateCursor(e.clientX, e.clientY, true);
     if (!isPainting.current||!active||!isReady.current) return;
+
     if (brushType === 'heal') {
+      const pos = getPos(e);
       lastHealPos.current = pos;
-      // ✅ Throttle heal during drag — only fire every 30px of movement
       if (lastPos.current) {
         const dx = pos.x - lastPos.current.x;
         const dy = pos.y - lastPos.current.y;
@@ -835,19 +1006,37 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       }
       return;
     }
-    paintStroke(pos);
-    lastPos.current = pos;
+
+    // Collect coalesced events for high-fidelity input
+    const coalesced = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for (const ce of coalesced) {
+      const pos = getPos(ce);
+      strokePointsRef.current.push({
+        x: pos.x, y: pos.y,
+        pressure: ce.pressure > 0 ? ce.pressure : 0.5,
+      });
+    }
+    if (!renderPendingRef.current) {
+      renderPendingRef.current = true;
+      requestAnimationFrame(flushStrokePoints);
+    }
   }
 
   function onMouseUp(e) {
     e.preventDefault();
     if (isPainting.current) {
+      // Flush any remaining queued points synchronously
+      if (strokePointsRef.current.length > 0) {
+        flushStrokePoints();
+      }
       isPainting.current   = false;
       lastPos.current      = null;
       stabPos.current      = null;
       lastPressure.current = 1;
-      // ✅ Run heal on mouseUp only — not during drag
-      // This prevents lag since PatchMatch only runs once per click
+      renderPendingRef.current = false;
+      strokePointsRef.current = [];
+
+      // ✅ Run heal on mouseUp only — PatchMatch runs once per click
       if (brushType === 'heal' && isReady.current && canvasRef.current) {
         const canvas = canvasRef.current;
         const ctx    = canvas.getContext('2d');
@@ -909,10 +1098,10 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 export default function BrushTool({
   layer, theme:T, brushOverlayRef,
   brushType, brushSize, brushStrength, brushEdge,
-  brushFlow, brushStabilizer,
+  brushFlow, brushStabilizer, brushSmoothing,
   paintColor, paintAlpha,
   onBrushTypeChange, onBrushSizeChange, onBrushStrengthChange,
-  onBrushEdgeChange, onBrushFlowChange, onBrushStabilizerChange,
+  onBrushEdgeChange, onBrushFlowChange, onBrushStabilizerChange, onBrushSmoothingChange,
   onPaintColorChange, onPaintAlphaChange,
   // Pressure props
   pressureEnabled, pressureMapping, pressureCurve, pressureMin, pressureMax, tabletDetected,
@@ -1059,6 +1248,21 @@ export default function BrushTool({
       </div>
       <div style={{ fontSize:10, color:T.muted, marginTop:2, marginBottom:2 }}>
         Smooths wobbly lines. High = very smooth curves.
+      </div>
+
+      {/* Stroke smoothing — EMA-based input smoothing */}
+      <span style={css.label}>Smoothing — {brushSmoothing ?? 40}%</span>
+      <div style={css.row}>
+        <input type="range" min="0" max="100" value={brushSmoothing ?? 40}
+          onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
+          onPointerMove={e=>{if(e.buttons&&onBrushSmoothingChange)onBrushSmoothingChange(Number(e.currentTarget.value));}}
+          onPointerUp={e=>{if(onBrushSmoothingChange)onBrushSmoothingChange(Number(e.currentTarget.value));}}
+          onChange={e=>{if(onBrushSmoothingChange)onBrushSmoothingChange(Number(e.target.value));}}
+          style={{ flex:1 }}/>
+        <span style={{ fontSize:10, color:T.muted, minWidth:32, textAlign:'right' }}>{brushSmoothing ?? 40}%</span>
+      </div>
+      <div style={{ fontSize:10, color:T.muted, marginTop:2, marginBottom:4 }}>
+        EMA input smoothing. 0 = raw, 100 = maximum smooth.
       </div>
 
       {/* Edge */}

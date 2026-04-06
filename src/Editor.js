@@ -1400,6 +1400,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [recentColors,setRecentColors]     = useState(['#ffffff','#000000','#FF4500','#f97316','#FFD700','#00C853']);
   const [savedPalette,setSavedPalette]     = useState([]);
   const [clipboard,setClipboard]           = useState(null);
+  const selClipboardRef                    = useRef(null); // {imageData, bounds} — pixel-level clipboard for selection ops
   const [showFileTab,setShowFileTab]       = useState(false);
   const [showDownload,setShowDownload]     = useState(false);
   const [exportFormat,setExportFormat]     = useState('png');   // 'png'|'jpeg'|'webp'|'psd'
@@ -1606,6 +1607,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [freeBrushSize,setFreeBrushSize]   = useState(8);
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
+  const [brushSmoothingState,setBrushSmoothingState]   = useState(40);
 
   // ── Pressure sensitivity (drawing tablet) ────────────────────────────────
   const [pressureEnabled,setPressureEnabled]   = useState(false);
@@ -2722,9 +2724,26 @@ PHASE 4 — Toolbar button:
       // ── Ctrl / Cmd combos (work even while typing) ────────────────────────
       if(ctrl&&e.key==='z'&&!e.shiftKey){e.preventDefault();undo();return;}
       if(ctrl&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo();return;}
-      if(ctrl&&e.key==='c'&&!e.shiftKey){if(selectedId){const l=layers.find(x=>x.id===selectedId);if(l)setClipboard(l);}return;}
-      if(ctrl&&e.key==='v'){if(clipboard)duplicateLayerFromObj(clipboard);return;}
-      if(ctrl&&e.key==='j'){e.preventDefault();if(selectedId)duplicateLayer(selectedId);return;}
+      if(ctrl&&e.key==='c'&&!e.shiftKey){
+        if(selectionActive){e.preventDefault();copySelection();return;}
+        if(selectedId){const l=layers.find(x=>x.id===selectedId);if(l)setClipboard(l);}
+        return;
+      }
+      if(ctrl&&e.key==='x'&&!e.shiftKey){
+        if(selectionActive){e.preventDefault();cutSelection();return;}
+        return;
+      }
+      if(ctrl&&e.key==='v'){
+        if(selClipboardRef.current){e.preventDefault();pasteFromSelClipboard();return;}
+        if(clipboard)duplicateLayerFromObj(clipboard);
+        return;
+      }
+      if(ctrl&&e.key==='j'){
+        e.preventDefault();
+        if(selectionActive){copySelectionToNewLayer();return;}
+        if(selectedId)duplicateLayer(selectedId);
+        return;
+      }
       if(ctrl&&e.key==='d'){e.preventDefault();setSelectedId(null);setSelectedIds(new Set());clearSel();return;}
       if(ctrl&&e.key==='a'){e.preventDefault();if(['marquee','sel-lasso','sel-poly','sel-wand'].includes(activeTool)){selectAll();}else{const ids=new Set(layers.filter(l=>l.type!=='background').map(l=>l.id));setSelectedIds(ids);}return;}
       if(ctrl&&(e.key==='+'||e.key==='=')){e.preventDefault();setZoom(z=>Math.min(16,+(z+0.1).toFixed(1)));return;}
@@ -2763,8 +2782,15 @@ PHASE 4 — Toolbar button:
         setSelectedId(null);setSelectedIds(new Set());setShowShortcutsModal(false);return;
       }
 
-      // Delete / Backspace — delete selected layer
-      if(e.key==='Delete'||e.key==='Backspace'){if(selectedId)deleteLayer(selectedId);return;}
+      // Delete / Backspace — delete selection pixels if active, else delete selected layer
+      if(e.key==='Delete'||e.key==='Backspace'){
+        if(selectionActive){e.preventDefault();deleteSelection();return;}
+        if(selectedId)deleteLayer(selectedId);
+        return;
+      }
+      // Alt+Delete = fill with foreground color, Ctrl+Delete = fill with background color
+      if(e.key==='Delete'&&e.altKey&&!ctrl){e.preventDefault();if(selectionActive)fillSelection(fillColor||'#FF4500');return;}
+      if(e.key==='Delete'&&ctrl&&!e.altKey){e.preventDefault();if(selectionActive)fillSelection('#ffffff');return;}
 
       // ? — shortcuts modal
       if(e.key==='?'){setShowShortcutsModal(s=>!s);return;}
@@ -3167,6 +3193,163 @@ PHASE 4 — Toolbar button:
     if(!selectionMaskRef.current)return;
     selectionMaskRef.current=invertMask(selectionMaskRef.current);
     setSelVersion(v=>v+1);
+  }
+
+  // ── Selection pixel operations ────────────────────────────────────────────
+  // Helper: get the active image layer (selectedId must point to an image/background)
+  function getActiveImageLayer(){
+    if(!selectedId)return null;
+    const layer=findInTree(layersRef.current,selectedId);
+    if(!layer||(layer.type!=='image'&&layer.type!=='background'))return null;
+    return layer;
+  }
+
+  // Helper: read layer pixels into an ImageData synchronously
+  // Returns a Promise resolving to {imageData, canvas, ctx, layer}
+  function readLayerPixels(layer){
+    return new Promise(resolve=>{
+      const W=layer.type==='background'?p.preview.w:(layer.width||p.preview.w);
+      const H=layer.type==='background'?p.preview.h:(layer.height||p.preview.h);
+      const canvas=document.createElement('canvas');
+      canvas.width=W; canvas.height=H;
+      const ctx=canvas.getContext('2d');
+      if(layer.type==='background'){
+        if(layer.bgGradient){
+          const g=ctx.createLinearGradient(0,0,0,H);
+          g.addColorStop(0,layer.bgGradient[0]);
+          g.addColorStop(1,layer.bgGradient[1]);
+          ctx.fillStyle=g;
+        }else{ctx.fillStyle=layer.bgColor||'#ffffff';}
+        ctx.fillRect(0,0,W,H);
+        resolve({imageData:ctx.getImageData(0,0,W,H),canvas,ctx,layer});
+      }else{
+        const imgSrc=layer.paintSrc||layer.src;
+        if(!imgSrc){resolve({imageData:ctx.getImageData(0,0,W,H),canvas,ctx,layer});return;}
+        const img=new Image();
+        img.crossOrigin='Anonymous';
+        img.onload=()=>{ctx.drawImage(img,0,0,W,H);resolve({imageData:ctx.getImageData(0,0,W,H),canvas,ctx,layer});};
+        img.onerror=()=>resolve({imageData:ctx.getImageData(0,0,W,H),canvas,ctx,layer});
+        img.src=imgSrc;
+      }
+    });
+  }
+
+  // Helper: write modified ImageData back to layer
+  function writeLayerPixels(layer,imageData,canvas,ctx,label){
+    ctx.putImageData(imageData,0,0);
+    const dataUrl=canvas.toDataURL('image/png');
+    if(layer.type==='background'){
+      updateLayerSilent(layer.id,{bgColor:'transparent',bgGradient:null,paintSrc:dataUrl,src:dataUrl,type:'image',
+        x:0,y:0,width:p.preview.w,height:p.preview.h,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+        imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0});
+    }else{
+      updateLayerSilent(layer.id,{paintSrc:dataUrl});
+    }
+    setLayers(prev=>{pushHistory(prev,label);return prev;});
+    saveEngineRef.current?.markDirty('layerContent',layer.id);
+  }
+
+  // Delete pixels under the selection mask
+  function deleteSelection(){
+    if(!selectionActive||!selectionMaskRef.current)return;
+    const layer=getActiveImageLayer();
+    if(!layer)return;
+    readLayerPixels(layer).then(({imageData,canvas,ctx})=>{
+      const m=selectionMaskRef.current;
+      for(let i=0;i<m.length;i++){
+        if(m[i]>0)imageData.data[i*4+3]=Math.max(0,Math.round(imageData.data[i*4+3]*(1-m[i]/255)));
+      }
+      writeLayerPixels(layer,imageData,canvas,ctx,'Delete Selection');
+    });
+  }
+
+  // Copy pixels under selection mask to internal sel clipboard
+  function copySelection(){
+    if(!selectionActive||!selectionMaskRef.current)return;
+    const layer=getActiveImageLayer();
+    if(!layer)return;
+    readLayerPixels(layer).then(({imageData,layer:l})=>{
+      const m=selectionMaskRef.current;
+      const copyData=new ImageData(imageData.width,imageData.height);
+      for(let i=0;i<m.length;i++){
+        const alpha=m[i]/255;
+        copyData.data[i*4]  =imageData.data[i*4];
+        copyData.data[i*4+1]=imageData.data[i*4+1];
+        copyData.data[i*4+2]=imageData.data[i*4+2];
+        copyData.data[i*4+3]=Math.round(imageData.data[i*4+3]*alpha);
+      }
+      selClipboardRef.current={imageData:copyData,bounds:maskBounds(m,imageData.width,imageData.height)};
+    });
+  }
+
+  // Cut = Copy + Delete
+  function cutSelection(){
+    copySelection();
+    // Slight delay so copySelection's async finishes first, then delete
+    setTimeout(()=>deleteSelection(),10);
+  }
+
+  // Paste from sel clipboard as new layer
+  function pasteFromSelClipboard(){
+    const sc=selClipboardRef.current;
+    if(!sc)return;
+    const {imageData}=sc;
+    const tmpC=document.createElement('canvas');
+    tmpC.width=imageData.width; tmpC.height=imageData.height;
+    tmpC.getContext('2d').putImageData(imageData,0,0);
+    const dataUrl=tmpC.toDataURL('image/png');
+    addLayer({type:'image',src:dataUrl,paintSrc:null,width:imageData.width,height:imageData.height,
+      x:0,y:0,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0});
+  }
+
+  // Copy selection to new layer (Ctrl+J when selection active)
+  function copySelectionToNewLayer(){
+    if(!selectionActive||!selectionMaskRef.current)return;
+    const layer=getActiveImageLayer();
+    if(!layer)return;
+    readLayerPixels(layer).then(({imageData})=>{
+      const m=selectionMaskRef.current;
+      const newCanvas=document.createElement('canvas');
+      newCanvas.width=imageData.width; newCanvas.height=imageData.height;
+      const nc=newCanvas.getContext('2d');
+      const nd=nc.createImageData(imageData.width,imageData.height);
+      for(let i=0;i<m.length;i++){
+        nd.data[i*4]  =imageData.data[i*4];
+        nd.data[i*4+1]=imageData.data[i*4+1];
+        nd.data[i*4+2]=imageData.data[i*4+2];
+        nd.data[i*4+3]=Math.round(imageData.data[i*4+3]*m[i]/255);
+      }
+      nc.putImageData(nd,0,0);
+      const dataUrl=newCanvas.toDataURL('image/png');
+      addLayer({type:'image',src:dataUrl,paintSrc:null,width:imageData.width,height:imageData.height,
+        x:0,y:0,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+        name:(layer.name||'Layer')+' copy'});
+      // addLayer already calls pushHistory, no need to call again
+    });
+  }
+
+  // Fill selection with a color
+  function fillSelection(color){
+    if(!selectionActive||!selectionMaskRef.current)return;
+    const layer=getActiveImageLayer();
+    if(!layer)return;
+    const hexStr=(color||'#ff4500').replace('#','');
+    const fr=parseInt(hexStr.slice(0,2),16)||0;
+    const fg=parseInt(hexStr.slice(2,4),16)||0;
+    const fb=parseInt(hexStr.slice(4,6),16)||0;
+    readLayerPixels(layer).then(({imageData,canvas,ctx})=>{
+      const m=selectionMaskRef.current;
+      for(let i=0;i<m.length;i++){
+        if(m[i]>0){
+          const alpha=m[i]/255;
+          imageData.data[i*4]  =Math.round(imageData.data[i*4]*(1-alpha)+fr*alpha);
+          imageData.data[i*4+1]=Math.round(imageData.data[i*4+1]*(1-alpha)+fg*alpha);
+          imageData.data[i*4+2]=Math.round(imageData.data[i*4+2]*(1-alpha)+fb*alpha);
+          imageData.data[i*4+3]=Math.max(imageData.data[i*4+3],m[i]);
+        }
+      }
+      writeLayerPixels(layer,imageData,canvas,ctx,'Fill Selection');
+    });
   }
 
   // ── Text panel helpers — keep panel state + selected layer in sync ────────
@@ -9587,6 +9770,7 @@ PHASE 4 — Toolbar button:
                       brushEdge={brushEdgeState}
                       brushFlow={brushFlowState}
                       brushStabilizer={brushStabilizerState}
+                      brushSmoothing={brushSmoothingState}
                       paintColor={brushColorState}
                       paintAlpha={brushColorAlpha}
                       pressureEnabled={pressureEnabled}
@@ -9595,6 +9779,8 @@ PHASE 4 — Toolbar button:
                       pressureMin={pressureMin}
                       pressureMax={pressureMax}
                       onTabletDetected={handleTabletDetected}
+                      selectionMaskRef={selectionMaskRef}
+                      selectionActive={selectionActive}
                       onUpdate={(updates)=>{
                         if(selectedLayer?.type==='background'){
                           updateLayer(selectedId,{bgColor:'transparent',bgGradient:null,paintSrc:updates.src,src:updates.src,type:'image',
@@ -10163,6 +10349,7 @@ PHASE 4 — Toolbar button:
                   brushEdge={brushEdgeState}
                   brushFlow={brushFlowState}
                   brushStabilizer={brushStabilizerState}
+                  brushSmoothing={brushSmoothingState}
                   paintColor={brushColorState}
                   paintAlpha={brushColorAlpha}
                   onBrushTypeChange={setBrushTypeState}
@@ -10171,6 +10358,7 @@ PHASE 4 — Toolbar button:
                   onBrushEdgeChange={setBrushEdgeState}
                   onBrushFlowChange={setBrushFlowState}
                   onBrushStabilizerChange={setBrushStabilizerState}
+                  onBrushSmoothingChange={setBrushSmoothingState}
                   onPaintColorChange={(c)=>{
                     setBrushColorState(c);
                   }}
