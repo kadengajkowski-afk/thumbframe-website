@@ -207,7 +207,7 @@ export default function Footer({ setPage }) {
                 <li><button onClick={() => go('pricing')}>Pricing</button></li>
                 <li><button onClick={() => go('gallery')}>Gallery</button></li>
                 <li><button onClick={() => go('editor')}>Templates</button></li>
-                <li><a href="/changelog">Changelog</a></li>
+                <li><button onClick={() => go('changelog')}>Changelog</button></li>
               </ul>
             </div>
 
@@ -227,9 +227,9 @@ export default function Footer({ setPage }) {
               <h4>Company</h4>
               <ul>
                 <li><button onClick={() => go('about')}>About</button></li>
-                <li><a href="/privacy">Privacy Policy</a></li>
-                <li><a href="/terms">Terms of Service</a></li>
-                <li><a href="/refunds">Refund Policy</a></li>
+                <li><button onClick={() => go('privacy')}>Privacy Policy</button></li>
+                <li><button onClick={() => go('terms')}>Terms of Service</button></li>
+                <li><button onClick={() => go('refund')}>Refund Policy</button></li>
               </ul>
             </div>
 
