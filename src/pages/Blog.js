@@ -69,6 +69,19 @@ const blogStyles = `
   .tf-cat-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
   /* ── Post cards ────────────────────────────────────── */
+  /* ── Mobile category scroll ──────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .tf-blog-filter {
+      flex-wrap: nowrap !important;
+      overflow-x: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+      scrollbar-width: none !important;
+      padding-bottom: 4px;
+      gap: 8px;
+    }
+    .tf-blog-filter::-webkit-scrollbar { display: none; }
+    .tf-cat-pill { flex-shrink: 0; white-space: nowrap; }
+  }
   .tf-blog-posts { display: flex; flex-direction: column; gap: 24px; }
   .tf-blog-card {
     background: var(--bg-secondary);
@@ -446,8 +459,24 @@ export default function Blog({ setPage, onOpenPost }) {
               <p style={{ fontSize: 13, color: '#22c55e', fontWeight: 600 }}>✓ You're on the list!</p>
             ) : (
               <>
-                <input className="tf-newsletter-input" type="email" placeholder="your@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <button className="tf-newsletter-btn" onClick={() => { if (email.includes('@')) setSubscribed(true); }}>Subscribe</button>
+                <input
+                  className="tf-newsletter-input"
+                  type="email"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && email.includes('@')) {
+                      fetch(`${API}/api/newsletter/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+                        .then(() => setSubscribed(true)).catch(() => setSubscribed(true));
+                    }
+                  }}
+                />
+                <button className="tf-newsletter-btn" onClick={() => {
+                  if (!email.includes('@')) return;
+                  fetch(`${API}/api/newsletter/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+                    .then(() => setSubscribed(true)).catch(() => setSubscribed(true));
+                }}>Subscribe</button>
               </>
             )}
           </div>

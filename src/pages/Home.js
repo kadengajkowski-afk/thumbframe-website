@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
@@ -492,6 +492,56 @@ const homeStyles = `
   @media (max-width: 480px) {
     .tf-gallery-grid { grid-template-columns: 1fr; }
   }
+  @media (max-width: 640px) {
+    .tf-hero { padding: 100px 16px 60px; }
+    .tf-hero h1 { font-size: clamp(28px, 8vw, 42px); }
+    .tf-hero-sub { font-size: 16px; }
+    .tf-features-list { gap: 48px; }
+    .tf-feature-row, .tf-feature-row.reverse { grid-template-columns: 1fr; direction: ltr; gap: 24px; }
+    .tf-section-h2 { font-size: clamp(24px, 6vw, 36px); }
+    .tf-pricing-grid { grid-template-columns: 1fr; max-width: 360px; }
+    .tf-pricing-card.pro { order: -1; }
+    .container { padding: 60px 16px; }
+    .section { padding: 64px 16px !important; }
+  }
+  /* Swipeable testimonials */
+  .tf-testimonial-carousel {
+    position: relative;
+    overflow: hidden;
+  }
+  .tf-testimonial-track {
+    display: flex;
+    transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+    will-change: transform;
+  }
+  .tf-testimonial-track .tf-testimonial-card {
+    flex-shrink: 0;
+    width: 340px;
+  }
+  @media (max-width: 640px) {
+    .tf-testimonial-track .tf-testimonial-card { width: calc(100vw - 48px); }
+  }
+  .tf-carousel-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 24px;
+  }
+  .tf-carousel-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--border);
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.2s, transform 0.2s;
+    min-height: unset;
+    min-width: unset;
+  }
+  .tf-carousel-dot.active {
+    background: var(--accent);
+    transform: scale(1.4);
+  }
 `;
 
 const PROBLEMS = [
@@ -742,38 +792,18 @@ export default function Home({ setPage, onCheckout }) {
         <div className="container">
           <p className="tf-section-label">Creators love it</p>
           <h2 className="tf-section-h2 animate-on-scroll">Don't take our word for it.</h2>
-          <div className="tf-testimonials-scroll">
-            {TESTIMONIALS.map((t) => (
-              <div key={t.name} className="tf-testimonial-card">
-                <div className="tf-testimonial-stars">★★★★★</div>
-                <p className="tf-testimonial-quote">"{t.quote}"</p>
-                <div className="tf-testimonial-author">
-                  <div className="tf-testimonial-avatar">{t.emoji}</div>
-                  <div>
-                    <div className="tf-testimonial-name">{t.name}</div>
-                    <div className="tf-testimonial-sub">{t.subs}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {fetchedReviews.map((r) => (
-              <div key={r.id} className="tf-testimonial-card">
-                <div className="tf-testimonial-stars">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</div>
-                <p className="tf-testimonial-quote">"{r.reviewText}"</p>
-                <div className="tf-testimonial-author">
-                  <div className="tf-testimonial-avatar" style={{ fontSize: 16, background: 'rgba(255,107,0,0.1)', color: 'var(--accent)' }}>★</div>
-                  <div>
-                    <div className="tf-testimonial-name">{r.name}</div>
-                    {r.channelUrl && (
-                      <div className="tf-testimonial-sub">
-                        <a href={r.channelUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: 12 }}>View channel</a>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <TestimonialCarousel items={[
+            ...TESTIMONIALS.map((t) => ({
+              stars: '★★★★★', quote: t.quote, avatar: t.emoji,
+              name: t.name, sub: t.subs,
+            })),
+            ...fetchedReviews.map((r) => ({
+              stars: '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating),
+              quote: r.reviewText, avatar: '★',
+              name: r.name, sub: r.channelUrl ? r.channelUrl : '',
+              accentAvatar: true,
+            })),
+          ]} />
         </div>
       </section>
 
@@ -858,6 +888,107 @@ export default function Home({ setPage, onCheckout }) {
       </section>
 
       <Footer setPage={setPage} />
+
+      {/* Mobile sticky CTA */}
+      <div className="tf-mobile-cta">
+        <button className="tf-mobile-cta-btn" onClick={() => go('editor')}>
+          Get Started Free →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Testimonial Carousel ─────────────────────────────────────────────────── */
+function TestimonialCarousel({ items }) {
+  const [active, setActive] = useState(0);
+  const trackRef = useRef(null);
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const isDragging = useRef(false);
+
+  const goTo = useCallback((idx) => {
+    setActive(Math.max(0, Math.min(idx, items.length - 1)));
+  }, [items.length]);
+
+  const onTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isDragging.current = false;
+  };
+
+  const onTouchMove = (e) => {
+    if (!touchStartX.current) return;
+    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
+    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (dx > dy && dx > 5) { isDragging.current = true; e.preventDefault(); }
+  };
+
+  const onTouchEnd = (e) => {
+    if (!touchStartX.current || !isDragging.current) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (dx < -50) goTo(active + 1);
+    else if (dx > 50) goTo(active - 1);
+    touchStartX.current = null;
+    isDragging.current = false;
+  };
+
+  if (!items.length) return null;
+
+  // Desktop: horizontal scroll; Mobile: carousel
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 640;
+
+  if (!isMobile) {
+    return (
+      <div className="tf-testimonials-scroll">
+        {items.map((t, i) => <TestimonialCard key={i} t={t} />)}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div
+        className="tf-testimonial-carousel"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        <div
+          ref={trackRef}
+          className="tf-testimonial-track"
+          style={{ transform: `translateX(calc(-${active} * (100vw - 48px) - ${active * 20}px))`, gap: '20px' }}
+        >
+          {items.map((t, i) => <TestimonialCard key={i} t={t} />)}
+        </div>
+      </div>
+      <div className="tf-carousel-dots">
+        {items.map((_, i) => (
+          <button
+            key={i}
+            className={`tf-carousel-dot${i === active ? ' active' : ''}`}
+            onClick={() => goTo(i)}
+            aria-label={`Go to testimonial ${i + 1}`}
+            style={{ minHeight: 'unset', minWidth: 'unset' }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TestimonialCard({ t }) {
+  return (
+    <div className="tf-testimonial-card">
+      <div className="tf-testimonial-stars">{t.stars}</div>
+      <p className="tf-testimonial-quote">"{t.quote}"</p>
+      <div className="tf-testimonial-author">
+        <div className="tf-testimonial-avatar" style={t.accentAvatar ? { fontSize: 16, background: 'rgba(255,107,0,0.1)', color: 'var(--accent)' } : undefined}>{t.avatar}</div>
+        <div>
+          <div className="tf-testimonial-name">{t.name}</div>
+          {t.sub && <div className="tf-testimonial-sub">{t.sub}</div>}
+        </div>
+      </div>
     </div>
   );
 }

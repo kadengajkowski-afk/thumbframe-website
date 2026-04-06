@@ -1,0 +1,204 @@
+/* ── ThumbFrame Global Mobile Responsive Overrides ─────────────────────────
+   Imported from index.js — applies on top of all component styles.
+   Target: 375px minimum width, 44×44px tap targets, 16px minimum text.       */
+
+/* ── Tap target enforcement ───────────────────────────────────────────────── */
+button, a, [role="button"], [role="link"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* ── Body text minimum ────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  body {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+  }
+  p, li, span { font-size: inherit; }
+}
+
+/* ── No horizontal overflow ───────────────────────────────────────────────── */
+html, body, #root { max-width: 100vw; overflow-x: hidden; }
+
+/* ── prefers-reduced-motion ───────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-on-scroll { opacity: 1 !important; transform: none !important; }
+}
+
+/* ── Section padding on mobile ────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .section {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+}
+
+/* ── Feature row — stack on mobile ───────────────────────────────────────── */
+@media (max-width: 680px) {
+  .tf-feature-row,
+  .tf-feature-row.reverse {
+    grid-template-columns: 1fr !important;
+    direction: ltr !important;
+    gap: 32px !important;
+  }
+  .tf-feature-row.reverse { direction: ltr !important; }
+}
+
+/* ── Problem grid — stack on mobile ──────────────────────────────────────── */
+@media (max-width: 640px) {
+  .tf-problem-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ── Testimonials — vertical stack on mobile ─────────────────────────────── */
+@media (max-width: 640px) {
+  .tf-testimonials-scroll {
+    flex-direction: column !important;
+    overflow-x: visible !important;
+    gap: 16px !important;
+  }
+  .tf-testimonial-card {
+    width: 100% !important;
+    min-width: unset !important;
+    flex-shrink: unset !important;
+  }
+}
+
+/* ── Blog — hide sidebar on mobile ──────────────────────────────────────── */
+@media (max-width: 960px) {
+  .tf-blog-layout { grid-template-columns: 1fr !important; }
+  .tf-blog-sidebar { position: static !important; }
+}
+
+/* ── Blog post cards — full width on mobile ─────────────────────────────── */
+@media (max-width: 580px) {
+  .tf-blog-card { grid-template-columns: 1fr !important; }
+  .tf-blog-card-img { min-height: 160px !important; }
+}
+
+/* ── Support — big touch targets for FAQ ─────────────────────────────────── */
+@media (max-width: 640px) {
+  .tf-faq-trigger { padding: 18px 0 !important; min-height: 56px !important; }
+  .tf-faq-body-inner { font-size: 15px !important; }
+}
+
+/* ── Pricing — stack on mobile, Pro first ────────────────────────────────── */
+@media (max-width: 640px) {
+  .tf-pricing-grid {
+    grid-template-columns: 1fr !important;
+  }
+  /* Pro card gets order: -1 to appear first */
+  .tf-pricing-card-pro { order: -1 !important; }
+}
+
+/* ── Hero buttons — full width stack on mobile ───────────────────────────── */
+@media (max-width: 480px) {
+  .tf-hero-actions {
+    flex-direction: column !important;
+    width: 100% !important;
+    align-items: stretch !important;
+  }
+  .tf-hero-actions button,
+  .tf-hero-actions a {
+    width: 100% !important;
+    text-align: center !important;
+    justify-content: center !important;
+  }
+}
+
+/* ── Forms — full width inputs ───────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .tf-form-row { grid-template-columns: 1fr !important; }
+}
+
+/* ── Gallery — 2 columns on mobile ──────────────────────────────────────── */
+@media (max-width: 480px) {
+  .tf-gallery-full-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    padding: 0 12px 60px !important;
+    gap: 10px !important;
+  }
+}
+
+/* ── Bottom sticky mobile CTA ────────────────────────────────────────────── */
+.tf-mobile-cta {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: linear-gradient(90deg, #f97316 0%, #ea580c 100%);
+  z-index: 500;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 -4px 20px rgba(249,115,22,0.3);
+}
+@media (max-width: 640px) {
+  .tf-mobile-cta { display: flex; }
+  /* Add bottom padding to pages that have the sticky CTA */
+  .has-mobile-cta { padding-bottom: 56px; }
+}
+.tf-mobile-cta-btn {
+  width: 100%;
+  height: 100%;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+}
+
+/* ── Cookie consent ──────────────────────────────────────────────────────── */
+.tf-cookie-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 800;
+  background: rgba(15,15,15,0.98);
+  border-top: 1px solid #2d2d2d;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  animation: cookie-slide-up 0.3s ease;
+}
+@keyframes cookie-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+.tf-cookie-text {
+  flex: 1;
+  font-size: 13px;
+  color: #a1a1aa;
+  line-height: 1.5;
+  min-width: 200px;
+}
+.tf-cookie-text a { color: #f97316; text-decoration: underline; cursor: pointer; }
+.tf-cookie-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.tf-cookie-btn {
+  padding: 8px 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  min-height: 36px;
+}
+.tf-cookie-accept { background: #f97316; color: #fff; }
+.tf-cookie-accept:hover { background: #e55f00; }
+.tf-cookie-decline { background: none; border: 1px solid #2d2d2d; color: #71717a; }
+.tf-cookie-decline:hover { border-color: #3f3f46; color: #a1a1aa; }
