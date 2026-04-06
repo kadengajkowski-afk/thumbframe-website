@@ -7,6 +7,13 @@ import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
 import BillingTab from './BillingTab';
 import { signIn } from './Auth';
+import Home from './pages/Home';
+import Features from './pages/Features';
+import PricingPage from './pages/Pricing';
+import About from './pages/About';
+import Gallery from './pages/Gallery';
+import Blog from './pages/Blog';
+import Support from './pages/Support';
 
 console.log("--- SYSTEM BOOT V2.1 ---");
 
@@ -850,6 +857,12 @@ function getInitialPage() {
   if (path === '/howitworks') return 'howitworks';
   if (path === '/forgot-password') return 'forgot-password';
   if (path === '/update-password') return 'update-password';
+  if (path === '/features') return 'features';
+  if (path === '/about') return 'about';
+  if (path === '/gallery') return 'gallery';
+  if (path === '/blog') return 'blog';
+  if (path === '/support') return 'support';
+  if (path === '/marketing-home') return 'marketing-home';
   return 'home';
 }
 
@@ -1071,12 +1084,20 @@ export default function App() {
     return <Editor onExit={() => setPage('home')} user={user} token={token} brandKit={brandKit} />;
   }
 
+  // Marketing pages — self-contained with own Navbar/Footer
+  if (page === 'marketing-home') return <Home setPage={setPage} onCheckout={handleCheckout} />;
+  if (page === 'features')       return <Features setPage={setPage} />;
+  if (page === 'about')          return <About setPage={setPage} />;
+  if (page === 'gallery')        return <Gallery setPage={setPage} />;
+  if (page === 'blog')           return <Blog setPage={setPage} />;
+  if (page === 'support')        return <Support setPage={setPage} />;
+
   return (
     <div>
       {page !== 'home' && <Nav page={page} setPage={setPage} user={user} onLogout={handleLogout} />}
       {page === 'home'       && <LandingPage   setPage={setPage} onCheckout={handleCheckout} />}
       {page === 'howitworks' && <HowItWorks   setPage={setPage} />}
-      {page === 'pricing'    && <Pricing      setPage={setPage} onCheckout={handleCheckout}/>}
+      {page === 'pricing'    && <PricingPage  setPage={setPage} onCheckout={handleCheckout}/>}
       {page === 'examples'   && <Examples     setPage={setPage} />}
       {page === 'login'      && <AuthPage     mode="login"  setPage={setPage} onAuth={handleAuth} />}
       {page === 'signup'     && <AuthPage     mode="signup" setPage={setPage} onAuth={handleAuth} />}
