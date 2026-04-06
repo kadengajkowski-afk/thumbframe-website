@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import supabase from './supabaseClient';
 import Editor from './Editor';
 import FabricCanvas from './FabricCanvas';
-import LandingPage from './LandingPage';
 import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
 import BillingTab from './BillingTab';
@@ -824,7 +823,7 @@ function getInitialPage() {
   if (path === '/blog') return 'blog';
   if (path.startsWith('/blog/') && path.length > 6) return 'blog-post';
   if (path === '/support') return 'support';
-  if (path === '/marketing-home') return 'marketing-home';
+
   if (path === '/admin/blog' || path.startsWith('/admin')) return 'admin-blog';
   if (path === '/privacy') return 'privacy';
   if (path === '/terms') return 'terms';
@@ -1059,7 +1058,7 @@ export default function App() {
 
   // Marketing pages — self-contained with own Navbar/Footer (code-split with Suspense)
   const marketingPages = {
-    'marketing-home': <Home setPage={setPage} onCheckout={handleCheckout} />,
+    home:        <Home setPage={setPage} onCheckout={handleCheckout} />,
     features:    <Features setPage={setPage} />,
     about:       <About setPage={setPage} />,
     gallery:     <Gallery setPage={setPage} />,
@@ -1084,8 +1083,6 @@ export default function App() {
 
   return (
     <div>
-      {page !== 'home' && <Nav page={page} setPage={setPage} user={user} onLogout={handleLogout} />}
-      {page === 'home'       && <LandingPage   setPage={setPage} onCheckout={handleCheckout} />}
       {page === 'howitworks' && <HowItWorks   setPage={setPage} />}
       {page === 'pricing'    && <PricingPage  setPage={setPage} onCheckout={handleCheckout}/>}
       {page === 'examples'   && <Examples     setPage={setPage} />}
