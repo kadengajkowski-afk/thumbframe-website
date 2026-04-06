@@ -7,6 +7,7 @@ import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
 import BillingTab from './BillingTab';
 import { signIn } from './Auth';
+import CookieBanner from './components/CookieBanner';
 
 // ── Code-split marketing pages ────────────────────────────────────────────────
 const Home      = lazy(() => import('./pages/Home'));
@@ -315,63 +316,6 @@ function HowItWorks({ setPage }) {
           <button onClick={() => setPage('editor')} style={{ padding: '13px 28px', borderRadius: 8, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 15, fontWeight: '700' }}>
             Try it now — it's free →
           </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Pricing ────────────────────────────────────────────────────────────────────
-function Pricing({ setPage, onCheckout }) {
-  return (
-    <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', paddingTop: 80 }}>
-      <div style={{ maxWidth: 800, margin: '0 auto', padding: '60px 24px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <div style={{ fontSize: 12, fontWeight: '700', color: C.accent, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 10 }}>Pricing</div>
-          <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: '800', letterSpacing: '-1px', marginBottom: 12, color: C.text }}>Simple, honest pricing</h1>
-          <p style={{ fontSize: 15, color: C.muted }}>Most tools charge you for things that should be free. We don't.</p>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div style={{ padding: 32, borderRadius: 12, border: `1px solid ${C.border}`, background: C.panel }}>
-            <div style={{ fontSize: 12, color: C.muted, fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 8 }}>Free</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
-              <span style={{ fontSize: 42, fontWeight: '800', letterSpacing: '-1px', color: C.text }}>$0</span>
-            </div>
-            <div style={{ fontSize: 13, color: C.muted, marginBottom: 24 }}>forever, no card needed</div>
-            <button onClick={() => setPage('editor')} style={{ width: '100%', padding: '11px', borderRadius: 7, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text, cursor: 'pointer', fontSize: 14, fontWeight: '600', marginBottom: 24 }}>
-              Start for free
-            </button>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {['Full editor','All shapes & text','Mobile stamp test','YouTube safe zones','Background remover','PNG & JPG export','Unlimited designs'].map(f => (
-                <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.text2 }}>
-                  <span style={{ color: C.success, fontSize: 11, fontWeight: '700' }}>✓</span>{f}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ padding: 32, borderRadius: 12, border: `2px solid ${C.accent}`, background: C.panel, position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: C.accent }} />
-            <div style={{ position: 'absolute', top: 14, right: 14, fontSize: 10, background: C.accent, color: '#fff', padding: '3px 8px', borderRadius: 10, fontWeight: '700' }}>MOST POPULAR</div>
-            <div style={{ fontSize: 12, color: C.accent, fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 8 }}>Pro</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
-              <span style={{ fontSize: 42, fontWeight: '800', letterSpacing: '-1px', color: C.text }}>$15</span>
-              <span style={{ fontSize: 14, color: C.muted }}>/month</span>
-            </div>
-            <div style={{ fontSize: 13, color: C.muted, marginBottom: 24 }}>cancel anytime</div>
-            <button onClick={onCheckout} style={{ width: '100%', padding: '11px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: '700', marginBottom: 24, boxShadow: `0 4px 16px ${C.accent}44` }}>
-              Get Pro
-            </button>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {['Everything in Free','AI thumbnail generation','HD 4K export','Priority support','Early access to new features','Brand kit (coming soon)'].map(f => (
-                <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.text2 }}>
-                  <span style={{ color: C.accent, fontSize: 11, fontWeight: '700' }}>✓</span>{f}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div style={{ marginTop: 24, padding: '20px 24px', borderRadius: 8, background: C.bg2, border: `1px solid ${C.border}`, textAlign: 'center', fontSize: 13, color: C.muted }}>
-          Both plans include unlimited designs, no watermarks, and no hidden fees. Ever.
         </div>
       </div>
     </div>
@@ -886,7 +830,7 @@ function getInitialPage() {
   if (path === '/terms') return 'terms';
   if (path === '/refund' || path === '/refunds') return 'refund';
   if (path === '/changelog') return 'changelog';
-  return 'home';
+  return path === '/' ? 'home' : 'notfound';
 }
 
 function syncPath(page) {
@@ -1127,9 +1071,15 @@ export default function App() {
     terms:       <Terms setPage={setPage} />,
     refund:      <Refund setPage={setPage} />,
     changelog:   <Changelog setPage={setPage} />,
+    notfound:    <NotFound setPage={setPage} />,
   };
   if (marketingPages[page]) {
-    return <Suspense fallback={<PageLoader />}>{marketingPages[page]}</Suspense>;
+    return (
+      <>
+        <Suspense fallback={<PageLoader />}>{marketingPages[page]}</Suspense>
+        <CookieBanner />
+      </>
+    );
   }
 
   return (
@@ -1145,6 +1095,7 @@ export default function App() {
       {page === 'settings'   && <Settings     setPage={setPage} user={user} />}
       {page === 'forgot-password' && <ForgotPassword setPage={setPage} />}
       {page === 'update-password' && <UpdatePassword setPage={setPage} />}
+      <CookieBanner />
     </div>
   );
 }
