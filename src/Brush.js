@@ -4,7 +4,7 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 export const BrushOverlay = forwardRef(function BrushOverlay(
   { layer, onUpdate, brushType, brushSize, brushStrength, brushEdge, brushFlow, brushStabilizer, brushSmoothing, active, zoom, paintColor, paintAlpha, isMask,
     pressureEnabled, pressureMapping, pressureCurve, pressureMin, pressureMax, onTabletDetected,
-    selectionMaskRef, selectionActive },
+    selectionMaskRef, selectionActive, maskW, maskH },
   ref
 ) {
   const canvasRef      = useRef(null);
@@ -855,14 +855,32 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
     // If using stroke preview canvas, composite it onto the main canvas at brushOpacity
     if (isPaintType && strokePreviewCanvasRef.current) {
-      // Apply selection mask to stroke preview canvas if active
+      // Apply selection mask to stroke preview canvas if active.
+      // The mask is in design-space (maskW × maskH pixels, 255=selected, 0=unselected).
+      // The stroke preview canvas is at (zoom * dpr) resolution, so we must scale
+      // the lookup: canvas pixel (cx,cy) → design pixel (layer.x + cx/scale, layer.y + cy/scale).
       if (selectionActive && selectionMaskRef?.current) {
-        const spc  = strokePreviewCanvasRef.current;
-        const sctx = spc.getContext('2d');
+        const spc   = strokePreviewCanvasRef.current;
+        const sctx  = spc.getContext('2d');
         const idata = sctx.getImageData(0, 0, spc.width, spc.height);
-        const m = selectionMaskRef.current;
-        for (let i = 0; i < m.length; i++) {
-          idata.data[i*4+3] = Math.round(idata.data[i*4+3] * m[i] / 255);
+        const m     = selectionMaskRef.current;
+        const mW    = maskW  || Math.round(spc.width  / ((zoom||1) * (canvasScale.current||1)));
+        const mH    = maskH  || Math.round(spc.height / ((zoom||1) * (canvasScale.current||1)));  // eslint-disable-line no-unused-vars
+        const scale = (zoom||1) * (canvasScale.current||1);
+        const offX  = layer?.x || 0;
+        const offY  = layer?.y || 0;
+        for (let cy = 0; cy < spc.height; cy++) {
+          const dy = Math.floor(cy / scale) + offY;
+          if (dy < 0 || dy >= (mH || m.length / mW)) continue;
+          for (let cx = 0; cx < spc.width; cx++) {
+            const dx = Math.floor(cx / scale) + offX;
+            if (dx < 0 || dx >= mW) continue;
+            const mi = dy * mW + dx;
+            if (mi >= 0 && mi < m.length) {
+              const pi = (cy * spc.width + cx) * 4 + 3;
+              idata.data[pi] = Math.round(idata.data[pi] * m[mi] / 255);
+            }
+          }
         }
         sctx.putImageData(idata, 0, 0);
       }

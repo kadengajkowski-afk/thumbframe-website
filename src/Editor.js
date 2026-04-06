@@ -9824,6 +9824,8 @@ PHASE 4 — Toolbar button:
                       onTabletDetected={handleTabletDetected}
                       selectionMaskRef={selectionMaskRef}
                       selectionActive={selectionActive}
+                      maskW={p.preview.w}
+                      maskH={p.preview.h}
                       onUpdate={(updates)=>{
                         if(selectedLayer?.type==='background'){
                           updateLayer(selectedId,{bgColor:'transparent',bgGradient:null,paintSrc:updates.src,src:updates.src,type:'image',
