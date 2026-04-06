@@ -2704,6 +2704,181 @@ Return ONLY valid JSON array, no markdown, no preamble.`;
   }
 });
 
+// ── Data file helpers ────────────────────────────────────────────────────────
+const CONTACTS_FILE = path.join(__dirname, 'contacts.json');
+const REVIEWS_FILE  = path.join(__dirname, 'reviews.json');
+
+function readJsonFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch { return []; }
+}
+
+function writeJsonFile(filePath, data) {
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+}
+
+// ── POST /api/contact ────────────────────────────────────────────────────────
+app.post('/api/contact', async (req, res) => {
+  try {
+    const { name, email, category, subject, message, screenshot } = req.body || {};
+    if (!name || !email || !category || !subject || !message) {
+      return res.status(400).json({ error: 'Missing required fields.' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email.' });
+    }
+    if (message.trim().length < 20) {
+      return res.status(400).json({ error: 'Message too short.' });
+    }
+
+    const entry = {
+      id: uuidv4(),
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      category,
+      subject: subject.trim(),
+      message: message.trim(),
+      hasScreenshot: !!screenshot,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Persist to contacts.json
+    const contacts = readJsonFile(CONTACTS_FILE);
+    contacts.push(entry);
+    writeJsonFile(CONTACTS_FILE, contacts);
+
+    // Email notification via Resend (best-effort)
+    if (process.env.RESEND_API_KEY) {
+      try {
+        const htmlBody = `
+          <h2>New support message from ${entry.name}</h2>
+          <p><strong>Email:</strong> ${entry.email}</p>
+          <p><strong>Category:</strong> ${entry.category}</p>
+          <p><strong>Subject:</strong> ${entry.subject}</p>
+          <p><strong>Message:</strong></p>
+          <blockquote style="border-left:3px solid #FF6B00;padding-left:12px;color:#555">${entry.message.replace(/\n/g, '<br>')}</blockquote>
+          ${entry.hasScreenshot ? '<p><em>Screenshot attached — view in admin panel.</em></p>' : ''}
+          <hr/>
+          <p style="color:#888;font-size:12px">Received ${entry.createdAt}</p>
+        `;
+        await resend.emails.send({
+          from: 'ThumbFrame Support <support@thumbframe.com>',
+          to: ADMIN_EMAIL,
+          subject: `[Support] ${entry.category}: ${entry.subject}`,
+          html: htmlBody,
+          reply_to: entry.email,
+        });
+      } catch (emailErr) {
+        console.warn('[CONTACT] Email send failed:', emailErr.message);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[CONTACT] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ── POST /api/reviews ────────────────────────────────────────────────────────
+app.post('/api/reviews', async (req, res) => {
+  try {
+    const { name, channelUrl, rating, reviewText } = req.body || {};
+    if (!name || !rating || !reviewText) {
+      return res.status(400).json({ error: 'Missing required fields.' });
+    }
+    const ratingNum = Number(rating);
+    if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+      return res.status(400).json({ error: 'Rating must be 1–5.' });
+    }
+    if (reviewText.trim().length < 30) {
+      return res.status(400).json({ error: 'Review too short.' });
+    }
+
+    const entry = {
+      id: uuidv4(),
+      name: name.trim(),
+      channelUrl: channelUrl?.trim() || null,
+      rating: ratingNum,
+      reviewText: reviewText.trim(),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    const reviews = readJsonFile(REVIEWS_FILE);
+    reviews.push(entry);
+    writeJsonFile(REVIEWS_FILE, reviews);
+
+    // Notify admin
+    if (process.env.RESEND_API_KEY) {
+      try {
+        await resend.emails.send({
+          from: 'ThumbFrame <support@thumbframe.com>',
+          to: ADMIN_EMAIL,
+          subject: `[Review] New ${ratingNum}-star review from ${entry.name}`,
+          html: `<h3>New review pending approval</h3><p><strong>${entry.name}</strong> — ${'★'.repeat(ratingNum)}${'☆'.repeat(5 - ratingNum)}</p><blockquote>${entry.reviewText}</blockquote>${entry.channelUrl ? `<p>Channel: <a href="${entry.channelUrl}">${entry.channelUrl}</a></p>` : ''}<p>Approve at: /api/admin/reviews/${entry.id}/approve</p>`,
+        });
+      } catch (emailErr) {
+        console.warn('[REVIEWS] Email send failed:', emailErr.message);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[REVIEWS] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ── GET /api/reviews — approved only ────────────────────────────────────────
+app.get('/api/reviews', (req, res) => {
+  try {
+    const reviews = readJsonFile(REVIEWS_FILE);
+    const approved = reviews
+      .filter((r) => r.status === 'approved')
+      .map(({ id, name, channelUrl, rating, reviewText, createdAt }) => ({ id, name, channelUrl, rating, reviewText, createdAt }));
+    res.json({ reviews: approved });
+  } catch (err) {
+    console.error('[REVIEWS GET] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ── Admin review endpoints (require admin key header) ────────────────────────
+function adminAuth(req, res, next) {
+  const key = req.headers['x-admin-key'];
+  const expected = process.env.ADMIN_KEY || JWT_SECRET;
+  if (!key || key !== expected) {
+    return res.status(401).json({ error: 'Unauthorized.' });
+  }
+  next();
+}
+
+app.get('/api/admin/reviews', adminAuth, (req, res) => {
+  try {
+    const reviews = readJsonFile(REVIEWS_FILE);
+    res.json({ reviews });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+app.patch('/api/admin/reviews/:id/approve', adminAuth, (req, res) => {
+  try {
+    const reviews = readJsonFile(REVIEWS_FILE);
+    const idx = reviews.findIndex((r) => r.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Review not found.' });
+    reviews[idx].status = 'approved';
+    reviews[idx].approvedAt = new Date().toISOString();
+    writeJsonFile(REVIEWS_FILE, reviews);
+    res.json({ success: true, review: reviews[idx] });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 // Catch-all route: serve index.html for all non-API requests (SPA routing)
 app.get('*', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
