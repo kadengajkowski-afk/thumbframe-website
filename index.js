@@ -491,6 +491,122 @@ app.get('/proxy-image', authMiddleware, async(req,res)=>{
   }
 });
 
+// ── Image generation helpers ────────────────────────────────────────────────────
+async function generateWithDallE3(prompt, size, style) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('OPENAI_API_KEY not set');
+  const validSize = ['1024x1024','1792x1024','1024x1792'].includes(size) ? size : '1792x1024';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  let response;
+  try {
+    response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: validSize, style: style || 'vivid', response_format: 'url' }),
+      signal: controller.signal,
+    });
+  } finally { clearTimeout(timeout); }
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(`DALL-E 3 HTTP ${response.status}: ${err?.error?.message || 'Unknown error'}`);
+  }
+  const data = await response.json();
+  if (!data?.data?.[0]?.url) throw new Error('DALL-E 3 returned no image URL');
+  return { imageUrl: data.data[0].url };
+}
+
+async function generateWithReplicateFlux(prompt) {
+  const apiKey = process.env.REPLICATE_API_TOKEN;
+  if (!apiKey) throw new Error('REPLICATE_API_TOKEN not set');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
+  try {
+    const response = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions', {
+      method: 'POST',
+      headers: { 'Authorization': `Token ${apiKey}`, 'Content-Type': 'application/json', 'Prefer': 'wait=60' },
+      body: JSON.stringify({ input: { prompt, aspect_ratio: '16:9', output_format: 'webp', num_outputs: 1 } }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(`Replicate Flux HTTP ${response.status}: ${err?.detail || JSON.stringify(err)}`);
+    }
+    const data = await response.json();
+    if (data.output?.[0]) return { imageUrl: data.output[0] };
+    // Poll if still processing
+    if (data.id) {
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const poll = await fetch(`https://api.replicate.com/v1/predictions/${data.id}`, { headers: { 'Authorization': `Token ${apiKey}` } });
+        const pd = await poll.json();
+        if (pd.status === 'succeeded' && pd.output?.[0]) return { imageUrl: pd.output[0] };
+        if (pd.status === 'failed') throw new Error(`Replicate Flux failed: ${pd.error || 'Unknown'}`);
+      }
+    }
+    throw new Error('Replicate Flux returned no output');
+  } finally { clearTimeout(timeout); }
+}
+
+async function generateWithReplicateSDXL(prompt) {
+  const apiKey = process.env.REPLICATE_API_TOKEN;
+  if (!apiKey) throw new Error('REPLICATE_API_TOKEN not set');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
+  try {
+    const response = await fetch('https://api.replicate.com/v1/models/stability-ai/sdxl/predictions', {
+      method: 'POST',
+      headers: { 'Authorization': `Token ${apiKey}`, 'Content-Type': 'application/json', 'Prefer': 'wait=60' },
+      body: JSON.stringify({ input: { prompt, width: 1024, height: 576, num_outputs: 1, num_inference_steps: 25, guidance_scale: 7.5 } }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(`Replicate SDXL HTTP ${response.status}: ${err?.detail || JSON.stringify(err)}`);
+    }
+    const data = await response.json();
+    if (data.output?.[0]) return { imageUrl: data.output[0] };
+    if (data.id) {
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const poll = await fetch(`https://api.replicate.com/v1/predictions/${data.id}`, { headers: { 'Authorization': `Token ${apiKey}` } });
+        const pd = await poll.json();
+        if (pd.status === 'succeeded' && pd.output?.[0]) return { imageUrl: pd.output[0] };
+        if (pd.status === 'failed') throw new Error(`Replicate SDXL failed: ${pd.error || 'Unknown'}`);
+      }
+    }
+    throw new Error('Replicate SDXL returned no output');
+  } finally { clearTimeout(timeout); }
+}
+
+// ── POST /api/generate-image — multi-provider fallback pipeline ────────────────
+app.post('/api/generate-image', authMiddleware, async (req, res) => {
+  const { prompt, size = '1792x1024', style = 'vivid' } = req.body;
+  if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required' });
+
+  const quota = checkAndDecrementQuota(req.user.email, req.user.plan);
+  if (!quota.ok) return res.status(429).json({ success: false, error: quota.message, code: quota.code });
+
+  const providers = [
+    { name: 'dall-e-3',       fn: () => generateWithDallE3(prompt, size, style) },
+    { name: 'replicate-flux', fn: () => generateWithReplicateFlux(prompt) },
+    { name: 'replicate-sdxl', fn: () => generateWithReplicateSDXL(prompt) },
+  ];
+
+  for (const provider of providers) {
+    try {
+      console.log(`[generate-image] Trying ${provider.name} for ${req.user.email}...`);
+      const result = await provider.fn();
+      console.log(`[generate-image] ${provider.name} succeeded`);
+      return res.json({ success: true, image: result.imageUrl, format: 'url', provider: provider.name });
+    } catch (err) {
+      console.error(`[generate-image] ${provider.name} failed:`, err.message);
+    }
+  }
+
+  return res.status(500).json({ success: false, error: 'Image generation is temporarily unavailable. Please try again in a few minutes.' });
+});
+
 app.post('/ai-generate', async (req, res) => {
   try {
     const { prompt, face_image_url } = req.body;
