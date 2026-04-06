@@ -13,6 +13,8 @@ import PricingPage from './pages/Pricing';
 import About from './pages/About';
 import Gallery from './pages/Gallery';
 import Blog from './pages/Blog';
+import BlogPost from './pages/BlogPost';
+import BlogAdmin from './pages/BlogAdmin';
 import Support from './pages/Support';
 
 console.log("--- SYSTEM BOOT V2.1 ---");
@@ -861,12 +863,16 @@ function getInitialPage() {
   if (path === '/about') return 'about';
   if (path === '/gallery') return 'gallery';
   if (path === '/blog') return 'blog';
+  if (path.startsWith('/blog/') && path.length > 6) return 'blog-post';
   if (path === '/support') return 'support';
   if (path === '/marketing-home') return 'marketing-home';
+  if (path === '/admin/blog' || path.startsWith('/admin')) return 'admin-blog';
   return 'home';
 }
 
 function syncPath(page) {
+  // These pages manage their own URLs
+  if (page === 'blog-post' || page === 'admin-blog') return;
   const nextPath = page === 'home' ? '/' : `/${page}`;
   // Preserve query params (e.g. ?engine=fabric, ?project=xxx)
   const search = window.location.search || '';
@@ -910,6 +916,10 @@ export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('sf_token') || null);
   const [brandKit, setBrandKit] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [blogSlug, setBlogSlug] = useState(() => {
+    const p = window.location.pathname;
+    return p.startsWith('/blog/') ? p.replace('/blog/', '') : null;
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -1089,7 +1099,9 @@ export default function App() {
   if (page === 'features')       return <Features setPage={setPage} />;
   if (page === 'about')          return <About setPage={setPage} />;
   if (page === 'gallery')        return <Gallery setPage={setPage} />;
-  if (page === 'blog')           return <Blog setPage={setPage} />;
+  if (page === 'blog')           return <Blog setPage={setPage} onOpenPost={(slug) => { setBlogSlug(slug); setPage('blog-post'); window.history.pushState(null, '', `/blog/${slug}`); }} />;
+  if (page === 'blog-post')      return <BlogPost slug={blogSlug} setPage={setPage} onBack={() => { setPage('blog'); window.history.pushState(null, '', '/blog'); }} />;
+  if (page === 'admin-blog')     return <BlogAdmin setPage={setPage} user={user} token={token} />;
   if (page === 'support')        return <Support setPage={setPage} />;
 
   return (

@@ -2707,6 +2707,7 @@ Return ONLY valid JSON array, no markdown, no preamble.`;
 // ── Data file helpers ────────────────────────────────────────────────────────
 const CONTACTS_FILE = path.join(__dirname, 'contacts.json');
 const REVIEWS_FILE  = path.join(__dirname, 'reviews.json');
+const POSTS_FILE    = path.join(__dirname, 'posts.json');
 
 function readJsonFile(filePath) {
   try {
@@ -2877,6 +2878,214 @@ app.patch('/api/admin/reviews/:id/approve', adminAuth, (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Internal server error.' });
   }
+});
+
+// ── Blog read endpoints (public) ─────────────────────────────────────────────
+app.get('/api/blog/posts', (req, res) => {
+  try {
+    const posts = readJsonFile(POSTS_FILE);
+    const published = posts
+      .filter((p) => p.status === 'published')
+      .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
+      .map(({ id, title, slug, category, heroImage, metaDescription, tags, publishedAt, readTimeMinutes, author }) =>
+        ({ id, title, slug, category, heroImage, metaDescription, tags, publishedAt, readTimeMinutes, author }));
+    res.json({ posts: published });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+app.get('/api/blog/posts/:slug', (req, res) => {
+  try {
+    const posts = readJsonFile(POSTS_FILE);
+    const post = posts.find((p) => p.slug === req.params.slug && p.status === 'published');
+    if (!post) return res.status(404).json({ error: 'Post not found.' });
+    const related = posts
+      .filter((p) => p.slug !== post.slug && p.status === 'published')
+      .filter((p) => p.category === post.category || (p.tags || []).some((t) => (post.tags || []).includes(t)))
+      .slice(0, 3)
+      .map(({ id, title, slug, category, heroImage }) => ({ id, title, slug, category, heroImage }));
+    res.json({ post, related });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ── Blog admin endpoints ──────────────────────────────────────────────────────
+app.get('/api/admin/blog/posts', adminAuth, (req, res) => {
+  try {
+    const posts = readJsonFile(POSTS_FILE);
+    const sorted = [...posts].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    res.json({ posts: sorted });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+app.post('/api/admin/blog/posts', adminAuth, (req, res) => {
+  try {
+    const { title, slug, category, heroImage, body, metaDescription, tags, status, publishedAt, readTimeMinutes, author } = req.body || {};
+    if (!title || !slug || !body) return res.status(400).json({ error: 'title, slug, and body are required.' });
+    const posts = readJsonFile(POSTS_FILE);
+    if (posts.find((p) => p.slug === slug)) return res.status(409).json({ error: 'Slug already exists.' });
+    const post = {
+      id: uuidv4(),
+      title: title.trim(),
+      slug: slug.trim(),
+      category: category || 'Tutorial',
+      heroImage: heroImage || null,
+      body: body.trim(),
+      metaDescription: (metaDescription || '').trim(),
+      tags: Array.isArray(tags) ? tags : (tags || '').split(',').map((t) => t.trim()).filter(Boolean),
+      status: status || 'draft',
+      publishedAt: publishedAt || new Date().toISOString(),
+      readTimeMinutes: readTimeMinutes || Math.ceil(body.split(' ').length / 200),
+      author: author || 'Kaden, Founder of ThumbFrame',
+      createdAt: new Date().toISOString(),
+    };
+    posts.push(post);
+    writeJsonFile(POSTS_FILE, posts);
+    res.json({ success: true, post });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+app.put('/api/admin/blog/posts/:slug', adminAuth, (req, res) => {
+  try {
+    const posts = readJsonFile(POSTS_FILE);
+    const idx = posts.findIndex((p) => p.slug === req.params.slug);
+    if (idx === -1) return res.status(404).json({ error: 'Post not found.' });
+    const { body, tags, ...rest } = req.body || {};
+    posts[idx] = {
+      ...posts[idx],
+      ...rest,
+      body: body ? body.trim() : posts[idx].body,
+      tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map((t) => t.trim()).filter(Boolean)) : posts[idx].tags,
+      readTimeMinutes: body ? Math.ceil(body.split(' ').length / 200) : posts[idx].readTimeMinutes,
+      updatedAt: new Date().toISOString(),
+    };
+    writeJsonFile(POSTS_FILE, posts);
+    res.json({ success: true, post: posts[idx] });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+app.delete('/api/admin/blog/posts/:slug', adminAuth, (req, res) => {
+  try {
+    const posts = readJsonFile(POSTS_FILE);
+    const filtered = posts.filter((p) => p.slug !== req.params.slug);
+    if (filtered.length === posts.length) return res.status(404).json({ error: 'Post not found.' });
+    writeJsonFile(POSTS_FILE, filtered);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ── POST /api/admin/generate-post — AI blog post generation ──────────────────
+app.post('/api/admin/generate-post', adminAuth, async (req, res) => {
+  try {
+    const { keyword, topic, wordCount = 1800 } = req.body || {};
+    if (!keyword || !topic) return res.status(400).json({ error: 'keyword and topic are required.' });
+
+    const prompt = `You are an expert SEO content writer for ThumbFrame, an AI-powered YouTube thumbnail editor at thumbframe.com.
+
+Write a comprehensive, SEO-optimized blog post targeting the keyword: "${keyword}"
+Topic/angle: "${topic}"
+Target word count: ~${wordCount} words
+
+ThumbFrame context:
+- AI YouTube thumbnail editor
+- Key features: AI background removal, CTR scoring, Prompt-to-Thumbnail generation, full layer editor, PSD export, keyboard shortcuts, curves, liquify, selection tools
+- Free plan + Pro ($15/month)
+- Built by Kaden, a YouTube creator
+- Competes with: Canva, Photoshop, Pixlr, BeFunky
+
+Output a JSON object with these exact fields:
+{
+  "title": "SEO-optimized title (include keyword, max 70 chars)",
+  "slug": "url-friendly-slug-from-title",
+  "category": "one of: Tutorial, Guide, Tips, Comparison, Case Study, Feature, News",
+  "metaDescription": "compelling 150-160 char meta description with keyword",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
+  "body": "full article in markdown format, ~${wordCount} words, with ## h2 headings, bold key points, practical tips, and 1-2 natural mentions of ThumbFrame where relevant",
+  "author": "Kaden, Founder of ThumbFrame",
+  "readTimeMinutes": estimated_reading_time_integer,
+  "status": "draft"
+}
+
+Requirements for the body:
+- Start with a compelling hook, not "Introduction"
+- Use ## H2 headers for each major section (6-8 sections)
+- Include practical, actionable advice
+- Reference YouTube creator best practices with real examples
+- Naturally mention ThumbFrame once or twice where truly relevant
+- End with a strong conclusion and a call to action
+- NO fluff, NO generic AI writing — write like a YouTube creator who knows their craft
+- Output ONLY valid JSON, no markdown wrapper`;
+
+    const response = await anthropic.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const raw = response.content?.[0]?.text?.trim() || '{}';
+    let draft;
+    try {
+      const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      draft = JSON.parse(cleaned);
+    } catch {
+      return res.status(500).json({ error: 'AI returned invalid JSON. Try again.' });
+    }
+
+    draft.publishedAt = new Date().toISOString().split('T')[0];
+    draft.heroImage = null;
+    res.json({ success: true, draft });
+  } catch (err) {
+    console.error('[GENERATE POST] Error:', err.message);
+    res.status(500).json({ error: err.message || 'Generation failed.' });
+  }
+});
+
+// ── Sitemap ───────────────────────────────────────────────────────────────────
+app.get('/sitemap.xml', (req, res) => {
+  try {
+    const base = 'https://thumbframe.com';
+    const posts = readJsonFile(POSTS_FILE).filter((p) => p.status === 'published');
+    const staticPages = [
+      { url: '/', priority: '1.0', changefreq: 'weekly' },
+      { url: '/features', priority: '0.9', changefreq: 'monthly' },
+      { url: '/pricing', priority: '0.9', changefreq: 'monthly' },
+      { url: '/blog', priority: '0.8', changefreq: 'daily' },
+      { url: '/about', priority: '0.6', changefreq: 'monthly' },
+      { url: '/support', priority: '0.7', changefreq: 'monthly' },
+      { url: '/gallery', priority: '0.7', changefreq: 'weekly' },
+    ];
+    const urls = [
+      ...staticPages.map(({ url, priority, changefreq }) =>
+        `  <url><loc>${base}${url}</loc><changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`),
+      ...posts.map((p) =>
+        `  <url><loc>${base}/blog/${p.slug}</loc><lastmod>${(p.publishedAt || p.createdAt || '').split('T')[0]}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>`),
+    ].join('\n');
+    res.set('Content-Type', 'application/xml');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`);
+  } catch (err) {
+    res.status(500).send('<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+  }
+});
+
+// ── Robots.txt ────────────────────────────────────────────────────────────────
+app.get('/robots.txt', (req, res) => {
+  res.set('Content-Type', 'text/plain');
+  res.send(`User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/admin/
+
+Sitemap: https://thumbframe.com/sitemap.xml`);
 });
 
 // Catch-all route: serve index.html for all non-API requests (SPA routing)
