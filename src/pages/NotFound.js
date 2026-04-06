@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useSEO } from '../hooks/useSEO';
@@ -7,11 +8,10 @@ export default function NotFound({ setPage }) {
   const canvasRef = useRef(null);
 
   useSEO({
-    title: '404 — Page Not Found | ThumbFrame',
-    description: "This page doesn't exist. But your next thumbnail could.",
+    title: '404 — Thumbnail Not Found | ThumbFrame',
+    description: "This thumbnail doesn't exist. But your next one could.",
   });
 
-  // Animated particle background
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -26,14 +26,13 @@ export default function NotFound({ setPage }) {
     resize();
     window.addEventListener('resize', resize);
 
-    const COUNT = 60;
-    const particles = Array.from({ length: COUNT }, () => ({
+    const particles = Array.from({ length: 60 }, () => ({
       x: Math.random() * w,
       y: Math.random() * h,
       r: Math.random() * 1.5 + 0.4,
       vx: (Math.random() - 0.5) * 0.3,
       vy: (Math.random() - 0.5) * 0.3,
-      alpha: Math.random() * 0.4 + 0.1,
+      alpha: Math.random() * 0.35 + 0.05,
     }));
 
     function draw() {
@@ -41,7 +40,7 @@ export default function NotFound({ setPage }) {
       for (const p of particles) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(249,115,22,${p.alpha})`;
+        ctx.fillStyle = `rgba(255,107,0,${p.alpha})`;
         ctx.fill();
         p.x += p.vx;
         p.y += p.vy;
@@ -61,121 +60,127 @@ export default function NotFound({ setPage }) {
   }, []);
 
   return (
-    <>
-      <style>{`
-        .tf-404-page {
-          background: var(--bg-primary);
-          min-height: 100vh;
-          color: var(--text-primary);
-          font-family: var(--font-body);
-        }
-        .tf-404-hero {
-          position: relative;
-          min-height: calc(100vh - 200px);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          padding: 120px 24px 80px;
-          overflow: hidden;
-        }
-        .tf-404-canvas {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          pointer-events: none;
-        }
-        .tf-404-number {
-          font-size: clamp(120px, 20vw, 220px);
-          font-weight: 900;
-          letter-spacing: -0.05em;
-          line-height: 1;
-          color: var(--accent);
-          font-family: var(--font-display);
-          position: relative;
-          margin-bottom: 16px;
-          text-shadow: 0 0 80px rgba(249,115,22,0.3);
-        }
-        .tf-404-headline {
-          font-size: clamp(18px, 3vw, 28px);
-          font-weight: 700;
-          letter-spacing: -0.02em;
-          margin-bottom: 14px;
-          position: relative;
-          max-width: 500px;
-        }
-        .tf-404-sub {
-          font-size: 16px;
-          color: var(--text-secondary);
-          margin-bottom: 40px;
-          position: relative;
-        }
-        .tf-404-actions {
-          display: flex;
-          gap: 12px;
-          justify-content: center;
-          flex-wrap: wrap;
-          position: relative;
-        }
-        .tf-404-btn-primary {
-          padding: 12px 28px;
-          border-radius: 8px;
-          border: none;
-          background: var(--accent);
-          color: #fff;
-          font-size: 15px;
-          font-weight: 700;
-          cursor: pointer;
-          font-family: var(--font-body);
-          transition: opacity 0.15s, transform 0.15s;
-          min-height: 44px;
-        }
-        .tf-404-btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
-        .tf-404-btn-secondary {
-          padding: 12px 28px;
-          border-radius: 8px;
-          border: 1px solid var(--border-hover);
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 15px;
-          font-weight: 600;
-          cursor: pointer;
-          font-family: var(--font-body);
-          transition: border-color 0.15s, color 0.15s;
-          min-height: 44px;
-        }
-        .tf-404-btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    <div style={{ background: '#050507', minHeight: '100vh', fontFamily: "'Satoshi', sans-serif", color: '#f0f0f3' }}>
+      <Navbar setPage={setPage} currentPage="404" />
 
-        @media (prefers-reduced-motion: reduce) {
-          .tf-404-canvas { display: none; }
-        }
-      `}</style>
-      <div className="tf-404-page">
-        <Navbar setPage={setPage} currentPage="404" />
+      <div style={{
+        position: 'relative',
+        minHeight: 'calc(100vh - 200px)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
+        padding: '120px 24px 80px',
+        overflow: 'hidden',
+      }}>
+        <canvas
+          ref={canvasRef}
+          aria-hidden="true"
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            pointerEvents: 'none',
+          }}
+        />
 
-        <div className="tf-404-hero">
-          <canvas ref={canvasRef} className="tf-404-canvas" aria-hidden="true" />
-          <div className="tf-404-number">404</div>
-          <h1 className="tf-404-headline">
-            This page doesn't exist.<br />But your next thumbnail could.
+        {/* Orange glow orb */}
+        <div style={{
+          position: 'absolute', top: '40%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 400, height: 200,
+          background: 'radial-gradient(ellipse, rgba(255,107,0,0.07) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          style={{ position: 'relative' }}
+        >
+          {/* 404 number */}
+          <div style={{
+            fontSize: 'clamp(100px, 18vw, 200px)',
+            fontWeight: 900,
+            letterSpacing: '-0.05em',
+            lineHeight: 1,
+            color: '#FF6B00',
+            marginBottom: 12,
+            textShadow: '0 0 80px rgba(255,107,0,0.3)',
+          }}>
+            404
+          </div>
+
+          {/* Thumbnail strip gag */}
+          <div style={{
+            display: 'flex', gap: 6, justifyContent: 'center',
+            marginBottom: 32,
+          }}>
+            {['???', '???', '???'].map((t, i) => (
+              <div key={i} style={{
+                width: 64, height: 36, borderRadius: 5,
+                background: 'rgba(255,107,0,0.06)',
+                border: '1px solid rgba(255,107,0,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, color: '#55555e', fontWeight: 700,
+                letterSpacing: '0.06em',
+              }}>
+                {t}
+              </div>
+            ))}
+          </div>
+
+          <h1 style={{
+            fontSize: 'clamp(20px, 3vw, 30px)',
+            fontWeight: 800, letterSpacing: '-0.02em',
+            margin: '0 0 14px', color: '#f0f0f3',
+          }}>
+            Thumbnail not found.
           </h1>
-          <p className="tf-404-sub">
-            Whatever you were looking for, it isn't here.
+
+          <p style={{
+            fontSize: 16, color: '#8a8a93',
+            margin: '0 0 8px', lineHeight: 1.65,
+          }}>
+            This page got background-removed a little too hard.
           </p>
-          <div className="tf-404-actions">
-            <button className="tf-404-btn-primary" onClick={() => setPage('home')}>
-              Go Home
+          <p style={{
+            fontSize: 14, color: '#55555e',
+            margin: '0 0 40px',
+          }}>
+            But your next thumbnail? That's still very much makeable.
+          </p>
+
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => { setPage('home'); window.scrollTo({ top: 0 }); }}
+              style={{
+                padding: '12px 28px', borderRadius: 10, border: 'none',
+                background: '#FF6B00', color: '#fff', cursor: 'pointer',
+                fontSize: 14, fontWeight: 700, fontFamily: "'Satoshi', sans-serif",
+                boxShadow: '0 0 24px rgba(255,107,0,0.25)',
+              }}
+            >
+              Go Home →
             </button>
-            <button className="tf-404-btn-secondary" onClick={() => setPage('editor')}>
-              Open Editor
+            <button
+              onClick={() => { setPage('editor'); window.scrollTo({ top: 0 }); }}
+              style={{
+                padding: '12px 22px', borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'transparent', color: '#8a8a93',
+                cursor: 'pointer', fontSize: 14, fontWeight: 600,
+                fontFamily: "'Satoshi', sans-serif",
+              }}
+            >
+              Make a Thumbnail
             </button>
           </div>
-        </div>
-
-        <Footer setPage={setPage} />
+        </motion.div>
       </div>
-    </>
+
+      <Footer setPage={setPage} />
+    </div>
   );
 }
