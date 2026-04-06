@@ -1,21 +1,95 @@
+/* ─────────────────────────────────────────────
+   ThumbFrame Design System — Phase 0
+   ───────────────────────────────────────────── */
+
+:root {
+  /* Colors */
+  --black:          #050507;
+  --surface:        #0c0c0f;
+  --elevated:       #141418;
+  --subtle:         #1e1e24;
+  --orange:         #FF6B00;
+  --orange-hover:   #FF8533;
+  --orange-glow:    rgba(255, 107, 0, 0.25);
+  --orange-subtle:  rgba(255, 107, 0, 0.07);
+  --white:          #f0f0f3;
+  --gray:           #8a8a93;
+  --dim:            #55555e;
+  --border:         rgba(255, 255, 255, 0.06);
+  --border-hover:   rgba(255, 255, 255, 0.12);
+
+  /* Typography */
+  --font-ui:     'Satoshi', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-editor: 'Anton', sans-serif; /* editor tool fonts — do not use for UI */
+
+  /* Editor font vars (unchanged) */
+  --font-anton:       'Anton', sans-serif;
+  --font-burbank:     'Bangers', 'Anton', sans-serif;
+  --font-komika-axis: 'Comic Neue', 'Bangers', cursive;
+
+  /* Custom easing */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-snap:   cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.68, -0.6, 0.32, 1.6);
+}
+
+/* Base reset */
+*, *::before, *::after { box-sizing: border-box; }
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  background: var(--black);
+  color: var(--white);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 420;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-:root {
-  --font-anton: 'Anton', sans-serif;
-  --font-burbank: 'Bangers', 'Anton', sans-serif;
-  --font-komika-axis: 'Comic Neue', 'Bangers', cursive;
+/* Grain overlay — fixed, covers entire viewport, non-interactive */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.022;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Typography scale */
+h1 {
+  font-family: var(--font-ui);
+  font-size: clamp(3rem, 5.5vw, 5.2rem);
+  font-weight: 900;
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+h2 {
+  font-family: var(--font-ui);
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+h3 {
+  font-family: var(--font-ui);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+p {
+  font-size: 16px;
+  font-weight: 420;
+  line-height: 1.6;
+  color: var(--gray);
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
 /* ThumbFrame — Feature A: Smart Cutout animations */
