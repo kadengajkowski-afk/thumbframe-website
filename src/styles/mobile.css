@@ -2,8 +2,11 @@
    Imported from index.js — applies on top of all component styles.
    Target: 375px minimum width, 44×44px tap targets, 16px minimum text.       */
 
-/* ── Tap target enforcement ───────────────────────────────────────────────── */
-button, a, [role="button"], [role="link"] {
+/* ── Tap target enforcement — marketing pages only, never the editor ──────── */
+.tf-marketing-shell button,
+.tf-marketing-shell a,
+.tf-marketing-shell [role="button"],
+.tf-marketing-shell [role="link"] {
   min-height: 44px;
   min-width: 44px;
 }
