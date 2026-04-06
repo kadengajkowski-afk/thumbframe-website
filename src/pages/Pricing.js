@@ -1,247 +1,15 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { motion } from 'framer-motion';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useSEO } from '../hooks/useSEO';
-import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import { handleUpgrade } from '../utils/checkout';
 
-const pricingStyles = `
-  .tf-pricing-hero {
-    padding: 140px 24px 80px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-  }
-  .tf-pricing-hero::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(255,107,0,0.06) 0%, transparent 70%);
-    pointer-events: none;
-  }
-  .tf-pricing-hero h1 {
-    font-size: clamp(36px, 5vw, 58px);
-    letter-spacing: -0.03em;
-    line-height: 1.08;
-    max-width: 600px;
-    margin: 0 auto 20px;
-  }
-  .tf-pricing-hero p {
-    font-size: 18px;
-    color: var(--text-secondary);
-    max-width: 420px;
-    margin: 0 auto;
-    line-height: 1.6;
-  }
-
-  /* ── Cards ─────────────────────────────────────────────────────────── */
-  .tf-pricing-cards {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    max-width: 860px;
-    margin: 64px auto 0;
-    padding: 0 24px;
-  }
-  .tf-pc {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-xl);
-    padding: 40px;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    position: relative;
-    transition: all var(--transition-base);
-  }
-  .tf-pc.pro {
-    border-color: rgba(255,107,0,0.3);
-    box-shadow: 0 0 60px rgba(255,107,0,0.08);
-  }
-  .tf-pc.pro:hover {
-    box-shadow: 0 0 80px rgba(255,107,0,0.14);
-  }
-  .tf-pc-popular {
-    position: absolute;
-    top: -14px;
-    left: 50%;
-    transform: translateX(-50%);
-    white-space: nowrap;
-  }
-  .tf-pc-tier {
-    font-family: var(--font-display);
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-  }
-  .tf-pc-tagline {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 24px;
-    line-height: 1.5;
-  }
-  .tf-pc-price {
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-    margin-bottom: 8px;
-  }
-  .tf-pc-price .amt {
-    font-family: var(--font-display);
-    font-size: 52px;
-    font-weight: 800;
-    color: var(--text-primary);
-    letter-spacing: -0.04em;
-    line-height: 1;
-  }
-  .tf-pc-price .per {
-    font-size: 14px;
-    color: var(--text-muted);
-  }
-  .tf-pc-billing {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-bottom: 28px;
-  }
-  .tf-pc-divider {
-    height: 1px;
-    background: var(--border);
-    margin-bottom: 24px;
-  }
-  .tf-pc-features {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 11px;
-    margin-bottom: 32px;
-    flex: 1;
-  }
-  .tf-pc-features li {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    font-size: 14px;
-    line-height: 1.4;
-  }
-  .tf-pc-features li .icon-yes {
-    color: var(--success);
-    font-size: 15px;
-    flex-shrink: 0;
-    margin-top: 1px;
-  }
-  .tf-pc-features li .icon-no {
-    color: var(--text-muted);
-    font-size: 15px;
-    flex-shrink: 0;
-    margin-top: 1px;
-  }
-  .tf-pc-features li .feat-text {
-    color: var(--text-secondary);
-  }
-  .tf-pc-features li .feat-text.dimmed {
-    color: var(--text-muted);
-    text-decoration: line-through;
-    opacity: 0.6;
-  }
-  .tf-pc-btn {
-    width: 100%;
-    padding: 14px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-primary);
-    font-family: var(--font-body);
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all var(--transition-base);
-    margin-top: auto;
-  }
-  .tf-pc-btn:hover {
-    border-color: var(--border-hover);
-    background: var(--bg-hover);
-  }
-  .tf-pc-btn.pro-btn {
-    background: var(--accent-gradient);
-    border: none;
-    color: #fff;
-    box-shadow: var(--shadow-accent);
-  }
-  .tf-pc-btn.pro-btn:hover {
-    box-shadow: 0 0 60px rgba(255,107,0,0.25);
-    transform: translateY(-1px);
-  }
-
-  /* ── Comparison note ─────────────────────────────────────────────── */
-  .tf-pricing-note {
-    text-align: center;
-    margin-top: 24px;
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-
-  /* ── FAQ ─────────────────────────────────────────────────────────── */
-  .tf-faq {
-    max-width: 680px;
-    margin: 0 auto;
-    padding: 0 24px;
-  }
-  .tf-faq-item {
-    border-bottom: 1px solid var(--border);
-    overflow: hidden;
-  }
-  .tf-faq-q {
-    width: 100%;
-    background: none;
-    border: none;
-    padding: 22px 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    font-family: var(--font-display);
-    font-size: 17px;
-    font-weight: 600;
-    color: var(--text-primary);
-    text-align: left;
-    gap: 16px;
-    transition: color var(--transition-base);
-  }
-  .tf-faq-q:hover { color: var(--accent); }
-  .tf-faq-icon {
-    flex-shrink: 0;
-    font-size: 22px;
-    color: var(--accent);
-    transition: transform var(--transition-base);
-    line-height: 1;
-  }
-  .tf-faq-icon.open { transform: rotate(45deg); }
-  .tf-faq-body {
-    overflow: hidden;
-    transition: max-height 300ms ease, opacity 300ms ease;
-    max-height: 0;
-    opacity: 0;
-  }
-  .tf-faq-body.open {
-    opacity: 1;
-  }
-  .tf-faq-body p {
-    padding: 0 0 22px;
-    font-size: 15px;
-    color: var(--text-secondary);
-    line-height: 1.7;
-  }
-
-  @media (max-width: 640px) {
-    .tf-pricing-cards {
-      grid-template-columns: 1fr;
-      max-width: 420px;
-      padding: 0 16px;
-    }
-    .tf-pricing-hero { padding: 120px 20px 60px; }
-  }
-`;
+const fadeUp = {
+  hidden:  { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] } },
+};
+const stagger = { visible: { transition: { staggerChildren: 0.07 } } };
 
 const FREE_FEATURES = [
   { yes: true,  text: 'Full canvas editor' },
@@ -258,35 +26,35 @@ const FREE_FEATURES = [
 ];
 
 const PRO_FEATURES = [
-  { yes: true, text: 'Everything in Free' },
-  { yes: true, text: 'Unlimited AI generations' },
-  { yes: true, text: 'CTR Intelligence scoring' },
-  { yes: true, text: 'A/B variant generation' },
-  { yes: true, text: 'Unlimited projects' },
-  { yes: true, text: 'AI background generation' },
-  { yes: true, text: 'Expression enhancement' },
-  { yes: true, text: 'Prompt-to-Thumbnail' },
-  { yes: true, text: 'Priority support' },
-  { yes: true, text: 'Early access to new features' },
-  { yes: true, text: 'Export up to 4K resolution' },
+  { text: 'Everything in Free' },
+  { text: 'Unlimited AI generations' },
+  { text: 'CTR Intelligence scoring' },
+  { text: 'A/B variant generation' },
+  { text: 'Unlimited projects' },
+  { text: 'AI background generation' },
+  { text: 'Expression enhancement' },
+  { text: 'Prompt-to-Thumbnail' },
+  { text: 'Priority support' },
+  { text: 'Early access to new features' },
+  { text: 'Export up to 4K resolution' },
 ];
 
 const FAQS = [
   {
     q: 'Can I cancel anytime?',
-    a: 'Yes. There are no contracts, no lock-ins. Cancel from your account settings and you\'ll keep Pro access until the end of your billing period.',
+    a: "Yes. There are no contracts, no lock-ins. Cancel from your account settings and you'll keep Pro access until the end of your billing period.",
   },
   {
     q: 'What happens when I hit my AI limit?',
-    a: 'On the Free plan, once you hit 5 AI operations for the month, AI features are paused until your next billing cycle. The full canvas editor still works. Upgrade to Pro for unlimited AI.',
+    a: "On the Free plan, once you hit 5 AI operations for the month, AI features are paused until your next billing cycle. The full canvas editor still works. Upgrade to Pro for unlimited AI.",
   },
   {
     q: 'Is there a free trial for Pro?',
-    a: 'Yes — new accounts get 7 days of full Pro access to try every feature. No credit card required to start. You\'ll only be charged if you decide to keep Pro after the trial.',
+    a: "Yes — new accounts get 7 days of full Pro access to try every feature. No credit card required to start. You'll only be charged if you decide to keep Pro after the trial.",
   },
   {
     q: 'Do you offer a refund?',
-    a: 'If you\'re not happy within 7 days of your first charge, email hi@thumbframe.app and we\'ll refund you. No questions, no friction.',
+    a: "If you're not happy within 7 days of your first charge, email hi@thumbframe.app and we'll refund you. No questions, no friction.",
   },
   {
     q: 'Is there annual pricing?',
@@ -305,136 +73,247 @@ function FaqItem({ q, a }) {
   }, [open]);
 
   return (
-    <div className="tf-faq-item">
-      <button className="tf-faq-q" onClick={() => setOpen(v => !v)}>
+    <div style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', background: 'none', border: 'none', padding: '22px 0',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          cursor: 'pointer', fontFamily: "'Satoshi',sans-serif",
+          fontSize: 17, fontWeight: 600, color: '#f0f0f3', textAlign: 'left', gap: 16,
+        }}
+      >
         <span>{q}</span>
-        <span className={`tf-faq-icon${open ? ' open' : ''}`}>+</span>
+        <span style={{
+          flexShrink: 0, fontSize: 22, color: '#FF6B00', lineHeight: 1,
+          transform: open ? 'rotate(45deg)' : 'none',
+          transition: 'transform 0.25s ease',
+        }}>+</span>
       </button>
-      <div ref={bodyRef} className={`tf-faq-body${open ? ' open' : ''}`}>
-        <p>{a}</p>
+      <div
+        ref={bodyRef}
+        style={{
+          overflow: 'hidden', maxHeight: 0,
+          opacity: open ? 1 : 0,
+          transition: 'max-height 300ms ease, opacity 300ms ease',
+        }}
+      >
+        <p style={{ padding: '0 0 22px', fontSize: 15, color: '#8a8a93', lineHeight: 1.7 }}>{a}</p>
       </div>
     </div>
   );
 }
 
 export default function Pricing({ setPage }) {
-  useScrollAnimation();
-
   useSEO({
     title: 'Pricing — ThumbFrame Free & Pro Plans',
-    description: 'ThumbFrame is free to start. Pro is $15/month for unlimited AI thumbnail generation, unlimited exports, and priority support. No hidden fees.',
+    description: 'ThumbFrame is free to start. Pro is $15/month for unlimited AI thumbnail generation, unlimited exports, and priority support.',
     url: 'https://thumbframe.com/pricing',
   });
 
-  useEffect(() => {
-    document.title = 'Pricing — ThumbFrame';
-  }, []);
-
-  const go = (page) => {
-    setPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  const go = (page) => { setPage(page); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   return (
-    <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <style>{pricingStyles}</style>
+    <div style={{ background: '#050507', minHeight: '100vh', fontFamily: "'Satoshi', sans-serif", color: '#f0f0f3' }}>
       <Navbar setPage={setPage} currentPage="pricing" />
 
       {/* Hero */}
-      <div className="tf-pricing-hero">
-        <span className="badge badge-accent" style={{ marginBottom: 24 }}>Pricing</span>
-        <h1 className="animate-on-scroll">
+      <motion.div
+        variants={stagger} initial="hidden" animate="visible"
+        style={{
+          textAlign: 'center',
+          padding: '140px 24px 80px',
+          position: 'relative', overflow: 'hidden',
+        }}
+      >
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(255,107,0,0.06) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <motion.p variants={fadeUp} style={{
+          fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+          textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 16px',
+        }}>
+          PRICING
+        </motion.p>
+        <motion.h1 variants={fadeUp} style={{ margin: '0 0 20px', maxWidth: 600, marginLeft: 'auto', marginRight: 'auto' }}>
           Simple pricing.<br />
-          <span className="text-gradient">No surprises.</span>
-        </h1>
-        <p className="animate-on-scroll">
+          <span style={{ color: '#FF6B00' }}>No surprises.</span>
+        </motion.h1>
+        <motion.p variants={fadeUp} style={{ fontSize: 17, color: '#8a8a93', margin: '0 auto', maxWidth: 380, lineHeight: 1.6 }}>
           Start free. Upgrade when you need more AI power.
-        </p>
-      </div>
+        </motion.p>
+      </motion.div>
 
-      {/* Cards */}
-      <div className="tf-pricing-cards stagger-children">
+      {/* Pricing Cards */}
+      <motion.div
+        variants={stagger} initial="hidden" whileInView="visible"
+        viewport={{ once: true, margin: '-60px' }}
+        className="tf-pricing-grid"
+        style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr',
+          gap: 24, maxWidth: 860, margin: '0 auto 24px', padding: '0 24px',
+        }}
+      >
         {/* Free */}
-        <div className="tf-pc">
-          <div className="tf-pc-tier">Free</div>
-          <p className="tf-pc-tagline">Get started with the core editor. No credit card required.</p>
-          <div className="tf-pc-price">
-            <span className="amt">$0</span>
-            <span className="per">/ forever</span>
+        <motion.div variants={fadeUp} style={{
+          background: '#0c0c0f', border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: 16, padding: '40px',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#f0f0f3', marginBottom: 4 }}>Free</div>
+          <p style={{ fontSize: 13, color: '#55555e', marginBottom: 24, lineHeight: 1.5 }}>
+            Get started with the core editor. No credit card required.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 8 }}>
+            <span style={{ fontSize: 52, fontWeight: 800, color: '#f0f0f3', letterSpacing: '-0.04em', lineHeight: 1 }}>$0</span>
+            <span style={{ fontSize: 14, color: '#55555e' }}>/ forever</span>
           </div>
-          <p className="tf-pc-billing">Always free.</p>
-          <div className="tf-pc-divider" />
-          <ul className="tf-pc-features">
+          <p style={{ fontSize: 12, color: '#55555e', marginBottom: 28 }}>Always free.</p>
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', marginBottom: 24 }} />
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 32px', display: 'flex', flexDirection: 'column', gap: 11, flex: 1 }}>
             {FREE_FEATURES.map((f, i) => (
-              <li key={i}>
-                <span className={f.yes ? 'icon-yes' : 'icon-no'}>{f.yes ? '✓' : '✗'}</span>
-                <span className={`feat-text${f.dimmed ? ' dimmed' : ''}`}>{f.text}</span>
+              <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, lineHeight: 1.4 }}>
+                <span style={{ color: f.yes ? '#FF6B00' : '#55555e', fontSize: 15, flexShrink: 0, marginTop: 1 }}>{f.yes ? '✓' : '✗'}</span>
+                <span style={{ color: f.dimmed ? '#55555e' : '#8a8a93', textDecoration: f.dimmed ? 'line-through' : 'none', opacity: f.dimmed ? 0.6 : 1 }}>
+                  {f.text}
+                </span>
               </li>
             ))}
           </ul>
-          <button className="tf-pc-btn" onClick={() => go('editor')}>
+          <button
+            onClick={() => go('editor')}
+            style={{
+              width: '100%', padding: 14, borderRadius: 9,
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'transparent', color: '#f0f0f3',
+              fontFamily: "'Satoshi',sans-serif", fontSize: 15, fontWeight: 600,
+              cursor: 'pointer', marginTop: 'auto',
+              transition: 'border-color 0.15s',
+            }}
+          >
             Start Free
           </button>
-        </div>
+        </motion.div>
 
         {/* Pro */}
-        <div className="tf-pc pro">
-          <span className="tf-pc-popular">
-            <span className="badge badge-accent">Most Popular</span>
-          </span>
-          <div className="tf-pc-tier">Pro</div>
-          <p className="tf-pc-tagline">Everything you need to grow your channel with great thumbnails.</p>
-          <div className="tf-pc-price">
-            <span className="amt">$15</span>
-            <span className="per">/ month</span>
+        <motion.div variants={fadeUp} style={{
+          background: '#0c0c0f',
+          border: '1px solid rgba(255,107,0,0.3)',
+          borderRadius: 16, padding: '40px',
+          display: 'flex', flexDirection: 'column',
+          position: 'relative',
+          boxShadow: '0 0 60px rgba(255,107,0,0.07)',
+        }}>
+          {/* Popular badge */}
+          <div style={{
+            position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)',
+            background: '#FF6B00', color: '#fff', borderRadius: 999,
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+            textTransform: 'uppercase', padding: '4px 12px', whiteSpace: 'nowrap',
+          }}>
+            Most Popular
           </div>
-          <p className="tf-pc-billing">7-day free trial. Cancel anytime.</p>
-          <div className="tf-pc-divider" />
-          <ul className="tf-pc-features">
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#f0f0f3', marginBottom: 4 }}>Pro</div>
+          <p style={{ fontSize: 13, color: '#55555e', marginBottom: 24, lineHeight: 1.5 }}>
+            Everything you need to grow your channel with great thumbnails.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 8 }}>
+            <span style={{ fontSize: 52, fontWeight: 800, color: '#f0f0f3', letterSpacing: '-0.04em', lineHeight: 1 }}>$15</span>
+            <span style={{ fontSize: 14, color: '#55555e' }}>/ month</span>
+          </div>
+          <p style={{ fontSize: 12, color: '#55555e', marginBottom: 28 }}>7-day free trial. Cancel anytime.</p>
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', marginBottom: 24 }} />
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 32px', display: 'flex', flexDirection: 'column', gap: 11, flex: 1 }}>
             {PRO_FEATURES.map((f, i) => (
-              <li key={i}>
-                <span className="icon-yes">✓</span>
-                <span className="feat-text">{f.text}</span>
+              <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, lineHeight: 1.4 }}>
+                <span style={{ color: '#FF6B00', fontSize: 15, flexShrink: 0, marginTop: 1 }}>✓</span>
+                <span style={{ color: '#8a8a93' }}>{f.text}</span>
               </li>
             ))}
           </ul>
-          <button className="tf-pc-btn pro-btn" onClick={handleUpgrade}>
+          <button
+            onClick={handleUpgrade}
+            style={{
+              width: '100%', padding: 14, borderRadius: 9, border: 'none',
+              background: '#FF6B00', color: '#fff',
+              fontFamily: "'Satoshi',sans-serif", fontSize: 15, fontWeight: 700,
+              cursor: 'pointer', marginTop: 'auto',
+              boxShadow: '0 0 28px rgba(255,107,0,0.3)',
+            }}
+          >
             Start Pro Trial →
           </button>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
-      <p className="tf-pricing-note animate-on-scroll">
+      <p style={{ textAlign: 'center', fontSize: 13, color: '#55555e', marginBottom: 80 }}>
         All prices in USD · Billed monthly · Cancel anytime
       </p>
 
       {/* FAQ */}
-      <section className="section">
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 12, fontFamily: 'var(--font-body)' }}>FAQ</p>
-          <h2 style={{ fontSize: 'clamp(26px, 3vw, 38px)', letterSpacing: '-0.025em' }} className="animate-on-scroll">
+      <motion.section
+        variants={stagger} initial="hidden" whileInView="visible"
+        viewport={{ once: true, margin: '-60px' }}
+        style={{ borderTop: '1px solid rgba(255,255,255,0.05)', padding: '80px 24px' }}
+      >
+        <div style={{ maxWidth: 680, margin: '0 auto' }}>
+          <motion.p variants={fadeUp} style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 16px', textAlign: 'center',
+          }}>
+            FAQ
+          </motion.p>
+          <motion.h2 variants={fadeUp} style={{ margin: '0 0 48px', textAlign: 'center' }}>
             Common questions.
-          </h2>
+          </motion.h2>
+          {FAQS.map((faq) => <FaqItem key={faq.q} q={faq.q} a={faq.a} />)}
         </div>
-        <div className="tf-faq">
-          {FAQS.map((faq) => (
-            <FaqItem key={faq.q} q={faq.q} a={faq.a} />
-          ))}
-        </div>
-      </section>
+      </motion.section>
 
       {/* Bottom CTA */}
-      <section style={{ textAlign: 'center', padding: '0 24px 100px', borderTop: '1px solid var(--border)', paddingTop: 80 }}>
-        <h2 style={{ fontSize: 'clamp(26px, 3vw, 38px)', marginBottom: 16 }} className="animate-on-scroll">
-          Still on the fence?
-        </h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 16, marginBottom: 32, maxWidth: 420, margin: '0 auto 32px' }}>
-          Try the full editor for free. No account required.
-        </p>
-        <button className="btn btn-primary btn-lg" onClick={() => go('editor')}>
-          Open the Editor →
-        </button>
-      </section>
+      <motion.section
+        initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        style={{ textAlign: 'center', padding: '0 24px 100px' }}
+      >
+        <div style={{
+          maxWidth: 560, margin: '0 auto',
+          padding: '48px 32px', borderRadius: 16,
+          background: '#0c0c0f', border: '1px solid rgba(255,107,0,0.12)',
+          position: 'relative', overflow: 'hidden',
+        }}>
+          <div style={{
+            position: 'absolute', top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%)',
+            width: 400, height: 200,
+            background: 'radial-gradient(ellipse, rgba(255,107,0,0.05) 0%, transparent 70%)',
+            pointerEvents: 'none',
+          }} />
+          <h2 style={{ margin: '0 0 12px', fontSize: 'clamp(22px,3vw,30px)' }}>Still on the fence?</h2>
+          <p style={{ color: '#8a8a93', margin: '0 0 28px', fontSize: 15 }}>
+            Try the full editor for free. No account required.
+          </p>
+          <button
+            onClick={() => go('editor')}
+            style={{
+              padding: '13px 28px', borderRadius: 10, border: 'none',
+              background: '#FF6B00', color: '#fff', cursor: 'pointer',
+              fontSize: 15, fontWeight: 700, fontFamily: "'Satoshi',sans-serif",
+              boxShadow: '0 0 24px rgba(255,107,0,0.25)',
+            }}
+          >
+            Open the Editor →
+          </button>
+        </div>
+      </motion.section>
+
+      <style>{`
+        @media (max-width: 640px) {
+          .tf-pricing-grid { grid-template-columns: 1fr !important; max-width: 420px !important; }
+        }
+      `}</style>
 
       <Footer setPage={setPage} />
     </div>
