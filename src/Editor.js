@@ -1684,6 +1684,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [segmentStatus,setSegmentStatus]               = useState('');
   const [segmentError,setSegmentError]                 = useState('');
   const [expressionScore,setExpressionScore]           = useState(null);
+  const [showExpressionScore,setShowExpressionScore]   = useState(false);
   const [expressionBusy,setExpressionBusy]             = useState(false);
   const [enhanceBusy,setEnhanceBusy]                   = useState(false);
   const [enhanceInstruction,setEnhanceInstruction]     = useState('open mouth more');
@@ -2137,6 +2138,11 @@ PHASE 4 — Toolbar button:
       setAdjLayerMenu(false);
     }
   },[activeTool]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hide expression score badge when switching away from face tool
+  useEffect(()=>{
+    if(activeTool!=='face') setShowExpressionScore(false);
+  },[activeTool]);
 
   const [isMobile,setIsMobile] = useState(()=>window.innerWidth<768);
   useEffect(()=>{
@@ -4245,6 +4251,7 @@ PHASE 4 — Toolbar button:
 
       if(result){
         setExpressionScore(calculateExpressionScore(result));
+        setShowExpressionScore(true);
       }
     }catch(e){
       console.warn('[FACE MESH]',e.message);
@@ -5616,6 +5623,7 @@ PHASE 4 — Toolbar button:
       syncProjectIdToUrl(nextProjectId);
       setSelectedId(null);
       setShowFileTab(false);
+      setShowExpressionScore(false);
 
       const snapshot = JSON.parse(JSON.stringify(hydratedLayers));
       historyRef.current=[snapshot];
@@ -6579,6 +6587,7 @@ PHASE 4 — Toolbar button:
               return nextLayers;
             });
             setSelectedId(id);
+            setShowExpressionScore(false);
             // Image import is a significant action — save immediately
             saveEngineRef.current?.saveImmediate();
             // Fire-and-forget: run MediaPipe face detection on new image
@@ -9829,14 +9838,14 @@ PHASE 4 — Toolbar button:
                 )}
 
                 {/* Face Score Badge — expression score on detected face */}
-                {expressionScore?.bbox&&!expressionBusy&&(()=>{
+                {activeTool==='face'&&showExpressionScore&&expressionScore?.bbox&&!expressionBusy&&(()=>{
                   const sc=expressionScore.overall;
                   const badgeColor=sc>=8?'#22c55e':sc>=5?'#f59e0b':'#ef4444';
                   const bx=Math.round(expressionScore.bbox.x*p.preview.w);
                   const by=Math.round(expressionScore.bbox.y*p.preview.h);
                   const bw=Math.round(expressionScore.bbox.w*p.preview.w);
                   return(
-                    <div style={{position:'absolute',left:bx,top:Math.max(0,by-28),zIndex:9984,pointerEvents:'none'}}>
+                    <div style={{position:'absolute',left:bx,top:Math.max(0,by-28),zIndex:9984,pointerEvents:'auto'}}>
                       <div style={{
                         display:'flex',alignItems:'center',gap:5,
                         background:'rgba(10,10,15,0.85)',
@@ -9851,6 +9860,10 @@ PHASE 4 — Toolbar button:
                         }}>{sc}</span>
                         <span style={{fontSize:9,color:'rgba(255,255,255,0.6)',fontWeight:'600',letterSpacing:'0.3px'}}>/10</span>
                         <span style={{fontSize:9,color:badgeColor,fontWeight:'700',letterSpacing:'0.2px',marginLeft:1}}>EXPR</span>
+                        <button onClick={()=>setShowExpressionScore(false)} style={{
+                          marginLeft:4,background:'none',border:'none',cursor:'pointer',
+                          color:'rgba(255,255,255,0.5)',fontSize:12,lineHeight:1,padding:'0 0 0 2px',
+                        }}>×</button>
                       </div>
                       <div style={{width:bw,height:1.5,background:`${badgeColor}55`,marginTop:2,borderRadius:1}}/>
                     </div>
