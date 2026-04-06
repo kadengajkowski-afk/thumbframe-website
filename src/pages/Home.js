@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
@@ -564,6 +564,15 @@ const TESTIMONIALS = [
 
 export default function Home({ setPage, onCheckout }) {
   useScrollAnimation();
+  const [fetchedReviews, setFetchedReviews] = useState([]);
+
+  useEffect(() => {
+    const API = process.env.REACT_APP_API_URL || '';
+    fetch(`${API}/api/reviews`)
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d.reviews)) setFetchedReviews(d.reviews); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     document.title = 'ThumbFrame — AI YouTube Thumbnail Editor';
@@ -724,6 +733,23 @@ export default function Home({ setPage, onCheckout }) {
                   <div>
                     <div className="tf-testimonial-name">{t.name}</div>
                     <div className="tf-testimonial-sub">{t.subs}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {fetchedReviews.map((r) => (
+              <div key={r.id} className="tf-testimonial-card">
+                <div className="tf-testimonial-stars">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</div>
+                <p className="tf-testimonial-quote">"{r.reviewText}"</p>
+                <div className="tf-testimonial-author">
+                  <div className="tf-testimonial-avatar" style={{ fontSize: 16, background: 'rgba(255,107,0,0.1)', color: 'var(--accent)' }}>★</div>
+                  <div>
+                    <div className="tf-testimonial-name">{r.name}</div>
+                    {r.channelUrl && (
+                      <div className="tf-testimonial-sub">
+                        <a href={r.channelUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: 12 }}>View channel</a>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
