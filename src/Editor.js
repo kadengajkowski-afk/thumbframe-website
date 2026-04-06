@@ -6052,6 +6052,7 @@ PHASE 4 — Toolbar button:
     }catch(err){
       console.error('[COLORGRADE]',err);
       setCmdLog('Color grade failed. Try again.');
+      showToastMsg(`Color grade failed: ${err.message||'Server error'}`, 'error');
     }finally{
       setCgBusy(false);
     }
