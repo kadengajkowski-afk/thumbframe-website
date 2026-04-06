@@ -5,7 +5,6 @@ import FabricCanvas from './FabricCanvas';
 import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
 import BillingTab from './BillingTab';
-import { signIn } from './Auth';
 import CookieBanner from './components/CookieBanner';
 import { useAuth } from './context/AuthContext';
 import { handleUpgrade } from './utils/checkout';
@@ -25,6 +24,9 @@ const Terms     = lazy(() => import('./pages/Terms'));
 const Refund    = lazy(() => import('./pages/Refund'));
 const Changelog = lazy(() => import('./pages/Changelog'));
 const NotFound  = lazy(() => import('./pages/NotFound'));
+const Login     = lazy(() => import('./pages/Login'));
+const Signup    = lazy(() => import('./pages/Signup'));
+const Account   = lazy(() => import('./pages/Account'));
 
 function PageLoader() {
   return (
@@ -371,151 +373,6 @@ function Examples({ setPage }) {
   );
 }
 
-// ── Auth pages ─────────────────────────────────────────────────────────────────
-function AuthPage({ mode, setPage, onAuth }) {
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [name,     setName]     = useState('');
-  const [error,    setError]    = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const isSignup = mode === 'signup';
-
-  async function submit() {
-    if (!email || !password) { setError('Email and password required'); return; }
-    if (isSignup && password.length < 8) { setError('Password must be at least 8 characters'); return; }
-    setLoading(true); setError('');
-    
-    try {
-      if (isSignup) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              name: name || email.split('@')[0],
-            }
-          }
-        });
-        
-        // Check if signup failed due to existing account
-        if (error) {
-          setError(error.message);
-          setLoading(false);
-          return;
-        }
-        
-        // Check if user exists but identities array is empty (existing account)
-        if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
-          setError(
-            <div>
-              You already have an account associated with this email.
-              <div style={{ marginTop: 8 }}>
-                <span onClick={() => setPage('login')} style={{ color: C.accent, cursor: 'pointer', fontWeight: '600', textDecoration: 'underline' }}>Click here to Log In instead</span>
-              </div>
-            </div>
-          );
-          setLoading(false);
-          return;
-        }
-        
-      } else {
-        const { error } = await signIn({ email, password, setLoading });
-        if (error) {
-          setError(error.message || 'Login failed. Please try again.');
-        }
-      }
-    } catch (err) {
-      setError(err?.message || 'Connection failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const inputStyle = {
-    width: '100%', padding: '11px 14px', borderRadius: 7,
-    border: `1px solid ${C.border2}`, background: C.panel,
-    color: C.text, fontSize: 14, outline: 'none',
-    boxSizing: 'border-box', fontFamily: 'inherit',
-    transition: 'border-color 0.2s',
-  };
-
-  return (
-    <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 400 }}>
-        <button onClick={() => setPage('home')} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 13, marginBottom: 32, padding: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-          ← Back to home
-        </button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
-          <div style={{ width: 28, height: 28, borderRadius: 7, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: 13, color: '#fff', fontWeight: '800' }}>S</span>
-          </div>
-          <span style={{ fontSize: 17, fontWeight: '700', color: C.text }}>ThumbFrame</span>
-        </div>
-
-        <h1 style={{ fontSize: 28, fontWeight: '800', letterSpacing: '-0.5px', marginBottom: 6, color: C.text }}>
-          {isSignup ? 'Create your account' : 'Welcome back'}
-        </h1>
-        <p style={{ fontSize: 14, color: C.muted, marginBottom: 28, lineHeight: 1.5 }}>
-          {isSignup ? 'Save your designs and access them from anywhere.' : 'Log in to access your saved thumbnails.'}
-        </p>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {isSignup && (
-            <div>
-              <label style={{ fontSize: 12, fontWeight: '600', color: C.text2, display: 'block', marginBottom: 5 }}>Your name</label>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" style={inputStyle}
-                onFocus={e => e.target.style.borderColor = C.accent}
-                onBlur={e => e.target.style.borderColor = C.border2}/>
-            </div>
-          )}
-          <div>
-            <label style={{ fontSize: 12, fontWeight: '600', color: C.text2, display: 'block', marginBottom: 5 }}>Email</label>
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@gmail.com" style={inputStyle} type="email"
-              onFocus={e => e.target.style.borderColor = C.accent}
-              onBlur={e => e.target.style.borderColor = C.border2}/>
-          </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: '600', color: C.text2, display: 'block', marginBottom: 5 }}>Password</label>
-            <input value={password} onChange={e => setPassword(e.target.value)} placeholder={isSignup ? 'At least 8 characters' : 'Your password'} style={inputStyle} type="password"
-              onFocus={e => e.target.style.borderColor = C.accent}
-              onBlur={e => e.target.style.borderColor = C.border2}/>
-          </div>
-
-          {error && (
-            <div style={{ padding: '10px 14px', borderRadius: 7, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)', fontSize: 13, color: '#f87171' }}>
-              {error}
-            </div>
-          )}
-          <button onClick={submit} disabled={loading} style={{
-            width: '100%', padding: '12px', borderRadius: 7, border: 'none',
-            background: loading ? C.muted : C.accent, color: '#fff', cursor: loading ? 'default' : 'pointer',
-            fontSize: 14, fontWeight: '700', marginTop: 6,
-            boxShadow: loading ? 'none' : `0 4px 16px ${C.accent}44`,
-          }}>
-            {loading ? 'Please wait…' : isSignup ? 'Create account →' : 'Log in →'}
-          </button>
-        </div>
-
-        {!isSignup && (
-          <p style={{ fontSize: 12, color: C.muted, marginTop: 14, textAlign: 'center' }}>
-            <span onClick={() => setPage('forgot-password')} style={{ color: C.accent, cursor: 'pointer' }}>Forgot password?</span>
-          </p>
-        )}
-
-        <div style={{ marginTop: 16, padding: '14px', borderRadius: 7, background: C.bg2, border: `1px solid ${C.border}`, textAlign: 'center' }}>
-          <span style={{ fontSize: 13, color: C.muted }}>
-            {isSignup ? 'Already have an account? ' : "Don't have an account? "}
-          </span>
-          <span onClick={() => setPage(isSignup ? 'login' : 'signup')} style={{ fontSize: 13, color: C.accent, cursor: 'pointer', fontWeight: '600' }}>
-            {isSignup ? 'Log in' : 'Sign up free'}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 function Dashboard({ setPage, user }) {
   const [designs,   setDesigns]   = useState([]);
@@ -817,6 +674,7 @@ function getInitialPage() {
   if (path === '/pricing') return 'pricing';
   if (path === '/examples') return 'examples';
   if (path === '/howitworks') return 'howitworks';
+  if (path === '/account') return 'account';
   if (path === '/forgot-password') return 'forgot-password';
   if (path === '/update-password') return 'update-password';
   if (path === '/features') return 'features';
@@ -846,7 +704,7 @@ function syncPath(page) {
   }
 }
 
-const PROTECTED_PAGES = new Set(['editor', 'dashboard', 'settings']);
+const PROTECTED_PAGES = new Set(['editor', 'dashboard', 'settings', 'account']);
 
 
 export default function App() {
@@ -897,6 +755,9 @@ export default function App() {
     features:    <Features setPage={setPage} />,
     about:       <About setPage={setPage} />,
     gallery:     <Gallery setPage={setPage} />,
+    login:       <Login setPage={setPage} />,
+    signup:      <Signup setPage={setPage} />,
+    account:     <Account setPage={setPage} />,
     blog:        <Blog setPage={setPage} onOpenPost={(slug) => { setBlogSlug(slug); setPage('blog-post'); window.history.pushState(null, '', `/blog/${slug}`); }} />,
     'blog-post': <BlogPost slug={blogSlug} setPage={setPage} onBack={() => { setPage('blog'); window.history.pushState(null, '', '/blog'); }} />,
     'admin-blog': <BlogAdmin setPage={setPage} user={user} token={localStorage.getItem('thumbframe_token')} />,
@@ -922,8 +783,6 @@ export default function App() {
       {page === 'howitworks' && <HowItWorks   setPage={setPage} />}
       {page === 'pricing'    && <PricingPage  setPage={setPage} />}
       {page === 'examples'   && <Examples     setPage={setPage} />}
-      {page === 'login'      && <AuthPage     mode="login"  setPage={setPage} />}
-      {page === 'signup'     && <AuthPage     mode="signup" setPage={setPage} />}
       {page === 'dashboard'  && <Dashboard    setPage={setPage} user={user} />}
       {page === 'settings'   && <Settings     setPage={setPage} user={user} />}
       {page === 'forgot-password' && <ForgotPassword setPage={setPage} />}
