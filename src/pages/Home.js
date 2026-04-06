@@ -613,6 +613,124 @@ const TESTIMONIALS = [
   },
 ];
 
+function FeatureMockup({ index }) {
+  const base = { className: 'tf-feature-screenshot-placeholder', style: { alignItems: 'stretch', padding: 0, overflow: 'hidden', gap: 0, flexDirection: 'column' } };
+
+  if (index === 0) { // AI Editing
+    return (
+      <div {...base}>
+        <div style={{ background: '#0f0f0f', borderBottom: '1px solid #1e1e1e', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontSize: 9, color: '#f97316', fontWeight: 700, fontFamily: 'monospace' }}>✦ AI TOOLS</div>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141414', padding: 20, gap: 16 }}>
+          <div style={{ position: 'relative', width: 100, aspectRatio: '1', borderRadius: 8, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg,#1a1a2e,#2d1b69)' }} />
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>👤</div>
+            <div style={{ position: 'absolute', inset: 0, border: '2px solid #f97316', borderRadius: 8, boxShadow: '0 0 12px rgba(249,115,22,0.4)' }} />
+            <div style={{ position: 'absolute', bottom: 4, left: 0, right: 0, textAlign: 'center', fontSize: 8, color: '#f97316', fontWeight: 700, fontFamily: 'monospace' }}>CUTOUT ✓</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[['Remove BG','#22c55e'],['Enhance Face','#f97316'],['Add Glow','#60a5fa']].map(([lbl,c]) => (
+              <div key={lbl} style={{ padding: '5px 10px', borderRadius: 5, background: '#1a1a1a', border: `1px solid ${c}30`, fontSize: 9, color: c, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: c }} />{lbl}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (index === 1) { // Professional Editor
+    return (
+      <div {...base}>
+        <div style={{ flex: 1, display: 'flex', background: '#141414' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 4, overflow: 'hidden', position: 'relative', boxShadow: '0 4px 16px rgba(0,0,0,0.5)' }}>
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg,#0f2027,#2c5364)' }} />
+              <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, background: 'rgba(0,0,0,0.7)', borderRadius: 3, padding: '3px 6px' }}>
+                <div style={{ fontSize: 9, color: '#fff', fontWeight: 900, fontFamily: 'Impact,sans-serif' }}>THE TRUTH ABOUT YOUTUBE</div>
+              </div>
+            </div>
+          </div>
+          <div style={{ width: 90, background: '#0f0f0f', borderLeft: '1px solid #1e1e1e', padding: '8px 6px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ fontSize: 7, color: '#555', letterSpacing: 1, marginBottom: 4, fontFamily: 'monospace' }}>LAYERS ×3</div>
+            {[['T Text','#f97316',true],['⬜ Image','#60a5fa',false],['◎ BG','#a3a3a3',false]].map(([lbl,c,a]) => (
+              <div key={lbl} style={{ padding: '3px 5px', borderRadius: 3, background: a ? `${c}15` : '#1a1a1a', border: `1px solid ${a ? c+'40' : 'transparent'}`, fontSize: 8, color: a ? c : '#555', fontFamily: 'monospace' }}>{lbl}</div>
+            ))}
+            <div style={{ marginTop: 8, fontSize: 7, color: '#555', letterSpacing: 1, fontFamily: 'monospace' }}>BLEND</div>
+            <div style={{ padding: '3px 5px', borderRadius: 3, background: '#1a1a1a', fontSize: 8, color: '#a3a3a3', fontFamily: 'monospace' }}>Normal ▾</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (index === 2) { // Prompt-to-Thumbnail
+    return (
+      <div {...base}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#141414', padding: 16, gap: 12, justifyContent: 'center' }}>
+          <div style={{ background: '#0f0f0f', border: '1px solid #f97316', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, color: '#666', fontFamily: 'monospace', flex: 1 }}>gaming thumbnail, dramatic lighting, face reaction...</span>
+            <div style={{ padding: '3px 8px', borderRadius: 4, background: '#f97316', fontSize: 9, color: '#fff', fontWeight: 700, flexShrink: 0 }}>Generate ✦</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {['linear-gradient(135deg,#1a1a2e,#c45c2e)','linear-gradient(135deg,#0f2027,#2c5364)','linear-gradient(135deg,#1a472a,#2d6a4f)','linear-gradient(135deg,#2c2c54,#706fd3)'].map((bg, i) => (
+              <div key={i} style={{ aspectRatio: '16/9', borderRadius: 5, background: bg, border: i === 0 ? '2px solid #f97316' : '1px solid #2a2a2a', display: 'flex', alignItems: 'flex-end', padding: '4px 5px' }}>
+                <div style={{ fontSize: 7, fontWeight: 900, color: '#fff', fontFamily: 'Impact,sans-serif', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>VARIANT {i + 1}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (index === 3) { // CTR Intelligence
+    return (
+      <div {...base}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141414', padding: 20, gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <svg viewBox="0 0 100 60" style={{ width: 100, height: 60 }}>
+              <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#1e1e1e" strokeWidth="8" strokeLinecap="round" />
+              <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#f97316" strokeWidth="8" strokeLinecap="round" strokeDasharray="125.7" strokeDashoffset="30" />
+              <text x="50" y="46" textAnchor="middle" fontSize="14" fontWeight="900" fill="#f97316" fontFamily="monospace">8.4</text>
+              <text x="50" y="56" textAnchor="middle" fontSize="7" fill="#555" fontFamily="monospace">/ 10</text>
+            </svg>
+            <div style={{ fontSize: 9, color: '#f97316', fontWeight: 700, fontFamily: 'monospace' }}>CTR SCORE</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {[['Contrast','92%','#22c55e'],['Text Size','88%','#22c55e'],['Face Visibility','74%','#f59e0b'],['Composition','81%','#22c55e']].map(([lbl,val,c]) => (
+              <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace', width: 72 }}>{lbl}</div>
+                <div style={{ flex: 1, height: 3, borderRadius: 2, background: '#1e1e1e', position: 'relative', width: 60 }}>
+                  <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: val, background: c, borderRadius: 2 }} />
+                </div>
+                <div style={{ fontSize: 8, color: c, fontFamily: 'monospace', width: 24, textAlign: 'right' }}>{val}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  // index === 4: A/B Variants
+  return (
+    <div {...base}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#141414', padding: 12, gap: 8, justifyContent: 'center' }}>
+        <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace', letterSpacing: 1 }}>5 VARIANTS GENERATED</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+          {[['#1a1a2e,#c45c2e',true],['#0f2027,#2c5364',false],['#1a472a,#2d6a4f',false],['#2c2c54,#706fd3',false],['#3d0000,#c0392b',false]].map(([colors, selected], i) => (
+            <div key={i} style={{ aspectRatio: '16/9', borderRadius: 4, background: `linear-gradient(135deg, ${colors})`, border: selected ? '2px solid #f97316' : '1px solid #2a2a2a', position: 'relative' }}>
+              {selected && <div style={{ position: 'absolute', top: 2, right: 2, width: 10, height: 10, borderRadius: '50%', background: '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 6, color: '#fff' }}>✓</div>}
+            </div>
+          ))}
+          <div style={{ aspectRatio: '16/9', borderRadius: 4, background: '#1a1a1a', border: '1px dashed #2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 12, color: '#2a2a2a' }}>+</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home({ setPage, onCheckout }) {
   useScrollAnimation();
   const [fetchedReviews, setFetchedReviews] = useState([]);
@@ -694,9 +812,52 @@ export default function Home({ setPage, onCheckout }) {
 
         <div className="tf-hero-img-wrap animate-on-scroll" style={{ animationDelay: '240ms' }}>
           <div className="tf-hero-img-glow" />
-          <div className="tf-hero-img-placeholder">
-            <span>🖼</span>
-            <span>ThumbFrame Editor Preview</span>
+          {/* Rich fake editor screenshot */}
+          <div className="tf-hero-img-placeholder" style={{ flexDirection: 'column', alignItems: 'stretch', padding: 0, overflow: 'hidden', gap: 0 }}>
+            {/* Fake top bar */}
+            <div style={{ background: '#0f0f0f', borderBottom: '1px solid #1e1e1e', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', flexShrink: 0 }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f97316' }} />
+              <div style={{ width: 60, height: 6, borderRadius: 3, background: '#1e1e1e' }} />
+              <div style={{ flex: 1 }} />
+              <div style={{ width: 40, height: 20, borderRadius: 4, background: '#f97316', opacity: 0.9 }} />
+              <div style={{ width: 50, height: 20, borderRadius: 4, background: '#1e1e1e' }} />
+            </div>
+            {/* Fake workspace */}
+            <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+              {/* Left sidebar */}
+              <div style={{ width: 44, background: '#0f0f0f', borderRight: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 6px', flexShrink: 0 }}>
+                {['▣','T','✦','✂','⬜','🖌'].map((icon, i) => (
+                  <div key={i} style={{ width: 32, height: 28, borderRadius: 5, background: i === 0 ? '#f97316' : '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: i === 0 ? '#fff' : '#555' }}>{icon}</div>
+                ))}
+              </div>
+              {/* Canvas area */}
+              <div style={{ flex: 1, background: '#161616', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                <div style={{ width: '100%', maxWidth: 220, aspectRatio: '16/9', borderRadius: 6, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', position: 'relative' }}>
+                  <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #1a0a2e 0%, #2d1b69 40%, #c45c2e 100%)' }} />
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 12px' }}>
+                    <div style={{ fontSize: 10, fontWeight: 900, color: '#fff', lineHeight: 1.1, textTransform: 'uppercase', fontFamily: 'Impact, sans-serif', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>I CAN'T<br />BELIEVE<br />THIS WORKED</div>
+                    <div style={{ marginTop: 4, width: 40, height: 3, borderRadius: 2, background: '#f97316' }} />
+                  </div>
+                  {/* Fake AI badge */}
+                  <div style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(249,115,22,0.9)', borderRadius: 3, padding: '1px 5px', fontSize: 8, color: '#fff', fontWeight: 700 }}>AI ✦</div>
+                </div>
+              </div>
+              {/* Right panel */}
+              <div style={{ width: 80, background: '#0f0f0f', borderLeft: '1px solid #1e1e1e', padding: '8px 6px', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                <div style={{ fontSize: 7, color: '#555', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2, fontFamily: 'monospace' }}>LAYERS</div>
+                {[['▣ Text', true], ['▣ BG', false], ['▣ Base', false]].map(([lbl, active], i) => (
+                  <div key={i} style={{ padding: '3px 6px', borderRadius: 4, background: active ? '#f9731620' : '#1a1a1a', border: active ? '1px solid #f9731640' : '1px solid transparent', fontSize: 8, color: active ? '#f97316' : '#555', whiteSpace: 'nowrap', overflow: 'hidden' }}>{lbl}</div>
+                ))}
+                <div style={{ marginTop: 4, fontSize: 7, color: '#555', letterSpacing: 1, textTransform: 'uppercase', fontFamily: 'monospace' }}>CTR</div>
+                <div style={{ position: 'relative', height: 36 }}>
+                  <svg viewBox="0 0 60 36" style={{ width: '100%', height: '100%' }}>
+                    <path d="M5 30 A25 25 0 0 1 55 30" fill="none" stroke="#1e1e1e" strokeWidth="5" strokeLinecap="round" />
+                    <path d="M5 30 A25 25 0 0 1 55 30" fill="none" stroke="#f97316" strokeWidth="5" strokeLinecap="round" strokeDasharray="78.5" strokeDashoffset="20" />
+                    <text x="30" y="28" textAnchor="middle" fontSize="9" fontWeight="700" fill="#f97316" fontFamily="monospace">8.1</text>
+                  </svg>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -756,9 +917,7 @@ export default function Home({ setPage, onCheckout }) {
                     Learn more →
                   </button>
                 </div>
-                <div className="tf-feature-screenshot-placeholder">
-                  <span>Feature {i + 1} Preview</span>
-                </div>
+                <FeatureMockup index={i} />
               </div>
             ))}
           </div>
@@ -778,9 +937,19 @@ export default function Home({ setPage, onCheckout }) {
             </button>
           </div>
           <div className="tf-gallery-grid stagger-children">
-            {Array.from({ length: 8 }, (_, i) => (
-              <div key={i} className="tf-gallery-card" onClick={() => go('gallery')}>
-                <span className="tf-gallery-card-label">Made with ThumbFrame</span>
+            {[
+              { bg: 'linear-gradient(135deg,#1a1a2e,#4a3060)', text: 'WATCH THIS', color: '#FFD700' },
+              { bg: 'linear-gradient(135deg,#0f2027,#2c5364)', text: 'THE TRUTH', color: '#fff' },
+              { bg: 'linear-gradient(135deg,#c45c2e,#f7a642)', text: "YOU WON'T BELIEVE", color: '#fff' },
+              { bg: 'linear-gradient(135deg,#1a472a,#2d6a4f)', text: 'How I Did It', color: '#95d5b2' },
+              { bg: 'linear-gradient(135deg,#2c2c54,#706fd3)', text: 'EPIC MOMENT', color: '#fff' },
+              { bg: 'linear-gradient(135deg,#3d0000,#c0392b)', text: 'GONE WRONG', color: '#fff' },
+              { bg: 'linear-gradient(135deg,#f7971e,#ffd200)', text: '5 TIPS', color: '#1a1a1a' },
+              { bg: 'linear-gradient(135deg,#11998e,#38ef7d)', text: 'I TRIED IT', color: '#fff' },
+            ].map((item, i) => (
+              <div key={i} className="tf-gallery-card" onClick={() => go('gallery')} style={{ background: item.bg, cursor: 'pointer', position: 'relative', overflow: 'hidden' }}>
+                <span style={{ fontSize: 11, fontWeight: 900, color: item.color, fontFamily: 'Impact,sans-serif', textShadow: '1px 1px 0 rgba(0,0,0,0.5)', textAlign: 'center', padding: '0 6px', lineHeight: 1.2, letterSpacing: 0.5 }}>{item.text}</span>
+                <div style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(0,0,0,0.7)', borderRadius: 2, padding: '1px 3px', fontSize: 7, color: '#fff' }}>0:00</div>
               </div>
             ))}
           </div>
