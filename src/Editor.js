@@ -3250,14 +3250,30 @@ PHASE 4 — Toolbar button:
   }
 
   // Delete pixels under the selection mask
+  // Helper: map a mask pixel index (p.preview.w stride) to an imageData pixel index
+  // (layer.width stride, with layer.x/layer.y offset). Returns -1 if outside the layer.
+  function maskIdxToImgIdx(mi,maskW,lx,ly,lw,lh){
+    const mx=mi%maskW, my=Math.floor(mi/maskW);
+    const px=mx-lx, py=my-ly;
+    if(px<0||px>=lw||py<0||py>=lh)return -1;
+    return py*lw+px;
+  }
+
   function deleteSelection(){
     if(!selectionActive||!selectionMaskRef.current)return;
     const layer=getActiveImageLayer();
     if(!layer)return;
     readLayerPixels(layer).then(({imageData,canvas,ctx})=>{
       const m=selectionMaskRef.current;
+      const mW=p.preview.w;
+      const lx=layer.type==='background'?0:(layer.x||0);
+      const ly=layer.type==='background'?0:(layer.y||0);
+      const lw=imageData.width, lh=imageData.height;
       for(let i=0;i<m.length;i++){
-        if(m[i]>0)imageData.data[i*4+3]=Math.max(0,Math.round(imageData.data[i*4+3]*(1-m[i]/255)));
+        if(m[i]>0){
+          const ii=maskIdxToImgIdx(i,mW,lx,ly,lw,lh);
+          if(ii>=0)imageData.data[ii*4+3]=Math.max(0,Math.round(imageData.data[ii*4+3]*(1-m[i]/255)));
+        }
       }
       writeLayerPixels(layer,imageData,canvas,ctx,'Delete Selection');
     });
@@ -3270,15 +3286,24 @@ PHASE 4 — Toolbar button:
     if(!layer)return;
     readLayerPixels(layer).then(({imageData,layer:l})=>{
       const m=selectionMaskRef.current;
-      const copyData=new ImageData(imageData.width,imageData.height);
+      const mW=p.preview.w;
+      const lx=layer.type==='background'?0:(layer.x||0);
+      const ly=layer.type==='background'?0:(layer.y||0);
+      const lw=imageData.width, lh=imageData.height;
+      const copyData=new ImageData(lw,lh);
       for(let i=0;i<m.length;i++){
-        const alpha=m[i]/255;
-        copyData.data[i*4]  =imageData.data[i*4];
-        copyData.data[i*4+1]=imageData.data[i*4+1];
-        copyData.data[i*4+2]=imageData.data[i*4+2];
-        copyData.data[i*4+3]=Math.round(imageData.data[i*4+3]*alpha);
+        if(m[i]>0){
+          const ii=maskIdxToImgIdx(i,mW,lx,ly,lw,lh);
+          if(ii>=0){
+            const alpha=m[i]/255;
+            copyData.data[ii*4]  =imageData.data[ii*4];
+            copyData.data[ii*4+1]=imageData.data[ii*4+1];
+            copyData.data[ii*4+2]=imageData.data[ii*4+2];
+            copyData.data[ii*4+3]=Math.round(imageData.data[ii*4+3]*alpha);
+          }
+        }
       }
-      selClipboardRef.current={imageData:copyData,bounds:maskBounds(m,imageData.width,imageData.height)};
+      selClipboardRef.current={imageData:copyData,bounds:maskBounds(m,mW,p.preview.h)};
     });
   }
 
@@ -3309,20 +3334,29 @@ PHASE 4 — Toolbar button:
     if(!layer)return;
     readLayerPixels(layer).then(({imageData})=>{
       const m=selectionMaskRef.current;
+      const mW=p.preview.w;
+      const lx=layer.type==='background'?0:(layer.x||0);
+      const ly=layer.type==='background'?0:(layer.y||0);
+      const lw=imageData.width, lh=imageData.height;
       const newCanvas=document.createElement('canvas');
-      newCanvas.width=imageData.width; newCanvas.height=imageData.height;
+      newCanvas.width=lw; newCanvas.height=lh;
       const nc=newCanvas.getContext('2d');
-      const nd=nc.createImageData(imageData.width,imageData.height);
+      const nd=nc.createImageData(lw,lh);
       for(let i=0;i<m.length;i++){
-        nd.data[i*4]  =imageData.data[i*4];
-        nd.data[i*4+1]=imageData.data[i*4+1];
-        nd.data[i*4+2]=imageData.data[i*4+2];
-        nd.data[i*4+3]=Math.round(imageData.data[i*4+3]*m[i]/255);
+        if(m[i]>0){
+          const ii=maskIdxToImgIdx(i,mW,lx,ly,lw,lh);
+          if(ii>=0){
+            nd.data[ii*4]  =imageData.data[ii*4];
+            nd.data[ii*4+1]=imageData.data[ii*4+1];
+            nd.data[ii*4+2]=imageData.data[ii*4+2];
+            nd.data[ii*4+3]=Math.round(imageData.data[ii*4+3]*m[i]/255);
+          }
+        }
       }
       nc.putImageData(nd,0,0);
       const dataUrl=newCanvas.toDataURL('image/png');
-      addLayer({type:'image',src:dataUrl,paintSrc:null,width:imageData.width,height:imageData.height,
-        x:0,y:0,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+      addLayer({type:'image',src:dataUrl,paintSrc:null,width:lw,height:lh,
+        x:lx,y:ly,cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
         name:(layer.name||'Layer')+' copy'});
       // addLayer already calls pushHistory, no need to call again
     });
@@ -3339,13 +3373,20 @@ PHASE 4 — Toolbar button:
     const fb=parseInt(hexStr.slice(4,6),16)||0;
     readLayerPixels(layer).then(({imageData,canvas,ctx})=>{
       const m=selectionMaskRef.current;
+      const mW=p.preview.w;
+      const lx=layer.type==='background'?0:(layer.x||0);
+      const ly=layer.type==='background'?0:(layer.y||0);
+      const lw=imageData.width, lh=imageData.height;
       for(let i=0;i<m.length;i++){
         if(m[i]>0){
-          const alpha=m[i]/255;
-          imageData.data[i*4]  =Math.round(imageData.data[i*4]*(1-alpha)+fr*alpha);
-          imageData.data[i*4+1]=Math.round(imageData.data[i*4+1]*(1-alpha)+fg*alpha);
-          imageData.data[i*4+2]=Math.round(imageData.data[i*4+2]*(1-alpha)+fb*alpha);
-          imageData.data[i*4+3]=Math.max(imageData.data[i*4+3],m[i]);
+          const ii=maskIdxToImgIdx(i,mW,lx,ly,lw,lh);
+          if(ii>=0){
+            const alpha=m[i]/255;
+            imageData.data[ii*4]  =Math.round(imageData.data[ii*4]*(1-alpha)+fr*alpha);
+            imageData.data[ii*4+1]=Math.round(imageData.data[ii*4+1]*(1-alpha)+fg*alpha);
+            imageData.data[ii*4+2]=Math.round(imageData.data[ii*4+2]*(1-alpha)+fb*alpha);
+            imageData.data[ii*4+3]=Math.max(imageData.data[ii*4+3],m[i]);
+          }
         }
       }
       writeLayerPixels(layer,imageData,canvas,ctx,'Fill Selection');
