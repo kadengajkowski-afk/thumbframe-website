@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import supabase from '../supabaseClient';
 
 const NAV_LINKS = [
   { label: 'Home',     page: 'home' },
@@ -169,10 +170,21 @@ const styles = `
 `;
 
 export default function Navbar({ setPage, currentPage }) {
-  const [scrolled, setScrolled]   = useState(false);
-  const [hidden, setHidden]       = useState(false);
+  const [scrolled, setScrolled]     = useState(false);
+  const [hidden, setHidden]         = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [authUser, setAuthUser]     = useState(null);
   const prevScrollY = useRef(0);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthUser(session?.user || null);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user || null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -230,20 +242,41 @@ export default function Navbar({ setPage, currentPage }) {
           </div>
 
           <div className="tf-nav-cta">
-            <button
-              className="btn btn-ghost"
-              style={{ fontSize: 13 }}
-              onClick={() => navigate('login')}
-            >
-              Log in
-            </button>
-            <button
-              className="btn btn-primary"
-              style={{ fontSize: 13 }}
-              onClick={() => navigate('editor')}
-            >
-              Get Started Free
-            </button>
+            {authUser ? (
+              <>
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: 13 }}
+                  onClick={() => navigate('dashboard')}
+                >
+                  Dashboard
+                </button>
+                <button
+                  className="btn btn-primary"
+                  style={{ fontSize: 13 }}
+                  onClick={() => navigate('editor')}
+                >
+                  Open Editor
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: 13 }}
+                  onClick={() => navigate('login')}
+                >
+                  Log in
+                </button>
+                <button
+                  className="btn btn-primary"
+                  style={{ fontSize: 13 }}
+                  onClick={() => navigate('editor')}
+                >
+                  Get Started Free
+                </button>
+              </>
+            )}
           </div>
 
           <button
@@ -270,9 +303,11 @@ export default function Navbar({ setPage, currentPage }) {
           ))}
         </div>
         <div className="tf-mobile-cta">
-          <button onClick={() => navigate('editor')}>
-            Get Started Free →
-          </button>
+          {authUser ? (
+            <button onClick={() => navigate('editor')}>Open Editor →</button>
+          ) : (
+            <button onClick={() => navigate('editor')}>Get Started Free →</button>
+          )}
         </div>
       </div>
     </>
