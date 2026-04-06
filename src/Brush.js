@@ -188,7 +188,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   // ── Item 4: Place a dab onto the stroke buffer ───────────────────────────
   function placeDab(imgX, imgY, pressure) {
-    const isPaintOrEraser = (brushType === 'paint' || brushType === 'eraser');
+    const isPaintOrEraser = (brushType === 'paint' || brushType === 'eraser' || brushType === 'airbrush');
     if (isPaintOrEraser && !strokeBufferRef.current) return;
 
     const effPressure = applyPressureCurve(pressure);
@@ -251,13 +251,13 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
           }
         }
       }
-    } else if (brushType === 'smudge') {
+    } else if (brushType === 'smudge' || brushType === 'smear') {
       _smudgeDab(imgX, imgY, radius, hardness, strength * flow * effPressure * 0.6);
       return;
-    } else if (brushType === 'blur-brush') {
+    } else if (brushType === 'blur-brush' || brushType === 'blur') {
       _blurDab(imgX, imgY, radius, hardness, strength * flow * effPressure);
       return;
-    } else if (brushType === 'sharpen-brush') {
+    } else if (brushType === 'sharpen-brush' || brushType === 'sharpen') {
       _sharpenDab(imgX, imgY, radius, hardness, strength * flow * effPressure * 0.2);
       return;
     } else if (brushType === 'clone') {
@@ -475,7 +475,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     const canvas = canvasRef.current;
     const W = canvas.width, H = canvas.height;
 
-    const isPaintOrEraser = (brushType === 'paint' || brushType === 'eraser');
+    const isPaintOrEraser = (brushType === 'paint' || brushType === 'eraser' || brushType === 'airbrush');
 
     if (isPaintOrEraser) {
       // Create OffscreenCanvas stroke buffer
@@ -509,7 +509,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     if (!canvas || !isReadyRef.current) return;
     const ctx = canvas.getContext('2d');
 
-    const isPaintOrEraser = (brushType === 'paint' || brushType === 'eraser');
+    const isPaintOrEraser = (brushType === 'paint' || brushType === 'eraser' || brushType === 'airbrush');
 
     if (isPaintOrEraser && strokeBufferRef.current) {
       // Apply selection mask to stroke buffer before compositing
@@ -574,7 +574,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     const last = lastDabPosRef.current;
     if (!last) {
       lastDabPosRef.current = { x, y };
-      const isPaint = (brushType === 'paint' || brushType === 'eraser');
+      const isPaint = (brushType === 'paint' || brushType === 'eraser' || brushType === 'airbrush');
       if (isPaint) placeDab(x, y, pressure);
       else placeDabDirect(x, y, pressure);
       return;
@@ -587,7 +587,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     let curLast = { x: last.x, y: last.y };
     let d = remainderRef.current;
 
-    const isPaint = (brushType === 'paint' || brushType === 'eraser');
+    const isPaint = (brushType === 'paint' || brushType === 'eraser' || brushType === 'airbrush');
 
     while (d + dist >= spacing) {
       const t = (spacing - d) / Math.max(0.001, dist);
