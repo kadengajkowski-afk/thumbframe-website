@@ -1,40 +1,62 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, forwardRef, useImperativeHandle, useState } from 'react';
 
 // ─── Brush Overlay ─────────────────────────────────────────────────────────────
+// Items 1-8: Stroke buffer architecture, coalesced pointer events, spacing-based
+// dab placement, opacity/flow model, radial gradient dabs, EMA smoothing,
+// OffscreenCanvas brush cursor, tool-specific pixel manipulation.
+
 export const BrushOverlay = forwardRef(function BrushOverlay(
-  { layer, onUpdate, brushType, brushSize, brushStrength, brushEdge, brushFlow, brushStabilizer, brushSmoothing, active, zoom, paintColor, paintAlpha, isMask,
-    pressureEnabled, pressureMapping, pressureCurve, pressureMin, pressureMax, onTabletDetected,
-    selectionMaskRef, selectionActive, maskW, maskH },
+  {
+    layer, onUpdate, brushType, brushSize, brushStrength, brushEdge,
+    brushFlow, brushStabilizer, brushSmoothing, brushSpacing,
+    active, zoom, paintColor, paintAlpha, isMask,
+    pressureEnabled, pressureMapping, pressureCurve, pressureMin, pressureMax,
+    onTabletDetected,
+    selectionMaskRef, selectionActive, maskW, maskH,
+  },
   ref
 ) {
-  const canvasRef      = useRef(null);
-  const cursorRef      = useRef(null);
-  const lastPos        = useRef(null);
-  const stabPos        = useRef(null); // stabilized position lags behind mouse
-  const cloneSource    = useRef(null);
-  const isPainting     = useRef(false);
-  const hasStroked     = useRef(false);
-  const isReady        = useRef(false);
-  const historyRef     = useRef([]);
-  const loadedSrc      = useRef(null);
-  const lastPressure   = useRef(1);
-  const lastTime       = useRef(Date.now());
-  const rawPressureRef = useRef(0.5); // live tablet pressure from pointer events (0.5 for mouse)
-  const lastHealPos    = useRef(null);
-  const hasPainted     = useRef(false);
-  const canvasScale    = useRef(1);
-  const originalImg    = useRef(null);
+  // ── Refs ──────────────────────────────────────────────────────────────────
+  const canvasRef            = useRef(null);   // main layer canvas (zoom×dpr resolution)
+  const brushCursorCanvasRef = useRef(null);   // cursor overlay (pointer-events:none)
 
-  const lastZoom       = useRef(null);
+  // Item 1: stroke buffer
+  const strokeBufferRef  = useRef(null);   // OffscreenCanvas matching layer pixel dimensions
+  const preStrokeRef     = useRef(null);   // ImageData snapshot before stroke (unused for undo, kept for possible revert)
+  const isPaintingRef    = useRef(false);
+  const lastDabPosRef    = useRef(null);   // last dab position for spacing
+  const remainderRef     = useRef(0);      // sub-pixel spacing remainder
 
-  // ── Stroke preview canvas — prevents alpha accumulation during a single stroke ──
-  const strokePreviewCanvasRef = useRef(null);
-  // ── Coalesced-event input queue + rAF render decoupling ──────────────────────
-  const strokePointsRef    = useRef([]);
-  const renderPendingRef   = useRef(false);
-  const lastSmoothedPoint  = useRef(null);
-  const strokeDistRef      = useRef(0);
+  // Item 2: coalesced + rAF
+  const coalescedQueueRef = useRef([]);
+  const rafPendingRef     = useRef(false);
 
+  // Item 6: EMA smoothing
+  const smoothedPosRef   = useRef(null);
+
+  // Item 8: smudge carry, clone source
+  const smudgeCarryRef   = useRef(null);   // {data:Uint8ClampedArray, w, h}
+  const cloneSourceRef   = useRef(null);   // {x,y} source point in image coords
+  const altPressedRef    = useRef(false);
+
+  // Internal: per-stroke layer snapshot (pre-stroke image for dodge/burn/smudge direct ops)
+  const strokeImageDataRef = useRef(null);   // ImageData for direct-manipulation tools
+  const strokeCanvasRef    = useRef(null);   // offscreen canvas backing strokeImageDataRef
+  const strokeCtxRef       = useRef(null);
+
+  // Loading / history
+  const isReadyRef       = useRef(false);
+  const loadedSrcRef     = useRef(null);
+  const originalImgRef   = useRef(null);
+  const canvasScaleRef   = useRef(1);       // devicePixelRatio at render time
+  const historyRef       = useRef([]);
+  const hasPaintedRef    = useRef(false);
+  const lastZoomRef      = useRef(null);
+  const rawPressureRef   = useRef(0.5);
+
+  const lastCursorPos    = useRef({x:0, y:0});
+
+  // ── Expose undo via ref ───────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
     undo() {
       if (historyRef.current.length <= 1) return;
@@ -48,38 +70,37 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     },
   }));
 
+  // ── Load layer image onto the canvas ─────────────────────────────────────
   useEffect(() => {
     if (!layer?.src || !active) return;
-    const zoomChanged = lastZoom.current !== null && lastZoom.current !== zoom;
-    if (loadedSrc.current === layer.src && !zoomChanged) return;
-    // If zoom changed but user was painting, save current state first
-    hasStroked.current = false;
-    hasPainted.current = false;
-    isReady.current = false;
+    const zoomChanged = lastZoomRef.current !== null && lastZoomRef.current !== zoom;
+    if (loadedSrcRef.current === layer.src && !zoomChanged) return;
+    hasPaintedRef.current = false;
+    isReadyRef.current = false;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    // Use the original image if available, otherwise load from src
+
     const loadImg = (img) => {
-      const z = zoom || 1;
+      const z   = zoom || 1;
       const dpr = window.devicePixelRatio || 1;
-      const pixelScale = z * dpr;
-      canvas.width  = Math.round(layer.width * pixelScale);
-      canvas.height = Math.round(layer.height * pixelScale);
-      canvasScale.current = dpr;
-      const ctx2 = canvas.getContext('2d');
-      ctx2.imageSmoothingEnabled = true;
-      ctx2.imageSmoothingQuality = 'high';
-      ctx2.clearRect(0, 0, canvas.width, canvas.height);
-      ctx2.drawImage(img, 0, 0, canvas.width, canvas.height);
-      originalImg.current = img;
-      historyRef.current = [ctx2.getImageData(0, 0, canvas.width, canvas.height)];
-      isReady.current    = true;
-      loadedSrc.current  = layer.src;
-      lastZoom.current   = zoom;
+      const px  = z * dpr;
+      canvas.width  = Math.round(layer.width  * px);
+      canvas.height = Math.round(layer.height * px);
+      canvasScaleRef.current = dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      originalImgRef.current = img;
+      historyRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+      isReadyRef.current   = true;
+      loadedSrcRef.current = layer.src;
+      lastZoomRef.current  = zoom;
     };
-    if (originalImg.current && originalImg.current.complete && loadedSrc.current === layer.src) {
-      // Zoom changed but same image — reuse cached original
-      loadImg(originalImg.current);
+
+    if (originalImgRef.current?.complete && loadedSrcRef.current === layer.src) {
+      loadImg(originalImgRef.current);
     } else {
       const img = new Image();
       img.crossOrigin = 'Anonymous';
@@ -88,1023 +109,724 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     }
   }, [layer?.src, layer?.width, layer?.height, active, zoom]);
 
-  function getPos(e) {
+  // ── Coordinate helpers ────────────────────────────────────────────────────
+  // Convert client coordinates → canvas pixel coordinates (layer pixels at zoom×dpr)
+  function clientToCanvas(clientX, clientY) {
     const canvas = canvasRef.current;
-    const rect   = canvas.getBoundingClientRect();
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
     return {
-      x: (e.clientX - rect.left) * (canvas.width  / rect.width),
-      y: (e.clientY - rect.top)  * (canvas.height / rect.height),
-      clientX: e.clientX,
-      clientY: e.clientY,
+      x: (clientX - rect.left) * (canvas.width  / rect.width),
+      y: (clientY - rect.top)  * (canvas.height / rect.height),
     };
   }
 
-  function saveSnap() {
-    const canvas = canvasRef.current;
-    if (!canvas || !isReady.current) return;
-    const snap = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-    historyRef.current = [...historyRef.current.slice(-19), snap];
-    hasStroked.current = true;
-  }
-
-  function flush() {
-    const canvas = canvasRef.current;
-    if (!canvas || !isReady.current) return;
-    if (!hasStroked.current) return;
-    // Store the painted canvas pixels as ImageData — don't re-encode as PNG
-    // This avoids quality loss from re-encoding
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    // Convert to data URL only for the layer state (needed for export)
-    const tmp = document.createElement('canvas');
-    tmp.width = canvas.width;
-    tmp.height = canvas.height;
-    tmp.getContext('2d').putImageData(imageData, 0, 0);
-    const dataUrl = tmp.toDataURL('image/png');
-    loadedSrc.current = dataUrl;
-    setTimeout(() => { onUpdate({ src: dataUrl }); }, 50);
-  }
-
-  function getPressure(pos) {
-    if (!lastPos.current) return 1;
-    const now    = Date.now();
-    const dt     = Math.max(1, now - lastTime.current);
-    const dx     = pos.x - lastPos.current.x;
-    const dy     = pos.y - lastPos.current.y;
-    const speed  = Math.sqrt(dx*dx + dy*dy) / dt;
-    const p      = Math.max(0.15, Math.min(1, 1 - speed * 0.8));
-    lastPressure.current = lastPressure.current * 0.7 + p * 0.3;
-    lastTime.current = now;
-    return lastPressure.current;
-  }
-
-  // ── Tablet pressure helpers ────────────────────────────────────────────────
-  function _applyPressureCurve(raw, curve, min, max) {
-    const minN = min / 100, maxN = max / 100;
-    const clamped = Math.max(minN, Math.min(maxN, raw));
-    const t = maxN > minN ? (clamped - minN) / (maxN - minN) : 0;
+  // ── Pressure helpers ──────────────────────────────────────────────────────
+  function applyPressureCurve(raw) {
+    if (!pressureEnabled || pressureMapping === 'none') return raw;
+    const minN  = (pressureMin  ?? 0)   / 100;
+    const maxN  = (pressureMax  ?? 100) / 100;
+    const clamp = Math.max(minN, Math.min(maxN, raw));
+    const t     = maxN > minN ? (clamp - minN) / (maxN - minN) : 0;
+    const curve = pressureCurve || 'linear';
     if (curve === 'exponential') return Math.pow(t, 2);
     if (curve === 'logarithmic') return Math.sqrt(t);
-    return t; // linear
+    return t;
   }
 
-  function getEffectivePressure(speedPressure) {
-    if (!pressureEnabled || pressureMapping === 'none') return speedPressure;
-    return _applyPressureCurve(
-      rawPressureRef.current,
-      pressureCurve || 'linear',
-      pressureMin ?? 0,
-      pressureMax ?? 100
-    );
-  }
-
-  // ✅ PHASE 2: Stabilizer — smooth position lags behind mouse
-  function getStabilizedPos(target) {
-    const stab = brushStabilizer || 0;
-    if (stab === 0) return target;
-    if (!stabPos.current) { stabPos.current = { x:target.x, y:target.y }; return target; }
-    const lag = stab / 100;
-    stabPos.current = {
-      x: stabPos.current.x + (target.x - stabPos.current.x) * (1 - lag),
-      y: stabPos.current.y + (target.y - stabPos.current.y) * (1 - lag),
-    };
-    return stabPos.current;
-  }
-
-  function getStamps(from, to, spacing) {
-    const dx   = to.x - from.x;
-    const dy   = to.y - from.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    if (dist < spacing) return [];
-    const steps  = Math.floor(dist / spacing);
-    const stamps = [];
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      stamps.push({ x: from.x + dx*t, y: from.y + dy*t });
+  // ── Item 6: EMA stroke smoothing ─────────────────────────────────────────
+  function applySmoothing(pt) {
+    const factor = ((brushSmoothing ?? 35) / 100) * 0.85;
+    if (factor <= 0 || !smoothedPosRef.current) {
+      smoothedPosRef.current = { x: pt.x, y: pt.y };
+      return pt;
     }
-    return stamps;
+    const s = smoothedPosRef.current;
+    s.x = s.x + (pt.x - s.x) * (1 - factor);
+    s.y = s.y + (pt.y - s.y) * (1 - factor);
+    return { x: s.x, y: s.y };
   }
 
-  // ── 3-pass box blur ────────────────────────────────────────────────────────
-  function boxBlurH(src, dst, w, h, r) {
-    const iarr = 1/(r+r+1);
-    for (let i=0; i<h; i++) {
-      let ti=i*w*4, li=ti, ri=ti+r*4;
-      const fv=[src[ti],src[ti+1],src[ti+2],src[ti+3]];
-      const lv=[src[ti+(w-1)*4],src[ti+(w-1)*4+1],src[ti+(w-1)*4+2],src[ti+(w-1)*4+3]];
-      let val=[fv[0]*(r+1),fv[1]*(r+1),fv[2]*(r+1),fv[3]*(r+1)];
-      for (let j=0;j<r;j++) for (let c=0;c<4;c++) val[c]+=src[ti+j*4+c];
-      for (let j=0;j<=r;j++){for(let c=0;c<4;c++){val[c]+=src[ri+c]-fv[c];dst[ti+c]=Math.round(val[c]*iarr);}ri+=4;ti+=4;}
-      for (let j=r+1;j<w-r;j++){for(let c=0;c<4;c++){val[c]+=src[ri+c]-src[li+c];dst[ti+c]=Math.round(val[c]*iarr);}ri+=4;li+=4;ti+=4;}
-      for (let j=w-r;j<w;j++){for(let c=0;c<4;c++){val[c]+=lv[c]-src[li+c];dst[ti+c]=Math.round(val[c]*iarr);}li+=4;ti+=4;}
-    }
-  }
-  function boxBlurV(src, dst, w, h, r) {
-    const iarr = 1/(r+r+1);
-    for (let i=0; i<w; i++) {
-      let ti=i*4, li=ti, ri=ti+r*w*4;
-      const fv=[src[ti],src[ti+1],src[ti+2],src[ti+3]];
-      const lv=[src[ti+(h-1)*w*4],src[ti+(h-1)*w*4+1],src[ti+(h-1)*w*4+2],src[ti+(h-1)*w*4+3]];
-      let val=[fv[0]*(r+1),fv[1]*(r+1),fv[2]*(r+1),fv[3]*(r+1)];
-      for (let j=0;j<r;j++) for (let c=0;c<4;c++) val[c]+=src[ti+j*w*4+c];
-      for (let j=0;j<=r;j++){for(let c=0;c<4;c++){val[c]+=src[ri+c]-fv[c];dst[ti+c]=Math.round(val[c]*iarr);}ri+=w*4;ti+=w*4;}
-      for (let j=r+1;j<h-r;j++){for(let c=0;c<4;c++){val[c]+=src[ri+c]-src[li+c];dst[ti+c]=Math.round(val[c]*iarr);}ri+=w*4;li+=w*4;ti+=w*4;}
-      for (let j=h-r;j<h;j++){for(let c=0;c<4;c++){val[c]+=lv[c]-src[li+c];dst[ti+c]=Math.round(val[c]*iarr);}li+=w*4;ti+=w*4;}
-    }
-  }
-
-  function applyBlurStamp(ctx, x, y, pressure) {
-    const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
-    // ✅ PHASE 2: Flow separates how much paint per stamp from total opacity
-    const s  = (brushStrength/100) * (brushFlow/100) * pressure;
-    const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
-    const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
-    if (sw<3||sh<3) return;
-    const id  = ctx.getImageData(sx,sy,sw,sh);
-    const src = new Uint8ClampedArray(id.data);
-    const tmp = new Uint8ClampedArray(id.data.length);
-    const dst = new Uint8ClampedArray(id.data.length);
-    const k   = brushEdge==='hard' ? Math.max(1,Math.round(r*0.15)) : Math.max(1,Math.round(r*0.25));
-    boxBlurH(src,tmp,sw,sh,k); boxBlurH(tmp,dst,sw,sh,k); boxBlurH(dst,tmp,sw,sh,k);
-    boxBlurV(tmp,dst,sw,sh,k); boxBlurV(dst,tmp,sw,sh,k); boxBlurV(tmp,dst,sw,sh,k);
-    for (let i=0;i<sw;i++) for (let j=0;j<sh;j++) {
-      const dist=Math.sqrt((sx+i-x)**2+(sy+j-y)**2);
-      if (dist>r) continue;
-      const falloff=brushEdge==='hard'?1:Math.max(0,1-(dist/r)**1.5);
-      const blend=s*falloff;
-      const idx=(j*sw+i)*4;
-      for (let c=0;c<3;c++) id.data[idx+c]=Math.round(src[idx+c]*(1-blend)+dst[idx+c]*blend);
-    }
-    ctx.putImageData(id,sx,sy);
-  }
-
-  function applySmearStamp(ctx, x, y, fromX, fromY, pressure) {
-    const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
-    const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.5;
-    const dx = x-fromX, dy = y-fromY;
-    if (Math.abs(dx)<0.5&&Math.abs(dy)<0.5) return;
-    const sx=Math.max(0,Math.round(x-r)), sy=Math.max(0,Math.round(y-r));
-    const sw=Math.min(canvas.width-sx,r*2+1), sh=Math.min(canvas.height-sy,r*2+1);
-    const osx=Math.max(0,Math.round(x-r-dx)), osy=Math.max(0,Math.round(y-r-dy));
-    const osw=Math.min(canvas.width-osx,r*2+1), osh=Math.min(canvas.height-osy,r*2+1);
-    if (sw<=0||sh<=0||osw<=0||osh<=0) return;
-    const dest=ctx.getImageData(sx,sy,sw,sh);
-    const src=ctx.getImageData(osx,osy,osw,osh);
-    const dd=dest.data, sd=src.data;
-    for (let i=0;i<sw;i++) for (let j=0;j<sh;j++) {
-      const dist=Math.sqrt((sx+i-x)**2+(sy+j-y)**2);
-      if (dist>r) continue;
-      const falloff=brushEdge==='hard'?1:Math.max(0,1-(dist/r)**1.5);
-      const blend=s*falloff;
-      const si=Math.min(i,osw-1), sj=Math.min(j,osh-1);
-      const idx=(j*sw+i)*4, sidx=(sj*osw+si)*4;
-      for (let c=0;c<3;c++) dd[idx+c]=Math.round(dd[idx+c]*(1-blend)+sd[sidx+c]*blend);
-    }
-    ctx.putImageData(dest,sx,sy);
-  }
-
-  function applySharpenStamp(ctx, x, y, pressure) {
-    const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
-    const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.12;
-    const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
-    const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
-    if (sw<=2||sh<=2) return;
-    const id=ctx.getImageData(sx,sy,sw,sh);
-    const d=id.data, out=new Uint8ClampedArray(d);
-    for (let i=1;i<sw-1;i++) for (let j=1;j<sh-1;j++) {
-      const dist=Math.sqrt((sx+i-x)**2+(sy+j-y)**2);
-      if (dist>r) continue;
-      const falloff=brushEdge==='hard'?1:Math.max(0,1-(dist/r)**2);
-      const strength=s*falloff;
-      if (strength<=0) continue;
-      for (let c=0;c<3;c++) {
-        const idx=(j*sw+i)*4+c;
-        const neighbors=(d[((j-1)*sw+i)*4+c]+d[((j+1)*sw+i)*4+c]+d[(j*sw+i-1)*4+c]+d[(j*sw+i+1)*4+c])/4;
-        out[idx]=Math.min(255,Math.max(0,Math.round(d[idx]+(d[idx]-neighbors)*strength*3)));
-      }
-      out[(j*sw+i)*4+3]=d[(j*sw+i)*4+3];
-    }
-    id.data.set(out);
-    ctx.putImageData(id,sx,sy);
-  }
-
-  function applyAirbrushStamp(ctx, x, y, pressure) {
-    const r       = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
-    const flow    = brushFlow/100;
-    const alpha   = (brushStrength/100)*flow*pressure*0.12;
-    const density = Math.round(r*1.2);
+  // ── Item 5: Radial gradient dab rendering ────────────────────────────────
+  function renderDab(ctx, x, y, size, hardness, rgbObj, alpha, isEraser) {
+    const radius = size / 2;
+    if (radius < 0.5) return;
+    const { r, g, b } = rgbObj;
     ctx.save();
-    for (let i=0;i<density;i++){
-      const angle    = Math.random()*Math.PI*2;
-      const dist     = brushEdge==='hard'
-        ? Math.random()*r
-        : Math.pow(Math.random(),0.6)*r;
-      const px = x+Math.cos(angle)*dist;
-      const py = y+Math.sin(angle)*dist;
-      const falloff = brushEdge==='hard'?1:Math.pow(1-dist/r,0.5);
-      const dotSize = Math.max(0.5, (1-dist/r)*2.5);
-      ctx.globalAlpha = Math.min(1, alpha*falloff*(0.6+Math.random()*0.8));
+    if (isEraser) ctx.globalCompositeOperation = 'destination-out';
+
+    if (hardness >= 0.99) {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = isEraser ? `rgba(0,0,0,1)` : `rgb(${r},${g},${b})`;
       ctx.beginPath();
-      ctx.arc(px,py,dotSize,0,Math.PI*2);
-      ctx.fillStyle='#000000';
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const solidStop = Math.max(0, Math.min(0.98, hardness));
+      const col       = isEraser ? `0,0,0` : `${r},${g},${b}`;
+      const grd = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      grd.addColorStop(0,           `rgba(${col},${alpha})`);
+      grd.addColorStop(solidStop,   `rgba(${col},${alpha})`);
+      grd.addColorStop(1,           `rgba(${col},0)`);
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
   }
 
-  function applyEraserStamp(ctx, x, y, pressure) {
-    const r     = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
-    const alpha = (brushStrength/100)*(brushFlow/100)*pressure;
-    ctx.save();
-    ctx.globalCompositeOperation='destination-out';
-    if (brushEdge==='soft') {
-      const g=ctx.createRadialGradient(x,y,0,x,y,r);
-      g.addColorStop(0,  `rgba(0,0,0,${alpha})`);
-      g.addColorStop(0.4,`rgba(0,0,0,${alpha*0.8})`);
-      g.addColorStop(1,  'rgba(0,0,0,0)');
-      ctx.fillStyle=g;
-    } else {
-      ctx.fillStyle=`rgba(0,0,0,${alpha})`;
-    }
-    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-    ctx.restore();
-  }
-
-  function applyCloneStamp(ctx, x, y, pressure) {
-    if (!cloneSource.current) return;
-    const r=Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current), cs=cloneSource.current;
-    ctx.save();
-    ctx.globalAlpha=(brushStrength/100)*(brushFlow/100)*pressure;
-    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.clip();
-    ctx.drawImage(canvasRef.current,cs.x-r,cs.y-r,r*2,r*2,x-r,y-r,r*2,r*2);
-    ctx.restore();
-  }
-
-  function applyPaintStamp(ctx, x, y, pressure, color, alpha) {
-    const r     = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
-    const a     = ((alpha||100)/100) * (brushStrength/100) * (brushFlow/100) * pressure;
-    const hex   = (color||'#ff0000').replace('#','');
-    const cr    = parseInt(hex.slice(0,2),16);
-    const cg    = parseInt(hex.slice(2,4),16);
-    const cb    = parseInt(hex.slice(4,6),16);
-    const canvas= canvasRef.current;
-    const sx    = Math.max(0,Math.round(x-r));
-    const sy    = Math.max(0,Math.round(y-r));
-    const sw    = Math.min(canvas.width-sx,r*2+1);
-    const sh    = Math.min(canvas.height-sy,r*2+1);
-    if(sw<=0||sh<=0) return;
-    const id    = ctx.getImageData(sx,sy,sw,sh);
-    const d     = id.data;
-    for(let i=0;i<sw;i++){
-      for(let j=0;j<sh;j++){
-        const dist=Math.sqrt((sx+i-x)**2+(sy+j-y)**2);
-        if(dist>r) continue;
-        const falloff=brushEdge==='hard'?1:Math.max(0,1-(dist/r)**1.5);
-        const blend=a*falloff;
-        if(blend<=0) continue;
-        const idx=(j*sw+i)*4;
-        d[idx+0]=Math.round(d[idx+0]*(1-blend)+cr*blend);
-        d[idx+1]=Math.round(d[idx+1]*(1-blend)+cg*blend);
-        d[idx+2]=Math.round(d[idx+2]*(1-blend)+cb*blend);
-        if(d[idx+3]<255) d[idx+3]=Math.min(255,Math.round(d[idx+3]+255*blend));
-      }
-    }
-    ctx.putImageData(id,sx,sy);
-  }
-
-  function applyFloodFill(ctx, x, y, fillColor) {
-    const canvas = canvasRef.current;
-    const width  = canvas.width;
-    const height = canvas.height;
-    const hex    = (fillColor||'#ff0000').replace('#','');
-    const fr     = parseInt(hex.slice(0,2),16);
-    const fg     = parseInt(hex.slice(2,4),16);
-    const fb     = parseInt(hex.slice(4,6),16);
-    const id     = ctx.getImageData(0,0,width,height);
-    const data   = id.data;
-    const px     = Math.round(x), py = Math.round(y);
-    if(px<0||px>=width||py<0||py>=height) return;
-    const startIdx=(py*width+px)*4;
-    const sr=data[startIdx],sg=data[startIdx+1],sb=data[startIdx+2];
-    if(sr===fr&&sg===fg&&sb===fb) return;
-    const tolerance=30;
-    function matches(idx){
-      return Math.abs(data[idx]-sr)<=tolerance&&
-             Math.abs(data[idx+1]-sg)<=tolerance&&
-             Math.abs(data[idx+2]-sb)<=tolerance;
-    }
-    const stack=[[px,py]];
-    const visited=new Uint8Array(width*height);
-    visited[py*width+px]=1;
-    while(stack.length>0){
-      const [cx,cy]=stack.pop();
-      const idx=(cy*width+cx)*4;
-      data[idx]=fr;data[idx+1]=fg;data[idx+2]=fb;data[idx+3]=255;
-      for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]){
-        const nx=cx+dx,ny=cy+dy;
-        if(nx<0||nx>=width||ny<0||ny>=height) continue;
-        if(visited[ny*width+nx]) continue;
-        const nidx=(ny*width+nx)*4;
-        if(matches(nidx)){
-          visited[ny*width+nx]=1;
-          stack.push([nx,ny]);
-        }
-      }
-    }
-    ctx.putImageData(id,0,0);
-    flush();
-  }
-
-  // ✅ PHASE 3: Dodge — brighten pixels
-  function applyDodgeStamp(ctx, x, y, pressure) {
-    const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
-    const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.4;
-    const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
-    const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
-    if (sw<=0||sh<=0) return;
-    const id=ctx.getImageData(sx,sy,sw,sh);
-    const d=id.data;
-    for (let i=0;i<sw;i++) for (let j=0;j<sh;j++) {
-      const dist=Math.sqrt((sx+i-x)**2+(sy+j-y)**2);
-      if (dist>r) continue;
-      const falloff=brushEdge==='hard'?1:Math.max(0,1-(dist/r)**1.5);
-      const strength=s*falloff;
-      const idx=(j*sw+i)*4;
-      for (let c=0;c<3;c++) {
-        const v=d[idx+c];
-        d[idx+c]=Math.min(255,Math.round(v+(255-v)*strength));
-      }
-    }
-    ctx.putImageData(id,sx,sy);
-  }
-
-  // ✅ PHASE 3: Burn — darken pixels
-  function applyBurnStamp(ctx, x, y, pressure) {
-    const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
-    const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.4;
-    const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
-    const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
-    if (sw<=0||sh<=0) return;
-    const id=ctx.getImageData(sx,sy,sw,sh);
-    const d=id.data;
-    for (let i=0;i<sw;i++) for (let j=0;j<sh;j++) {
-      const dist=Math.sqrt((sx+i-x)**2+(sy+j-y)**2);
-      if (dist>r) continue;
-      const falloff=brushEdge==='hard'?1:Math.max(0,1-(dist/r)**1.5);
-      const strength=s*falloff;
-      const idx=(j*sw+i)*4;
-      for (let c=0;c<3;c++) d[idx+c]=Math.min(255,Math.max(0,Math.round(d[idx+c]*(1-strength))));
-    }
-    ctx.putImageData(id,sx,sy);
-  }
-
-  // ✅ PHASE 3: Healing brush — samples surrounding texture
-  function applyHealStamp(ctx, x, y, pressure) {
-    const canvas = canvasRef.current;
-    const z      = zoom || 1;
-    const r      = Math.round(brushSize * z);
-    const s      = Math.min(1, (brushStrength/100) * (brushFlow/100) * pressure * 1.8);
-    const clamp  = v => Math.min(255, Math.max(0, Math.round(v)));
-    const PATCH  = Math.max(2, Math.round(r * 0.2));
-
-    // ✅ Tighter margin — less pixels to process
-    const margin = Math.round(r * 2);
-    const wx  = Math.max(0, Math.round(x-r-margin));
-    const wy  = Math.max(0, Math.round(y-r-margin));
-    const ww  = Math.min(canvas.width-wx,  (r+margin)*2+1);
-    const wh  = Math.min(canvas.height-wy, (r+margin)*2+1);
-    if (ww < PATCH*4 || wh < PATCH*4) return;
-
-    const lx = x-wx, ly = y-wy;
-    const SI = (px,py) => (py*ww+px)*4;
-
-    const wid  = ctx.getImageData(wx, wy, ww, wh);
-    const src  = new Uint8ClampedArray(wid.data);
-    const work = new Uint8ClampedArray(wid.data);
-
-    // ── Build mask ──────────────────────────────────────────────────────────────
-    const mask = new Uint8Array(ww*wh);
-    for (let i=0;i<ww;i++) for (let j=0;j<wh;j++) {
-      const d  = Math.sqrt((i-lx)**2+(j-ly)**2);
-      const p  = SI(i,j);
-      const pb = src[p+2], pr = src[p], pg = src[p+1], pa = src[p+3];
-      const isBlue = pb>150&&pb>pr*1.5&&pb>pg*1.3&&pa>40;
-      if (d<=r||pa<128||isBlue) mask[j*ww+i]=1;
-    }
-
-    // ── BFS order — outside in ──────────────────────────────────────────────────
-    const order = [];
-    const visited = new Uint8Array(ww*wh);
-    const bfsQ = [];
-
-    // Seed BFS from masked pixels adjacent to unmasked
-    for (let i=0;i<ww;i++) for (let j=0;j<wh;j++) {
-      if (!mask[j*ww+i]) continue;
-      let hasUnmaskedNeighbor = false;
-      for (const [di,dj] of [[-1,0],[1,0],[0,-1],[0,1]]) {
-        const ni=i+di,nj=j+dj;
-        if (ni<0||ni>=ww||nj<0||nj>=wh) continue;
-        if (!mask[nj*ww+ni]) { hasUnmaskedNeighbor=true; break; }
-      }
-      if (hasUnmaskedNeighbor) { bfsQ.push([i,j]); visited[j*ww+i]=1; }
-    }
-
-    let qi=0;
-    while (qi<bfsQ.length) {
-      const [ci,cj]=bfsQ[qi++];
-      order.push([ci,cj]);
-      for (const [di,dj] of [[-1,0],[1,0],[0,-1],[0,1]]) {
-        const ni=ci+di,nj=cj+dj;
-        if (ni<0||ni>=ww||nj<0||nj>=wh) continue;
-        if (!mask[nj*ww+ni]||visited[nj*ww+ni]) continue;
-        visited[nj*ww+ni]=1;
-        bfsQ.push([ni,nj]);
-      }
-    }
-
-    // ── Single PatchMatch pass on ALL masked pixels ─────────────────────────────
-    // ✅ Run NNF once upfront instead of per-layer — much faster
-    const sources=[];
-    for (let i=PATCH;i<ww-PATCH;i+=2) for (let j=PATCH;j<wh-PATCH;j+=2) {
-      if (!mask[j*ww+i]&&src[SI(i,j)+3]>=200) sources.push([i,j]);
-    }
-    if (sources.length<4) return;
-
-    function patchDist(ax,ay,bx,by) {
-      let sum=0,cnt=0;
-      for (let di=-PATCH;di<=PATCH;di+=2) for (let dj=-PATCH;dj<=PATCH;dj+=2) {
-        const ai=ax+di,aj=ay+dj,bi=bx+di,bj=by+dj;
-        if(ai<0||ai>=ww||aj<0||aj>=wh||bi<0||bi>=ww||bj<0||bj>=wh) continue;
-        if(mask[aj*ww+ai]||mask[bj*ww+bi]) continue;
-        const a=SI(ai,aj),b=SI(bi,bj);
-        const dr=src[a]-src[b],dg=src[a+1]-src[b+1],db=src[a+2]-src[b+2];
-        sum+=dr*dr+dg*dg+db*db; cnt++;
-      }
-      return cnt>0?sum/cnt:Infinity;
-    }
-
-    const nnfX=new Int16Array(ww*wh);
-    const nnfY=new Int16Array(ww*wh);
-    const nnfS=new Float32Array(ww*wh).fill(Infinity);
-
-    // Init NNF — use BFS order for smarter initialization
-    for (const [i,j] of order) {
-      // Try to inherit from already-processed neighbor first
-      let bx=-1,by=-1,bs=Infinity;
-      for (const [di,dj] of [[-1,0],[1,0],[0,-1],[0,1]]) {
-        const ni=i+di,nj=j+dj;
-        if(ni<0||ni>=ww||nj<0||nj>=wh) continue;
-        if(nnfS[nj*ww+ni]===Infinity) continue;
-        const cx=nnfX[nj*ww+ni]+di,cy=nnfY[nj*ww+ni]+dj;
-        if(cx<0||cx>=ww||cy<0||cy>=wh||mask[cy*ww+cx]) continue;
-        const sc=patchDist(i,j,cx,cy);
-        if(sc<bs){bx=cx;by=cy;bs=sc;}
-      }
-      if(bx<0){
-        // Random init
-        const rnd=sources[Math.floor(Math.random()*sources.length)];
-        bx=rnd[0];by=rnd[1];bs=patchDist(i,j,bx,by);
-      }
-      nnfX[j*ww+i]=bx;nnfY[j*ww+i]=by;nnfS[j*ww+i]=bs;
-    }
-
-    // ✅ Two PatchMatch passes total — not per layer
-    for (let iter=0;iter<2;iter++) {
-      const fwd=iter%2===0;
-      const iS=fwd?PATCH:ww-PATCH-1,iE=fwd?ww-PATCH:PATCH-1,iV=fwd?1:-1;
-      const jS=fwd?PATCH:wh-PATCH-1,jE=fwd?wh-PATCH:PATCH-1,jV=fwd?1:-1;
-      for (let i=iS;i!==iE;i+=iV) for (let j=jS;j!==jE;j+=jV) {
-        if (!mask[j*ww+i]) continue;
-        const ni=j*ww+i;
-        let bx=nnfX[ni],by=nnfY[ni],bs=nnfS[ni];
-        for (const [di,dj] of [[iV,0],[0,jV]]) {
-          const pi=i-di,pj=j-dj;
-          if(pi<0||pi>=ww||pj<0||pj>=wh||!mask[pj*ww+pi]) continue;
-          const cx=nnfX[pj*ww+pi]+di,cy=nnfY[pj*ww+pi]+dj;
-          if(cx<PATCH||cx>=ww-PATCH||cy<PATCH||cy>=wh-PATCH||mask[cy*ww+cx]) continue;
-          const sc=patchDist(i,j,cx,cy);
-          if(sc<bs){bx=cx;by=cy;bs=sc;}
-        }
-        let sr=Math.max(ww,wh)/2;
-        while(sr>=1){
-          const rx=Math.round(bx+(Math.random()*2-1)*sr);
-          const ry=Math.round(by+(Math.random()*2-1)*sr);
-          if(rx>=PATCH&&rx<ww-PATCH&&ry>=PATCH&&ry<wh-PATCH&&!mask[ry*ww+rx]){
-            const sc=patchDist(i,j,rx,ry);
-            if(sc<bs){bx=rx;by=ry;bs=sc;}
-          }
-          sr*=0.5;
-        }
-        nnfX[ni]=bx;nnfY[ni]=by;nnfS[ni]=bs;
-      }
-    }
-
-    // ── Reconstruct in BFS order ────────────────────────────────────────────────
-    for (const [i,j] of order) {
-      const ni  = j*ww+i;
-      const sx  = nnfX[ni], sy = nnfY[ni];
-      if(sx<0||sx>=ww||sy<0||sy>=wh) continue;
-      const ss  = SI(sx,sy);
-      if(src[ss+3]<200) continue;
-      const pidx = SI(i,j);
-      const dist = Math.sqrt((i-lx)**2+(j-ly)**2);
-      const fo   = brushEdge==='hard'?1:Math.max(0,1-(dist/r)**1.2);
-      const str  = s*fo;
-      if(str<=0) continue;
-
-      // Gaussian blend of small neighborhood
-      let wR=0,wG=0,wB=0,wT=0;
-      const kr=Math.min(2,PATCH);
-      for(let di=-kr;di<=kr;di++) for(let dj=-kr;dj<=kr;dj++){
-        const ni2=i+di,nj2=j+dj;
-        if(ni2<0||ni2>=ww||nj2<0||nj2>=wh||!mask[nj2*ww+ni2]) continue;
-        const nn2=nj2*ww+ni2;
-        const sx2=nnfX[nn2]+di,sy2=nnfY[nn2]+dj;
-        if(sx2<0||sx2>=ww||sy2<0||sy2>=wh||mask[sy2*ww+sx2]) continue;
-        const ss2=SI(sx2,sy2);
-        if(work[ss2+3]<200) continue;
-        const gw=Math.exp(-(di*di+dj*dj)/(kr*kr+0.1))/(nnfS[nn2]+0.001);
-        wR+=work[ss2]*gw;wG+=work[ss2+1]*gw;wB+=work[ss2+2]*gw;wT+=gw;
-      }
-      const fR=wT>0?wR/wT:src[ss];
-      const fG=wT>0?wG/wT:src[ss+1];
-      const fB=wT>0?wB/wT:src[ss+2];
-      const alpha=src[pidx+3];
-
-      if(alpha<128){
-        work[pidx+0]=clamp(fR);
-        work[pidx+1]=clamp(fG);
-        work[pidx+2]=clamp(fB);
-        work[pidx+3]=clamp(255*Math.min(1,str*1.5));
-      } else {
-        const tL=0.299*src[pidx]+0.587*src[pidx+1]+0.114*src[pidx+2];
-        const sL=0.299*fR+0.587*fG+0.114*fB;
-        const lr=sL>1?Math.min(tL/sL,1.8):1;
-        work[pidx+0]=clamp(src[pidx+0]*(1-str)+fR*lr*str);
-        work[pidx+1]=clamp(src[pidx+1]*(1-str)+fG*lr*str);
-        work[pidx+2]=clamp(src[pidx+2]*(1-str)+fB*lr*str);
-        work[pidx+3]=src[pidx+3];
-      }
-      // Unmask so inner pixels can use it
-      mask[j*ww+i]=0;
-    }
-
-    // ── Feather edge ────────────────────────────────────────────────────────────
-    const final=new Uint8ClampedArray(work);
-    for(let i=0;i<ww;i++) for(let j=0;j<wh;j++){
-      const d=Math.sqrt((i-lx)**2+(j-ly)**2);
-      if(d<r*0.82||d>r) continue;
-      const t=(d-r*0.82)/(r*0.18);
-      const p=SI(i,j);
-      for(let c=0;c<3;c++) final[p+c]=clamp(work[p+c]*(1-t)+src[p+c]*t);
-      if(src[p+3]<128) final[p+3]=clamp(work[p+3]*(1-t));
-    }
-
-    ctx.putImageData(new ImageData(final,ww,wh),wx,wy);
-  }
-
-  // ✅ PHASE 3: Wet mix — picks up color from canvas and mixes like paint
-  function applyWetMixStamp(ctx, x, y, pressure) {
-    const canvas = canvasRef.current;
-    const r  = Math.round(brushSize*pressureSizeMultRef.current*(zoom||1)*canvasScale.current);
-    const s  = (brushStrength/100)*(brushFlow/100)*pressure*0.6;
-    const sx = Math.max(0,Math.round(x-r)), sy = Math.max(0,Math.round(y-r));
-    const sw = Math.min(canvas.width-sx,r*2+1), sh = Math.min(canvas.height-sy,r*2+1);
-    if (sw<=0||sh<=0) return;
-
-    const id  = ctx.getImageData(sx,sy,sw,sh);
-    const d   = id.data;
-
-    // Sample canvas color under brush center
-    const centerData = ctx.getImageData(Math.round(x),Math.round(y),1,1).data;
-    const pickR = centerData[0], pickG = centerData[1], pickB = centerData[2];
-
-    // Sample from behind (smear direction)
-    const fromX = lastPos.current ? lastPos.current.x : x;
-    const fromY = lastPos.current ? lastPos.current.y : y;
-    const osx = Math.max(0,Math.round(fromX-r)), osy = Math.max(0,Math.round(fromY-r));
-    const osw = Math.min(canvas.width-osx,r*2+1), osh = Math.min(canvas.height-osy,r*2+1);
-    if (osw<=0||osh<=0) return;
-    const behind = ctx.getImageData(osx,osy,osw,osh);
-    const bd     = behind.data;
-
-    for (let i=0;i<sw;i++) for (let j=0;j<sh;j++) {
-      const dist=Math.sqrt((sx+i-x)**2+(sy+j-y)**2);
-      if (dist>r) continue;
-      const falloff=brushEdge==='hard'?1:Math.max(0,1-(dist/r)**1.5);
-      const blend=s*falloff;
-      const si=Math.min(i,osw-1), sj=Math.min(j,osh-1);
-      const idx=(j*sw+i)*4, bidx=(sj*osw+si)*4;
-
-      // Mix: canvas pixel + picked color + behind pixel
-      for (let c=0;c<3;c++) {
-        const picked = c===0?pickR:c===1?pickG:pickB;
-        const wet    = d[idx+c]*0.4 + bd[bidx+c]*0.4 + picked*0.2;
-        d[idx+c]     = Math.round(d[idx+c]*(1-blend)+wet*blend);
-      }
-    }
-    ctx.putImageData(id,sx,sy);
-  }
-
-
-  function paintStamp(ctx, x, y, fromX, fromY, pressure) {
-    if (brushType==='blur')     applyBlurStamp(ctx,x,y,pressure);
-    if (brushType==='smear')    applySmearStamp(ctx,x,y,fromX||x,fromY||y,pressure);
-    if (brushType==='sharpen')  applySharpenStamp(ctx,x,y,pressure);
-    if (brushType==='airbrush') applyAirbrushStamp(ctx,x,y,pressure);
-    if (brushType==='eraser')   applyEraserStamp(ctx,x,y,pressure);
-    if (brushType==='clone')    applyCloneStamp(ctx,x,y,pressure);
-    if (brushType==='dodge')    applyDodgeStamp(ctx,x,y,pressure);
-    if (brushType==='burn')     applyBurnStamp(ctx,x,y,pressure);
-    if (brushType==='wetmix')   applyWetMixStamp(ctx,x,y,pressure);
-    if (brushType==='paint')    applyPaintStamp(ctx,x,y,pressure,paintColor,paintAlpha);
-    if (brushType==='fill')     applyFloodFill(ctx,x,y,paintColor);
-  }
-
-  // Ref to hold pressure-scaled brush size multiplier, read by stamp functions
-  const pressureSizeMultRef = useRef(1);
-
-  // ── Gradient dab — proper radial-gradient brush stamp for paint/eraser ────────
-  function renderGradientDab(ctx, x, y, size, hardness, r, g, b, alpha) {
-    const radius = size / 2;
-    if (radius < 0.5) return;
-    const grd = ctx.createRadialGradient(x, y, 0, x, y, radius);
-    const innerStop = Math.max(0, Math.min(0.99, hardness));
-    grd.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
-    if (innerStop > 0) grd.addColorStop(innerStop, `rgba(${r},${g},${b},${alpha})`);
-    grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
-    ctx.fillStyle = grd;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // ── Stroke smoothing — exponential moving average ─────────────────────────────
-  function smoothPoint(curr, last, factor) {
-    if (!last) return curr;
+  // Parse hex paintColor into {r,g,b}
+  function parseColor(hex) {
+    const h = (hex || '#ff0000').replace('#', '');
     return {
-      x: last.x + (curr.x - last.x) * (1 - factor),
-      y: last.y + (curr.y - last.y) * (1 - factor),
-      pressure: curr.pressure,
+      r: parseInt(h.slice(0, 2), 16) || 0,
+      g: parseInt(h.slice(2, 4), 16) || 0,
+      b: parseInt(h.slice(4, 6), 16) || 0,
     };
   }
 
-  // ── Stroke interpolation — fill gaps between sampled points ──────────────────
-  // eslint-disable-next-line no-unused-vars
-  function interpolateStroke(p1, p2, spacing) {
-    const dx = p2.x - p1.x, dy = p2.y - p1.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    if (dist < 0.1) return [];
-    const steps = Math.max(1, Math.floor(dist / spacing));
-    const pts = [];
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      pts.push({
-        x: p1.x + dx*t, y: p1.y + dy*t,
-        pressure: p1.pressure + (p2.pressure - p1.pressure)*t,
-      });
+  // ── Item 4: Place a dab onto the stroke buffer ───────────────────────────
+  function placeDab(imgX, imgY, pressure) {
+    const isPaintOrEraser = (brushType === 'paint' || brushType === 'eraser');
+    if (isPaintOrEraser && !strokeBufferRef.current) return;
+
+    const effPressure = applyPressureCurve(pressure);
+    const sizeScale   = (pressureEnabled && (pressureMapping === 'size' || pressureMapping === 'both'))
+      ? Math.max(0.1, 0.1 + 0.9 * effPressure) : 1;
+    const effSize = brushSize * sizeScale * (zoom || 1) * canvasScaleRef.current;
+    const effFlow = (brushFlow ?? 100) / 100;
+
+    if (isPaintOrEraser) {
+      const ctx = strokeBufferRef.current.getContext('2d');
+      const hardness = brushEdge === 'hard' ? 0.99 : 0.0;
+      const rgb      = parseColor(paintColor);
+      const alphaVal = ((paintAlpha ?? 100) / 100) * effFlow;
+      renderDab(ctx, imgX, imgY, effSize * 2, hardness, rgb, alphaVal, brushType === 'eraser');
     }
-    return pts;
+    // For non-paint types (dodge/burn/smudge/blur/sharpen/clone), called via placeDabDirect
   }
 
-  // ── Flush queued stroke points (called from rAF) ──────────────────────────────
-  function flushStrokePoints() {
-    renderPendingRef.current = false;
-    const pts = strokePointsRef.current.splice(0);
-    if (!pts.length || !isReady.current || !canvasRef.current) return;
+  // ── Item 8: Direct pixel manipulation dabs ───────────────────────────────
+  function placeDabDirect(imgX, imgY, pressure) {
+    if (!strokeCtxRef.current || !strokeImageDataRef.current) return;
 
-    const canvas = canvasRef.current;
-    const ctx    = canvas.getContext('2d');
-    // For paint/eraser we use the stroke preview canvas; for pixel-ops we use main canvas
-    const isPaintType = brushType === 'paint' || brushType === 'eraser';
-    const renderCtx   = isPaintType && strokePreviewCanvasRef.current
-      ? strokePreviewCanvasRef.current.getContext('2d')
-      : ctx;
+    const effPressure = applyPressureCurve(pressure);
+    const sizeScale   = (pressureEnabled && (pressureMapping === 'size' || pressureMapping === 'both'))
+      ? Math.max(0.1, 0.1 + 0.9 * effPressure) : 1;
+    const pxScale  = (zoom || 1) * canvasScaleRef.current;
+    const radius   = (brushSize * sizeScale * pxScale) / 2;
+    const hardness = brushEdge === 'hard' ? 1.0 : 0.5;
+    const strength = (brushStrength ?? 50) / 100;
+    const flow     = (brushFlow     ?? 100) / 100;
+    const exposure = (strength * flow * effPressure * 0.4);
 
-    const smoothFactor = ((brushSmoothing ?? 40) / 100) * 0.85;
+    const imgData = strokeImageDataRef.current;
+    const W = imgData.width, H = imgData.height;
+    const d = imgData.data;
+    const cx = imgX, cy = imgY;
 
-    for (const rawPt of pts) {
-      // Apply smoothing
-      const smoothed = smoothPoint(rawPt, lastSmoothedPoint.current, smoothFactor);
-      lastSmoothedPoint.current = smoothed;
-
-      const speedPres   = getPressure(smoothed);
-      const effPressure = getEffectivePressure(speedPres);
-
-      if (pressureEnabled && (pressureMapping === 'size' || pressureMapping === 'both')) {
-        pressureSizeMultRef.current = Math.max(0.05, 0.1 + 0.9 * effPressure);
-      } else {
-        pressureSizeMultRef.current = 1;
-      }
-
-      const r2      = Math.round(brushSize * pressureSizeMultRef.current * (zoom||1) * canvasScale.current);
-      const spacing = Math.max(1, r2 * (brushEdge === 'hard' ? 0.2 : 0.25));
-
-      if (lastPos.current) {
-        const stamps = getStamps(lastPos.current, smoothed, spacing);
-        for (const s of stamps) {
-          if (isPaintType) {
-            // Use gradient dab on stroke preview canvas
-            const hexColor = (paintColor || '#ff0000').replace('#', '');
-            const cr = parseInt(hexColor.slice(0,2), 16);
-            const cg = parseInt(hexColor.slice(2,4), 16);
-            const cb2 = parseInt(hexColor.slice(4,6), 16);
-            const hardness = brushEdge === 'hard' ? 0.95 : 0.0;
-            if (brushType === 'eraser') {
-              renderCtx.save();
-              renderCtx.globalCompositeOperation = 'destination-out';
-              renderGradientDab(renderCtx, s.x, s.y, r2 * 2, hardness, 0, 0, 0,
-                (brushStrength/100) * (brushFlow/100) * effPressure);
-              renderCtx.restore();
-            } else {
-              const alpha = ((paintAlpha||100)/100) * (brushStrength/100) * (brushFlow/100) * effPressure;
-              renderGradientDab(renderCtx, s.x, s.y, r2 * 2, hardness, cr, cg, cb2, alpha);
-            }
+    if (brushType === 'dodge' || brushType === 'burn') {
+      const isDodge = brushType === 'dodge';
+      const x0 = Math.max(0, Math.floor(cx - radius));
+      const y0 = Math.max(0, Math.floor(cy - radius));
+      const x1 = Math.min(W - 1, Math.ceil(cx + radius));
+      const y1 = Math.min(H - 1, Math.ceil(cy + radius));
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const dx = x - cx, dy = y - cy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > radius) continue;
+          const fo = hardness >= 1 ? 1 : Math.max(0, 1 - (Math.max(0, dist / radius - hardness) / (1 - hardness + 0.001)));
+          const s = exposure * fo;
+          const i = (y * W + x) * 4;
+          if (isDodge) {
+            d[i]   = Math.min(255, d[i]   + (255 - d[i])   * s);
+            d[i+1] = Math.min(255, d[i+1] + (255 - d[i+1]) * s);
+            d[i+2] = Math.min(255, d[i+2] + (255 - d[i+2]) * s);
           } else {
-            paintStamp(ctx, s.x, s.y, lastPos.current.x, lastPos.current.y, effPressure);
+            d[i]   = Math.max(0, d[i]   * (1 - s));
+            d[i+1] = Math.max(0, d[i+1] * (1 - s));
+            d[i+2] = Math.max(0, d[i+2] * (1 - s));
           }
         }
-      } else {
-        if (isPaintType) {
-          const hexColor = (paintColor || '#ff0000').replace('#', '');
-          const cr = parseInt(hexColor.slice(0,2), 16);
-          const cg = parseInt(hexColor.slice(2,4), 16);
-          const cb2 = parseInt(hexColor.slice(4,6), 16);
-          const hardness = brushEdge === 'hard' ? 0.95 : 0.0;
-          if (brushType === 'eraser') {
-            renderCtx.save();
-            renderCtx.globalCompositeOperation = 'destination-out';
-            renderGradientDab(renderCtx, smoothed.x, smoothed.y, pressureSizeMultRef.current * brushSize * (zoom||1) * canvasScale.current * 2,
-              hardness, 0, 0, 0, (brushStrength/100) * (brushFlow/100));
-            renderCtx.restore();
-          } else {
-            renderGradientDab(renderCtx, smoothed.x, smoothed.y, pressureSizeMultRef.current * brushSize * (zoom||1) * canvasScale.current * 2,
-              hardness, cr, cg, cb2, ((paintAlpha||100)/100) * (brushStrength/100) * (brushFlow/100));
-          }
-        } else {
-          paintStamp(ctx, smoothed.x, smoothed.y, smoothed.x, smoothed.y, effPressure);
-        }
       }
-      lastPos.current = smoothed;
+    } else if (brushType === 'smudge') {
+      _smudgeDab(imgX, imgY, radius, hardness, strength * flow * effPressure * 0.6);
+      return;
+    } else if (brushType === 'blur-brush') {
+      _blurDab(imgX, imgY, radius, hardness, strength * flow * effPressure);
+      return;
+    } else if (brushType === 'sharpen-brush') {
+      _sharpenDab(imgX, imgY, radius, hardness, strength * flow * effPressure * 0.2);
+      return;
+    } else if (brushType === 'clone') {
+      _cloneDab(imgX, imgY, radius, hardness, strength * flow * effPressure);
+      return;
     }
 
-    // If using stroke preview canvas, composite it onto the main canvas at brushOpacity
-    if (isPaintType && strokePreviewCanvasRef.current) {
-      // Apply selection mask to stroke preview canvas if active.
-      // The mask is in design-space (maskW × maskH pixels, 255=selected, 0=unselected).
-      // The stroke preview canvas is at (zoom * dpr) resolution, so we must scale
-      // the lookup: canvas pixel (cx,cy) → design pixel (layer.x + cx/scale, layer.y + cy/scale).
+    // Write updated pixels back to canvas
+    strokeCtxRef.current.putImageData(imgData, 0, 0);
+    // Sync to main canvas
+    _syncDirectToMainCanvas();
+  }
+
+  function _smudgeDab(cx, cy, radius, hardness, strength) {
+    if (!strokeImageDataRef.current || !lastDabPosRef.current) return;
+    const imgData = strokeImageDataRef.current;
+    const W = imgData.width, H = imgData.height;
+    const d = imgData.data;
+    const prev = lastDabPosRef.current;
+
+    const x0 = Math.max(0, Math.floor(cx - radius));
+    const y0 = Math.max(0, Math.floor(cy - radius));
+    const x1 = Math.min(W - 1, Math.ceil(cx + radius));
+    const y1 = Math.min(H - 1, Math.ceil(cy + radius));
+
+    // On first smudge dab, sample carry pixels from starting position
+    if (!smudgeCarryRef.current) {
+      const cw = Math.round(radius * 2), ch = Math.round(radius * 2);
+      const carry = new Uint8ClampedArray(cw * ch * 4);
+      const ox = Math.max(0, Math.round(cx - radius));
+      const oy = Math.max(0, Math.round(cy - radius));
+      for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
+        const sx = ox + i, sy = oy + j;
+        if (sx < W && sy < H) {
+          const si = (sy * W + sx) * 4, di = (j * cw + i) * 4;
+          carry[di] = d[si]; carry[di+1] = d[si+1]; carry[di+2] = d[si+2]; carry[di+3] = d[si+3];
+        }
+      }
+      smudgeCarryRef.current = { data: carry, w: cw, h: ch, ox, oy };
+    }
+
+    const carry = smudgeCarryRef.current;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx, dy = y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius) continue;
+        const fo = hardness >= 1 ? 1 : Math.max(0, 1 - (dist / radius));
+        const blend = strength * fo;
+        if (blend <= 0) continue;
+        const di = (y * W + x) * 4;
+        // Map to carry coords
+        const carryX = x - (Math.round(prev.x - radius));
+        const carryY = y - (Math.round(prev.y - radius));
+        if (carryX >= 0 && carryX < carry.w && carryY >= 0 && carryY < carry.h) {
+          const ci = (carryY * carry.w + carryX) * 4;
+          d[di]   = Math.round(d[di]   * (1 - blend) + carry.data[ci]   * blend);
+          d[di+1] = Math.round(d[di+1] * (1 - blend) + carry.data[ci+1] * blend);
+          d[di+2] = Math.round(d[di+2] * (1 - blend) + carry.data[ci+2] * blend);
+        }
+      }
+    }
+
+    // Update carry with current pixels at new position
+    const newCw = Math.round(radius * 2), newCh = Math.round(radius * 2);
+    const newCarry = new Uint8ClampedArray(newCw * newCh * 4);
+    const nox = Math.max(0, Math.round(cx - radius));
+    const noy = Math.max(0, Math.round(cy - radius));
+    for (let j = 0; j < newCh; j++) for (let i = 0; i < newCw; i++) {
+      const sx = nox + i, sy = noy + j;
+      if (sx < W && sy < H) {
+        const si = (sy * W + sx) * 4, di2 = (j * newCw + i) * 4;
+        newCarry[di2] = d[si]; newCarry[di2+1] = d[si+1]; newCarry[di2+2] = d[si+2]; newCarry[di2+3] = d[si+3];
+      }
+    }
+    smudgeCarryRef.current = { data: newCarry, w: newCw, h: newCh, ox: nox, oy: noy };
+
+    strokeCtxRef.current.putImageData(imgData, 0, 0);
+    _syncDirectToMainCanvas();
+  }
+
+  function _blurDab(cx, cy, radius, hardness, strength) {
+    if (!strokeImageDataRef.current) return;
+    const imgData = strokeImageDataRef.current;
+    const W = imgData.width, H = imgData.height;
+    const d = imgData.data;
+    const blurR = Math.max(1, Math.round(radius * 0.25));
+
+    const x0 = Math.max(1, Math.floor(cx - radius));
+    const y0 = Math.max(1, Math.floor(cy - radius));
+    const x1 = Math.min(W - 2, Math.ceil(cx + radius));
+    const y1 = Math.min(H - 2, Math.ceil(cy + radius));
+    const src = new Uint8ClampedArray(d);
+
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx, dy = y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius) continue;
+        const fo = hardness >= 1 ? 1 : Math.max(0, 1 - (dist / radius) ** 1.5);
+        const blend = strength * fo;
+        if (blend <= 0) continue;
+        let rA = 0, gA = 0, bA = 0, cnt = 0;
+        for (let bj = -blurR; bj <= blurR; bj++) {
+          for (let bi = -blurR; bi <= blurR; bi++) {
+            const sx = Math.max(0, Math.min(W - 1, x + bi));
+            const sy = Math.max(0, Math.min(H - 1, y + bj));
+            const si = (sy * W + sx) * 4;
+            rA += src[si]; gA += src[si+1]; bA += src[si+2]; cnt++;
+          }
+        }
+        if (cnt > 0) {
+          const di = (y * W + x) * 4;
+          d[di]   = Math.round(d[di]   * (1 - blend) + (rA / cnt) * blend);
+          d[di+1] = Math.round(d[di+1] * (1 - blend) + (gA / cnt) * blend);
+          d[di+2] = Math.round(d[di+2] * (1 - blend) + (bA / cnt) * blend);
+        }
+      }
+    }
+    strokeCtxRef.current.putImageData(imgData, 0, 0);
+    _syncDirectToMainCanvas();
+  }
+
+  function _sharpenDab(cx, cy, radius, hardness, strength) {
+    if (!strokeImageDataRef.current) return;
+    const imgData = strokeImageDataRef.current;
+    const W = imgData.width, H = imgData.height;
+    const d = imgData.data;
+    const src = new Uint8ClampedArray(d);
+
+    const x0 = Math.max(1, Math.floor(cx - radius));
+    const y0 = Math.max(1, Math.floor(cy - radius));
+    const x1 = Math.min(W - 2, Math.ceil(cx + radius));
+    const y1 = Math.min(H - 2, Math.ceil(cy + radius));
+
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx, dy = y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius) continue;
+        const fo = hardness >= 1 ? 1 : Math.max(0, 1 - (dist / radius) ** 2);
+        const s = strength * fo;
+        if (s <= 0) continue;
+        const di = (y * W + x) * 4;
+        for (let c = 0; c < 3; c++) {
+          const n = (src[((y-1)*W+x)*4+c] + src[((y+1)*W+x)*4+c] + src[(y*W+(x-1))*4+c] + src[(y*W+(x+1))*4+c]) / 4;
+          d[di+c] = Math.min(255, Math.max(0, Math.round(src[di+c] + (src[di+c] - n) * s * 3)));
+        }
+      }
+    }
+    strokeCtxRef.current.putImageData(imgData, 0, 0);
+    _syncDirectToMainCanvas();
+  }
+
+  function _cloneDab(cx, cy, radius, hardness, strength) {
+    if (!strokeImageDataRef.current || !cloneSourceRef.current) return;
+    const imgData = strokeImageDataRef.current;
+    const W = imgData.width, H = imgData.height;
+    const d = imgData.data;
+    const src = new Uint8ClampedArray(d);
+    const { x: sxBase, y: syBase } = cloneSourceRef.current;
+
+    // Compute offset from stroke start if not set
+    const offsetX = lastDabPosRef.current ? sxBase + (cx - lastDabPosRef.current.x) : sxBase;
+    const offsetY = lastDabPosRef.current ? syBase + (cy - lastDabPosRef.current.y) : syBase;
+
+    const x0 = Math.max(0, Math.floor(cx - radius));
+    const y0 = Math.max(0, Math.floor(cy - radius));
+    const x1 = Math.min(W - 1, Math.ceil(cx + radius));
+    const y1 = Math.min(H - 1, Math.ceil(cy + radius));
+
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx, dy = y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius) continue;
+        const fo = hardness >= 1 ? 1 : Math.max(0, 1 - dist / radius);
+        const blend = strength * fo;
+        const srcX = Math.round(offsetX + (x - cx));
+        const srcY = Math.round(offsetY + (y - cy));
+        if (srcX < 0 || srcX >= W || srcY < 0 || srcY >= H) continue;
+        const si = (srcY * W + srcX) * 4, di = (y * W + x) * 4;
+        d[di]   = Math.round(d[di]   * (1 - blend) + src[si]   * blend);
+        d[di+1] = Math.round(d[di+1] * (1 - blend) + src[si+1] * blend);
+        d[di+2] = Math.round(d[di+2] * (1 - blend) + src[si+2] * blend);
+        d[di+3] = Math.round(d[di+3] * (1 - blend) + src[si+3] * blend);
+      }
+    }
+    strokeCtxRef.current.putImageData(imgData, 0, 0);
+    _syncDirectToMainCanvas();
+  }
+
+  // Sync direct-manipulation canvas to the main display canvas
+  function _syncDirectToMainCanvas() {
+    const canvas = canvasRef.current;
+    const sc = strokeCanvasRef.current;
+    if (!canvas || !sc) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (originalImgRef.current) {
+      ctx.drawImage(originalImgRef.current, 0, 0, canvas.width, canvas.height);
+    }
+    ctx.drawImage(sc, 0, 0);
+  }
+
+  // ── Item 1: Stroke lifecycle ──────────────────────────────────────────────
+  function startStroke(canvasX, canvasY, pressure) {
+    if (!isReadyRef.current || !canvasRef.current) return;
+    isPaintingRef.current  = true;
+    remainderRef.current   = 0;
+    smudgeCarryRef.current = null;
+    smoothedPosRef.current = { x: canvasX, y: canvasY };
+    lastDabPosRef.current  = { x: canvasX, y: canvasY };
+
+    const canvas = canvasRef.current;
+    const W = canvas.width, H = canvas.height;
+
+    const isPaintOrEraser = (brushType === 'paint' || brushType === 'eraser');
+
+    if (isPaintOrEraser) {
+      // Create OffscreenCanvas stroke buffer
+      const sb = (typeof OffscreenCanvas !== 'undefined')
+        ? new OffscreenCanvas(W, H)
+        : (() => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; })();
+      strokeBufferRef.current = sb;
+      // Save pre-stroke state
+      preStrokeRef.current = canvas.getContext('2d').getImageData(0, 0, W, H);
+      // Place first dab
+      placeDab(canvasX, canvasY, pressure);
+    } else {
+      // Direct manipulation tools: load layer image into writable canvas
+      const sc = document.createElement('canvas');
+      sc.width = W; sc.height = H;
+      const sctx = sc.getContext('2d');
+      sctx.drawImage(canvas, 0, 0);
+      strokeCanvasRef.current = sc;
+      strokeCtxRef.current    = sctx;
+      strokeImageDataRef.current = sctx.getImageData(0, 0, W, H);
+      placeDabDirect(canvasX, canvasY, pressure);
+    }
+  }
+
+  // ── Item 1: Commit stroke ─────────────────────────────────────────────────
+  function commitStroke() {
+    if (!isPaintingRef.current) return;
+    isPaintingRef.current = false;
+
+    const canvas = canvasRef.current;
+    if (!canvas || !isReadyRef.current) return;
+    const ctx = canvas.getContext('2d');
+
+    const isPaintOrEraser = (brushType === 'paint' || brushType === 'eraser');
+
+    if (isPaintOrEraser && strokeBufferRef.current) {
+      // Apply selection mask to stroke buffer before compositing
       if (selectionActive && selectionMaskRef?.current) {
-        const spc   = strokePreviewCanvasRef.current;
-        const sctx  = spc.getContext('2d');
-        const idata = sctx.getImageData(0, 0, spc.width, spc.height);
-        const m     = selectionMaskRef.current;
-        const mW    = maskW  || Math.round(spc.width  / ((zoom||1) * (canvasScale.current||1)));
-        const mH    = maskH  || Math.round(spc.height / ((zoom||1) * (canvasScale.current||1)));  // eslint-disable-line no-unused-vars
-        const scale = (zoom||1) * (canvasScale.current||1);
-        const offX  = layer?.x || 0;
-        const offY  = layer?.y || 0;
-        for (let cy = 0; cy < spc.height; cy++) {
-          const dy = Math.floor(cy / scale) + offY;
-          if (dy < 0 || dy >= (mH || m.length / mW)) continue;
-          for (let cx = 0; cx < spc.width; cx++) {
-            const dx = Math.floor(cx / scale) + offX;
-            if (dx < 0 || dx >= mW) continue;
-            const mi = dy * mW + dx;
-            if (mi >= 0 && mi < m.length) {
-              const pi = (cy * spc.width + cx) * 4 + 3;
-              idata.data[pi] = Math.round(idata.data[pi] * m[mi] / 255);
-            }
-          }
+        _applySelectionMaskToStrokeBuffer();
+      }
+
+      // Composite stroke buffer onto main canvas at brush opacity
+      ctx.save();
+      ctx.globalAlpha = (brushStrength ?? 100) / 100;
+      if (brushType === 'eraser') ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(strokeBufferRef.current, 0, 0);
+      ctx.restore();
+
+      strokeBufferRef.current = null;
+      preStrokeRef.current    = null;
+    }
+    // For direct tools, strokeCtxRef canvas is already composited to main canvas
+
+    // Flush to layer
+    flush();
+
+    // Reset direct-tool state
+    strokeCanvasRef.current    = null;
+    strokeCtxRef.current       = null;
+    strokeImageDataRef.current = null;
+    smudgeCarryRef.current     = null;
+    lastDabPosRef.current      = null;
+  }
+
+  // Apply selection mask to the stroke buffer (clip paint to selected area)
+  function _applySelectionMaskToStrokeBuffer() {
+    const sb = strokeBufferRef.current;
+    if (!sb) return;
+    const sCtx = sb.getContext('2d');
+    const W = sb.width, H = sb.height;
+    const sid = sCtx.getImageData(0, 0, W, H);
+    const m = selectionMaskRef.current;
+    const mW = maskW || Math.round(W / ((zoom || 1) * (canvasScaleRef.current || 1)));
+    const mH = maskH || Math.round(H / ((zoom || 1) * (canvasScaleRef.current || 1)));
+    const scale = (zoom || 1) * (canvasScaleRef.current || 1);
+    const offX = layer?.x || 0;
+    const offY = layer?.y || 0;
+    for (let cy = 0; cy < H; cy++) {
+      const dy = Math.floor(cy / scale) + offY;
+      if (dy < 0 || dy >= mH) continue;
+      for (let cx = 0; cx < W; cx++) {
+        const dx = Math.floor(cx / scale) + offX;
+        if (dx < 0 || dx >= mW) continue;
+        const mi = dy * mW + dx;
+        if (mi >= 0 && mi < m.length) {
+          const pi = (cy * W + cx) * 4 + 3;
+          sid.data[pi] = Math.round(sid.data[pi] * m[mi] / 255);
         }
-        sctx.putImageData(idata, 0, 0);
       }
-      // Composite preview onto main canvas for real-time display (doesn't accumulate alpha)
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      // Redraw original image first
-      if (originalImg.current) {
-        ctx.drawImage(originalImg.current, 0, 0, canvas.width, canvas.height);
-      }
-      ctx.drawImage(strokePreviewCanvasRef.current, 0, 0);
     }
+    sCtx.putImageData(sid, 0, 0);
   }
 
-  // eslint-disable-next-line no-unused-vars
-  function paintStroke(pos) {
-    if (!isReady.current||!canvasRef.current) return;
-    const ctx         = canvasRef.current.getContext('2d');
-    const speedPres   = getPressure(pos);
-    const effPressure = getEffectivePressure(speedPres);
-    // Apply size pressure scaling via a ref readable by stamp functions
-    if (pressureEnabled && (pressureMapping === 'size' || pressureMapping === 'both')) {
-      pressureSizeMultRef.current = Math.max(0.05, 0.1 + 0.9 * effPressure);
-    } else {
-      pressureSizeMultRef.current = 1;
-    }
-    const stabbed = getStabilizedPos(pos);
-    const r       = Math.round(brushSize * pressureSizeMultRef.current * (zoom||1) * canvasScale.current);
-    const spacing = Math.max(1, r*(brushEdge==='hard'?0.2:0.12));
-
-    if (lastPos.current) {
-      const stamps = getStamps(lastPos.current, stabbed, spacing);
-      stamps.forEach(s=>paintStamp(ctx,s.x,s.y,lastPos.current.x,lastPos.current.y,effPressure));
-    } else {
-      paintStamp(ctx,stabbed.x,stabbed.y,stabbed.x,stabbed.y,effPressure);
-    }
-  }
-
-  function updateCursor(clientX, clientY, visible) {
-    const cursor = cursorRef.current;
-    if (!cursor) return;
-    if (!visible) { cursor.style.display='none'; return; }
-    const canvas = canvasRef.current;
-    const rect   = canvas.getBoundingClientRect();
-    const z      = zoom || 1;
-    const r      = brushSize;
-    const localX = (clientX - rect.left) / z;
-    const localY = (clientY - rect.top)  / z;
-    cursor.style.display      = 'block';
-    cursor.style.left         = (localX - r) + 'px';
-    cursor.style.top          = (localY - r) + 'px';
-    cursor.style.width        = (r * 2) + 'px';
-    cursor.style.height       = (r * 2) + 'px';
-    cursor.style.borderRadius = '50%';
-    cursor.style.position     = 'absolute';
-    cursor.style.pointerEvents= 'none';
-    cursor.style.zIndex       = '99999';
-    cursor.style.border       = brushEdge==='soft'
-      ? '1.5px solid rgba(255,255,255,0.75)'
-      : '1.5px solid rgba(255,255,255,0.95)';
-    cursor.style.background   = brushEdge==='soft'
-      ? `radial-gradient(circle, rgba(255,255,255,${(brushStrength/100)*0.08}) 0%, transparent 70%)`
-      : `rgba(255,255,255,${(brushStrength/100)*0.05})`;
-    cursor.style.boxShadow    = '0 0 0 1px rgba(0,0,0,0.5)';
-    cursor.style.transition   = 'width 0.06s, height 0.06s';
-    if (brushType === 'heal') {
-      cursor.style.border = '2px solid rgba(100,220,100,0.9)';
-      cursor.style.background = 'rgba(100,220,100,0.08)';
-    }
-  }
-
-  function onMouseDown(e) {
-    e.preventDefault(); e.stopPropagation();
-    if (!isReady.current||!active) return;
-    if (brushType==='clone'&&e.altKey) { cloneSource.current=getPos(e); return; }
-    // Show canvas on first paint (was hidden to keep sharp <img> visible)
-    // For mask painting, canvas stays invisible — CSS mask handles the visual
-    if (!hasPainted.current && !isMask) {
-      hasPainted.current = true;
-      if (canvasRef.current) canvasRef.current.style.opacity = '0.99';
-    }
-    saveSnap();
-    isPainting.current   = true;
-    lastPressure.current = 1;
-    lastTime.current     = Date.now();
-    stabPos.current      = null;
-    lastSmoothedPoint.current = null;
-    strokeDistRef.current = 0;
-    strokePointsRef.current = [];
-
-    // Initialize stroke preview canvas for paint/eraser types
-    const isPaintType = brushType === 'paint' || brushType === 'eraser';
-    if (isPaintType && canvasRef.current) {
-      const c = document.createElement('canvas');
-      c.width  = canvasRef.current.width;
-      c.height = canvasRef.current.height;
-      strokePreviewCanvasRef.current = c;
-    } else {
-      strokePreviewCanvasRef.current = null;
-    }
-
-    const pos = getPos(e);
-    lastPos.current = pos;
-    if (brushType === 'heal') {
-      lastHealPos.current = pos;
-      lastPos.current = pos;
-      if (isReady.current && canvasRef.current) {
-        const ctx = canvasRef.current.getContext('2d');
-        applyHealStamp(ctx, pos.x, pos.y, 1.0);
-      }
+  // ── Item 3: Spacing-based stroke interpolation ────────────────────────────
+  function strokeToPoint(x, y, pressure) {
+    const last = lastDabPosRef.current;
+    if (!last) {
+      lastDabPosRef.current = { x, y };
+      const isPaint = (brushType === 'paint' || brushType === 'eraser');
+      if (isPaint) placeDab(x, y, pressure);
+      else placeDabDirect(x, y, pressure);
       return;
     }
-    // Queue the initial point
-    strokePointsRef.current.push({ x: pos.x, y: pos.y, pressure: rawPressureRef.current > 0 ? rawPressureRef.current : 0.5 });
-    if (!renderPendingRef.current) {
-      renderPendingRef.current = true;
-      requestAnimationFrame(flushStrokePoints);
+
+    const dx = x - last.x, dy = y - last.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const spacing = Math.max(1, (brushSize * (zoom || 1) * canvasScaleRef.current) * ((brushSpacing ?? 25) / 100));
+
+    let curLast = { x: last.x, y: last.y };
+    let d = remainderRef.current;
+
+    const isPaint = (brushType === 'paint' || brushType === 'eraser');
+
+    while (d + dist >= spacing) {
+      const t = (spacing - d) / Math.max(0.001, dist);
+      const ix = curLast.x + (x - curLast.x) * t;
+      const iy = curLast.y + (y - curLast.y) * t;
+      if (isPaint) placeDab(ix, iy, pressure);
+      else placeDabDirect(ix, iy, pressure);
+      curLast = { x: ix, y: iy };
+      d = 0;
+      const rdx = x - curLast.x, rdy = y - curLast.y;
+      const rdist = Math.sqrt(rdx * rdx + rdy * rdy);
+      if (rdist < 0.001) {
+        lastDabPosRef.current = { x, y };
+        remainderRef.current  = 0;
+        return;
+      }
     }
+
+    const finalDx = x - curLast.x, finalDy = y - curLast.y;
+    remainderRef.current  = Math.sqrt(finalDx * finalDx + finalDy * finalDy) % spacing;
+    lastDabPosRef.current = { x, y };
   }
 
-  function onMouseMove(e) {
+  // ── Item 2: Pointer event handlers ───────────────────────────────────────
+  function onPointerDown(e) {
     e.preventDefault();
-    updateCursor(e.clientX, e.clientY, true);
-    if (!isPainting.current||!active||!isReady.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
 
-    if (brushType === 'heal') {
-      const pos = getPos(e);
-      lastHealPos.current = pos;
-      if (lastPos.current) {
-        const dx = pos.x - lastPos.current.x;
-        const dy = pos.y - lastPos.current.y;
-        const moved = Math.sqrt(dx*dx+dy*dy);
-        if (moved >= Math.max(brushSize*(zoom||1)*0.8, 20)) {
-          if (isReady.current && canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d');
-            applyHealStamp(ctx, pos.x, pos.y, getPressure(pos));
-          }
-          lastPos.current = pos;
-        }
-      } else {
-        lastPos.current = pos;
-      }
+    rawPressureRef.current = e.pressure;
+    if (e.pointerType === 'pen' && onTabletDetected) onTabletDetected();
+
+    if (!isReadyRef.current || !active) return;
+
+    // Clone: Alt+click sets source
+    if (brushType === 'clone' && e.altKey) {
+      const pos = clientToCanvas(e.clientX, e.clientY);
+      cloneSourceRef.current = { x: pos.x, y: pos.y };
       return;
     }
 
-    // Collect coalesced events for high-fidelity input
+    if (!hasPaintedRef.current && !isMask && canvasRef.current) {
+      hasPaintedRef.current = true;
+      canvasRef.current.style.opacity = '1';
+    }
+
+    altPressedRef.current = e.altKey;
+
+    const pos = clientToCanvas(e.clientX, e.clientY);
+    coalescedQueueRef.current = [];
+    startStroke(pos.x, pos.y, rawPressureRef.current > 0 ? rawPressureRef.current : 0.5);
+
+    updateBrushCursor(e.clientX, e.clientY);
+  }
+
+  function onPointerMove(e) {
+    e.preventDefault();
+    rawPressureRef.current = e.pressure;
+    lastCursorPos.current  = { x: e.clientX, y: e.clientY };
+    updateBrushCursor(e.clientX, e.clientY);
+
+    if (!isPaintingRef.current || !active || !isReadyRef.current) return;
+
     const coalesced = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
     for (const ce of coalesced) {
-      const pos = getPos(ce);
-      strokePointsRef.current.push({
-        x: pos.x, y: pos.y,
+      coalescedQueueRef.current.push({
+        x: ce.clientX,
+        y: ce.clientY,
         pressure: ce.pressure > 0 ? ce.pressure : 0.5,
       });
     }
-    if (!renderPendingRef.current) {
-      renderPendingRef.current = true;
-      requestAnimationFrame(flushStrokePoints);
+
+    if (!rafPendingRef.current) {
+      rafPendingRef.current = true;
+      requestAnimationFrame(flushPointQueue);
     }
   }
 
-  function onMouseUp(e) {
+  function onPointerUp(e) {
     e.preventDefault();
-    if (isPainting.current) {
-      // Flush any remaining queued points synchronously
-      if (strokePointsRef.current.length > 0) {
-        flushStrokePoints();
-      }
-      isPainting.current   = false;
-      lastPos.current      = null;
-      stabPos.current      = null;
-      lastPressure.current = 1;
-      renderPendingRef.current = false;
-      strokePointsRef.current = [];
+    rawPressureRef.current = e.pressure;
 
-      // ✅ Run heal on mouseUp only — PatchMatch runs once per click
-      if (brushType === 'heal' && isReady.current && canvasRef.current) {
-        const canvas = canvasRef.current;
-        const ctx    = canvas.getContext('2d');
-        if (lastHealPos.current) {
-          applyHealStamp(ctx, lastHealPos.current.x, lastHealPos.current.y, 1.0);
-        }
-      }
-      flush();
+    if (!isPaintingRef.current) return;
+
+    // Flush remaining queued points synchronously
+    const pts = coalescedQueueRef.current.splice(0);
+    for (const pt of pts) {
+      const pos     = clientToCanvas(pt.x, pt.y);
+      const smoothed = applySmoothing(pos);
+      strokeToPoint(smoothed.x, smoothed.y, pt.pressure);
+    }
+
+    // Composite stroke preview on viewport if paint type
+    if (strokeBufferRef.current) {
+      _compositeStrokePreviewOnCanvas();
+    }
+
+    commitStroke();
+    updateBrushCursor(e.clientX, e.clientY);
+  }
+
+  // Item 2: flush coalesced queue via rAF
+  function flushPointQueue() {
+    rafPendingRef.current = false;
+    const pts = coalescedQueueRef.current.splice(0);
+    if (!pts.length || !isPaintingRef.current) return;
+
+    for (const pt of pts) {
+      const pos      = clientToCanvas(pt.x, pt.y);
+      const smoothed = applySmoothing(pos);
+      strokeToPoint(smoothed.x, smoothed.y, pt.pressure);
+    }
+
+    // Live preview during stroke (paint/eraser only)
+    if (strokeBufferRef.current) {
+      _compositeStrokePreviewOnCanvas();
     }
   }
 
-  // onPointerLeave is used inline below — this alias is kept for reference
-  // eslint-disable-next-line no-unused-vars
-  function onMouseLeave(e) { updateCursor(0,0,false); onMouseUp(e); }
+  // Composite stroke buffer onto main canvas for live preview (non-destructive)
+  function _compositeStrokePreviewOnCanvas() {
+    const canvas = canvasRef.current;
+    const sb = strokeBufferRef.current;
+    if (!canvas || !sb) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (originalImgRef.current) {
+      ctx.drawImage(originalImgRef.current, 0, 0, canvas.width, canvas.height);
+    } else if (preStrokeRef.current) {
+      ctx.putImageData(preStrokeRef.current, 0, 0);
+    }
+    ctx.save();
+    ctx.globalAlpha = (brushStrength ?? 100) / 100;
+    if (brushType === 'eraser') ctx.globalCompositeOperation = 'destination-out';
+    ctx.drawImage(sb, 0, 0);
+    ctx.restore();
+  }
 
-  if (!active||!layer?.src) return null;
+  // ── Flush layer output ─────────────────────────────────────────────────────
+  function flush() {
+    const canvas = canvasRef.current;
+    if (!canvas || !isReadyRef.current) return;
+
+    const snap = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    historyRef.current = [...historyRef.current.slice(-19), snap];
+
+    const tmp = document.createElement('canvas');
+    tmp.width = canvas.width;
+    tmp.height = canvas.height;
+    tmp.getContext('2d').putImageData(snap, 0, 0);
+    const dataUrl = tmp.toDataURL('image/png');
+    loadedSrcRef.current = dataUrl;
+    setTimeout(() => { onUpdate({ src: dataUrl }); }, 50);
+  }
+
+  // ── Item 7: Brush cursor (OffscreenCanvas-rendered) ───────────────────────
+  function updateBrushCursor(clientX, clientY) {
+    const cc = brushCursorCanvasRef.current;
+    if (!cc) return;
+
+    const canvas = canvasRef.current;
+    const rect   = canvas ? canvas.getBoundingClientRect() : null;
+    const displayX = clientX - (rect ? rect.left : 0);
+    const displayY = clientY - (rect ? rect.top  : 0);
+
+    cc.width  = rect ? rect.width  : cc.width;
+    cc.height = rect ? rect.height : cc.height;
+
+    const ctx = cc.getContext('2d');
+    ctx.clearRect(0, 0, cc.width, cc.height);
+
+    const dispRadius = (brushSize / 2) * (zoom || 1);
+    const hardness   = brushEdge === 'hard' ? 0.99 : 0.0;
+
+    if (dispRadius < 3) {
+      // Crosshair for tiny brushes
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(displayX - 7, displayY); ctx.lineTo(displayX + 7, displayY);
+      ctx.moveTo(displayX, displayY - 7); ctx.lineTo(displayX, displayY + 7);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(displayX - 6, displayY); ctx.lineTo(displayX + 6, displayY);
+      ctx.moveTo(displayX, displayY - 6); ctx.lineTo(displayX, displayY + 6);
+      ctx.stroke();
+    } else {
+      // Outer ring
+      ctx.beginPath();
+      ctx.arc(displayX, displayY, dispRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.lineWidth   = 1.5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(displayX, displayY, dispRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth   = 1;
+      ctx.stroke();
+      // Inner core ring for soft brushes
+      if (hardness < 0.9) {
+        ctx.beginPath();
+        ctx.arc(displayX, displayY, dispRadius * Math.max(0.1, hardness), 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth   = 1;
+        ctx.setLineDash([2, 2]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
+  if (!active || !layer?.src) return null;
 
   return (
-    <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%' }}>
-      <div ref={cursorRef} style={{ display:'none', position:'absolute', pointerEvents:'none', zIndex:99999 }}/>
+    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+      {/* Item 7: Brush cursor overlay */}
+      <canvas
+        ref={brushCursorCanvasRef}
+        style={{
+          position: 'absolute', top: 0, left: 0,
+          width: '100%', height: '100%',
+          pointerEvents: 'none',
+          zIndex: 100000,
+        }}
+      />
       <canvas
         ref={canvasRef}
-        onPointerDown={(e) => {
-          // Capture pointer so move/up fire even if pointer leaves element
-          e.currentTarget.setPointerCapture(e.pointerId);
-          // Track tablet pressure
-          rawPressureRef.current = e.pressure;
-          // Tablet detection — pointerType 'pen' means drawing tablet
-          if (e.pointerType === 'pen' && onTabletDetected) onTabletDetected();
-          // Show canvas on first interaction (not for mask — mask stays invisible)
-          if (!isMask && canvasRef.current) canvasRef.current.style.opacity = '1';
-          onMouseDown(e);
-        }}
-        onPointerMove={(e) => {
-          // Update live pressure — for mouse this is always 0.5, for pen it's real
-          rawPressureRef.current = e.pressure;
-          onMouseMove(e);
-        }}
-        onPointerUp={(e) => {
-          rawPressureRef.current = e.pressure;
-          onMouseUp(e);
-        }}
-        onPointerLeave={(e) => { updateCursor(0,0,false); onMouseUp(e); }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={(e) => { updateBrushCursor(-999, -999); onPointerUp(e); }}
         style={{
-          position:'absolute', top:0, left:0,
+          position: 'absolute', top: 0, left: 0,
           width: '100%', height: '100%',
-          cursor:'none', display:'block',
-          userSelect:'none', WebkitUserSelect:'none',
-          touchAction:'none',
-          pointerEvents:'auto',
+          cursor: 'none', display: 'block',
+          userSelect: 'none', WebkitUserSelect: 'none',
+          touchAction: 'none',
+          pointerEvents: 'auto',
           opacity: 0,
         }}
       />
@@ -1114,21 +836,21 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
 // ─── Brush Tool Sidebar ─────────────────────────────────────────────────────────
 export default function BrushTool({
-  layer, theme:T, brushOverlayRef,
+  layer, theme: T, brushOverlayRef,
   brushType, brushSize, brushStrength, brushEdge,
-  brushFlow, brushStabilizer, brushSmoothing,
+  brushFlow, brushStabilizer, brushSmoothing, brushSpacing,
   paintColor, paintAlpha,
   onBrushTypeChange, onBrushSizeChange, onBrushStrengthChange,
   onBrushEdgeChange, onBrushFlowChange, onBrushStabilizerChange, onBrushSmoothingChange,
-  onPaintColorChange, onPaintAlphaChange,
+  onBrushSpacingChange, onPaintColorChange, onPaintAlphaChange,
   // Pressure props
   pressureEnabled, pressureMapping, pressureCurve, pressureMin, pressureMax, tabletDetected,
   onPressureEnabledChange, onPressureMappingChange, onPressureCurveChange,
   onPressureMinChange, onPressureMaxChange,
 }) {
   const pressureCurveCanvasRef = useRef(null);
+  const [showSpacing, setShowSpacing] = useState(false);
 
-  // Draw curve preview whenever curve changes
   useEffect(() => {
     const el = pressureCurveCanvasRef.current;
     if (!el || !pressureEnabled) return;
@@ -1155,287 +877,301 @@ export default function BrushTool({
   }, [pressureCurve, pressureEnabled]);
 
   const brushTypes = [
-    { key:'blur',     label:'Blur',     icon:'◎', desc:'Softens — good for skin and backgrounds'      },
-    { key:'smear',    label:'Smear',    icon:'≋', desc:'Drags pixels — blend edges naturally'         },
-    { key:'sharpen',  label:'Sharpen',  icon:'◈', desc:'Crispens detail — use lightly'                },
-    { key:'airbrush', label:'Air',      icon:'∴', desc:'Soft scattered spray'                         },
-    { key:'dodge',    label:'Dodge',    icon:'☀', desc:'Brightens — add highlights and rim light'     },
-    { key:'burn',     label:'Burn',     icon:'◑', desc:'Darkens — add shadows and depth'              },
-    { key:'heal',     label:'Heal',     icon:'✚', desc:'Removes blemishes using surrounding texture'  },
-    { key:'wetmix',   label:'Wet',      icon:'≈', desc:'Wet mix — picks up and blends color like paint'},
-    { key:'eraser',   label:'Erase',    icon:'○', desc:'Erases to transparent'                        },
-    { key:'clone',    label:'Clone',    icon:'⊕', desc:'Alt+click to set source, then paint'          },
-    { key:'paint',    label:'Paint',    icon:'✏', desc:'Paint with a custom color'                     },
-    { key:'fill',     label:'Fill',     icon:'⬛', desc:'Flood fill — click to fill area with color'   },
+    { key: 'blur',     label: 'Blur',    icon: '◎', desc: 'Softens — good for skin and backgrounds'      },
+    { key: 'smear',    label: 'Smear',   icon: '≋', desc: 'Drags pixels — blend edges naturally'         },
+    { key: 'sharpen',  label: 'Sharpen', icon: '◈', desc: 'Crispens detail — use lightly'                },
+    { key: 'airbrush', label: 'Air',     icon: '∴', desc: 'Soft scattered spray'                         },
+    { key: 'dodge',    label: 'Dodge',   icon: '☀', desc: 'Brightens — add highlights and rim light'     },
+    { key: 'burn',     label: 'Burn',    icon: '◑', desc: 'Darkens — add shadows and depth'              },
+    { key: 'heal',     label: 'Heal',    icon: '✚', desc: 'Removes blemishes using surrounding texture'  },
+    { key: 'wetmix',   label: 'Wet',     icon: '≈', desc: 'Wet mix — picks up and blends color like paint'},
+    { key: 'eraser',   label: 'Erase',   icon: '○', desc: 'Erases to transparent'                        },
+    { key: 'clone',    label: 'Clone',   icon: '⊕', desc: 'Alt+click to set source, then paint'          },
+    { key: 'paint',    label: 'Paint',   icon: '✏', desc: 'Paint with a custom color'                    },
+    { key: 'fill',     label: 'Fill',    icon: '⬛', desc: 'Flood fill — click to fill area with color'   },
   ];
 
   const css = {
-    label:   { fontSize:'10px', color:T.muted, marginBottom:4, marginTop:12, letterSpacing:'0.8px', fontWeight:'600', textTransform:'uppercase', display:'block' },
-    section: { padding:10, background:T.input, borderRadius:7, border:`1px solid ${T.border}`, marginTop:8 },
-    row:     { display:'flex', gap:6, alignItems:'center' },
+    label:   { fontSize: '10px', color: T.muted, marginBottom: 4, marginTop: 12, letterSpacing: '0.8px', fontWeight: '600', textTransform: 'uppercase', display: 'block' },
+    section: { padding: 10, background: T.input, borderRadius: 7, border: `1px solid ${T.border}`, marginTop: 8 },
+    row:     { display: 'flex', gap: 6, alignItems: 'center' },
   };
 
   const flow       = brushFlow       ?? 100;
   const stabilizer = brushStabilizer ?? 0;
+  const spacing    = brushSpacing    ?? 25;
 
   if (!layer?.src) return (
-    <div style={{ ...css.section, marginTop:0, fontSize:11, color:T.muted, lineHeight:1.8 }}>
+    <div style={{ ...css.section, marginTop: 0, fontSize: 11, color: T.muted, lineHeight: 1.8 }}>
       Click an image on the canvas to select it, then use brush tools.
     </div>
   );
 
   return (
     <div>
-      <div style={{ ...css.section, marginTop:0, fontSize:11, color:T.success, fontWeight:'600' }}>
+      <div style={{ ...css.section, marginTop: 0, fontSize: 11, color: T.success, fontWeight: '600' }}>
         ✓ Image selected — paint on the canvas
       </div>
 
       <span style={css.label}>Brush type</span>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:4 }}>
-        {brushTypes.map(b=>(
-          <button key={b.key} onClick={()=>onBrushTypeChange(b.key)} title={b.desc}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 4 }}>
+        {brushTypes.map(b => (
+          <button key={b.key} onClick={() => onBrushTypeChange(b.key)} title={b.desc}
             style={{
-              padding:'8px 2px', borderRadius:6,
-              border:`1px solid ${brushType===b.key?T.accent:T.border}`,
-              background: brushType===b.key?`${T.accent}18`:T.input,
-              color:      brushType===b.key?T.accent:T.text,
-              fontSize:8, cursor:'pointer', fontWeight:brushType===b.key?'700':'400',
-              textAlign:'center', lineHeight:1.6, transition:'all 0.1s',
+              padding: '8px 2px', borderRadius: 6,
+              border: `1px solid ${brushType === b.key ? T.accent : T.border}`,
+              background: brushType === b.key ? `${T.accent}18` : T.input,
+              color:      brushType === b.key ? T.accent : T.text,
+              fontSize: 8, cursor: 'pointer', fontWeight: brushType === b.key ? '700' : '400',
+              textAlign: 'center', lineHeight: 1.6, transition: 'all 0.1s',
             }}>
-            <div style={{ fontFamily:'monospace', fontSize:13, marginBottom:1 }}>{b.icon}</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 13, marginBottom: 1 }}>{b.icon}</div>
             <div>{b.label}</div>
           </button>
         ))}
       </div>
 
-      {brushType==='clone'&&(
-        <div style={{ ...css.section, fontSize:11, color:T.muted, lineHeight:1.6, marginTop:6 }}>
-          <strong style={{ color:T.text }}>Alt+click</strong> to set source, then paint.
+      {brushType === 'clone' && (
+        <div style={{ ...css.section, fontSize: 11, color: T.muted, lineHeight: 1.6, marginTop: 6 }}>
+          <strong style={{ color: T.text }}>Alt+click</strong> to set source, then paint.
         </div>
       )}
 
-      {/* Size */}
-      <span style={css.label}>Size — {brushSize}px</span>
+      {/* Size — [ ] keys also resize */}
+      <span style={css.label}>Size — {brushSize}px  <span style={{ color: T.muted, fontWeight: 400, textTransform: 'none' }}>( [ ] keys )</span></span>
       <div style={css.row}>
-        <input type="range" min="2" max="120" value={brushSize}
-          onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
-          onPointerMove={e=>{if(e.buttons)onBrushSizeChange(Number(e.currentTarget.value));}}
-          onPointerUp={e=>onBrushSizeChange(Number(e.currentTarget.value))}
-          onChange={e=>onBrushSizeChange(Number(e.target.value))}
-          style={{ flex:1 }}/>
-        <span style={{ fontSize:10, color:T.muted, minWidth:32, textAlign:'right' }}>{brushSize}px</span>
+        <input type="range" min="1" max="500" value={brushSize}
+          onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+          onPointerMove={e => { if (e.buttons) onBrushSizeChange(Number(e.currentTarget.value)); }}
+          onPointerUp={e => onBrushSizeChange(Number(e.currentTarget.value))}
+          onChange={e => onBrushSizeChange(Number(e.target.value))}
+          style={{ flex: 1 }} />
+        <span style={{ fontSize: 10, color: T.muted, minWidth: 32, textAlign: 'right' }}>{brushSize}px</span>
       </div>
 
-      {/* ✅ PHASE 2: Opacity (strength) */}
+      {/* Opacity (brushStrength = ceiling opacity for stroke) */}
       <span style={css.label}>Opacity — {brushStrength}%</span>
       <div style={css.row}>
         <input type="range" min="1" max="100" value={brushStrength}
-          onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
-          onPointerMove={e=>{if(e.buttons)onBrushStrengthChange(Number(e.currentTarget.value));}}
-          onPointerUp={e=>onBrushStrengthChange(Number(e.currentTarget.value))}
-          onChange={e=>onBrushStrengthChange(Number(e.target.value))}
-          style={{ flex:1 }}/>
-        <span style={{ fontSize:10, color:T.muted, minWidth:32, textAlign:'right' }}>{brushStrength}%</span>
+          onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+          onPointerMove={e => { if (e.buttons) onBrushStrengthChange(Number(e.currentTarget.value)); }}
+          onPointerUp={e => onBrushStrengthChange(Number(e.currentTarget.value))}
+          onChange={e => onBrushStrengthChange(Number(e.target.value))}
+          style={{ flex: 1 }} />
+        <span style={{ fontSize: 10, color: T.muted, minWidth: 32, textAlign: 'right' }}>{brushStrength}%</span>
       </div>
 
-      {/* ✅ PHASE 2: Flow — separate from opacity */}
+      {/* Flow — per-dab buildup */}
       <span style={css.label}>Flow — {flow}%</span>
       <div style={css.row}>
         <input type="range" min="1" max="100" value={flow}
-          onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
-          onPointerMove={e=>{if(e.buttons)onBrushFlowChange(Number(e.currentTarget.value));}}
-          onPointerUp={e=>onBrushFlowChange(Number(e.currentTarget.value))}
-          onChange={e=>onBrushFlowChange(Number(e.target.value))}
-          style={{ flex:1 }}/>
-        <span style={{ fontSize:10, color:T.muted, minWidth:32, textAlign:'right' }}>{flow}%</span>
+          onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+          onPointerMove={e => { if (e.buttons) onBrushFlowChange(Number(e.currentTarget.value)); }}
+          onPointerUp={e => onBrushFlowChange(Number(e.currentTarget.value))}
+          onChange={e => onBrushFlowChange(Number(e.target.value))}
+          style={{ flex: 1 }} />
+        <span style={{ fontSize: 10, color: T.muted, minWidth: 32, textAlign: 'right' }}>{flow}%</span>
       </div>
-      <div style={{ fontSize:10, color:T.muted, marginTop:2, marginBottom:2 }}>
-        Opacity = max effect. Flow = buildup per stroke.
+      <div style={{ fontSize: 10, color: T.muted, marginTop: 2, marginBottom: 2 }}>
+        Opacity = max for stroke. Flow = buildup per dab.
       </div>
 
-      {/* ✅ PHASE 2: Stabilizer */}
+      {/* Smoothing — EMA */}
+      <span style={css.label}>Smoothing — {brushSmoothing ?? 35}%</span>
+      <div style={css.row}>
+        <input type="range" min="0" max="100" value={brushSmoothing ?? 35}
+          onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+          onPointerMove={e => { if (e.buttons && onBrushSmoothingChange) onBrushSmoothingChange(Number(e.currentTarget.value)); }}
+          onPointerUp={e => { if (onBrushSmoothingChange) onBrushSmoothingChange(Number(e.currentTarget.value)); }}
+          onChange={e => { if (onBrushSmoothingChange) onBrushSmoothingChange(Number(e.target.value)); }}
+          style={{ flex: 1 }} />
+        <span style={{ fontSize: 10, color: T.muted, minWidth: 32, textAlign: 'right' }}>{brushSmoothing ?? 35}%</span>
+      </div>
+
+      {/* Stabilizer */}
       <span style={css.label}>Stabilizer — {stabilizer}%</span>
       <div style={css.row}>
         <input type="range" min="0" max="95" value={stabilizer}
-          onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
-          onPointerMove={e=>{if(e.buttons)onBrushStabilizerChange(Number(e.currentTarget.value));}}
-          onPointerUp={e=>onBrushStabilizerChange(Number(e.currentTarget.value))}
-          onChange={e=>onBrushStabilizerChange(Number(e.target.value))}
-          style={{ flex:1 }}/>
-        <span style={{ fontSize:10, color:T.muted, minWidth:32, textAlign:'right' }}>{stabilizer}%</span>
-      </div>
-      <div style={{ fontSize:10, color:T.muted, marginTop:2, marginBottom:2 }}>
-        Smooths wobbly lines. High = very smooth curves.
+          onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+          onPointerMove={e => { if (e.buttons) onBrushStabilizerChange(Number(e.currentTarget.value)); }}
+          onPointerUp={e => onBrushStabilizerChange(Number(e.currentTarget.value))}
+          onChange={e => onBrushStabilizerChange(Number(e.target.value))}
+          style={{ flex: 1 }} />
+        <span style={{ fontSize: 10, color: T.muted, minWidth: 32, textAlign: 'right' }}>{stabilizer}%</span>
       </div>
 
-      {/* Stroke smoothing — EMA-based input smoothing */}
-      <span style={css.label}>Smoothing — {brushSmoothing ?? 40}%</span>
-      <div style={css.row}>
-        <input type="range" min="0" max="100" value={brushSmoothing ?? 40}
-          onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
-          onPointerMove={e=>{if(e.buttons&&onBrushSmoothingChange)onBrushSmoothingChange(Number(e.currentTarget.value));}}
-          onPointerUp={e=>{if(onBrushSmoothingChange)onBrushSmoothingChange(Number(e.currentTarget.value));}}
-          onChange={e=>{if(onBrushSmoothingChange)onBrushSmoothingChange(Number(e.target.value));}}
-          style={{ flex:1 }}/>
-        <span style={{ fontSize:10, color:T.muted, minWidth:32, textAlign:'right' }}>{brushSmoothing ?? 40}%</span>
-      </div>
-      <div style={{ fontSize:10, color:T.muted, marginTop:2, marginBottom:4 }}>
-        EMA input smoothing. 0 = raw, 100 = maximum smooth.
-      </div>
+      {/* Spacing — show/hide toggle */}
+      <button onClick={() => setShowSpacing(s => !s)}
+        style={{ fontSize: 10, color: T.muted, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', width: '100%', textAlign: 'left', marginTop: 4 }}>
+        {showSpacing ? '▾' : '▸'} Advanced — Spacing
+      </button>
+      {showSpacing && (
+        <>
+          <span style={css.label}>Spacing — {spacing}%</span>
+          <div style={css.row}>
+            <input type="range" min="1" max="200" value={spacing}
+              onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+              onPointerMove={e => { if (e.buttons && onBrushSpacingChange) onBrushSpacingChange(Number(e.currentTarget.value)); }}
+              onPointerUp={e => { if (onBrushSpacingChange) onBrushSpacingChange(Number(e.currentTarget.value)); }}
+              onChange={e => { if (onBrushSpacingChange) onBrushSpacingChange(Number(e.target.value)); }}
+              style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, color: T.muted, minWidth: 32, textAlign: 'right' }}>{spacing}%</span>
+          </div>
+        </>
+      )}
 
       {/* Edge */}
       <span style={css.label}>Edge</span>
-      <div style={{ display:'flex', gap:5 }}>
-        {['soft','hard'].map(edge=>(
-          <button key={edge} onClick={()=>onBrushEdgeChange(edge)}
+      <div style={{ display: 'flex', gap: 5 }}>
+        {['soft', 'hard'].map(edge => (
+          <button key={edge} onClick={() => onBrushEdgeChange(edge)}
             style={{
-              flex:1, padding:'7px', borderRadius:6,
-              border:`1px solid ${brushEdge===edge?T.accent:T.border}`,
-              background: brushEdge===edge?`${T.accent}18`:T.input,
-              color:      brushEdge===edge?T.accent:T.text,
-              fontSize:11, cursor:'pointer',
-              fontWeight: brushEdge===edge?'700':'400',
-              textTransform:'capitalize',
+              flex: 1, padding: '7px', borderRadius: 6,
+              border: `1px solid ${brushEdge === edge ? T.accent : T.border}`,
+              background: brushEdge === edge ? `${T.accent}18` : T.input,
+              color:      brushEdge === edge ? T.accent : T.text,
+              fontSize: 11, cursor: 'pointer',
+              fontWeight: brushEdge === edge ? '700' : '400',
+              textTransform: 'capitalize',
             }}>{edge}</button>
         ))}
       </div>
 
-      {(brushType==='paint'||brushType==='fill')&&(
+      {(brushType === 'paint' || brushType === 'fill') && (
         <div>
           <span style={css.label}>Paint color</span>
-          <input type="color" value={paintColor||'#ff0000'}
-            onChange={e=>onPaintColorChange(e.target.value)}
-            style={{width:'100%',height:36,borderRadius:6,
-              border:`1px solid ${T.border}`,cursor:'pointer',background:'none'}}/>
+          <input type="color" value={paintColor || '#ff0000'}
+            onChange={e => onPaintColorChange(e.target.value)}
+            style={{ width: '100%', height: 36, borderRadius: 6, border: `1px solid ${T.border}`, cursor: 'pointer', background: 'none' }} />
 
           <span style={css.label}>RGB sliders</span>
           <div style={css.section}>
-            {(()=>{
-              const hex=(paintColor||'#ff0000').replace('#','');
-              const vals=[
-                parseInt(hex.slice(0,2),16)||0,
-                parseInt(hex.slice(2,4),16)||0,
-                parseInt(hex.slice(4,6),16)||0,
+            {(() => {
+              const hex = (paintColor || '#ff0000').replace('#', '');
+              const vals = [
+                parseInt(hex.slice(0, 2), 16) || 0,
+                parseInt(hex.slice(2, 4), 16) || 0,
+                parseInt(hex.slice(4, 6), 16) || 0,
               ];
-              const colors=['#f87171','#4ade80','#60a5fa'];
-              const labels=['R','G','B'];
-              return labels.map((l,idx)=>(
-                <div key={l} style={{...css.row,marginBottom:6}}>
-                  <span style={{fontSize:11,color:colors[idx],fontWeight:'700',width:12}}>{l}</span>
+              const colors = ['#f87171', '#4ade80', '#60a5fa'];
+              const labels = ['R', 'G', 'B'];
+              return labels.map((l, idx) => (
+                <div key={l} style={{ ...css.row, marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, color: colors[idx], fontWeight: '700', width: 12 }}>{l}</span>
                   <input type="range" min={0} max={255} value={vals[idx]}
-                    onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
-                    onChange={e=>{
-                      const newVals=[...vals];
-                      newVals[idx]=Number(e.target.value);
-                      const newHex='#'+newVals.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+                    onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+                    onChange={e => {
+                      const newVals = [...vals];
+                      newVals[idx] = Number(e.target.value);
+                      const newHex = '#' + newVals.map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
                       onPaintColorChange(newHex);
                     }}
-                    style={{flex:1}}/>
-                  <span style={{fontSize:10,color:T.text,width:26,textAlign:'right'}}>{vals[idx]}</span>
+                    style={{ flex: 1 }} />
+                  <span style={{ fontSize: 10, color: T.text, width: 26, textAlign: 'right' }}>{vals[idx]}</span>
                 </div>
               ));
             })()}
           </div>
 
-          <span style={css.label}>Opacity — {paintAlpha||100}%</span>
-          <input type="range" min={1} max={100} value={paintAlpha||100}
-            onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
-            onChange={e=>onPaintAlphaChange(Number(e.target.value))}
-            style={{width:'100%'}}/>
+          <span style={css.label}>Opacity — {paintAlpha || 100}%</span>
+          <input type="range" min={1} max={100} value={paintAlpha || 100}
+            onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+            onChange={e => onPaintAlphaChange(Number(e.target.value))}
+            style={{ width: '100%' }} />
 
           <div style={{
-            width:'100%',height:32,borderRadius:6,
-            background:paintColor||'#ff0000',
-            opacity:(paintAlpha||100)/100,
-            border:`1px solid ${T.border}`,
-            marginTop:8,
-          }}/>
+            width: '100%', height: 32, borderRadius: 6,
+            background: paintColor || '#ff0000',
+            opacity: (paintAlpha || 100) / 100,
+            border: `1px solid ${T.border}`,
+            marginTop: 8,
+          }} />
         </div>
       )}
 
-      {/* ── Pressure sensitivity (tablet) ───────────────────────────────── */}
+      {/* Pressure sensitivity */}
       <span style={css.label}>Pressure sensitivity</span>
-      <div style={{ ...css.section, marginTop:0 }}>
+      <div style={{ ...css.section, marginTop: 0 }}>
         {tabletDetected && (
-          <div style={{ fontSize:10, color:'#4ade80', fontWeight:'600', marginBottom:6 }}>
+          <div style={{ fontSize: 10, color: '#4ade80', fontWeight: '600', marginBottom: 6 }}>
             ✓ Drawing tablet detected
           </div>
         )}
         {!tabletDetected && (
-          <div style={{ fontSize:10, color:T.muted, marginBottom:6 }}>
+          <div style={{ fontSize: 10, color: T.muted, marginBottom: 6 }}>
             Connect a drawing tablet to enable pressure sensitivity.
           </div>
         )}
-        <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', marginBottom:6 }}>
-          <input type="checkbox" checked={!!pressureEnabled} onChange={e=>onPressureEnabledChange&&onPressureEnabledChange(e.target.checked)} style={{ accentColor:'#ff6a00' }}/>
-          <span style={{ fontSize:11, color:T.text, fontWeight:'600' }}>Enable pressure</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 6 }}>
+          <input type="checkbox" checked={!!pressureEnabled} onChange={e => onPressureEnabledChange && onPressureEnabledChange(e.target.checked)} style={{ accentColor: '#ff6a00' }} />
+          <span style={{ fontSize: 11, color: T.text, fontWeight: '600' }}>Enable pressure</span>
         </label>
         {pressureEnabled && (
           <div>
-            <div style={{ ...css.row, marginBottom:6 }}>
-              <span style={{ fontSize:10, color:T.muted, width:50 }}>Maps to</span>
-              <select value={pressureMapping||'both'} onChange={e=>onPressureMappingChange&&onPressureMappingChange(e.target.value)}
-                style={{ flex:1, background:'#222', color:'#fff', border:`1px solid ${T.border}`, borderRadius:4, padding:'3px 6px', fontSize:11 }}>
+            <div style={{ ...css.row, marginBottom: 6 }}>
+              <span style={{ fontSize: 10, color: T.muted, width: 50 }}>Maps to</span>
+              <select value={pressureMapping || 'both'} onChange={e => onPressureMappingChange && onPressureMappingChange(e.target.value)}
+                style={{ flex: 1, background: '#222', color: '#fff', border: `1px solid ${T.border}`, borderRadius: 4, padding: '3px 6px', fontSize: 11 }}>
                 <option value="none">Nothing</option>
                 <option value="size">Size only</option>
                 <option value="opacity">Opacity only</option>
                 <option value="both">Size + Opacity</option>
               </select>
             </div>
-            <div style={{ ...css.row, marginBottom:8 }}>
-              <span style={{ fontSize:10, color:T.muted, width:50 }}>Curve</span>
-              <select value={pressureCurve||'linear'} onChange={e=>onPressureCurveChange&&onPressureCurveChange(e.target.value)}
-                style={{ flex:1, background:'#222', color:'#fff', border:`1px solid ${T.border}`, borderRadius:4, padding:'3px 6px', fontSize:11 }}>
+            <div style={{ ...css.row, marginBottom: 8 }}>
+              <span style={{ fontSize: 10, color: T.muted, width: 50 }}>Curve</span>
+              <select value={pressureCurve || 'linear'} onChange={e => onPressureCurveChange && onPressureCurveChange(e.target.value)}
+                style={{ flex: 1, background: '#222', color: '#fff', border: `1px solid ${T.border}`, borderRadius: 4, padding: '3px 6px', fontSize: 11 }}>
                 <option value="linear">Linear</option>
                 <option value="exponential">Exponential (light touch)</option>
                 <option value="logarithmic">Logarithmic (easy full)</option>
               </select>
               <canvas ref={pressureCurveCanvasRef} width={60} height={40}
-                style={{ borderRadius:3, border:`1px solid ${T.border}`, flexShrink:0 }}/>
+                style={{ borderRadius: 3, border: `1px solid ${T.border}`, flexShrink: 0 }} />
             </div>
-            <div style={{ ...css.row, marginBottom:4 }}>
-              <span style={{ fontSize:10, color:T.muted, width:50 }}>Min %</span>
-              <input type="range" min={0} max={100} value={pressureMin??0}
-                onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
-                onChange={e=>onPressureMinChange&&onPressureMinChange(Number(e.target.value))}
-                style={{ flex:1, accentColor:'#ff6a00' }}/>
-              <span style={{ fontSize:10, color:T.muted, width:26, textAlign:'right' }}>{pressureMin??0}%</span>
+            <div style={{ ...css.row, marginBottom: 4 }}>
+              <span style={{ fontSize: 10, color: T.muted, width: 50 }}>Min %</span>
+              <input type="range" min={0} max={100} value={pressureMin ?? 0}
+                onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+                onChange={e => onPressureMinChange && onPressureMinChange(Number(e.target.value))}
+                style={{ flex: 1, accentColor: '#ff6a00' }} />
+              <span style={{ fontSize: 10, color: T.muted, width: 26, textAlign: 'right' }}>{pressureMin ?? 0}%</span>
             </div>
             <div style={{ ...css.row }}>
-              <span style={{ fontSize:10, color:T.muted, width:50 }}>Max %</span>
-              <input type="range" min={0} max={100} value={pressureMax??100}
-                onPointerDown={e=>{e.stopPropagation();e.currentTarget.setPointerCapture(e.pointerId);}}
-                onChange={e=>onPressureMaxChange&&onPressureMaxChange(Number(e.target.value))}
-                style={{ flex:1, accentColor:'#ff6a00' }}/>
-              <span style={{ fontSize:10, color:T.muted, width:26, textAlign:'right' }}>{pressureMax??100}%</span>
+              <span style={{ fontSize: 10, color: T.muted, width: 50 }}>Max %</span>
+              <input type="range" min={0} max={100} value={pressureMax ?? 100}
+                onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+                onChange={e => onPressureMaxChange && onPressureMaxChange(Number(e.target.value))}
+                style={{ flex: 1, accentColor: '#ff6a00' }} />
+              <span style={{ fontSize: 10, color: T.muted, width: 26, textAlign: 'right' }}>{pressureMax ?? 100}%</span>
             </div>
           </div>
         )}
       </div>
 
-      <button onClick={()=>brushOverlayRef?.current?.undo()}
-        style={{ width:'100%', padding:9, borderRadius:7, border:`1px solid ${T.border}`, background:'transparent', color:T.text, fontSize:12, cursor:'pointer', fontWeight:'600', marginTop:10 }}>
+      <button onClick={() => brushOverlayRef?.current?.undo()}
+        style={{ width: '100%', padding: 9, borderRadius: 7, border: `1px solid ${T.border}`, background: 'transparent', color: T.text, fontSize: 12, cursor: 'pointer', fontWeight: '600', marginTop: 10 }}>
         ↩ Undo stroke
       </button>
 
       {/* Live preview */}
       <span style={css.label}>Preview</span>
-      <div style={{ position:'relative', width:'100%', height:64, borderRadius:8, background:T.bg, border:`1px solid ${T.border}`, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ position: 'relative', width: '100%', height: 64, borderRadius: 8, background: T.bg, border: `1px solid ${T.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{
-          width:  Math.min(brushSize*1.4,58),
-          height: Math.min(brushSize*1.4,58),
-          borderRadius:'50%',
-          background: brushEdge==='soft'
-            ? `radial-gradient(circle, rgba(249,115,22,${brushStrength/100}) 0%, rgba(249,115,22,${brushStrength/300}) 50%, rgba(249,115,22,0) 100%)`
-            : `rgba(249,115,22,${brushStrength/100})`,
-          border:'1.5px solid rgba(249,115,22,0.6)',
-          transition:'all 0.1s',
-          opacity: flow/100,
-        }}/>
+          width:  Math.min(brushSize * 1.4, 58),
+          height: Math.min(brushSize * 1.4, 58),
+          borderRadius: '50%',
+          background: brushEdge === 'soft'
+            ? `radial-gradient(circle, rgba(249,115,22,${brushStrength / 100}) 0%, rgba(249,115,22,${brushStrength / 300}) 50%, rgba(249,115,22,0) 100%)`
+            : `rgba(249,115,22,${brushStrength / 100})`,
+          border: '1.5px solid rgba(249,115,22,0.6)',
+          transition: 'all 0.1s',
+          opacity: flow / 100,
+        }} />
       </div>
 
-      <div style={{ ...css.section, fontSize:11, color:T.muted, lineHeight:1.6, marginTop:8 }}>
-        {brushTypes.find(b=>b.key===brushType)?.desc}
+      <div style={{ ...css.section, fontSize: 11, color: T.muted, lineHeight: 1.6, marginTop: 8 }}>
+        {brushTypes.find(b => b.key === brushType)?.desc}
       </div>
     </div>
   );
