@@ -295,6 +295,33 @@ const blogStyles = `
     color: var(--text-muted);
     font-size: 15px;
   }
+
+  /* ── Mobile newsletter section ───────────────────────────────────────── */
+  .tf-blog-newsletter-mobile {
+    display: none;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 24px;
+    margin: 32px 0 0;
+    text-align: center;
+  }
+  .tf-blog-newsletter-mobile h3 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+  }
+  .tf-blog-newsletter-mobile p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0 0 16px;
+  }
+  .tf-blog-newsletter-mobile .tf-newsletter-input { text-align: left; }
+  @media (max-width: 960px) {
+    .tf-blog-newsletter-mobile { display: block; }
+  }
 `;
 
 const CAT_ICONS = {
@@ -377,6 +404,7 @@ export default function Blog({ setPage, onOpenPost }) {
             <div className="tf-blog-empty">
               {activeCategory === 'All' ? 'No posts yet — check back soon.' : `No posts in "${activeCategory}" yet.`}
             </div>
+
           ) : (
             <div className="tf-blog-posts">
               {filtered.map((post) => (
@@ -412,6 +440,36 @@ export default function Blog({ setPage, onOpenPost }) {
               ))}
             </div>
           )}
+
+          {/* Mobile newsletter — hidden on desktop via CSS */}
+          <div className="tf-blog-newsletter-mobile">
+            <h3>Get better thumbnails in your inbox</h3>
+            <p>Thumbnail tips, new features, and creator resources — weekly.</p>
+            {subscribed ? (
+              <p style={{ fontSize: 14, color: '#22c55e', fontWeight: 600, margin: 0 }}>✓ You're in! Check your inbox.</p>
+            ) : (
+              <>
+                <input
+                  className="tf-newsletter-input"
+                  type="email"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && email.includes('@')) {
+                      fetch(`${API}/api/newsletter/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+                        .then(() => setSubscribed(true)).catch(() => setSubscribed(true));
+                    }
+                  }}
+                />
+                <button className="tf-newsletter-btn" onClick={() => {
+                  if (!email.includes('@')) return;
+                  fetch(`${API}/api/newsletter/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+                    .then(() => setSubscribed(true)).catch(() => setSubscribed(true));
+                }}>Subscribe →</button>
+              </>
+            )}
+          </div>
         </main>
 
         <aside className="tf-blog-sidebar">
