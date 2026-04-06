@@ -1,517 +1,245 @@
-import React, { useEffect } from 'react';
+import React from 'react';
+import { motion } from 'framer-motion';
+import { ArrowRight } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useSEO } from '../hooks/useSEO';
-import { useScrollAnimation } from '../hooks/useScrollAnimation';
 
-const aboutStyles = `
-  .tf-about-hero {
-    padding: 140px 24px 80px;
-    position: relative;
-    overflow: hidden;
-  }
-  .tf-about-hero::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse 60% 40% at 0% 50%, rgba(255,107,0,0.05) 0%, transparent 70%);
-    pointer-events: none;
-  }
-  .tf-about-hero-inner {
-    max-width: 1200px;
-    margin: 0 auto;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 80px;
-    align-items: center;
-  }
-  .tf-about-hero-text .badge {
-    margin-bottom: 24px;
-  }
-  .tf-about-hero-text h1 {
-    font-size: clamp(36px, 4.5vw, 54px);
-    letter-spacing: -0.03em;
-    line-height: 1.08;
-    margin-bottom: 20px;
-  }
-  .tf-about-hero-text p {
-    font-size: 17px;
-    color: var(--text-secondary);
-    line-height: 1.7;
-  }
-  .tf-about-avatar-wrap {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    position: relative;
-  }
-  .tf-about-avatar {
-    width: 240px;
-    height: 240px;
-    border-radius: var(--radius-xl);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    position: relative;
-    overflow: hidden;
-  }
-  .tf-about-avatar::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse at 30% 30%, rgba(255,107,0,0.08) 0%, transparent 70%);
-  }
-  .tf-about-avatar span.emoji {
-    font-size: 64px;
-    z-index: 1;
-  }
-  .tf-about-avatar span.name {
-    font-family: var(--font-display);
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--text-primary);
-    z-index: 1;
-  }
-  .tf-about-avatar span.age {
-    font-size: 13px;
-    color: var(--text-muted);
-    z-index: 1;
-  }
-
-  /* ── Story ──────────────────────────────────────────────────────── */
-  .tf-about-story {
-    max-width: 680px;
-    margin: 0 auto;
-    padding: 0 24px 100px;
-  }
-  .tf-about-story-label {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 16px;
-    font-family: var(--font-body);
-  }
-  .tf-about-story p {
-    font-size: 17px;
-    color: var(--text-secondary);
-    line-height: 1.8;
-    margin-bottom: 24px;
-  }
-  .tf-about-story p:first-of-type {
-    font-size: 20px;
-    color: var(--text-primary);
-    font-weight: 500;
-    line-height: 1.65;
-  }
-  .tf-about-story blockquote {
-    border-left: 3px solid var(--accent);
-    padding: 4px 0 4px 24px;
-    margin: 32px 0;
-  }
-  .tf-about-story blockquote p {
-    font-size: 18px;
-    color: var(--text-primary);
-    font-style: italic;
-    font-family: var(--font-display);
-    margin-bottom: 0;
-  }
-
-  /* ── Mission ────────────────────────────────────────────────────── */
-  .tf-about-mission {
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    padding: 80px 24px;
-  }
-  .tf-about-mission-inner {
-    max-width: 900px;
-    margin: 0 auto;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 64px;
-    align-items: start;
-  }
-  .tf-about-mission h2 {
-    font-size: clamp(26px, 3vw, 38px);
-    letter-spacing: -0.025em;
-    margin-bottom: 20px;
-    line-height: 1.2;
-  }
-  .tf-about-mission p {
-    font-size: 15px;
-    color: var(--text-secondary);
-    line-height: 1.7;
-  }
-  .tf-about-mission-values {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    margin-top: 8px;
-  }
-  .tf-about-mission-value {
-    display: flex;
-    gap: 14px;
-    align-items: flex-start;
-  }
-  .tf-about-mission-value-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-md);
-    background: var(--accent-glow);
-    border: 1px solid rgba(255,107,0,0.2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    flex-shrink: 0;
-  }
-  .tf-about-mission-value-text h4 {
-    font-size: 15px;
-    font-family: var(--font-display);
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-    letter-spacing: -0.01em;
-  }
-  .tf-about-mission-value-text p {
-    font-size: 13px;
-    margin-bottom: 0;
-  }
-
-  /* ── What's Next ────────────────────────────────────────────────── */
-  .tf-about-next {
-    padding: 80px 24px;
-  }
-  .tf-about-next-inner {
-    max-width: 680px;
-    margin: 0 auto;
-  }
-  .tf-about-next h2 {
-    font-size: clamp(26px, 3vw, 38px);
-    letter-spacing: -0.025em;
-    margin-bottom: 12px;
-  }
-  .tf-about-next-desc {
-    font-size: 15px;
-    color: var(--text-secondary);
-    margin-bottom: 36px;
-    line-height: 1.65;
-  }
-  .tf-roadmap {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-  .tf-roadmap-item {
-    display: flex;
-    gap: 16px;
-    align-items: flex-start;
-    padding: 20px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    transition: all var(--transition-base);
-  }
-  .tf-roadmap-item:hover {
-    border-color: var(--border-hover);
-    transform: translateX(4px);
-  }
-  .tf-roadmap-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
-    margin-top: 6px;
-  }
-  .tf-roadmap-dot.soon {
-    background: var(--warning);
-  }
-  .tf-roadmap-dot.future {
-    background: var(--border);
-  }
-  .tf-roadmap-text h4 {
-    font-size: 15px;
-    font-family: var(--font-display);
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-    letter-spacing: -0.01em;
-  }
-  .tf-roadmap-text p {
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-  }
-  .tf-roadmap-badge {
-    margin-left: auto;
-    flex-shrink: 0;
-  }
-
-  /* ── Final CTA ──────────────────────────────────────────────────── */
-  .tf-about-cta {
-    padding: 80px 24px 100px;
-    text-align: center;
-    border-top: 1px solid var(--border);
-    position: relative;
-    overflow: hidden;
-  }
-  .tf-about-cta::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 500px;
-    height: 300px;
-    background: radial-gradient(ellipse at center, rgba(255,107,0,0.08) 0%, transparent 70%);
-    pointer-events: none;
-  }
-  .tf-about-cta h2 {
-    font-size: clamp(28px, 3.5vw, 44px);
-    margin-bottom: 16px;
-    position: relative;
-    z-index: 1;
-  }
-  .tf-about-cta p {
-    font-size: 16px;
-    color: var(--text-secondary);
-    margin-bottom: 32px;
-    position: relative;
-    z-index: 1;
-  }
-
-  @media (max-width: 768px) {
-    .tf-about-hero-inner { grid-template-columns: 1fr; gap: 48px; }
-    .tf-about-avatar-wrap { order: -1; }
-    .tf-about-avatar { width: 180px; height: 180px; }
-    .tf-about-mission-inner { grid-template-columns: 1fr; gap: 40px; }
-  }
-`;
-
-const VALUES = [
-  {
-    icon: '🎯',
-    title: 'Creator-first.',
-    body: 'Every decision — every feature, every default — is made by asking: "does this make a creator\'s life easier?"',
-  },
-  {
-    icon: '🚫',
-    title: 'No bloat.',
-    body: 'We don\'t add features because they look impressive. We add features because they\'re actually needed.',
-  },
-  {
-    icon: '🔬',
-    title: 'AI that earns its place.',
-    body: 'AI is only in ThumbFrame where it demonstrably produces better results faster than doing it manually.',
-  },
-];
+const fadeUp = {
+  hidden:  { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } },
+};
+const stagger = { visible: { transition: { staggerChildren: 0.09 } } };
 
 const ROADMAP = [
-  {
-    title: 'YouTube Analytics Integration',
-    body: 'Connect your channel and see actual CTR data alongside your designs. Real feedback loop.',
-    status: 'active',
-    label: 'In progress',
-  },
-  {
-    title: 'Brand Kit Pro',
-    body: 'Team-shareable brand kits with color palettes, fonts, overlays, and logo placement rules.',
-    status: 'soon',
-    label: 'Coming soon',
-  },
-  {
-    title: 'Template Marketplace',
-    body: 'Creator-made templates you can buy, sell, and remix. Quality over quantity.',
-    status: 'soon',
-    label: 'Coming soon',
-  },
-  {
-    title: 'Batch Thumbnail Export',
-    body: 'Generate a full series of thumbnails from a single template + variable inputs.',
-    status: 'future',
-    label: 'Planned',
-  },
+  { done: true,  item: 'Canvas editor with full layer system' },
+  { done: true,  item: 'AI background removal' },
+  { done: true,  item: 'A/B thumbnail testing' },
+  { done: true,  item: 'Brand kit + text engine' },
+  { done: false, item: 'CTR tracking with YouTube API' },
+  { done: false, item: 'Thumbnail templates library' },
+  { done: false, item: 'Team collaboration / shared brand kits' },
+  { done: false, item: 'Mobile app (iOS)' },
 ];
 
 export default function About({ setPage }) {
-  useScrollAnimation();
-
   useSEO({
     title: 'About — ThumbFrame',
-    description: 'ThumbFrame was built by Kaden, a YouTube creator who got tired of spending hours in Photoshop on every thumbnail. Here\'s the story.',
+    description: 'ThumbFrame was built by Kaden, a creator who was tired of spending 2 hours per thumbnail in Photoshop. Here\'s the real story.',
     url: 'https://thumbframe.com/about',
   });
 
-  useEffect(() => {
-    document.title = 'About — ThumbFrame';
-  }, []);
-
-  const go = (page) => {
-    setPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  const go = (page) => { setPage(page); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   return (
-    <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <style>{aboutStyles}</style>
+    <div style={{ background: '#050507', minHeight: '100vh', fontFamily: "'Satoshi', sans-serif", color: '#f0f0f3' }}>
       <Navbar setPage={setPage} currentPage="about" />
 
-      {/* Hero */}
-      <section className="tf-about-hero">
-        <div className="tf-about-hero-inner">
-          <div className="tf-about-hero-text animate-on-scroll">
-            <span className="badge badge-accent" style={{ marginBottom: 24 }}>About</span>
-            <h1>
-              Built by one person.<br />
-              <span className="text-gradient">For everyone.</span>
-            </h1>
-            <p>
-              ThumbFrame isn't a startup. It's a tool built by a creator who got frustrated enough to solve the problem himself.
-            </p>
-          </div>
-          <div className="tf-about-avatar-wrap animate-on-scroll">
-            <div className="tf-about-avatar">
-              <span className="emoji">👨‍💻</span>
-              <span className="name">Kaden</span>
-              <span className="age">Founder · 20</span>
+      {/* Hero — asymmetric, text-heavy */}
+      <div style={{
+        maxWidth: 1100, margin: '0 auto',
+        padding: '140px 24px 80px',
+        display: 'grid',
+        gridTemplateColumns: '1.2fr 0.8fr',
+        gap: 80, alignItems: 'center',
+        position: 'relative',
+      }}>
+        {/* Glow */}
+        <div style={{
+          position: 'absolute', top: 0, left: '-10%',
+          width: '50%', height: '60%',
+          background: 'radial-gradient(ellipse 60% 40% at 0% 50%, rgba(255,107,0,0.05) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+
+        {/* Left text */}
+        <motion.div variants={stagger} initial="hidden" animate="visible">
+          <motion.p variants={fadeUp} style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 16px',
+          }}>
+            THE STORY
+          </motion.p>
+
+          <motion.h1 variants={fadeUp} style={{ margin: '0 0 28px' }}>
+            Built this because<br />
+            <span style={{ color: '#FF6B00' }}>Photoshop is overkill</span><br />
+            for a 1280×720 image.
+          </motion.h1>
+
+          <motion.div variants={stagger} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {[
+              "I'm Kaden. I make Minecraft content and I was spending something like 2 hours per thumbnail in Photoshop. Cut out the subject, fix the edges, add text that doesn't look trash, export at the right size — every single time. For a thumbnail.",
+              "At some point I looked around for a faster option. There wasn't one that actually worked. The thumbnail tools I found were either broken, ugly, or trying to be full design suites I'd get lost in.",
+              "So I built ThumbFrame. Started as a side project in my bedroom, mostly for myself. Added the AI background remover because I was spending the most time on that. Added A/B testing because I had no idea which of my thumbnails would actually get clicked.",
+              "Now 50+ creators use it. People are actually cancelling their Photoshop subscriptions. That's still kind of wild to me.",
+            ].map((para, i) => (
+              <motion.p key={i} variants={fadeUp} style={{
+                fontSize: 16, color: '#8a8a93', lineHeight: 1.75, margin: 0,
+              }}>
+                {para}
+              </motion.p>
+            ))}
+          </motion.div>
+
+          <motion.div variants={fadeUp} style={{ marginTop: 36, display: 'flex', gap: 12 }}>
+            <button
+              onClick={() => go('editor')}
+              style={{
+                padding: '12px 24px', borderRadius: 10, border: 'none',
+                background: '#FF6B00', color: '#fff', cursor: 'pointer',
+                fontSize: 14, fontWeight: 700, fontFamily: "'Satoshi', sans-serif",
+                boxShadow: '0 0 24px rgba(255,107,0,0.25)',
+                display: 'flex', alignItems: 'center', gap: 7,
+              }}
+            >
+              Try it yourself <ArrowRight size={14} weight="bold" />
+            </button>
+            <a
+              href="mailto:hi@thumbframe.app"
+              style={{
+                padding: '12px 22px', borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'transparent', color: '#8a8a93',
+                fontSize: 14, fontWeight: 600,
+                fontFamily: "'Satoshi', sans-serif",
+                textDecoration: 'none', display: 'inline-flex', alignItems: 'center',
+              }}
+            >
+              Say hi →
+            </a>
+          </motion.div>
+        </motion.div>
+
+        {/* Right — "About Kaden" card */}
+        <motion.div
+          initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.3, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <div style={{
+            background: '#0c0c0f',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: 16, padding: '32px',
+          }}>
+            {/* Avatar placeholder */}
+            <div style={{
+              width: 72, height: 72, borderRadius: '50%',
+              background: 'rgba(255,107,0,0.1)',
+              border: '2px solid rgba(255,107,0,0.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 28, marginBottom: 20,
+            }}>
+              K
             </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#f0f0f3', marginBottom: 4, letterSpacing: '-0.02em' }}>
+              Kaden
+            </div>
+            <div style={{ fontSize: 13, color: '#55555e', marginBottom: 20 }}>
+              Minecraft creator → accidental startup founder
+            </div>
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', marginBottom: 20 }} />
+            {[
+              ['Channel', 'YouTube (Minecraft)'],
+              ['Location', 'United States'],
+              ['Building with', 'React, Node, Supabase'],
+              ['Contact', 'hi@thumbframe.app'],
+            ].map(([label, value]) => (
+              <div key={label} style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '8px 0',
+                borderBottom: '1px solid rgba(255,255,255,0.04)',
+                fontSize: 13,
+              }}>
+                <span style={{ color: '#55555e' }}>{label}</span>
+                <span style={{ color: '#8a8a93', fontWeight: 500 }}>{value}</span>
+              </div>
+            ))}
           </div>
-        </div>
-      </section>
-
-      {/* Story */}
-      <section style={{ borderTop: '1px solid var(--border)' }}>
-        <div className="tf-about-story animate-on-scroll">
-          <p className="tf-about-story-label">The story</p>
-
-          <p>
-            I'm Kaden. I'm 20 years old and I built ThumbFrame by myself.
-          </p>
-
-          <p>
-            It started because I was trying to grow a Minecraft YouTube channel.
-            I was spending hours making thumbnails in Photoshop — watching tutorials,
-            fighting with layers, trying to figure out why my thumbnails looked
-            like garbage while everyone else's looked clean.
-          </p>
-
-          <p>
-            I tried Canva. Too limiting. The templates looked generic and every
-            other small creator was using the same ones. I tried other thumbnail
-            tools. They were either too expensive, too basic, or clearly designed
-            by people who had never made a YouTube video in their life.
-          </p>
-
-          <blockquote>
-            <p>So I built my own.</p>
-          </blockquote>
-
-          <p>
-            ThumbFrame started as a side project — just a simple editor that did
-            what I needed. Then I added AI. Then I added expression scoring. Then
-            background generation. Then CTR prediction. And it kept growing because
-            every feature I added was something I actually needed as a creator.
-          </p>
-
-          <p>
-            This isn't a product built by a committee or a VC-funded startup with
-            a marketing team. It's built by one person who makes videos and got
-            frustrated enough to solve the problem.
-          </p>
-
-          <p>
-            That's ThumbFrame.
-          </p>
-        </div>
-      </section>
+        </motion.div>
+      </div>
 
       {/* Mission */}
-      <section className="tf-about-mission">
-        <div className="tf-about-mission-inner">
-          <div className="animate-on-scroll">
-            <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 12, fontFamily: 'var(--font-body)' }}>Mission</p>
-            <h2>
-              Make professional thumbnails accessible to every creator.
-            </h2>
-            <p>
-              Skill shouldn't be the bottleneck between a creator's idea and a great thumbnail.
-              ThumbFrame exists to collapse that gap — using AI where it genuinely helps, and staying
-              out of the way everywhere else.
-            </p>
-          </div>
-          <div className="tf-about-mission-values stagger-children">
-            {VALUES.map((v) => (
-              <div className="tf-about-mission-value" key={v.title}>
-                <div className="tf-about-mission-value-icon">{v.icon}</div>
-                <div className="tf-about-mission-value-text">
-                  <h4>{v.title}</h4>
-                  <p>{v.body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+      <motion.section
+        variants={stagger} initial="hidden" whileInView="visible"
+        viewport={{ once: true, margin: '-60px' }}
+        style={{
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+          padding: '80px 24px',
+        }}
+      >
+        <div style={{ maxWidth: 700, margin: '0 auto' }}>
+          <motion.p variants={fadeUp} style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 16px',
+          }}>
+            THE MISSION
+          </motion.p>
+          <motion.h2 variants={fadeUp} style={{ margin: '0 0 24px' }}>
+            Make great thumbnails accessible<br />to every creator.
+          </motion.h2>
+          <motion.p variants={fadeUp} style={{ fontSize: 16, color: '#8a8a93', lineHeight: 1.75 }}>
+            Big channels have full-time thumbnail designers. A creator with 2,000 subscribers doesn't. That gap
+            isn't about talent — it's about tooling. ThumbFrame exists to close it. The goal is for every
+            creator to be able to make a thumbnail that looks like it took a pro hours, in under 20 minutes.
+          </motion.p>
         </div>
-      </section>
+      </motion.section>
 
-      {/* What's Next */}
-      <section className="tf-about-next">
-        <div className="tf-about-next-inner">
-          <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 12, fontFamily: 'var(--font-body)' }}>
-            What's next
-          </p>
-          <h2 className="animate-on-scroll">The roadmap.</h2>
-          <p className="tf-about-next-desc animate-on-scroll">
-            What I'm building next, in order of "things I need as a creator."
-          </p>
-          <div className="tf-roadmap stagger-children">
-            {ROADMAP.map((item) => (
-              <div className="tf-roadmap-item" key={item.title}>
-                <div className={`tf-roadmap-dot ${item.status}`} />
-                <div className="tf-roadmap-text">
-                  <h4>{item.title}</h4>
-                  <p>{item.body}</p>
+      {/* Roadmap */}
+      <motion.section
+        variants={stagger} initial="hidden" whileInView="visible"
+        viewport={{ once: true, margin: '-60px' }}
+        style={{
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+          padding: '80px 24px',
+        }}
+      >
+        <div style={{ maxWidth: 700, margin: '0 auto' }}>
+          <motion.p variants={fadeUp} style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 16px',
+          }}>
+            WHAT'S NEXT
+          </motion.p>
+          <motion.h2 variants={fadeUp} style={{ margin: '0 0 36px' }}>Roadmap</motion.h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {ROADMAP.map(({ done, item }, i) => (
+              <motion.div key={i} variants={fadeUp} style={{
+                display: 'flex', alignItems: 'center', gap: 16,
+                padding: '14px 0',
+                borderBottom: i < ROADMAP.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+              }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                  background: done ? 'rgba(255,107,0,0.12)' : 'rgba(255,255,255,0.04)',
+                  border: done ? '1.5px solid rgba(255,107,0,0.35)' : '1.5px solid rgba(255,255,255,0.08)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, color: done ? '#FF6B00' : '#55555e',
+                }}>
+                  {done ? '✓' : '·'}
                 </div>
-                <div className="tf-roadmap-badge">
-                  <span className="badge" style={{
-                    background: item.status === 'active' ? 'rgba(34,197,94,0.1)' : item.status === 'soon' ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.05)',
-                    color: item.status === 'active' ? 'var(--success)' : item.status === 'soon' ? 'var(--warning)' : 'var(--text-muted)',
-                    border: `1px solid ${item.status === 'active' ? 'rgba(34,197,94,0.25)' : item.status === 'soon' ? 'rgba(245,158,11,0.25)' : 'var(--border)'}`,
-                    fontSize: 11,
+                <span style={{
+                  fontSize: 15, color: done ? '#f0f0f3' : '#55555e',
+                  textDecoration: done ? 'none' : 'none',
+                  fontWeight: done ? 500 : 400,
+                }}>
+                  {item}
+                </span>
+                {!done && (
+                  <span style={{
+                    marginLeft: 'auto', fontSize: 10, fontWeight: 700,
+                    letterSpacing: '0.06em', textTransform: 'uppercase',
+                    color: '#55555e', background: 'rgba(255,255,255,0.04)',
+                    padding: '2px 8px', borderRadius: 999,
                   }}>
-                    {item.label}
+                    Coming soon
                   </span>
-                </div>
-              </div>
+                )}
+              </motion.div>
             ))}
           </div>
         </div>
-      </section>
-
-      {/* Final CTA */}
-      <section className="tf-about-cta">
-        <h2 className="animate-on-scroll">
-          Try the editor.<br />
-          <span className="text-gradient">It's free.</span>
-        </h2>
-        <p className="animate-on-scroll">
-          No account. No credit card. Just open it and start.
-        </p>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-          <button className="btn btn-primary btn-lg" onClick={() => go('editor')}>
-            Open ThumbFrame →
-          </button>
-          <button className="btn btn-ghost btn-lg" onClick={() => go('pricing')}>
-            View Pricing
-          </button>
-        </div>
-      </section>
+      </motion.section>
 
       <Footer setPage={setPage} />
     </div>
