@@ -7,6 +7,7 @@ import UpdatePassword from './UpdatePassword';
 import BillingTab from './BillingTab';
 import { signIn } from './Auth';
 import CookieBanner from './components/CookieBanner';
+import { useAuth } from './context/AuthContext';
 
 // ── Code-split marketing pages ────────────────────────────────────────────────
 const Home      = lazy(() => import('./pages/Home'));
@@ -846,205 +847,52 @@ function syncPath(page) {
 
 const PROTECTED_PAGES = new Set(['editor', 'dashboard', 'settings']);
 
-function LoadingSpinner() {
-  return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: C.bg,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-        <div style={{
-          width: 36,
-          height: 36,
-          borderRadius: '50%',
-          border: `3px solid ${C.border}`,
-          borderTopColor: C.accent,
-          animation: 'thumbframe-spin 0.8s linear infinite',
-        }} />
-        <div style={{ fontSize: 13, color: C.muted, fontWeight: '600' }}>Loading session...</div>
-      </div>
-      <style>{`@keyframes thumbframe-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
-}
 
 export default function App() {
-  const [page,  setPage]  = useState(getInitialPage);
-  const [user,  setUser]  = useState(null);
-  const [token, setToken] = useState(() => localStorage.getItem('sf_token') || null);
+  const [page, setPage] = useState(getInitialPage);
   const [brandKit, setBrandKit] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [blogSlug, setBlogSlug] = useState(() => {
     const p = window.location.pathname;
     return p.startsWith('/blog/') ? p.replace('/blog/', '') : null;
   });
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadSession() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!mounted) return;
-
-        if (session?.user) {
-          setToken(session.access_token || null);
-          if (session.access_token) localStorage.setItem('sf_token', session.access_token);
-          else localStorage.removeItem('sf_token');
-          setUser({
-            id: session.user.id,
-            email: session.user.email,
-            name: session.user.user_metadata?.name,
-            is_pro: session.user.user_metadata?.is_pro === true,
-          });
-          // Ensure quota record exists for this user (fire-and-forget)
-          if (session.access_token) {
-            fetch(`${API_BASE}/api/sync-user`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${session.access_token}` },
-            }).catch(() => {});
-          }
-        } else {
-          setToken(null);
-          localStorage.removeItem('sf_token');
-          setUser(null);
-        }
-      } catch (error) {
-        if (mounted) {
-          console.error('Session bootstrap failed:', error);
-          setToken(null);
-          localStorage.removeItem('sf_token');
-          setUser(null);
-        }
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    }
-
-    loadSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mounted) return;
-
-      // H10: handle token refresh
-      if (event === 'TOKEN_REFRESHED' && session) {
-        setToken(session.access_token || null);
-        if (session.access_token) localStorage.setItem('sf_token', session.access_token);
-        return;
-      }
-
-      if (session?.user) {
-        // H10: check token expiry
-        const expiresAt = session.expires_at ? session.expires_at * 1000 : 0;
-        if (expiresAt && expiresAt < Date.now()) {
-          supabase.auth.refreshSession().then(({data, error}) => {
-            if (error || !data?.session) {
-              supabase.auth.signOut();
-              setToken(null); setUser(null);
-              localStorage.removeItem('sf_token');
-            }
-          });
-          return;
-        }
-        setToken(session.access_token || null);
-        if (session.access_token) localStorage.setItem('sf_token', session.access_token);
-        else localStorage.removeItem('sf_token');
-        setUser({
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.user_metadata?.name,
-          is_pro: session.user.user_metadata?.is_pro === true,
-        });
-        // Ensure quota record exists (fire-and-forget)
-        if (session.access_token) {
-          fetch(`${API_BASE}/api/sync-user`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
-          }).catch(() => {});
-        }
-      } else {
-        setToken(null);
-        localStorage.removeItem('sf_token');
-        setUser(null);
-      }
-
-      setIsLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+  // Auth state comes from context — no local duplication.
+  const { user, logout: handleLogout } = useAuth();
 
   useEffect(() => {
     syncPath(page);
   }, [page]);
 
+  // Redirect away from protected pages when logged out.
   useEffect(() => {
-    if (!isLoading && !user && PROTECTED_PAGES.has(page)) {
+    if (!user && PROTECTED_PAGES.has(page)) {
       setPage('home');
     }
-  }, [isLoading, page, user]);
+  }, [page, user]);
 
+  // Load brand kit whenever the user changes.
   useEffect(() => {
-    if (!token) return;
-    fetch(`${API_BASE}/auth/me`, { headers: { 'Authorization': `Bearer ${token}` } })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(userData => setUser(prev => ({
-        ...prev,
-        email: userData.email,
-        name: userData.name,
-        is_pro: userData.plan === 'pro',
-        plan: userData.plan,
-      })))
-      .catch(() => { setToken(null); localStorage.removeItem('sf_token'); });
-
-    fetch(`${API_BASE}/brand-kit`, { headers: { 'Authorization': `Bearer ${token}` } })
+    const token = localStorage.getItem('thumbframe_token');
+    if (!token) { setBrandKit(null); return; }
+    fetch(`${API_BASE}/brand-kit`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setBrandKit(data.brandKit))
-      .catch(() => console.log('No brand kit yet'));
-  }, [token]);
+      .catch(() => {});
+  }, [user?.id]);
 
-  async function handleCheckout(){
-    try{
-      const res = await fetch(`${API_BASE}/checkout`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({plan:'pro', email:user?.email||''}),
+  async function handleCheckout() {
+    try {
+      const res = await fetch(`${API_BASE}/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: 'pro', email: user?.email || '' }),
       });
       const data = await res.json();
-      if(data.url) window.location.href = data.url;
+      if (data.url) window.location.href = data.url;
       else alert('Checkout failed — please try again');
-    }catch(e){
+    } catch {
       alert('Could not connect to server');
     }
-  }
-
-  function handleAuth(data) {
-    setToken(data.token);
-    setUser(data.user);
-    localStorage.setItem('sf_token', data.token);
-    setPage('dashboard');
-  }
-
-  function handleLogout() {
-    supabase.auth.signOut();
-    setToken(null); setUser(null);
-    localStorage.removeItem('sf_token');
-    setPage('home');
-  }
-
-  if (isLoading && PROTECTED_PAGES.has(page)) {
-    return <LoadingSpinner />;
-  }
-
-  if (!isLoading && !user && PROTECTED_PAGES.has(page)) {
-    return <LoadingSpinner />;
   }
 
   if (page === 'editor') {
@@ -1053,7 +901,7 @@ export default function App() {
     if (useFabric) {
       return <FabricCanvas user={user} darkMode={true} />;
     }
-    return <Editor onExit={() => setPage('home')} user={user} token={token} brandKit={brandKit} />;
+    return <Editor onExit={() => setPage('home')} user={user} token={localStorage.getItem('thumbframe_token')} brandKit={brandKit} />;
   }
 
   // Marketing pages — self-contained with own Navbar/Footer (code-split with Suspense)
@@ -1064,7 +912,7 @@ export default function App() {
     gallery:     <Gallery setPage={setPage} />,
     blog:        <Blog setPage={setPage} onOpenPost={(slug) => { setBlogSlug(slug); setPage('blog-post'); window.history.pushState(null, '', `/blog/${slug}`); }} />,
     'blog-post': <BlogPost slug={blogSlug} setPage={setPage} onBack={() => { setPage('blog'); window.history.pushState(null, '', '/blog'); }} />,
-    'admin-blog': <BlogAdmin setPage={setPage} user={user} token={token} />,
+    'admin-blog': <BlogAdmin setPage={setPage} user={user} token={localStorage.getItem('thumbframe_token')} />,
     support:     <Support setPage={setPage} />,
     privacy:     <Privacy setPage={setPage} />,
     terms:       <Terms setPage={setPage} />,
@@ -1087,8 +935,8 @@ export default function App() {
       {page === 'howitworks' && <HowItWorks   setPage={setPage} />}
       {page === 'pricing'    && <PricingPage  setPage={setPage} onCheckout={handleCheckout}/>}
       {page === 'examples'   && <Examples     setPage={setPage} />}
-      {page === 'login'      && <AuthPage     mode="login"  setPage={setPage} onAuth={handleAuth} />}
-      {page === 'signup'     && <AuthPage     mode="signup" setPage={setPage} onAuth={handleAuth} />}
+      {page === 'login'      && <AuthPage     mode="login"  setPage={setPage} />}
+      {page === 'signup'     && <AuthPage     mode="signup" setPage={setPage} />}
       {page === 'dashboard'  && <Dashboard    setPage={setPage} user={user} />}
       {page === 'settings'   && <Settings     setPage={setPage} user={user} />}
       {page === 'forgot-password' && <ForgotPassword setPage={setPage} />}
