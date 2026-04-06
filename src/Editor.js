@@ -1607,7 +1607,8 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [freeBrushSize,setFreeBrushSize]   = useState(8);
   const [brushFlowState,setBrushFlowState]             = useState(100);
   const [brushStabilizerState,setBrushStabilizerState] = useState(0);
-  const [brushSmoothingState,setBrushSmoothingState]   = useState(40);
+  const [brushSmoothingState,setBrushSmoothingState]   = useState(35);
+  const [brushSpacingState,setBrushSpacingState]       = useState(25);
 
   // ── Pressure sensitivity (drawing tablet) ────────────────────────────────
   const [pressureEnabled,setPressureEnabled]   = useState(false);
@@ -1642,6 +1643,9 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const selDrawRef = useRef(null); // drawing-in-progress state
   const selPolyPointsRef = useRef([]); // eslint-disable-line no-unused-vars
   const [selDrawState, setSelDrawState] = useState(null); // {type, x1,y1,x2,y2} | {type:'path',points} for live SVG
+  // ── Quick Mask Mode (Item 20) ──────────────────────────────────────────────
+  const [quickMaskActive, setQuickMaskActive] = useState(false);
+  const quickMaskCanvasRef = useRef(null);
 
   const [showBrandKitSetup,setShowBrandKitSetup]       = useState(false);
   const [brandKit,setBrandKit]                         = useState(initialBrandKit||null);
@@ -2820,14 +2824,14 @@ PHASE 4 — Toolbar button:
       }
 
       // [ ] — brush size   Shift+[ Shift+] — brush hardness
-      if(e.key==='['&&!e.shiftKey&&(activeTool==='brush'||activeTool==='freehand')){
+      if(e.key==='['&&!e.shiftKey&&(activeTool==='brush'||activeTool==='freehand'||RETOUCH_TOOLS.includes(activeTool))){
         if(activeTool==='freehand')setFreeBrushSize(s=>Math.max(1,s-2));
         else setBrushSizeState(s=>Math.max(1,s-5));
         return;
       }
-      if(e.key===']'&&!e.shiftKey&&(activeTool==='brush'||activeTool==='freehand')){
+      if(e.key===']'&&!e.shiftKey&&(activeTool==='brush'||activeTool==='freehand'||RETOUCH_TOOLS.includes(activeTool))){
         if(activeTool==='freehand')setFreeBrushSize(s=>Math.min(100,s+2));
-        else setBrushSizeState(s=>Math.min(300,s+5));
+        else setBrushSizeState(s=>Math.min(500,s+5));
         return;
       }
       if(e.key==='['&&e.shiftKey&&activeTool==='brush'){setBrushEdgeState('soft');return;}
@@ -2863,10 +2867,16 @@ PHASE 4 — Toolbar button:
         setTextColor(prev=>{const old=prev;setStrokeColor(old);return strokeColor;});return;
       }
       if(e.key==='q'||e.key==='Q'){
+        // Q = Quick Mask toggle (Item 20)
+        if(['marquee','sel-lasso','sel-poly','sel-wand'].includes(activeTool)||selectionActive||quickMaskActive){
+          e.preventDefault();toggleQuickMask();return;
+        }
         if(activeTool==='lasso'){setIsLassoMode(false);setActiveTool('select');}
         else{setActiveTool('lasso');setIsLassoMode(true);}
         return;
       }
+      // Shift+F6 — Feather dialog (Item 19)
+      if(e.key==='F6'&&e.shiftKey){e.preventDefault();featherSelDialog();return;}
     };
 
     const onKeyUp=(e)=>{
@@ -3193,6 +3203,62 @@ PHASE 4 — Toolbar button:
     if(!selectionMaskRef.current)return;
     selectionMaskRef.current=invertMask(selectionMaskRef.current);
     setSelVersion(v=>v+1);
+  }
+
+  // ── Item 19: Feather dialog (Shift+F6) ────────────────────────────────────
+  function featherSelDialog(){
+    if(!selectionMaskRef.current){showToastMsg('No active selection','info');return;}
+    const rawInput=window.prompt('Feather radius (pixels):', '5');
+    if(rawInput===null)return; // cancelled
+    const radius=parseInt(rawInput,10);
+    if(!isFinite(radius)||radius<0){showToastMsg('Invalid feather radius','error');return;}
+    if(radius===0)return;
+    selectionMaskRef.current=featherMask(selectionMaskRef.current,p.preview.w,p.preview.h,radius);
+    setSelVersion(v=>v+1);
+    showToastMsg(`Feathered selection by ${radius}px`,'success');
+  }
+
+  // ── Item 20: Quick Mask Mode ───────────────────────────────────────────────
+  function drawQuickMaskOverlay(){
+    const qm=quickMaskCanvasRef.current;
+    if(!qm)return;
+    const ctx=qm.getContext('2d');
+    ctx.clearRect(0,0,qm.width,qm.height);
+    const m=selectionMaskRef.current;
+    if(!m){ctx.fillStyle='rgba(255,0,0,0.4)';ctx.fillRect(0,0,qm.width,qm.height);return;}
+    const id=ctx.createImageData(qm.width,qm.height);
+    const scaleX=qm.width/p.preview.w, scaleY=qm.height/p.preview.h;
+    for(let y=0;y<qm.height;y++) for(let x=0;x<qm.width;x++){
+      const mx=Math.floor(x/scaleX), my=Math.floor(y/scaleY);
+      const maskVal=m[my*p.preview.w+mx]||0;
+      const i=(y*qm.width+x)*4;
+      id.data[i]=255;id.data[i+1]=0;id.data[i+2]=0;
+      id.data[i+3]=Math.round((1-maskVal/255)*0.4*255);
+    }
+    ctx.putImageData(id,0,0);
+  }
+
+  function toggleQuickMask(){
+    if(quickMaskActive){
+      // Convert QM canvas alpha back to selection mask
+      const qm=quickMaskCanvasRef.current;
+      if(qm){
+        const qCtx=qm.getContext('2d');
+        const qData=qCtx.getImageData(0,0,p.preview.w,p.preview.h);
+        const newMask=new Uint8Array(p.preview.w*p.preview.h);
+        for(let i=0;i<newMask.length;i++){
+          newMask[i]=255-qData.data[i*4+3];
+        }
+        selectionMaskRef.current=newMask;
+        setSelectionActive(true);
+        setSelVersion(v=>v+1);
+      }
+      setQuickMaskActive(false);
+    }else{
+      setQuickMaskActive(true);
+      // Draw overlay immediately
+      setTimeout(()=>drawQuickMaskOverlay(),0);
+    }
   }
 
   // ── Selection pixel operations ────────────────────────────────────────────
@@ -8565,6 +8631,8 @@ PHASE 4 — Toolbar button:
               </div>
             );
           })()}
+          {/* Item 20: Quick Mask Mode badge */}
+          {quickMaskActive&&<div onClick={toggleQuickMask} title="Quick Mask active — press Q to exit" style={{padding:'3px 9px',borderRadius:6,border:`1px solid rgba(255,0,0,0.5)`,background:'rgba(255,0,0,0.12)',color:'#ff6666',fontSize:10,fontWeight:'700',letterSpacing:'0.5px',cursor:'pointer'}}>Q MASK</div>}
           {/* M6: Remaining quota display */}
           {remainingQuota!=null&&<div style={{padding:'3px 8px',borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,fontSize:10,fontWeight:'600',letterSpacing:'0.2px'}} title="AI credits remaining">{remainingQuota} AI left</div>}
           {/* Undo / Redo */}
@@ -9524,7 +9592,13 @@ PHASE 4 — Toolbar button:
                 })()}
 
                 {/* ── Selection marching ants overlay ─────────────────── */}
-                <SelectionOverlay maskRef={selectionMaskRef} W={p.preview.w} H={p.preview.h} active={selectionActive}/>
+                <SelectionOverlay maskRef={selectionMaskRef} W={p.preview.w} H={p.preview.h} active={selectionActive&&!quickMaskActive}/>
+
+                {/* ── Item 20: Quick Mask red overlay ─────────────────── */}
+                {quickMaskActive&&(
+                  <canvas ref={quickMaskCanvasRef} width={p.preview.w} height={p.preview.h}
+                    style={{position:'absolute',inset:0,width:p.preview.w,height:p.preview.h,pointerEvents:'none',zIndex:9999}}/>
+                )}
 
                 {/* ── Live selection draw preview ──────────────────────── */}
                 {selDrawState&&(
@@ -9814,6 +9888,7 @@ PHASE 4 — Toolbar button:
                       brushFlow={brushFlowState}
                       brushStabilizer={brushStabilizerState}
                       brushSmoothing={brushSmoothingState}
+                      brushSpacing={brushSpacingState}
                       paintColor={brushColorState}
                       paintAlpha={brushColorAlpha}
                       pressureEnabled={pressureEnabled}
@@ -10395,6 +10470,7 @@ PHASE 4 — Toolbar button:
                   brushFlow={brushFlowState}
                   brushStabilizer={brushStabilizerState}
                   brushSmoothing={brushSmoothingState}
+                  brushSpacing={brushSpacingState}
                   paintColor={brushColorState}
                   paintAlpha={brushColorAlpha}
                   onBrushTypeChange={setBrushTypeState}
@@ -10404,6 +10480,7 @@ PHASE 4 — Toolbar button:
                   onBrushFlowChange={setBrushFlowState}
                   onBrushStabilizerChange={setBrushStabilizerState}
                   onBrushSmoothingChange={setBrushSmoothingState}
+                  onBrushSpacingChange={setBrushSpacingState}
                   onPaintColorChange={(c)=>{
                     setBrushColorState(c);
                   }}
