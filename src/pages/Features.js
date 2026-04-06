@@ -1,402 +1,240 @@
-import React, { useEffect } from 'react';
+import React from 'react';
+import { motion } from 'framer-motion';
+import {
+  Lightning, Scissors, TextT, Shuffle, PaintBrush,
+  Eye, Image, Palette, Sparkle, Stack,
+  ArrowRight, Sliders,
+} from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { useScrollAnimation } from '../hooks/useScrollAnimation';
+import { handleUpgrade } from '../utils/checkout';
 import { useSEO } from '../hooks/useSEO';
 
-const featuresStyles = `
-  .tf-feat-hero {
-    padding: 140px 24px 80px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-  }
-  .tf-feat-hero::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(255,107,0,0.06) 0%, transparent 70%);
-    pointer-events: none;
-  }
-  .tf-feat-hero h1 {
-    font-size: clamp(36px, 5vw, 60px);
-    letter-spacing: -0.03em;
-    line-height: 1.08;
-    max-width: 680px;
-    margin: 0 auto 20px;
-  }
-  .tf-feat-hero-sub {
-    font-size: 18px;
-    color: var(--text-secondary);
-    max-width: 500px;
-    margin: 0 auto;
-    line-height: 1.65;
-  }
-  .tf-feat-toc {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    justify-content: center;
-    margin-top: 36px;
-    flex-wrap: wrap;
-  }
-  .tf-feat-toc a {
-    padding: 8px 16px;
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-family: var(--font-body);
-    font-weight: 500;
-    text-decoration: none;
-    transition: all var(--transition-base);
-    cursor: pointer;
-  }
-  .tf-feat-toc a:hover {
-    color: var(--text-primary);
-    border-color: var(--border-hover);
-    background: var(--bg-hover);
-  }
+const fadeUp = {
+  hidden:  { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] } },
+};
+const stagger = { visible: { transition: { staggerChildren: 0.07 } } };
 
-  .tf-feat-section {
-    padding: 80px 0;
-    border-top: 1px solid var(--border);
-  }
-  .tf-feat-section-header {
-    margin-bottom: 48px;
-  }
-  .tf-feat-section-label {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 12px;
-    font-family: var(--font-body);
-  }
-  .tf-feat-section h2 {
-    font-size: clamp(26px, 3vw, 38px);
-    letter-spacing: -0.025em;
-    margin-bottom: 14px;
-  }
-  .tf-feat-section-desc {
-    font-size: 16px;
-    color: var(--text-secondary);
-    max-width: 520px;
-    line-height: 1.65;
-  }
-
-  .tf-feat-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
-  }
-  .tf-feat-item {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    transition: all var(--transition-base);
-  }
-  .tf-feat-item:hover {
-    border-color: var(--border-hover);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-  }
-  .tf-feat-item-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  .tf-feat-item-icon {
-    font-size: 28px;
-    flex-shrink: 0;
-  }
-  .tf-feat-item h3 {
-    font-size: 18px;
-    font-family: var(--font-display);
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: var(--text-primary);
-    line-height: 1.3;
-  }
-  .tf-feat-item p {
-    font-size: 14px;
-    color: var(--text-secondary);
-    line-height: 1.65;
-  }
-
-  @media (max-width: 768px) {
-    .tf-feat-grid { grid-template-columns: 1fr; }
-    .tf-feat-hero { padding: 120px 20px 60px; }
-  }
-`;
-
-const AI_FEATURES = [
-  {
-    icon: '🎭',
-    title: 'AI Background Removal',
-    body: 'One-click subject isolation with edge refinement. No green screen, no manual selection — just clean cutouts every time.',
-    badge: 'Free',
-    badgeClass: 'badge-accent',
-  },
-  {
-    icon: '✨',
-    title: 'AI Background Generation',
-    body: 'Describe the background you want. The AI generates a photorealistic or artistic scene perfectly matched to your subject.',
-    badge: 'Pro',
-    badgeClass: 'badge-pro',
-  },
-  {
-    icon: '😊',
-    title: 'Expression Enhancement',
-    body: 'AI detects facial expressions and suggests enhancements. Brighten eyes, amplify shock, intensify emotion — stay authentic.',
-    badge: 'Pro',
-    badgeClass: 'badge-pro',
-  },
-  {
-    icon: '🖼',
-    title: 'Prompt-to-Thumbnail',
-    body: 'Describe your complete thumbnail in natural language. Get a fully-composed, export-ready design you can customize.',
-    badge: 'Pro',
-    badgeClass: 'badge-pro',
-  },
-  {
-    icon: '📊',
-    title: 'CTR Intelligence Scoring',
-    body: 'Before you publish, get an AI-generated CTR score and actionable feedback on color, text, contrast, and emotional punch.',
-    badge: 'Pro',
-    badgeClass: 'badge-pro',
-  },
-  {
-    icon: '🔢',
-    title: 'A/B Variant Generation',
-    body: 'One design, multiple variations. The AI creates color, text, and layout variants automatically. Test and ship the winner.',
-    badge: 'Pro',
-    badgeClass: 'badge-pro',
-  },
-  {
-    icon: '🧹',
-    title: 'AI Healing Brush',
-    body: 'Paint over distractions, blemishes, or unwanted elements. The AI fills them in seamlessly using context-aware generation.',
-    badge: 'Pro',
-    badgeClass: 'badge-pro',
-  },
-  {
-    icon: '💡',
-    title: 'Smart Subject Enhancement',
-    body: 'Automatic contrast boost, skin tone balancing, and shadow fill specifically tuned for YouTube thumbnail subject framing.',
-    badge: 'Pro',
-    badgeClass: 'badge-pro',
-  },
+const ALL_FEATURES = [
+  { icon: <Lightning size={20} weight="duotone" />,  tag: 'Free', title: 'Professional Canvas',
+    desc: 'Full layer system with blend modes, masks, and non-destructive editing. Everything you need for a 1280×720 image.' },
+  { icon: <Scissors size={20} weight="duotone" />,   tag: 'Pro',  title: 'AI Background Removal',
+    desc: 'Complex edges, messy hair, anything. One click — done in 3 seconds. No manual cleanup.' },
+  { icon: <TextT size={20} weight="duotone" />,      tag: 'Free', title: 'Smart Text Engine',
+    desc: '500+ fonts, custom spacing, stroke, glow effects, and text on path. Make any headline pop.' },
+  { icon: <Shuffle size={20} weight="duotone" />,    tag: 'Pro',  title: 'A/B Variant Testing',
+    desc: 'Create two versions of your thumbnail and test which clicks more. Your CTR will thank you.' },
+  { icon: <PaintBrush size={20} weight="duotone" />, tag: 'Free', title: '12 Brush Tools',
+    desc: 'Dodge, burn, heal, clone stamp, blur, sharpen, smudge. The full retouching suite.' },
+  { icon: <Sparkle size={20} weight="duotone" />,    tag: 'Pro',  title: 'AI Image Generation',
+    desc: 'Describe a background or element and generate it on the canvas. No external tools needed.' },
+  { icon: <Eye size={20} weight="duotone" />,        tag: 'Pro',  title: 'CTR Intelligence',
+    desc: 'Automatic scoring of your thumbnail\'s click potential — contrast, face visibility, text readability.' },
+  { icon: <Image size={20} weight="duotone" />,      tag: 'Free', title: 'Smart Cutout + Lasso',
+    desc: 'Precise AI-assisted selection tools for cutting out subjects with clean edges.' },
+  { icon: <Palette size={20} weight="duotone" />,    tag: 'Free', title: 'Brand Kit',
+    desc: 'Save your brand colors, fonts, and logo. Apply them with one click to any new thumbnail.' },
+  { icon: <Sliders size={20} weight="duotone" />,    tag: 'Pro',  title: 'Rim Light + Liquify',
+    desc: 'Add dramatic rim lighting and warp elements. The pro finishing touches that make people stop scrolling.' },
+  { icon: <Stack size={20} weight="duotone" />,      tag: 'Free', title: 'Layer Blend Modes',
+    desc: '16 blend modes including Multiply, Screen, Overlay, and Luminosity. Full Photoshop-grade compositing.' },
+  { icon: <ArrowRight size={20} weight="duotone" />, tag: 'Free', title: 'One-Click Export',
+    desc: 'Export at YouTube\'s exact 1280×720 spec as PNG or JPG. No resizing, no guessing.' },
 ];
 
-const EDITOR_FEATURES = [
-  {
-    icon: '📐',
-    title: 'Layer System',
-    body: 'Full non-destructive layers with groups, lock, visibility toggle, and blend mode per layer. Full Photoshop-compatible workflow.',
-    badge: 'Free',
-  },
-  {
-    icon: '🎨',
-    title: 'Blend Modes',
-    body: '20+ blend modes including Multiply, Screen, Overlay, Luminosity. Identical results to Photoshop.',
-    badge: 'Free',
-  },
-  {
-    icon: '✍️',
-    title: 'Text Engine',
-    body: '500+ fonts from Google Fonts. Per-character color, stroke, shadow, gradient fill. Variable font support.',
-    badge: 'Free',
-  },
-  {
-    icon: '🖌',
-    title: 'Brush & Retouch Tools',
-    body: 'Healing brush, clone stamp, dodge/burn, blur/sharpen. Everything for fine-tuning expressions and skin.',
-    badge: 'Free',
-  },
-  {
-    icon: '🔲',
-    title: 'Selection Tools',
-    body: 'Marquee, Lasso, Polygon Lasso, and Magic Wand. Full selection modification (grow, shrink, feather, invert).',
-    badge: 'Free',
-  },
-  {
-    icon: '🌊',
-    title: 'Liquify Filter',
-    body: 'Mesh-based warp tool. Push, pull, pinch, and bloat. Perfect for exaggerating expressions for emotional impact.',
-    badge: 'Free',
-  },
-  {
-    icon: '⚙️',
-    title: 'Curves & Adjustments',
-    body: 'Interactive LUT-based curves panel with RGB channel control. HSL, Levels, Brightness/Contrast, and more.',
-    badge: 'Free',
-  },
-  {
-    icon: '🎭',
-    title: 'Masks',
-    body: 'Non-destructive pixel and vector masks on every layer. Painted masks, gradient masks, luminosity masks.',
-    badge: 'Free',
-  },
-];
-
-const WORKFLOW_FEATURES = [
-  {
-    icon: '💾',
-    title: 'Auto-Save',
-    body: 'Your work is saved automatically to the cloud after every change. Never lose a design.',
-    badge: 'Free',
-  },
-  {
-    icon: '📁',
-    title: 'Multi-Project Management',
-    body: 'Organize designs by channel, series, or date. Unlimited projects on Pro. Full search and tagging.',
-    badge: 'Free',
-  },
-  {
-    icon: '📤',
-    title: 'Export Formats',
-    body: 'Export as PNG, JPG, WebP. Custom resolution up to 4K. Lossless or compressed. Direct YouTube dimension presets.',
-    badge: 'Free',
-  },
-  {
-    icon: '🔑',
-    title: 'Keyboard Shortcuts',
-    body: 'Full Photoshop-compatible shortcut system. Every tool, panel, and action accessible from the keyboard.',
-    badge: 'Free',
-  },
-  {
-    icon: '⌨️',
-    title: 'Command Palette',
-    body: 'VS Code-style command palette (Ctrl+K). Search and run any action by typing. Power user mode.',
-    badge: 'Free',
-  },
-  {
-    icon: '📱',
-    title: 'Mobile View',
-    body: 'Preview your thumbnail at mobile scale before export. See exactly how it looks in the YouTube app.',
-    badge: 'Free',
-  },
-];
-
-function FeatureSection({ id, label, title, description, features }) {
+function FeatureCard({ icon, tag, title, desc }) {
+  const isPro = tag === 'Pro';
   return (
-    <section className="tf-feat-section" id={id}>
-      <div className="container">
-        <div className="tf-feat-section-header animate-on-scroll">
-          <p className="tf-feat-section-label">{label}</p>
-          <h2>{title}</h2>
-          <p className="tf-feat-section-desc">{description}</p>
+    <motion.div
+      variants={fadeUp}
+      style={{
+        background: '#0c0c0f',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderRadius: 12, padding: '24px',
+        transition: 'border-color 0.2s',
+      }}
+      whileHover={{ y: -3, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } }}
+      onHoverStart={e => { e.currentTarget.style.borderColor = 'rgba(255,107,0,0.18)'; }}
+      onHoverEnd={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{
+          width: 38, height: 38, borderRadius: 9,
+          background: 'rgba(255,107,0,0.08)', border: '1px solid rgba(255,107,0,0.13)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FF6B00',
+        }}>
+          {icon}
         </div>
-        <div className="tf-feat-grid stagger-children">
-          {features.map((f) => (
-            <div className="tf-feat-item" key={f.title}>
-              <div className="tf-feat-item-top">
-                <div>
-                  <div className="tf-feat-item-icon">{f.icon}</div>
-                  <h3>{f.title}</h3>
-                </div>
-                <span className={`badge ${f.badgeClass || 'badge-accent'}`}>{f.badge}</span>
-              </div>
-              <p>{f.body}</p>
-            </div>
-          ))}
-        </div>
+        <span style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+          textTransform: 'uppercase', padding: '3px 8px', borderRadius: 999,
+          background: isPro ? 'rgba(255,107,0,0.1)' : 'rgba(255,255,255,0.04)',
+          border: isPro ? '1px solid rgba(255,107,0,0.22)' : '1px solid rgba(255,255,255,0.07)',
+          color: isPro ? '#FF6B00' : '#55555e',
+        }}>
+          {tag}
+        </span>
       </div>
-    </section>
+      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f0f0f3', margin: '0 0 8px', letterSpacing: '-0.01em' }}>
+        {title}
+      </h3>
+      <p style={{ fontSize: 13, color: '#8a8a93', margin: 0, lineHeight: 1.65 }}>{desc}</p>
+    </motion.div>
   );
 }
 
 export default function Features({ setPage }) {
-  useScrollAnimation();
-
   useSEO({
-    title: 'Features — ThumbFrame AI Thumbnail Editor',
-    description: 'Explore every feature in ThumbFrame: AI background removal, CTR scoring, text generation, curves, selection tools, PSD export, and more.',
+    title: 'Features — ThumbFrame',
+    description: 'Every tool you need to make thumbnails that get clicked. AI background removal, A/B testing, 500+ fonts, brush tools, and more.',
     url: 'https://thumbframe.com/features',
   });
 
-  useEffect(() => {
-    document.title = 'Features — ThumbFrame';
-  }, []);
-
-  const go = (page) => {
-    setPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   return (
-    <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <style>{featuresStyles}</style>
+    <div style={{ background: '#050507', minHeight: '100vh', fontFamily: "'Satoshi', sans-serif", color: '#f0f0f3' }}>
       <Navbar setPage={setPage} currentPage="features" />
 
       {/* Hero */}
-      <div className="tf-feat-hero">
-        <span className="badge badge-accent" style={{ marginBottom: 24 }}>Features</span>
-        <h1 className="animate-on-scroll">
-          Every tool a creator<br />
-          <span className="text-gradient">actually needs.</span>
-        </h1>
-        <p className="tf-feat-hero-sub animate-on-scroll">
-          AI that works, an editor built for thumbnails, and a workflow that gets out of your way.
-        </p>
-        <nav className="tf-feat-toc">
-          <a href="#ai-tools">AI-Powered Tools</a>
-          <a href="#editor">Professional Editor</a>
-          <a href="#workflow">Workflow</a>
-        </nav>
-      </div>
+      <motion.div
+        variants={stagger} initial="hidden" animate="visible"
+        style={{
+          textAlign: 'center',
+          padding: '140px 24px 80px',
+          position: 'relative', overflow: 'hidden',
+        }}
+      >
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'radial-gradient(ellipse 60% 40% at 50% 0%, rgba(255,107,0,0.06) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <motion.p variants={fadeUp} style={{
+          fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+          textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 16px',
+        }}>
+          FEATURES
+        </motion.p>
+        <motion.h1 variants={fadeUp} style={{ margin: '0 0 20px', maxWidth: 600, marginLeft: 'auto', marginRight: 'auto' }}>
+          Everything you need.<br />
+          <span style={{ color: '#FF6B00' }}>Nothing you don't.</span>
+        </motion.h1>
+        <motion.p variants={fadeUp} style={{ fontSize: 17, color: '#8a8a93', margin: '0 auto 40px', maxWidth: 480, lineHeight: 1.6 }}>
+          Built specifically for YouTube thumbnails. Not a full design suite you'll be lost in for an hour.
+        </motion.p>
+        <motion.div variants={fadeUp} style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => { setPage('editor'); window.scrollTo({ top: 0 }); }}
+            style={{
+              padding: '12px 26px', borderRadius: 10, border: 'none',
+              background: '#FF6B00', color: '#fff', cursor: 'pointer',
+              fontSize: 14, fontWeight: 700, fontFamily: "'Satoshi', sans-serif",
+              boxShadow: '0 0 24px rgba(255,107,0,0.25)',
+            }}
+          >
+            Try it free →
+          </button>
+          <button
+            onClick={handleUpgrade}
+            style={{
+              padding: '12px 22px', borderRadius: 10,
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'transparent', color: '#8a8a93',
+              cursor: 'pointer', fontSize: 14, fontWeight: 600,
+              fontFamily: "'Satoshi', sans-serif",
+            }}
+          >
+            See Pro features →
+          </button>
+        </motion.div>
+      </motion.div>
 
-      <FeatureSection
-        id="ai-tools"
-        label="AI-Powered Tools"
-        title="AI that actually understands thumbnails."
-        description="Not generic AI tools ported from Photoshop. These are purpose-built for YouTube thumbnails and CTR."
-        features={AI_FEATURES}
-      />
+      {/* Feature grid */}
+      <motion.div
+        variants={stagger} initial="hidden" whileInView="visible"
+        viewport={{ once: true, margin: '-60px' }}
+        style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 120px' }}
+      >
+        {/* Free vs Pro legend */}
+        <motion.div variants={fadeUp} style={{
+          display: 'flex', gap: 20, marginBottom: 36, flexWrap: 'wrap',
+        }}>
+          {[['Free', false], ['Pro', true]].map(([label, isPro]) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{
+                fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+                textTransform: 'uppercase', padding: '3px 8px', borderRadius: 999,
+                background: isPro ? 'rgba(255,107,0,0.1)' : 'rgba(255,255,255,0.04)',
+                border: isPro ? '1px solid rgba(255,107,0,0.22)' : '1px solid rgba(255,255,255,0.07)',
+                color: isPro ? '#FF6B00' : '#55555e',
+              }}>
+                {label}
+              </span>
+              <span style={{ fontSize: 13, color: '#55555e' }}>
+                {isPro ? '— requires Pro plan ($15/mo)' : '— available on all plans'}
+              </span>
+            </div>
+          ))}
+        </motion.div>
 
-      <FeatureSection
-        id="editor"
-        label="Professional Editor"
-        title="Pro-grade editing without the learning curve."
-        description="All the power of Photoshop, none of the friction. Built specifically for the 1280×720 thumbnail workflow."
-        features={EDITOR_FEATURES}
-      />
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+          gap: 14,
+        }}>
+          {ALL_FEATURES.map((f, i) => <FeatureCard key={i} {...f} />)}
+        </div>
 
-      <FeatureSection
-        id="workflow"
-        label="Workflow"
-        title="Ship thumbnails faster, not slower."
-        description="Every workflow decision was made with one question: does this help a creator ship faster?"
-        features={WORKFLOW_FEATURES}
-      />
-
-      {/* CTA */}
-      <section className="section" style={{ textAlign: 'center', borderTop: '1px solid var(--border)' }}>
-        <div className="container">
-          <h2 style={{ fontSize: 'clamp(28px, 3vw, 42px)', marginBottom: 16 }} className="animate-on-scroll">
-            Ready to try it?
+        {/* Bottom CTA */}
+        <motion.div
+          variants={fadeUp}
+          style={{
+            marginTop: 64, textAlign: 'center',
+            padding: '48px 32px', borderRadius: 16,
+            background: '#0c0c0f', border: '1px solid rgba(255,107,0,0.12)',
+            position: 'relative', overflow: 'hidden',
+          }}
+        >
+          <div style={{
+            position: 'absolute', top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%)',
+            width: 400, height: 200,
+            background: 'radial-gradient(ellipse, rgba(255,107,0,0.06) 0%, transparent 70%)',
+            pointerEvents: 'none',
+          }} />
+          <h2 style={{ margin: '0 0 12px', fontSize: 'clamp(24px,3vw,34px)' }}>
+            Ready to stop overthinking thumbnails?
           </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 16, marginBottom: 32 }} className="animate-on-scroll">
-            Start free. No credit card. Full editor access.
+          <p style={{ color: '#8a8a93', margin: '0 0 28px', fontSize: 15 }}>
+            Free forever on the core tools. Upgrade to Pro when you need AI power.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button className="btn btn-primary btn-lg" onClick={() => go('editor')}>
-              Open the Editor →
+            <button
+              onClick={() => { setPage('editor'); window.scrollTo({ top: 0 }); }}
+              style={{
+                padding: '12px 24px', borderRadius: 10, border: 'none',
+                background: '#FF6B00', color: '#fff', cursor: 'pointer',
+                fontSize: 14, fontWeight: 700, fontFamily: "'Satoshi', sans-serif",
+                boxShadow: '0 0 24px rgba(255,107,0,0.25)',
+              }}
+            >
+              Start for free →
             </button>
-            <button className="btn btn-ghost btn-lg" onClick={() => go('pricing')}>
-              View Pricing
+            <button
+              onClick={handleUpgrade}
+              style={{
+                padding: '12px 22px', borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'transparent', color: '#8a8a93',
+                cursor: 'pointer', fontSize: 14, fontWeight: 600,
+                fontFamily: "'Satoshi', sans-serif",
+              }}
+            >
+              Upgrade to Pro — $15/mo
             </button>
           </div>
-        </div>
-      </section>
+        </motion.div>
+      </motion.div>
 
       <Footer setPage={setPage} />
     </div>
