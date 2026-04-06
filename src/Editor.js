@@ -9345,7 +9345,9 @@ PHASE 4 — Toolbar button:
                     // Same DOM-based coordinate system as the wheel handler:
                     // container = flex scroll div that wraps the transform wrapper.
                     const canvasRect    = canvasRef.current.getBoundingClientRect();
-                    const containerElem = canvasRef.current.parentElement.parentElement;
+                    // parentElement = zoom-scale wrapper, .parentElement = flex-column wrapper,
+                    // .parentElement = outer scroll container (same element as onWheel's e.currentTarget)
+                    const containerElem = canvasRef.current.parentElement.parentElement.parentElement;
                     const containerRect = containerElem.getBoundingClientRect();
                     const curZoom       = zoomRef.current;
 
