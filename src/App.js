@@ -8,6 +8,7 @@ import BillingTab from './BillingTab';
 import { signIn } from './Auth';
 import CookieBanner from './components/CookieBanner';
 import { useAuth } from './context/AuthContext';
+import { handleUpgrade } from './utils/checkout';
 
 // ── Code-split marketing pages ────────────────────────────────────────────────
 const Home      = lazy(() => import('./pages/Home'));
@@ -81,7 +82,7 @@ function Sidebar({ open, onClose, setPage }) {
       items: [
         { icon: '◎', label: 'Log in',    action: () => { setPage('login'); onClose(); } },
         { icon: '✚', label: 'Sign up',   action: () => { setPage('signup'); onClose(); } },
-        { icon: '⚡', label: 'Go Pro — $15/mo', action: () => { setPage('pricing'); onClose(); }, highlight: true },
+        { icon: '⚡', label: 'Go Pro — $15/mo', action: () => { onClose(); handleUpgrade(); }, highlight: true },
         { icon: '⚙️', label: 'Settings', action: () => { setPage('settings'); onClose(); } },
       ],
     },
@@ -880,20 +881,6 @@ export default function App() {
       .catch(() => {});
   }, [user?.id]);
 
-  async function handleCheckout() {
-    try {
-      const res = await fetch(`${API_BASE}/checkout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: 'pro', email: user?.email || '' }),
-      });
-      const data = await res.json();
-      if (data.url) window.location.href = data.url;
-      else alert('Checkout failed — please try again');
-    } catch {
-      alert('Could not connect to server');
-    }
-  }
 
   if (page === 'editor') {
     // Feature flag: ?engine=fabric switches to the new fabric.js V2 canvas
@@ -906,7 +893,7 @@ export default function App() {
 
   // Marketing pages — self-contained with own Navbar/Footer (code-split with Suspense)
   const marketingPages = {
-    home:        <Home setPage={setPage} onCheckout={handleCheckout} />,
+    home:        <Home setPage={setPage} />,
     features:    <Features setPage={setPage} />,
     about:       <About setPage={setPage} />,
     gallery:     <Gallery setPage={setPage} />,
@@ -933,7 +920,7 @@ export default function App() {
     <div>
       <Nav page={page} setPage={setPage} user={user} onLogout={handleLogout} />
       {page === 'howitworks' && <HowItWorks   setPage={setPage} />}
-      {page === 'pricing'    && <PricingPage  setPage={setPage} onCheckout={handleCheckout}/>}
+      {page === 'pricing'    && <PricingPage  setPage={setPage} />}
       {page === 'examples'   && <Examples     setPage={setPage} />}
       {page === 'login'      && <AuthPage     mode="login"  setPage={setPage} />}
       {page === 'signup'     && <AuthPage     mode="signup" setPage={setPage} />}

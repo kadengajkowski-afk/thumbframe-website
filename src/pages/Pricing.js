@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useSEO } from '../hooks/useSEO';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
+import { handleUpgrade } from '../utils/checkout';
 
 const pricingStyles = `
   .tf-pricing-hero {
@@ -316,7 +317,7 @@ function FaqItem({ q, a }) {
   );
 }
 
-export default function Pricing({ setPage, onCheckout }) {
+export default function Pricing({ setPage }) {
   useScrollAnimation();
 
   useSEO({
@@ -397,7 +398,7 @@ export default function Pricing({ setPage, onCheckout }) {
               </li>
             ))}
           </ul>
-          <button className="tf-pc-btn pro-btn" onClick={onCheckout}>
+          <button className="tf-pc-btn pro-btn" onClick={handleUpgrade}>
             Start Pro Trial →
           </button>
         </div>

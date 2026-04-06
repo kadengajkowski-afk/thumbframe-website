@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import supabase from './supabaseClient';
+import { handleUpgrade } from './utils/checkout';
 
 const C = {
   bg:       '#0a0a0a',
@@ -19,9 +19,7 @@ const C = {
   error:    '#ef4444',
 };
 
-const API_BASE = process.env.NODE_ENV === 'development'
-  ? 'http://localhost:5000'
-  : 'https://thumbframe-api-production.up.railway.app';
+const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
 
 export default function BillingTab() {
   const [isLoading, setIsLoading] = useState(false);
@@ -30,43 +28,25 @@ export default function BillingTab() {
   async function handleManageSubscription() {
     setError('');
     setIsLoading(true);
-
     try {
-      // Get the current user's auth token from Supabase
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session?.access_token) {
-        throw new Error('Not authenticated. Please log in.');
-      }
+      const token = localStorage.getItem('thumbframe_token');
+      if (!token) throw new Error('Not logged in.');
 
-      const token = session.access_token;
-
-      // Fetch the billing portal URL from the backend
-      const response = await fetch(`${API_BASE}/billing/portal`, {
+      const response = await fetch(`${API_URL}/api/create-portal-session`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${response.status})`);
       }
 
       const { url } = await response.json();
-
-      if (!url) {
-        throw new Error('No portal URL returned from server');
-      }
-
-      // Redirect to the Stripe Customer Portal
+      if (!url) throw new Error('No portal URL returned');
       window.location.href = url;
     } catch (err) {
-      const errorMsg = err?.message || 'Failed to open billing portal';
-      setError(errorMsg);
-      console.error('[BillingTab] Error:', err);
-      alert(`Billing Portal Error: ${errorMsg}`);
+      setError(err?.message || 'Failed to open billing portal');
     } finally {
       setIsLoading(false);
     }

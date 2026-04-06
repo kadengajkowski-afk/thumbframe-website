@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import { useSEO } from '../hooks/useSEO';
+import { handleUpgrade } from '../utils/checkout';
 
 const homeStyles = `
   /* ── Hero ────────────────────────────────────────────────────────────── */
@@ -731,7 +732,7 @@ function FeatureMockup({ index }) {
   );
 }
 
-export default function Home({ setPage, onCheckout }) {
+export default function Home({ setPage }) {
   useScrollAnimation();
   const [fetchedReviews, setFetchedReviews] = useState([]);
 
@@ -1024,7 +1025,7 @@ export default function Home({ setPage, onCheckout }) {
                 <li><span className="check">✓</span> A/B variant generation</li>
                 <li><span className="check">✓</span> Priority support</li>
               </ul>
-              <button className="tf-pricing-btn pro-btn" onClick={onCheckout}>
+              <button className="tf-pricing-btn pro-btn" onClick={handleUpgrade}>
                 Start Pro Trial →
               </button>
             </div>
