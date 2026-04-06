@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
+import { useSEO } from '../hooks/useSEO';
 
 const featuresStyles = `
   .tf-feat-hero {
@@ -316,8 +317,14 @@ function FeatureSection({ id, label, title, description, features }) {
 export default function Features({ setPage }) {
   useScrollAnimation();
 
+  useSEO({
+    title: 'Features — ThumbFrame AI Thumbnail Editor',
+    description: 'Explore every feature in ThumbFrame: AI background removal, CTR scoring, text generation, curves, selection tools, PSD export, and more.',
+    url: 'https://thumbframe.com/features',
+  });
+
   useEffect(() => {
-    document.title = 'Features | ThumbFrame — AI YouTube Thumbnail Editor';
+    document.title = 'Features — ThumbFrame';
   }, []);
 
   const go = (page) => {

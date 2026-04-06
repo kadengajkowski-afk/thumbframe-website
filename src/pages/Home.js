@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
+import { useSEO } from '../hooks/useSEO';
 
 const homeStyles = `
   /* ── Hero ────────────────────────────────────────────────────────────── */
@@ -565,6 +566,24 @@ const TESTIMONIALS = [
 export default function Home({ setPage, onCheckout }) {
   useScrollAnimation();
   const [fetchedReviews, setFetchedReviews] = useState([]);
+
+  useSEO({
+    title: 'ThumbFrame — AI YouTube Thumbnail Editor',
+    description: 'The AI thumbnail editor that turns your ideas into scroll-stopping YouTube thumbnails in minutes. Built by a creator, for creators. Free to start.',
+    url: 'https://thumbframe.com',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'ThumbFrame',
+      applicationCategory: 'DesignApplication',
+      operatingSystem: 'Web browser',
+      description: 'AI-powered YouTube thumbnail editor with background removal, CTR scoring, and AI generation.',
+      url: 'https://thumbframe.com',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      author: { '@type': 'Person', name: 'Kaden' },
+      aggregateRating: { '@type': 'AggregateRating', ratingValue: '4.9', reviewCount: '3' },
+    },
+  });
 
   useEffect(() => {
     const API = process.env.REACT_APP_API_URL || '';

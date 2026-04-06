@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { useSEO } from '../hooks/useSEO';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 
 const pricingStyles = `
@@ -318,8 +319,14 @@ function FaqItem({ q, a }) {
 export default function Pricing({ setPage, onCheckout }) {
   useScrollAnimation();
 
+  useSEO({
+    title: 'Pricing — ThumbFrame Free & Pro Plans',
+    description: 'ThumbFrame is free to start. Pro is $15/month for unlimited AI thumbnail generation, unlimited exports, and priority support. No hidden fees.',
+    url: 'https://thumbframe.com/pricing',
+  });
+
   useEffect(() => {
-    document.title = 'Pricing | ThumbFrame — AI YouTube Thumbnail Editor';
+    document.title = 'Pricing — ThumbFrame';
   }, []);
 
   const go = (page) => {

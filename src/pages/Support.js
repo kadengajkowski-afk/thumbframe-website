@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
+import { useSEO } from '../hooks/useSEO';
 
 // ── FAQ Data ──────────────────────────────────────────────────────────────────
 const FAQ_CATEGORIES = [
@@ -837,10 +838,23 @@ function ReviewForm() {
 export default function Support({ setPage }) {
   useScrollAnimation();
 
+  useSEO({
+    title: 'Support — ThumbFrame',
+    description: 'Get help with ThumbFrame. Browse the FAQ, send a support message, or leave a review. We respond within 24 hours.',
+    url: 'https://thumbframe.com/support',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: FAQ_CATEGORIES.flatMap((c) => c.items).map((item) => ({
+        '@type': 'Question',
+        name: item.q,
+        acceptedAnswer: { '@type': 'Answer', text: item.a },
+      })),
+    },
+  });
+
   useEffect(() => {
     document.title = 'Support — ThumbFrame';
-    const meta = document.querySelector('meta[name="description"]');
-    if (meta) meta.setAttribute('content', 'Get help with ThumbFrame. Browse our FAQ, contact support, or leave a review.');
   }, []);
 
   return (

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { useSEO } from '../hooks/useSEO';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 
 const aboutStyles = `
@@ -342,8 +343,14 @@ const ROADMAP = [
 export default function About({ setPage }) {
   useScrollAnimation();
 
+  useSEO({
+    title: 'About — ThumbFrame',
+    description: 'ThumbFrame was built by Kaden, a YouTube creator who got tired of spending hours in Photoshop on every thumbnail. Here\'s the story.',
+    url: 'https://thumbframe.com/about',
+  });
+
   useEffect(() => {
-    document.title = 'About | ThumbFrame — AI YouTube Thumbnail Editor';
+    document.title = 'About — ThumbFrame';
   }, []);
 
   const go = (page) => {
