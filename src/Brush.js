@@ -1193,7 +1193,7 @@ export default function BrushTool({
         ))}
       </div>
 
-      {(brushType === 'paint' || brushType === 'fill') && (
+      {(brushType === 'paint' || brushType === 'fill' || brushType === 'wetmix') && (
         <div>
           <span style={css.label}>Paint color</span>
           <input type="color" value={paintColor || '#ff0000'}
