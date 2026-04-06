@@ -56,6 +56,11 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   const lastCursorPos    = useRef({x:0, y:0});
 
+  // Airbrush: continuous spray timer
+  const airbrushTimerRef    = useRef(null);
+  const airbrushPosRef      = useRef(null);
+  const airbrushPressureRef = useRef(0.5);
+
   // ── Expose undo via ref ───────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
     undo() {
@@ -201,10 +206,12 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       const ctx = strokeBufferRef.current.getContext('2d');
       const hardness = brushEdge === 'hard' ? 0.99 : 0.0;
       const rgb      = parseColor(paintColor);
-      const alphaVal = ((paintAlpha ?? 100) / 100) * effFlow;
+      // Airbrush uses very low flow per tick — continuous spray via interval builds up paint
+      const airbrushMul = brushType === 'airbrush' ? 0.1 : 1;
+      const alphaVal = ((paintAlpha ?? 100) / 100) * effFlow * airbrushMul;
       renderDab(ctx, imgX, imgY, effSize * 2, hardness, rgb, alphaVal, brushType === 'eraser');
     }
-    // For non-paint types (dodge/burn/smudge/blur/sharpen/clone), called via placeDabDirect
+    // For non-paint types (dodge/burn/smudge/blur/sharpen/clone/heal/wetmix/fill), called via placeDabDirect
   }
 
   // ── Item 8: Direct pixel manipulation dabs ───────────────────────────────
@@ -262,6 +269,16 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       return;
     } else if (brushType === 'clone') {
       _cloneDab(imgX, imgY, radius, hardness, strength * flow * effPressure);
+      return;
+    } else if (brushType === 'heal') {
+      _healDab(strokeCtxRef.current, imgX, imgY, radius, hardness);
+      _syncDirectToMainCanvas();
+      return;
+    } else if (brushType === 'wetmix') {
+      const rgb = parseColor(paintColor);
+      const wetness = (brushStrength ?? 50) / 100;
+      _wetmixDab(strokeCtxRef.current, imgX, imgY, radius, hardness, rgb.r, rgb.g, rgb.b, wetness);
+      _syncDirectToMainCanvas();
       return;
     }
 
@@ -450,6 +467,113 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     _syncDirectToMainCanvas();
   }
 
+  // ── Heal dab: sample surrounding texture and blend it into the dab area ───
+  function _healDab(ctx, cx, cy, radius, hardness) {
+    const r = Math.ceil(radius);
+    const x0 = Math.max(0, cx - r * 2), y0 = Math.max(0, cy - r * 2);
+    const x1 = Math.min(ctx.canvas.width - 1, cx + r * 2);
+    const y1 = Math.min(ctx.canvas.height - 1, cy + r * 2);
+    const w = x1 - x0 + 1, h = y1 - y0 + 1;
+    if (w <= 0 || h <= 0) return;
+
+    const src = ctx.getImageData(x0, y0, w, h);
+    const d = src.data;
+
+    let sumR = 0, sumG = 0, sumB = 0, cnt = 0;
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const dx = (x0 + px) - cx, dy = (y0 + py) - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist >= radius && dist <= radius * 1.8) {
+          const i = (py * w + px) * 4;
+          sumR += d[i]; sumG += d[i + 1]; sumB += d[i + 2]; cnt++;
+        }
+      }
+    }
+    if (cnt === 0) return;
+    const avgR = sumR / cnt, avgG = sumG / cnt, avgB = sumB / cnt;
+
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const dx = (x0 + px) - cx, dy = (y0 + py) - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius) continue;
+        const falloff = hardness >= 0.99 ? 1 : Math.max(0, 1 - (dist / radius - hardness) / (1 - hardness + 0.001));
+        const strength = falloff * 0.4;
+        const i = (py * w + px) * 4;
+        d[i]     = Math.round(d[i]     * (1 - strength) + avgR * strength);
+        d[i + 1] = Math.round(d[i + 1] * (1 - strength) + avgG * strength);
+        d[i + 2] = Math.round(d[i + 2] * (1 - strength) + avgB * strength);
+      }
+    }
+    ctx.putImageData(src, x0, y0);
+  }
+
+  // ── Wet mix dab: blends brush color with canvas color (wet paint) ─────────
+  function _wetmixDab(ctx, cx, cy, radius, hardness, r, g, b, wetness) {
+    const rad = Math.ceil(radius);
+    const x0 = Math.max(0, cx - rad), y0 = Math.max(0, cy - rad);
+    const x1 = Math.min(ctx.canvas.width - 1, cx + rad);
+    const y1 = Math.min(ctx.canvas.height - 1, cy + rad);
+    const w = x1 - x0 + 1, h = y1 - y0 + 1;
+    if (w <= 0 || h <= 0) return;
+
+    const idata = ctx.getImageData(x0, y0, w, h);
+    const d = idata.data;
+    const wet = Math.min(1, Math.max(0, wetness));
+
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const dx = (x0 + px) - cx, dy = (y0 + py) - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius) continue;
+        const falloff = hardness >= 0.99 ? 1 : Math.max(0, 1 - (dist / radius - hardness) / (1 - hardness + 0.001));
+        const i = (py * w + px) * 4;
+        const canvasR = d[i], canvasG = d[i + 1], canvasB = d[i + 2];
+        const mixR = r * (1 - wet) + canvasR * wet;
+        const mixG = g * (1 - wet) + canvasG * wet;
+        const mixB = b * (1 - wet) + canvasB * wet;
+        d[i]     = Math.round(d[i]     + (mixR - d[i])     * falloff * 0.3);
+        d[i + 1] = Math.round(d[i + 1] + (mixG - d[i + 1]) * falloff * 0.3);
+        d[i + 2] = Math.round(d[i + 2] + (mixB - d[i + 2]) * falloff * 0.3);
+      }
+    }
+    ctx.putImageData(idata, x0, y0);
+  }
+
+  // ── Flood fill ────────────────────────────────────────────────────────────
+  function _floodFill(layerCtx, startX, startY, fillR, fillG, fillB, tolerance) {
+    const canvas = layerCtx.canvas;
+    const W = canvas.width, H = canvas.height;
+    const idata = layerCtx.getImageData(0, 0, W, H);
+    const d = idata.data;
+    const si = (Math.floor(startY) * W + Math.floor(startX)) * 4;
+    const tr = d[si], tg = d[si + 1], tb = d[si + 2];
+
+    if (tr === fillR && tg === fillG && tb === fillB) return;
+
+    function diff(idx) { return Math.abs(d[idx] - tr) + Math.abs(d[idx + 1] - tg) + Math.abs(d[idx + 2] - tb); }
+
+    const visited = new Uint8Array(W * H);
+    const q = [Math.floor(startY) * W + Math.floor(startX)];
+
+    while (q.length) {
+      const idx = q.pop();
+      if (visited[idx]) continue;
+      if (idx < 0 || idx >= W * H) continue;
+      if (diff(idx * 4) > tolerance * 3) continue;
+      visited[idx] = 1;
+      const i = idx * 4;
+      d[i] = fillR; d[i + 1] = fillG; d[i + 2] = fillB; d[i + 3] = 255;
+      const x = idx % W, y = (idx / W) | 0;
+      if (x > 0) q.push(idx - 1);
+      if (x < W - 1) q.push(idx + 1);
+      if (y > 0) q.push(idx - W);
+      if (y < H - 1) q.push(idx + W);
+    }
+    layerCtx.putImageData(idata, 0, 0);
+  }
+
   // Sync direct-manipulation canvas to the main display canvas
   function _syncDirectToMainCanvas() {
     const canvas = canvasRef.current;
@@ -487,6 +611,25 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       preStrokeRef.current = canvas.getContext('2d').getImageData(0, 0, W, H);
       // Place first dab
       placeDab(canvasX, canvasY, pressure);
+      // Airbrush: start continuous spray interval
+      if (brushType === 'airbrush') {
+        airbrushPosRef.current      = { x: canvasX, y: canvasY };
+        airbrushPressureRef.current = pressure;
+        if (airbrushTimerRef.current) clearInterval(airbrushTimerRef.current);
+        airbrushTimerRef.current = setInterval(() => {
+          if (airbrushPosRef.current && strokeBufferRef.current) {
+            placeDab(airbrushPosRef.current.x, airbrushPosRef.current.y, airbrushPressureRef.current);
+            _compositeStrokePreviewOnCanvas();
+          }
+        }, 50);
+      }
+    } else if (brushType === 'fill') {
+      // Fill: flood fill immediately, no stroke loop
+      const layerCtx = canvas.getContext('2d');
+      const { r, g, b } = parseColor(paintColor);
+      _floodFill(layerCtx, canvasX, canvasY, r, g, b, 32);
+      flush();
+      isPaintingRef.current = false;
     } else {
       // Direct manipulation tools: load layer image into writable canvas
       const sc = document.createElement('canvas');
@@ -502,6 +645,11 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
   // ── Item 1: Commit stroke ─────────────────────────────────────────────────
   function commitStroke() {
+    // Clear airbrush interval regardless of isPaintingRef state
+    if (airbrushTimerRef.current) {
+      clearInterval(airbrushTimerRef.current);
+      airbrushTimerRef.current = null;
+    }
     if (!isPaintingRef.current) return;
     isPaintingRef.current = false;
 
@@ -657,6 +805,14 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
         y: ce.clientY,
         pressure: ce.pressure > 0 ? ce.pressure : 0.5,
       });
+    }
+
+    // Airbrush: update position so interval deposits paint at current cursor
+    if (brushType === 'airbrush' && coalesced.length > 0) {
+      const last = coalesced[coalesced.length - 1];
+      const pos = clientToCanvas(last.clientX, last.clientY);
+      airbrushPosRef.current      = { x: pos.x, y: pos.y };
+      airbrushPressureRef.current = last.pressure > 0 ? last.pressure : 0.5;
     }
 
     if (!rafPendingRef.current) {
