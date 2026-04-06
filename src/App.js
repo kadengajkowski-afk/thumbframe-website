@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import supabase from './supabaseClient';
 import Editor from './Editor';
 import FabricCanvas from './FabricCanvas';
@@ -7,15 +7,30 @@ import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
 import BillingTab from './BillingTab';
 import { signIn } from './Auth';
-import Home from './pages/Home';
-import Features from './pages/Features';
-import PricingPage from './pages/Pricing';
-import About from './pages/About';
-import Gallery from './pages/Gallery';
-import Blog from './pages/Blog';
-import BlogPost from './pages/BlogPost';
-import BlogAdmin from './pages/BlogAdmin';
-import Support from './pages/Support';
+
+// ── Code-split marketing pages ────────────────────────────────────────────────
+const Home      = lazy(() => import('./pages/Home'));
+const Features  = lazy(() => import('./pages/Features'));
+const PricingPage = lazy(() => import('./pages/Pricing'));
+const About     = lazy(() => import('./pages/About'));
+const Gallery   = lazy(() => import('./pages/Gallery'));
+const Blog      = lazy(() => import('./pages/Blog'));
+const BlogPost  = lazy(() => import('./pages/BlogPost'));
+const BlogAdmin = lazy(() => import('./pages/BlogAdmin'));
+const Support   = lazy(() => import('./pages/Support'));
+const Privacy   = lazy(() => import('./pages/Privacy'));
+const Terms     = lazy(() => import('./pages/Terms'));
+const Refund    = lazy(() => import('./pages/Refund'));
+const Changelog = lazy(() => import('./pages/Changelog'));
+const NotFound  = lazy(() => import('./pages/NotFound'));
+
+function PageLoader() {
+  return (
+    <div style={{ minHeight: '100vh', background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid #1c1c1c', borderTopColor: '#f97316', animation: 'thumbframe-spin 0.7s linear infinite' }} />
+    </div>
+  );
+}
 
 console.log("--- SYSTEM BOOT V2.1 ---");
 
@@ -867,6 +882,10 @@ function getInitialPage() {
   if (path === '/support') return 'support';
   if (path === '/marketing-home') return 'marketing-home';
   if (path === '/admin/blog' || path.startsWith('/admin')) return 'admin-blog';
+  if (path === '/privacy') return 'privacy';
+  if (path === '/terms') return 'terms';
+  if (path === '/refund' || path === '/refunds') return 'refund';
+  if (path === '/changelog') return 'changelog';
   return 'home';
 }
 
@@ -1094,15 +1113,24 @@ export default function App() {
     return <Editor onExit={() => setPage('home')} user={user} token={token} brandKit={brandKit} />;
   }
 
-  // Marketing pages — self-contained with own Navbar/Footer
-  if (page === 'marketing-home') return <Home setPage={setPage} onCheckout={handleCheckout} />;
-  if (page === 'features')       return <Features setPage={setPage} />;
-  if (page === 'about')          return <About setPage={setPage} />;
-  if (page === 'gallery')        return <Gallery setPage={setPage} />;
-  if (page === 'blog')           return <Blog setPage={setPage} onOpenPost={(slug) => { setBlogSlug(slug); setPage('blog-post'); window.history.pushState(null, '', `/blog/${slug}`); }} />;
-  if (page === 'blog-post')      return <BlogPost slug={blogSlug} setPage={setPage} onBack={() => { setPage('blog'); window.history.pushState(null, '', '/blog'); }} />;
-  if (page === 'admin-blog')     return <BlogAdmin setPage={setPage} user={user} token={token} />;
-  if (page === 'support')        return <Support setPage={setPage} />;
+  // Marketing pages — self-contained with own Navbar/Footer (code-split with Suspense)
+  const marketingPages = {
+    'marketing-home': <Home setPage={setPage} onCheckout={handleCheckout} />,
+    features:    <Features setPage={setPage} />,
+    about:       <About setPage={setPage} />,
+    gallery:     <Gallery setPage={setPage} />,
+    blog:        <Blog setPage={setPage} onOpenPost={(slug) => { setBlogSlug(slug); setPage('blog-post'); window.history.pushState(null, '', `/blog/${slug}`); }} />,
+    'blog-post': <BlogPost slug={blogSlug} setPage={setPage} onBack={() => { setPage('blog'); window.history.pushState(null, '', '/blog'); }} />,
+    'admin-blog': <BlogAdmin setPage={setPage} user={user} token={token} />,
+    support:     <Support setPage={setPage} />,
+    privacy:     <Privacy setPage={setPage} />,
+    terms:       <Terms setPage={setPage} />,
+    refund:      <Refund setPage={setPage} />,
+    changelog:   <Changelog setPage={setPage} />,
+  };
+  if (marketingPages[page]) {
+    return <Suspense fallback={<PageLoader />}>{marketingPages[page]}</Suspense>;
+  }
 
   return (
     <div>
