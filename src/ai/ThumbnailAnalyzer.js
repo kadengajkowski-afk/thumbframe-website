@@ -4,7 +4,6 @@
 
 let blazefaceModel = null;
 let cocoModel = null;
-let modelsLoading = false;
 let modelsLoadPromise = null;
 
 async function ensureModels() {
@@ -12,7 +11,7 @@ async function ensureModels() {
   if (modelsLoadPromise) { await modelsLoadPromise; return; }
 
   modelsLoadPromise = (async () => {
-    modelsLoading = true;
+
     try {
       const tf = await import('@tensorflow/tfjs');
       await tf.ready();
@@ -26,8 +25,6 @@ async function ensureModels() {
       ]);
     } catch (err) {
       console.warn('[ThumbnailAnalyzer] ML models failed to load — pixel-only mode:', err.message);
-    } finally {
-      modelsLoading = false;
     }
   })();
 
