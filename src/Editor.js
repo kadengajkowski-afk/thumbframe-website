@@ -24,8 +24,6 @@ import ColorBlindSimulator from './ai/ColorBlindSimulator';
 import PromptToThumbnail from './ai/PromptToThumbnail';
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
-const BrandKitSetupModal = lazy(() => import('./BrandKit'));
-const SidebarBrandKit = lazy(() => import('./SidebarBrandKit'));
 
 const PLATFORMS = {
   youtube:   { label:'YouTube',   width:1280, height:720,  preview:{ w:640, h:360 } },
@@ -1277,7 +1275,7 @@ const NICHE_CONFIG = {
   education: { label:'Education', emoji:'📚', desc:'Tutorials, explainers & how-tos',   accentColor:'#f97316', gradFrom:'#7c2d12', gradTo:'#f97316' },
 };
 
-export default function Editor({onExit, user, token, apiUrl, brandKit: initialBrandKit}){
+export default function Editor({onExit, user, token, apiUrl}){
   const resolvedApiUrl = (apiUrl || process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
   const [layers,setLayersRaw]              = useState([]);
   const canvasRef       = useRef(null);
@@ -1668,12 +1666,6 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [quickMaskActive, setQuickMaskActive] = useState(false);
   const quickMaskCanvasRef = useRef(null);
 
-  const [showBrandKitSetup,setShowBrandKitSetup]       = useState(false);
-  const [brandKit,setBrandKit]                         = useState(initialBrandKit||null);
-  const [brandKitColors,setBrandKitColors]             = useState({primary:'#c45c2e',secondary:'#f97316'});
-  const [brandKitFace,setBrandKitFace]                 = useState(null);
-  const [brandKitLoading,setBrandKitLoading]           = useState(false);
-
   const [remainingQuota,setRemainingQuota]             = useState(null); // eslint-disable-line no-unused-vars
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
   // Automation pipeline
@@ -1805,7 +1797,7 @@ Guards:
 `[SPRINT 4 — SELECTED OBJECT SPECS + FREEHAND BRUSH PLAN]
 
 PHASE 1 — MrBeast Typography Defaults (addText()):
-  • fontFamily : Anton (or brandKit.primary_font)
+  • fontFamily : Anton
   • textColor  : #FFD700 (YouTube gold) — was #FFFFFF
   • strokeWidth: 8, strokeColor: #000000 (strokeUniform = CSS paint-order: stroke fill)
   • shadow     : color rgba(0,0,0,0.8), blur 15, offsetX 0, offsetY 10
@@ -1900,7 +1892,6 @@ PHASE 4 — Toolbar button:
 
   saveMetaRef.current = {
     aiPrompt,
-    brandKitColors,
     brightness,
     contrast,
     designName,
@@ -1931,9 +1922,8 @@ PHASE 4 — Toolbar button:
       textColor,
       strokeColor,
       fillColor,
-      brandKitColors,
     }
-  ),[aiPrompt, brandKitColors, brightness, contrast, designName, fillColor, hue, lastGeneratedImageUrl, platform, projectId, saturation, strokeColor, textColor]);
+  ),[aiPrompt, brightness, contrast, designName, fillColor, hue, lastGeneratedImageUrl, platform, projectId, saturation, strokeColor, textColor]);
 
   const buildSaveSignature = useCallback((snapshot)=>{
     return JSON.stringify({
@@ -2255,51 +2245,6 @@ PHASE 4 — Toolbar button:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[token]);
 
-  useEffect(()=>{
-    let cancelled=false;
-
-    async function fetchBrandKitForUser(){
-      if (!currentUserId) return;
-
-      setBrandKitLoading(true);
-      try{
-        const { data, error } = await supabase
-          .from('brand_kits')
-          .select('*')
-          .eq('user_id', currentUserId)
-          .limit(1);
-
-        if(cancelled) return;
-        if(error) throw error;
-
-        const fallbackBrandKit = { primary_font: 'Anton', brand_colors: ['#FF0000'] };
-        const firstBrandKit = Array.isArray(data) ? (data[0] || null) : (data || null);
-        const normalizedBrandKit = firstBrandKit || fallbackBrandKit;
-
-        setBrandKit(normalizedBrandKit);
-        if(Array.isArray(firstBrandKit?.brand_colors) && firstBrandKit.brand_colors.length>0){
-          setBrandKitColors({
-            primary:firstBrandKit.brand_colors[0] || '#c45c2e',
-            secondary:firstBrandKit.brand_colors[1] || firstBrandKit.brand_colors[0] || '#f97316',
-          });
-        }
-        if(firstBrandKit?.primary_color || firstBrandKit?.secondary_color){
-          setBrandKitColors({
-            primary:firstBrandKit.primary_color || '#c45c2e',
-            secondary:firstBrandKit.secondary_color || '#f97316',
-          });
-        }
-        setBrandKitFace(firstBrandKit?.subject_image_url || firstBrandKit?.subject_url || firstBrandKit?.face_image_url || null);
-      }catch(err){
-        if(!cancelled) console.error('Brand Kit fetch failed:', err);
-      }finally{
-        if(!cancelled) setBrandKitLoading(false);
-      }
-    }
-
-    fetchBrandKitForUser();
-    return()=>{cancelled=true;};
-  },[currentUserId]);
 
   useEffect(()=>{
     let cancelled=false;
@@ -2310,7 +2255,6 @@ PHASE 4 — Toolbar button:
       if (!safeUser || !safeUser.id) return;
 
       setIsLoading(true);
-      setBrandKitLoading(true);
 
       try{
         // ── Resolve project ID synchronously before any await ──
@@ -2339,15 +2283,13 @@ PHASE 4 — Toolbar button:
         const isAdmin = safeUser?.is_admin || safeUser?.is_admin;
         // fetchSavedDesigns is non-critical — fire in background, don't block canvas render
         fetchSavedDesigns().catch(()=>{});
-        const [remoteDesignResult, brandKitResult, profileResult] = await Promise.allSettled([
+        const [remoteDesignResult, profileResult] = await Promise.allSettled([
           // 1. Remote design from Supabase (if URL has a valid UUID project ID)
           // Timestamp-based IDs (e.g. "1775596436228") are local-only — skip Supabase query
           (urlDesignId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(urlDesignId))
             ? supabase.from('thumbnails').select('*').eq('id', urlDesignId).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
-          // 2. Brand kit
-          supabase.from('brand_kits').select('*').eq('user_id', safeUser.id).limit(1),
-          // 3. Pro profile — query by email (avoids bigint vs UUID mismatch)
+          // 2. Pro profile — query by email (avoids bigint vs UUID mismatch)
           safeUser?.email
             ? supabase.from('profiles').select('is_pro').eq('email', safeUser.email).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
@@ -2402,33 +2344,8 @@ PHASE 4 — Toolbar button:
             setIsProUser(false);
           }
 
-          if(brandKitResult.status==='fulfilled'){
-            const { data, error } = brandKitResult.value;
-            if(error)throw error;
-
-            const fallbackBrandKit = { primary_font: 'Anton', brand_colors: ['#FF0000'] };
-            const firstBrandKit = Array.isArray(data) ? (data[0] || null) : (data || null);
-            const normalizedBrandKit = firstBrandKit || fallbackBrandKit;
-
-            setBrandKit(normalizedBrandKit);
-            if(Array.isArray(firstBrandKit?.brand_colors) && firstBrandKit.brand_colors.length>0){
-              setBrandKitColors({
-                primary:firstBrandKit.brand_colors[0] || '#c45c2e',
-                secondary:firstBrandKit.brand_colors[1] || firstBrandKit.brand_colors[0] || '#f97316',
-              });
-            }
-            if(firstBrandKit?.primary_color||firstBrandKit?.secondary_color){
-              setBrandKitColors({
-                primary:firstBrandKit?.primary_color||'#c45c2e',
-                secondary:firstBrandKit?.secondary_color||'#f97316',
-              });
-            }
-            setBrandKitFace(firstBrandKit?.subject_image_url||firstBrandKit?.subject_url||firstBrandKit?.face_image_url||null);
-          }else{
-            throw brandKitResult.reason;
-          }
-        }catch(brandKitErr){
-          if(!cancelled)console.error('Brand Kit/Profile bootstrap failed:',brandKitErr);
+        }catch(profileErr){
+          if(!cancelled)console.error('[PRO PROFILE] Bootstrap failed:',profileErr);
         }
 
         const stateToRestore = restoredDraft;
@@ -2507,9 +2424,6 @@ PHASE 4 — Toolbar button:
           if(stateToRestore.textColor)setTextColor(stateToRestore.textColor);
           if(stateToRestore.strokeColor)setStrokeColor(stateToRestore.strokeColor);
           if(stateToRestore.fillColor)setFillColor(stateToRestore.fillColor);
-          if(stateToRestore.brandKitColors){
-            setBrandKitColors(stateToRestore.brandKitColors);
-          }
 
           const snapshot = JSON.parse(JSON.stringify(restoredLayers));
           historyRef.current=[snapshot];
@@ -2575,7 +2489,6 @@ PHASE 4 — Toolbar button:
         }
       }finally{
         if(!cancelled){
-          setBrandKitLoading(false);
           setIsLoading(false);
         }
       }
@@ -3649,39 +3562,6 @@ PHASE 4 — Toolbar button:
   }
   function addRecentColor(color){setRecentColors(prev=>[color,...prev.filter(c=>c!==color)].slice(0,12));}
 
-  function applyBrandColorToSelected(color){
-    if(!color) return;
-    addRecentColor(color);
-    if(!selectedLayer){
-      setTextColor(color);
-      setCmdLog('Brand color selected for the next layer');
-      return;
-    }
-    if(selectedLayer.type==='background'){
-      updateBg({bgColor:color,bgGradient:null});
-      setCmdLog('Applied brand color to background');
-      return;
-    }
-    if(selectedLayer.type==='text'){
-      updateLayer(selectedLayer.id,{textColor:color});
-      setTextColor(color);
-      setCmdLog('Applied brand color to text');
-      return;
-    }
-    if(selectedLayer.type==='shape'){
-      updateLayer(selectedLayer.id,{fillColor:color});
-      setFillColor(color);
-      setCmdLog('Applied brand color to shape');
-      return;
-    }
-    if(selectedLayer.type==='image'){
-      updateLayer(selectedLayer.id,{effects:{...(selectedLayer.effects||defaultEffects()),subjectOutline:{enabled:true,color,width:selectedLayer.effects?.subjectOutline?.width||brandKit?.outline_width||5}}});
-      setCmdLog('Applied brand color to subject outline');
-      return;
-    }
-    setTextColor(color);
-    setCmdLog('Brand color selected');
-  }
 
   function loadTemplate(template){
     if(!window.confirm(`Load template "${template.label}"? This will replace your current canvas.`)) return;
@@ -5423,7 +5303,6 @@ PHASE 4 — Toolbar button:
       textColor: saveMetaRef.current.textColor,
       strokeColor: saveMetaRef.current.strokeColor,
       fillColor: saveMetaRef.current.fillColor,
-      brandKitColors: saveMetaRef.current.brandKitColors,
     };
     const signature = buildSaveSignature({...snapshot, designName: nextName});
 
@@ -5610,7 +5489,7 @@ PHASE 4 — Toolbar button:
 
     // Mark project as dirty so the save engine schedules a local save
     saveEngineRef.current?.markDirty('projectMeta');
-  },[aiPrompt, brightness, brandKitColors, buildProjectSnapshot, contrast, currentDesignId, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
+  },[aiPrompt, brightness, buildProjectSnapshot, contrast, currentDesignId, designName, fillColor, hue, isLoading, lastGeneratedImageUrl, layers, platform, projectId, saturation, strokeColor, textColor]);
 
   // Auto-scroll history list to current entry when tab is active
   useEffect(()=>{
@@ -6754,7 +6633,7 @@ PHASE 4 — Toolbar button:
       setLayers(prev=>{
         const hasTarget=prev.some(item=>item.id===targetId&&item.type==='image');
         if(!hasTarget) return prev;
-        const subjectShadowColor=brandKit?.outline_color||'#FFFFFF';
+        const subjectShadowColor='#FFFFFF';
         const nl=prev.map(item=>item.id===targetId&&item.type==='image'
           ? {...item,src:safeDataUrl,paintSrc:null,isSubject:true,effects:{...(item.effects||defaultEffects()),shadow:{enabled:true,x:0,y:0,blur:20,color:subjectShadowColor,opacity:100},dropShadow:{enabled:false,x:0,y:0,blur:0,color:subjectShadowColor,opacity:100,spread:0},subjectOutline:{enabled:false,color:subjectShadowColor,width:0}}}
           : item);
@@ -6971,8 +6850,8 @@ PHASE 4 — Toolbar button:
   }
   function addText(){
     // ── Sprint 4: MrBeast-style defaults ──────────────────────────────────
-    const nextFontFamily=brandKit?.primary_font||'Anton';
-    const nextTextColor=brandKit?.brand_colors?.[0]||'#FFD700'; // YouTube gold
+    const nextFontFamily='Anton';
+    const nextTextColor='#FFD700'; // YouTube gold
     const nextStrokeColor='#000000';
     const nextStrokeWidth=8;                  // strokeUniform equivalent (CSS scales with element)
     const nextShadowColor='rgba(0,0,0,0.8)';  // heavy drop shadow
@@ -7025,34 +6904,6 @@ PHASE 4 — Toolbar button:
     setSelectedId(id);
   }
   function addSvgSticker(svg,label){addLayer({type:'svg',svg,label,width:64,height:64});}
-  function injectBrandSubject(kit){
-    const subjectUrl=kit?.subject_image_url||kit?.subject_url||kit?.face_image_url||brandKitFace;
-    if(!subjectUrl)return;
-    const outlineColor=kit?.outline_color||'#FFFFFF';
-    const img=new Image();
-    img.crossOrigin='Anonymous';
-    img.onload=()=>{
-      const cW=p.preview.w,cH=p.preview.h,aspect=img.naturalWidth/img.naturalHeight,ca=cW/cH;
-      let w,h;
-      if(aspect>ca){w=cW*0.5;h=w/aspect;}else{h=cH*0.5;w=h*aspect;}
-      addLayer({
-        type:'image',src:subjectUrl,width:Math.round(w),height:Math.round(h),
-        originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,
-        x:Math.round((cW-w)/2),y:Math.round((cH-h)/2),
-        cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
-        imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
-        isSubject:true,
-        effects:{
-          ...defaultEffects(),
-          shadow:{enabled:true,x:0,y:0,blur:20,color:outlineColor,opacity:100},
-          dropShadow:{enabled:false,x:0,y:0,blur:0,color:outlineColor,opacity:100,spread:0},
-          subjectOutline:{enabled:false,color:outlineColor,width:0},
-        },
-      });
-    };
-    img.src=subjectUrl;
-  }
-
   function readBlobAsDataUrl(blob){
     return new Promise((resolve,reject)=>{
       const reader=new FileReader();
@@ -8288,7 +8139,6 @@ PHASE 4 — Toolbar button:
     {key:'adjustment',label:'Adjustments',  icon:'◐',   group:'Design'},
     {key:'liquify',   label:'Liquify',      icon:'≋',   group:'Design'},
     {key:'filters',   label:'Filters',      icon:'◎',   group:'Design'},
-    {key:'brandkit',  label:'Brand Kit',    icon:'◐',   group:'Design'},
     null,
     {key:'templates',   label:'Templates',    icon:'⊞',   group:'Analyze'},
     {key:'composition', label:'Composition', icon:'◫',   group:'Analyze'},
@@ -11580,21 +11430,6 @@ PHASE 4 — Toolbar button:
                 <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{recentColors.map((c,i)=>(<div key={i} onClick={()=>updateBg({bgColor:c,bgGradient:null})} style={{width:20,height:20,borderRadius:4,background:c,cursor:'pointer',border:`1px solid ${T.border}`}}/>))}</div>
                 {bg&&(<><span style={css.label}>Opacity — {bg.opacity??100}%</span><Slider min={0} max={100} value={bg.opacity??100} onChange={v=>updateLayerSilent(bg.id,{opacity:v})} onCommit={v=>updateLayer(bg.id,{opacity:v})} style={{width:'100%'}}/></>)}
               </div>
-            )}
-
-            {activeTool==='brandkit'&&(
-              <Suspense fallback={null}><SidebarBrandKit
-                T={T}
-                user={user}
-                brandKit={brandKit}
-                brandKitLoading={brandKitLoading}
-                brandKitFace={brandKitFace}
-                brandKitColors={brandKitColors}
-                selectedLayer={selectedLayer}
-                onOpenSetup={()=>setShowBrandKitSetup(true)}
-                onInjectSubject={()=>injectBrandSubject(brandKit||{face_image_url:brandKitFace,subject_url:brandKitFace,subject_image_url:brandKitFace})}
-                onApplyColor={applyBrandColorToSelected}
-              /></Suspense>
             )}
 
             {(activeTool==='curves'||selectedLayer?.type==='curves')&&(
@@ -15096,23 +14931,6 @@ PHASE 4 — Toolbar button:
           ))}
         </div>
       )}
-      {showBrandKitSetup && (
-        <Suspense fallback={null}><BrandKitSetupModal
-          T={T}
-          token={token}
-          apiUrl={resolvedApiUrl}
-          user={user}
-          brandKit={brandKit}
-          setBrandKit={setBrandKit}
-          brandKitColors={brandKitColors}
-          setBrandKitColors={setBrandKitColors}
-          brandKitFace={brandKitFace}
-          setBrandKitFace={setBrandKitFace}
-          setShowBrandKitSetup={setShowBrandKitSetup}
-          setCmdLog={setCmdLog}
-        /></Suspense>
-      )}
-
       {/* ── Keyboard Shortcuts Reference Modal ────────────────────────────── */}
       {showShortcutsModal&&(
         <div

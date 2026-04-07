@@ -705,7 +705,6 @@ const PROTECTED_PAGES = new Set(['editor', 'dashboard', 'settings', 'account']);
 
 export default function App() {
   const [page, setPage] = useState(getInitialPage);
-  const [brandKit, setBrandKit] = useState(null);
   const [blogSlug, setBlogSlug] = useState(() => {
     const p = window.location.pathname;
     return p.startsWith('/blog/') ? p.replace('/blog/', '') : null;
@@ -726,24 +725,13 @@ export default function App() {
     }
   }, [page, user]);
 
-  // Load brand kit whenever the user changes — read from Supabase directly.
-  useEffect(() => {
-    if (!user?.id) { setBrandKit(null); return; }
-    import('./supabaseClient').then(m => m.default
-      .from('brand_kits').select('primary_color,secondary_color,face_image_url')
-      .eq('user_id', user.id).maybeSingle()
-    ).then(({ data }) => setBrandKit(data || null))
-      .catch(() => {});
-  }, [user?.id]);
-
-
   if (page === 'editor') {
     // Feature flag: ?engine=fabric switches to the new fabric.js V2 canvas
     const useFabric = new URLSearchParams(window.location.search).get('engine') === 'fabric';
     if (useFabric) {
       return <FabricCanvas user={user} darkMode={true} />;
     }
-    return <Editor onExit={() => setPage('home')} user={user} token={authToken} brandKit={brandKit} />;
+    return <Editor onExit={() => setPage('home')} user={user} token={authToken} />;
   }
 
   // Marketing pages — self-contained with own Navbar/Footer (code-split with Suspense)
