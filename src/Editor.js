@@ -5798,65 +5798,225 @@ PHASE 4 — Toolbar button:
     }
   }
 
-  // ── Automation Pipeline ───────────────────────────────────────────────────
-  async function runAutoAnalysis(imageDataUrl){
+  // ── Automation Pipeline — client-side image analysis ─────────────────────
+  function _analyzeImageData(imageData){
+    const{data,width,height}=imageData;
+    const totalPixels=width*height;
+
+    // Average brightness (luma)
+    let totalBrightness=0;
+    for(let i=0;i<data.length;i+=4){
+      totalBrightness+=(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114);
+    }
+    const avgBrightness=totalBrightness/totalPixels;
+
+    // Average saturation
+    let totalSat=0;
+    for(let i=0;i<data.length;i+=4){
+      const max=Math.max(data[i],data[i+1],data[i+2]);
+      const min=Math.min(data[i],data[i+1],data[i+2]);
+      totalSat+=max>0?(max-min)/max:0;
+    }
+    const avgSaturation=totalSat/totalPixels;
+
+    // Contrast (stddev of luma)
+    let sumSqDiff=0;
+    for(let i=0;i<data.length;i+=4){
+      const b=data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114;
+      sumSqDiff+=(b-avgBrightness)**2;
+    }
+    const contrast=Math.sqrt(sumSqDiff/totalPixels);
+
+    // Edge density (simple gradient — indicates visual complexity)
+    let edgeCount=0;
+    for(let y=1;y<height-1;y++){
+      for(let x=1;x<width-1;x++){
+        const idx=(y*width+x)*4;
+        const gx=Math.abs(data[idx]-data[idx-4])+Math.abs(data[idx]-data[idx+4]);
+        const gy=Math.abs(data[idx]-data[idx-width*4])+Math.abs(data[idx]-data[idx+width*4]);
+        if(gx+gy>60) edgeCount++;
+      }
+    }
+    const edgeDensity=edgeCount/totalPixels;
+
+    const correctSize=(width===1280&&height===720);
+    // Large-text heuristic: edge density in the moderate-high range
+    const hasLargeText=edgeDensity>0.15;
+
+    return{avgBrightness,avgSaturation,contrast,edgeDensity,correctSize,hasLargeText,width,height};
+  }
+
+  function _generateRecommendations(analysis){
+    const recs=[];
+    if(analysis.avgBrightness<60){
+      recs.push({id:'brighten',icon:'☀️',title:'Boost Brightness',desc:`Average brightness is ${Math.round(analysis.avgBrightness)}/255 — this will look muddy on mobile. Lift shadows and midtones.`,action:'auto_brighten',actionLabel:'Auto Brighten'});
+    } else if(analysis.avgBrightness>220){
+      recs.push({id:'darken',icon:'🌙',title:'Too Bright — Add Depth',desc:'The image is washed out. Add contrast or darken shadows to create visual depth.',action:'auto_contrast',actionLabel:'Add Contrast'});
+    }
+    if(analysis.contrast<35){
+      recs.push({id:'contrast',icon:'⚡',title:'Increase Contrast',desc:'Low contrast makes thumbnails blend in with other videos. Boost the difference between lights and darks.',action:'auto_contrast',actionLabel:'Boost Contrast'});
+    }
+    if(analysis.avgSaturation<0.2){
+      recs.push({id:'saturate',icon:'🎨',title:'Boost Color Saturation',desc:'Colors look muted. Punch up the saturation to make this pop in search results.',action:'auto_saturate',actionLabel:'Boost Colors'});
+    } else if(analysis.avgSaturation>0.7){
+      recs.push({id:'desaturate',icon:'🎨',title:'Oversaturated',desc:'Colors are very intense — this might look unnatural. Consider dialing saturation back slightly.',action:'auto_desaturate',actionLabel:'Tone Down'});
+    }
+    if(!analysis.hasLargeText){
+      recs.push({id:'text',icon:'🔤',title:'Add Bold Text',desc:"No large text detected. Thumbnails with 1–3 bold words get higher CTR. Use the Text tool to add a title.",action:null,actionLabel:null});
+    }
+    if(!analysis.correctSize){
+      recs.push({id:'size',icon:'📐',title:'Wrong Dimensions',desc:`Image is ${analysis.width}×${analysis.height}. YouTube thumbnails should be 1280×720 for best quality.`,action:null,actionLabel:null});
+    }
+    if(analysis.edgeDensity>0.3){
+      recs.push({id:'busy',icon:'👁️',title:'Too Visually Busy',desc:'Lots of detail competing for attention. Add a vignette to darken the edges and draw focus to the center.',action:'auto_vignette',actionLabel:'Add Vignette'});
+    }
+    if(recs.length===0){
+      recs.push({id:'good',icon:'✅',title:'Looking Good',desc:"Brightness, contrast, and saturation are all in a solid range. Consider adding bold text if you haven't already.",action:null,actionLabel:null});
+    }
+    return recs.slice(0,4);
+  }
+
+  function _calculateCTRScore(analysis){
+    let score=30;
+    if(analysis.avgBrightness>=60&&analysis.avgBrightness<=200) score+=15;
+    if(analysis.contrast>=35) score+=15;
+    if(analysis.avgSaturation>=0.2&&analysis.avgSaturation<=0.7) score+=10;
+    if(analysis.hasLargeText) score+=15;
+    if(analysis.correctSize) score+=5;
+    if(analysis.edgeDensity<0.3) score+=10;
+    return Math.min(100,score);
+  }
+
+  function runAutoAnalysis(imageDataUrl){
     setAutoPanel(true);
     setAutoLoading(true);
     setAutoRecs([]);
     setAutoMetrics(null);
     setAutoDismissed(new Set());
-    try{
-      const { data: { session } } = await supabase.auth.getSession();
-      const tok = session?.access_token || token;
-      const res = await fetch(`${resolvedApiUrl}/api/analyze-thumbnail`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
-        body:JSON.stringify({image:imageDataUrl,niche:userNiche||undefined,videoTitle:ctrTitle.trim()||undefined}),
-      });
-      const data = await res.json();
-      if(!res.ok){
-        if(res.status===403){
-          // Pro gate — show panel with upgrade prompt
-          setAutoRecs([{id:'upgrade',priority:0,icon:'✨',title:'Pro Feature',description:data.error||'Upgrade to Pro to unlock the automation pipeline.',action:'upgrade',actionLabel:'Upgrade to Pro'}]);
-          return;
-        }
-        if(res.status===429){ setCmdLog(data.error||'Quota exceeded.'); setAutoPanel(false); return; }
-        throw new Error(data.error||'Analysis failed');
+    // Use setTimeout to let loading state render before the synchronous pixel loop
+    setTimeout(()=>{
+      try{
+        const img=new Image();
+        img.onload=()=>{
+          const c=document.createElement('canvas');
+          c.width=img.naturalWidth; c.height=img.naturalHeight;
+          const ctx=c.getContext('2d');
+          ctx.drawImage(img,0,0);
+          const imageData=ctx.getImageData(0,0,c.width,c.height);
+          const analysis=_analyzeImageData(imageData);
+          const recs=_generateRecommendations(analysis);
+          const ctrScore=_calculateCTRScore(analysis);
+          setAutoRecs(recs);
+          setAutoMetrics({ctrScore,analysis});
+          setAutoLoading(false);
+        };
+        img.onerror=()=>{
+          console.error('[AUTO-ANALYZE] Image load failed');
+          setAutoPanel(false);
+          setAutoLoading(false);
+        };
+        img.src=imageDataUrl;
+      }catch(err){
+        console.error('[AUTO-ANALYZE]',err);
+        setAutoPanel(false);
+        setAutoLoading(false);
       }
-      if(!data.success) throw new Error(data.error||'Invalid response');
-      setAutoRecs(data.recommendations||[]);
-      setAutoMetrics(data.metrics||null);
-      if(data.remaining!=null) setRemainingQuota(data.remaining);
-    }catch(err){
-      console.error('[AUTO-ANALYZE]',err);
-      setAutoPanel(false);
-      setCmdLog('Auto-analysis failed. Try again.');
-    }finally{
-      setAutoLoading(false);
+    },50);
+  }
+
+  // Apply a pixel-level action to the first visible image layer, then re-analyze
+  async function applyAutoAction(action){
+    const imgLayer=layers.find(l=>l.type==='image'&&!l.hidden);
+    if(!imgLayer?.src) return;
+    const img=await new Promise((res,rej)=>{
+      const i=new Image(); i.crossOrigin='Anonymous';
+      i.onload=()=>res(i); i.onerror=rej; i.src=imgLayer.src;
+    });
+    const c=document.createElement('canvas');
+    c.width=img.naturalWidth; c.height=img.naturalHeight;
+    const ctx=c.getContext('2d');
+    ctx.drawImage(img,0,0);
+    const imageData=ctx.getImageData(0,0,c.width,c.height);
+    const d=imageData.data;
+
+    if(action==='auto_brighten'){
+      for(let i=0;i<d.length;i+=4){
+        d[i]  =Math.min(255,d[i]  +40);
+        d[i+1]=Math.min(255,d[i+1]+40);
+        d[i+2]=Math.min(255,d[i+2]+40);
+      }
+    } else if(action==='auto_contrast'){
+      // Compute mean luma, then stretch contrast around it
+      let mean=0;
+      for(let i=0;i<d.length;i+=4) mean+=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114);
+      mean/=(d.length/4);
+      const factor=1.4;
+      for(let i=0;i<d.length;i+=4){
+        d[i]  =Math.min(255,Math.max(0,Math.round((d[i]  -mean)*factor+mean)));
+        d[i+1]=Math.min(255,Math.max(0,Math.round((d[i+1]-mean)*factor+mean)));
+        d[i+2]=Math.min(255,Math.max(0,Math.round((d[i+2]-mean)*factor+mean)));
+      }
+    } else if(action==='auto_saturate'||action==='auto_desaturate'){
+      const delta=action==='auto_saturate'?0.25:-0.2;
+      for(let i=0;i<d.length;i+=4){
+        // RGB → HSL → tweak S → HSL → RGB
+        const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255;
+        const max=Math.max(r,g,b),min=Math.min(r,g,b);
+        const l=(max+min)/2;
+        if(max===min){continue;} // achromatic
+        const s=l>0.5?(max-min)/(2-max-min):(max-min)/(max+min);
+        const ns=Math.min(1,Math.max(0,s+delta));
+        // back to RGB via hue
+        const hue60=max===r?((g-b)/(max-min)%6):max===g?((b-r)/(max-min)+2):((r-g)/(max-min)+4);
+        const h=(hue60/6+1)%1;
+        const q=l<0.5?l*(1+ns):l+ns-l*ns;
+        const p2=2*l-q;
+        const hq=(hv)=>{
+          const hh=((hv%1)+1)%1;
+          if(hh<1/6) return p2+(q-p2)*6*hh;
+          if(hh<1/2) return q;
+          if(hh<2/3) return p2+(q-p2)*(2/3-hh)*6;
+          return p2;
+        };
+        d[i]  =Math.round(hq(h+1/3)*255);
+        d[i+1]=Math.round(hq(h)*255);
+        d[i+2]=Math.round(hq(h-1/3)*255);
+      }
+    } else if(action==='auto_vignette'){
+      const W=c.width,H=c.height,cx=W/2,cy=H/2,maxD=Math.sqrt(cx*cx+cy*cy);
+      for(let y=0;y<H;y++){
+        for(let x=0;x<W;x++){
+          const idx=(y*W+x)*4;
+          const dist=Math.sqrt((x-cx)**2+(y-cy)**2);
+          const t=dist/maxD; // 0 center, 1 corner
+          const darken=t>0.5?((t-0.5)/0.5)*0.55:0; // fade in from 50% radius
+          d[idx]  =Math.round(d[idx]  *(1-darken));
+          d[idx+1]=Math.round(d[idx+1]*(1-darken));
+          d[idx+2]=Math.round(d[idx+2]*(1-darken));
+        }
+      }
     }
+
+    ctx.putImageData(imageData,0,0);
+    const newSrc=c.toDataURL('image/png');
+    updateLayer(imgLayer.id,{src:newSrc});
+    // Re-analyze with new pixel data
+    runAutoAnalysis(newSrc);
   }
 
   async function runAutoFix(){
     setAutoFixRunning(true);
     try{
-      const visibleRecs = autoRecs.filter(r=>!autoDismissed.has(r.id)&&r.action!=='upgrade'&&r.action!=='ctr-check');
-      for(const rec of visibleRecs){
-        if(rec.action==='color-grade'&&rec.actionParams){
-          const cg=rec.actionParams;
-          setCgPreset(cg.preset||'default');
-          setCgIntensity(cg.intensity||70);
-          // trigger CG on the first image layer
-          const imgLayer=layers.find(l=>l.type==='image'&&!l.hidden);
-          if(imgLayer) setCgLayerId(imgLayer.id);
-          await new Promise(r=>setTimeout(r,300));
-        }
+      const actionableRecs=autoRecs.filter(r=>!autoDismissed.has(r.id)&&r.action&&r.action!==null);
+      for(const rec of actionableRecs){
+        await applyAutoAction(rec.action);
+        await new Promise(r=>setTimeout(r,120));
       }
-      // Re-score after fixes
-      await analyzeCTR();
-      setCmdLog('Auto-fix complete. CTR re-scored.');
+      showToastMsg('Auto-fix applied ✓','success');
       setAutoPanel(false);
     }catch(err){
       console.error('[AUTO-FIX]',err);
+      showToastMsg('Auto-fix failed — try individual actions','error');
     }finally{
       setAutoFixRunning(false);
     }
@@ -14982,8 +15142,12 @@ PHASE 4 — Toolbar button:
           <div style={{padding:'16px 20px', borderBottom:'1px solid rgba(255,255,255,0.08)', display:'flex', alignItems:'center', gap:10, flexShrink:0}}>
             <div style={{fontSize:20}}>✨</div>
             <div style={{flex:1}}>
-              <div style={{fontSize:14, fontWeight:700, color:'#fff'}}>AI Recommendations</div>
-              {autoMetrics?.ctr && <div style={{fontSize:11, color:'rgba(255,255,255,0.4)', marginTop:2}}>CTR potential: {autoMetrics.ctr.overall}/100</div>}
+              <div style={{fontSize:14, fontWeight:700, color:'#fff'}}>Image Analysis</div>
+              {autoMetrics?.ctrScore!=null && (
+                <div style={{fontSize:11, color:'rgba(255,255,255,0.4)', marginTop:2}}>
+                  CTR score: <span style={{color: autoMetrics.ctrScore>=70?'#4ade80':autoMetrics.ctrScore>=45?'#fbbf24':'#f87171', fontWeight:700}}>{autoMetrics.ctrScore}/100</span>
+                </div>
+              )}
             </div>
             <button
               onClick={()=>setAutoPanel(false)}
@@ -14997,12 +15161,7 @@ PHASE 4 — Toolbar button:
             {autoLoading ? (
               <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:16, color:'rgba(255,255,255,0.5)'}}>
                 <div style={{width:40, height:40, borderRadius:'50%', border:'3px solid rgba(249,115,22,0.3)', borderTopColor:'#f97316', animation:'editor-spin 0.8s linear infinite'}} />
-                <div style={{fontSize:13, textAlign:'center', lineHeight:1.5}}>Analyzing your thumbnail…<br/><span style={{fontSize:11}}>Checking composition, colors & CTR</span></div>
-              </div>
-            ) : autoRecs.length===0 ? (
-              <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:12, color:'rgba(255,255,255,0.4)'}}>
-                <div style={{fontSize:32}}>🎉</div>
-                <div style={{fontSize:13, textAlign:'center'}}>No issues found — your thumbnail looks great!</div>
+                <div style={{fontSize:13, textAlign:'center', lineHeight:1.5}}>Analyzing pixels…<br/><span style={{fontSize:11}}>Checking brightness, contrast & saturation</span></div>
               </div>
             ) : (
               <>
@@ -15016,50 +15175,48 @@ PHASE 4 — Toolbar button:
                       <div style={{fontSize:20, flexShrink:0, lineHeight:1, marginTop:1}}>{rec.icon}</div>
                       <div style={{flex:1}}>
                         <div style={{fontSize:13, fontWeight:700, color:'#fff', lineHeight:1.3}}>{rec.title}</div>
-                        <div style={{fontSize:11, color:'rgba(255,255,255,0.5)', marginTop:4, lineHeight:1.5}}>{rec.description}</div>
+                        <div style={{fontSize:11, color:'rgba(255,255,255,0.5)', marginTop:4, lineHeight:1.5}}>{rec.desc}</div>
                       </div>
                     </div>
-                    <div style={{display:'flex', gap:8, marginTop:2}}>
-                      {rec.action!=='upgrade' && rec.action!=='ctr-check' && (
+                    {(rec.action || rec.id==='good') ? (
+                      <div style={{display:'flex', gap:8, marginTop:2}}>
+                        {rec.action && (
+                          <button
+                            onClick={async()=>{
+                              setAutoDismissed(prev=>new Set([...prev,rec.id]));
+                              await applyAutoAction(rec.action);
+                              showToastMsg(`${rec.title} applied ✓`,'success');
+                            }}
+                            style={{flex:1, padding:'7px 10px', borderRadius:7, border:'none', background:'#f97316', color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer'}}
+                          >{rec.actionLabel}</button>
+                        )}
                         <button
-                          onClick={()=>{
-                            if(rec.action==='color-grade'&&rec.actionParams){
-                              setCgPreset(rec.actionParams.preset||'default');
-                              setCgIntensity(rec.actionParams.intensity||70);
-                              const il=layers.find(l=>l.type==='image'&&!l.hidden);
-                              if(il) setCgLayerId(il.id);
-                              setRightPanelTab('ai');
-                            } else if(rec.action==='remove-bg'||rec.action==='segment'){
-                              setActiveTool('smart-cutout');
-                            } else if(rec.action==='ctr-check'){
-                              analyzeCTR();
-                            } else if(rec.action==='enhance-expression'){
-                              setActiveTool('brush');
-                            }
-                            setAutoDismissed(prev=>new Set([...prev,rec.id]));
-                          }}
-                          style={{flex:1, padding:'7px 10px', borderRadius:7, border:'none', background:'#f97316', color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer'}}
-                        >{rec.actionLabel}</button>
-                      )}
-                      {rec.action==='upgrade' && (
+                          onClick={()=>setAutoDismissed(prev=>new Set([...prev,rec.id]))}
+                          style={{padding:'7px 10px', borderRadius:7, border:'1px solid rgba(255,255,255,0.12)', background:'transparent', color:'rgba(255,255,255,0.4)', fontSize:11, cursor:'pointer'}}
+                        >Dismiss</button>
+                      </div>
+                    ) : (
+                      <div style={{display:'flex', gap:8, marginTop:2}}>
                         <button
-                          onClick={handleUpgrade}
-                          style={{flex:1, padding:'7px 10px', borderRadius:7, border:'none', background:'linear-gradient(135deg,#f97316,#ec4899)', color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer'}}
-                        >Upgrade to Pro</button>
-                      )}
-                      <button
-                        onClick={()=>setAutoDismissed(prev=>new Set([...prev,rec.id]))}
-                        style={{padding:'7px 10px', borderRadius:7, border:'1px solid rgba(255,255,255,0.12)', background:'transparent', color:'rgba(255,255,255,0.4)', fontSize:11, cursor:'pointer'}}
-                      >Dismiss</button>
-                    </div>
+                          onClick={()=>setAutoDismissed(prev=>new Set([...prev,rec.id]))}
+                          style={{padding:'7px 10px', borderRadius:7, border:'1px solid rgba(255,255,255,0.12)', background:'transparent', color:'rgba(255,255,255,0.4)', fontSize:11, cursor:'pointer'}}
+                        >Dismiss</button>
+                      </div>
+                    )}
                   </div>
                 ))}
+                {autoRecs.filter(r=>!autoDismissed.has(r.id)).length===0 && (
+                  <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:12, color:'rgba(255,255,255,0.4)', padding:'32px 0'}}>
+                    <div style={{fontSize:32}}>🎉</div>
+                    <div style={{fontSize:13, textAlign:'center'}}>All recommendations dismissed.</div>
+                  </div>
+                )}
               </>
             )}
           </div>
 
           {/* Footer — Auto-Fix Everything */}
-          {!autoLoading && autoRecs.filter(r=>!autoDismissed.has(r.id)&&r.action!=='upgrade').length>0 && (
+          {!autoLoading && autoRecs.filter(r=>!autoDismissed.has(r.id)&&!!r.action).length>0 && (
             <div style={{padding:'12px 16px', borderTop:'1px solid rgba(255,255,255,0.08)', flexShrink:0}}>
               <button
                 onClick={runAutoFix}
@@ -15077,7 +15234,7 @@ PHASE 4 — Toolbar button:
                 }
               </button>
               <div style={{fontSize:10,color:'rgba(255,255,255,0.25)',textAlign:'center',marginTop:6}}>
-                Applies color grade, re-scores CTR
+                {autoRecs.filter(r=>!autoDismissed.has(r.id)&&!!r.action).length} fix{autoRecs.filter(r=>!autoDismissed.has(r.id)&&!!r.action).length!==1?'es':''} queued
               </div>
             </div>
           )}
