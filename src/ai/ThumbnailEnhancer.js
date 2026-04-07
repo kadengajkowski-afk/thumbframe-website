@@ -5,33 +5,36 @@ export function autoBrighten(canvas) {
   const ctx = canvas.getContext('2d');
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
-  const total = canvas.width * canvas.height;
+  const totalPixels = canvas.width * canvas.height;
 
-  // Auto Levels: clip 0.5% per channel
-  for (let c = 0; c < 3; c++) {
-    const histogram = new Array(256).fill(0);
-    for (let i = c; i < data.length; i += 4) histogram[data[i]]++;
-    let low = 0, high = 255, cumLow = 0, cumHigh = 0;
-    for (let i = 0; i <= 255; i++) {
-      cumLow += histogram[i];
-      if (cumLow > total * 0.005) { low = i; break; }
-    }
-    for (let i = 255; i >= 0; i--) {
-      cumHigh += histogram[i];
-      if (cumHigh > total * 0.005) { high = i; break; }
-    }
-    const range = (high - low) || 1;
-    for (let i = c; i < data.length; i += 4) {
-      data[i] = Math.min(255, Math.max(0, Math.round((data[i] - low) * 255 / range)));
-    }
+  // Calculate current average brightness (luma-weighted, all channels equal)
+  let avgBrightness = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    avgBrightness += data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+  }
+  avgBrightness /= totalPixels;
+
+  // Uniform additive shift toward target — preserves color relationships, no artifacts
+  const target = 120;
+  const adjustment = target - avgBrightness;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i]     = Math.min(255, Math.max(0, data[i]     + adjustment));
+    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + adjustment));
+    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + adjustment));
   }
 
-  // Mild S-curve for pop
-  const k = 6;
-  for (let i = 0; i < data.length; i += 4) {
-    for (let c = 0; c < 3; c++) {
-      const n = data[i+c] / 255;
-      data[i+c] = Math.round(255 / (1 + Math.exp(-k * (n - 0.5))));
+  // Only add a gentle contrast boost when the image was very dark (needed big push)
+  if (adjustment > 30) {
+    let mean = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      mean += data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    }
+    mean /= totalPixels;
+    const factor = 1.15;
+    for (let i = 0; i < data.length; i += 4) {
+      data[i]     = Math.min(255, Math.max(0, Math.round(mean + (data[i]     - mean) * factor)));
+      data[i + 1] = Math.min(255, Math.max(0, Math.round(mean + (data[i + 1] - mean) * factor)));
+      data[i + 2] = Math.min(255, Math.max(0, Math.round(mean + (data[i + 2] - mean) * factor)));
     }
   }
 
@@ -43,18 +46,22 @@ export function autoContrast(canvas) {
   const ctx = canvas.getContext('2d');
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
-  let mean = 0, count = 0;
+  const totalPixels = canvas.width * canvas.height;
+
+  // Luma-weighted mean — expand contrast around it uniformly, no color shift
+  let mean = 0;
   for (let i = 0; i < data.length; i += 4) {
-    mean += data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114;
-    count++;
+    mean += data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
   }
-  mean /= count;
+  mean /= totalPixels;
+
   const factor = 1.3;
   for (let i = 0; i < data.length; i += 4) {
-    for (let c = 0; c < 3; c++) {
-      data[i+c] = Math.min(255, Math.max(0, Math.round(mean + (data[i+c] - mean) * factor)));
-    }
+    data[i]     = Math.min(255, Math.max(0, Math.round(mean + (data[i]     - mean) * factor)));
+    data[i + 1] = Math.min(255, Math.max(0, Math.round(mean + (data[i + 1] - mean) * factor)));
+    data[i + 2] = Math.min(255, Math.max(0, Math.round(mean + (data[i + 2] - mean) * factor)));
   }
+
   ctx.putImageData(imageData, 0, 0);
   return canvas;
 }
