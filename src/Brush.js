@@ -869,10 +869,10 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     if (!canvas || !sb) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (originalImgRef.current) {
-      ctx.drawImage(originalImgRef.current, 0, 0, canvas.width, canvas.height);
-    } else if (preStrokeRef.current) {
+    if (preStrokeRef.current) {
       ctx.putImageData(preStrokeRef.current, 0, 0);
+    } else if (originalImgRef.current) {
+      ctx.drawImage(originalImgRef.current, 0, 0, canvas.width, canvas.height);
     }
     ctx.save();
     ctx.globalAlpha = (brushStrength ?? 100) / 100;
@@ -914,7 +914,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     const ctx = cc.getContext('2d');
     ctx.clearRect(0, 0, cc.width, cc.height);
 
-    const dispRadius = (brushSize / 2) * (zoom || 1);
+    const dispRadius = brushSize * (zoom || 1);
     const hardness   = brushEdge === 'hard' ? 0.99 : 0.0;
 
     if (dispRadius < 3) {
@@ -1033,9 +1033,9 @@ export default function BrushTool({
   }, [pressureCurve, pressureEnabled]);
 
   const brushTypes = [
-    { key: 'blur',     label: 'Blur',    icon: '◎', desc: 'Softens — good for skin and backgrounds'      },
-    { key: 'smear',    label: 'Smear',   icon: '≋', desc: 'Drags pixels — blend edges naturally'         },
-    { key: 'sharpen',  label: 'Sharpen', icon: '◈', desc: 'Crispens detail — use lightly'                },
+    { key: 'blur-brush',     label: 'Blur',    icon: '◎', desc: 'Softens — good for skin and backgrounds'      },
+    { key: 'smudge',         label: 'Smudge',  icon: '≋', desc: 'Drags pixels — blend edges naturally'         },
+    { key: 'sharpen-brush',  label: 'Sharpen', icon: '◈', desc: 'Crispens detail — use lightly'                },
     { key: 'airbrush', label: 'Air',     icon: '∴', desc: 'Soft scattered spray'                         },
     { key: 'dodge',    label: 'Dodge',   icon: '☀', desc: 'Brightens — add highlights and rim light'     },
     { key: 'burn',     label: 'Burn',    icon: '◑', desc: 'Darkens — add shadows and depth'              },
