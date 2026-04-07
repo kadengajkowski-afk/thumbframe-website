@@ -42,6 +42,77 @@ function getCanvasDisplaySize() {
   return { w: Math.round(w), h: Math.round(h) };
 }
 
+// ── Client-side color grade (no API needed — pure pixel math) ─────────────────
+function colorGradeClientSide(srcDataUrl, preset='default', intensity=0.8){
+  return new Promise((resolve, reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth; c.height=img.naturalHeight;
+      const ctx=c.getContext('2d',{willReadFrequently:true});
+      ctx.drawImage(img,0,0);
+      const imageData=ctx.getImageData(0,0,c.width,c.height);
+      const d=imageData.data;
+      const total=c.width*c.height;
+      // 1. Auto-levels (0.5% clip)
+      const hist=new Array(256).fill(0);
+      for(let i=0;i<d.length;i+=4)
+        hist[Math.round(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)]++;
+      let lo=0,hi=255,cumLo=0,cumHi=0;
+      for(let i=0;i<=255;i++){cumLo+=hist[i];if(cumLo>total*0.005){lo=i;break;}}
+      for(let i=255;i>=0;i--){cumHi+=hist[i];if(cumHi>total*0.005){hi=i;break;}}
+      const range=Math.max(1,hi-lo);
+      for(let i=0;i<d.length;i+=4){
+        const lum=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114;
+        const ratio=(lum>0)?(Math.min(255,Math.max(0,(lum-lo)*255/range))/lum):1;
+        d[i]  =Math.min(255,Math.max(0,Math.round(d[i]  *ratio)));
+        d[i+1]=Math.min(255,Math.max(0,Math.round(d[i+1]*ratio)));
+        d[i+2]=Math.min(255,Math.max(0,Math.round(d[i+2]*ratio)));
+      }
+      // 2. Mild S-curve contrast
+      for(let i=0;i<d.length;i+=4){
+        for(let c2=0;c2<3;c2++){
+          const x=d[i+c2]/255;
+          d[i+c2]=Math.round(255/(1+Math.exp(-5*(x-0.5))));
+        }
+      }
+      // 3. Preset colour toning
+      const presetFn={
+        default: (r,g,b)=>({r,g,b}),
+        warm:    (r,g,b)=>({r:Math.min(255,r+20*intensity),g:Math.min(255,g+6*intensity),b:Math.max(0,b-18*intensity)}),
+        cool:    (r,g,b)=>({r:Math.max(0,r-15*intensity),g:Math.min(255,g+5*intensity),b:Math.min(255,b+22*intensity)}),
+        cinematic:(r,g,b)=>({r:Math.min(255,r*0.95+8*intensity),g:Math.min(255,g*0.92+4*intensity),b:Math.min(255,b*1.08)}),
+        vibrant:  (r,g,b)=>{const avg=(r+g+b)/3;return{r:Math.min(255,avg+(r-avg)*(1+0.35*intensity)),g:Math.min(255,avg+(g-avg)*(1+0.35*intensity)),b:Math.min(255,avg+(b-avg)*(1+0.35*intensity))};},
+        neon:    (r,g,b)=>{const avg=(r+g+b)/3;return{r:Math.min(255,avg+(r-avg)*(1+0.4*intensity)),g:Math.min(255,avg+(g-avg)*(1+0.3*intensity)),b:Math.min(255,avg+(b-avg)*(1+0.5*intensity))};},
+      }[preset]||((r,g,b)=>({r,g,b}));
+      for(let i=0;i<d.length;i+=4){
+        const {r,g,b}=presetFn(d[i],d[i+1],d[i+2]);
+        d[i]=Math.min(255,Math.max(0,Math.round(r)));
+        d[i+1]=Math.min(255,Math.max(0,Math.round(g)));
+        d[i+2]=Math.min(255,Math.max(0,Math.round(b)));
+      }
+      // 4. Vibrance boost
+      const boost=0.15*intensity;
+      for(let i=0;i<d.length;i+=4){
+        const mx=Math.max(d[i],d[i+1],d[i+2]),mn=Math.min(d[i],d[i+1],d[i+2]);
+        const sat=mx>0?(mx-mn)/mx:0;
+        const b2=boost*(1-sat);
+        if(mx!==mn){const avg2=(d[i]+d[i+1]+d[i+2])/3;
+          d[i]  =Math.min(255,Math.max(0,Math.round(d[i]  +(d[i]  -avg2)*b2)));
+          d[i+1]=Math.min(255,Math.max(0,Math.round(d[i+1]+(d[i+1]-avg2)*b2)));
+          d[i+2]=Math.min(255,Math.max(0,Math.round(d[i+2]+(d[i+2]-avg2)*b2)));
+        }
+      }
+      ctx.putImageData(imageData,0,0);
+      const out=c.toDataURL('image/png');
+      c.width=1;c.height=1;
+      resolve(out);
+    };
+    img.onerror=reject;
+    img.src=srcDataUrl;
+  });
+}
+
 // ── MobileEditor ───────────────────────────────────────────────────────────────
 export default function MobileEditor({ user, token, apiUrl, onSwitchToDesktop }) {
   const resolvedApiUrl = (apiUrl || process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
@@ -118,16 +189,16 @@ export default function MobileEditor({ user, token, apiUrl, onSwitchToDesktop })
 
       try{
         const [gradeRes, compRes, ctrRes] = await Promise.allSettled([
-          apiPost('/api/color-grade', { image:dataUrl, preset:'cinematic', intensity:75 }),
+          colorGradeClientSide(dataUrl, 'cinematic', 0.75),
           apiPost('/api/analyze-composition', { image:dataUrl }),
           apiPost('/api/ctr-score-v2', { image:dataUrl }),
         ]);
 
         setProgress(90);
 
-        const graded = gradeRes.status==='fulfilled' && gradeRes.value?.success ? gradeRes.value.image : null;
-        const comp   = compRes.status==='fulfilled'  && compRes.value?.success  ? compRes.value        : null;
-        const ctr    = ctrRes.status==='fulfilled'   && ctrRes.value?.success   ? ctrRes.value         : null;
+        const graded = gradeRes.status==='fulfilled' ? gradeRes.value : null;
+        const comp   = compRes.status==='fulfilled'  && compRes.value?.success  ? compRes.value : null;
+        const ctr    = ctrRes.status==='fulfilled'   && ctrRes.value?.success   ? ctrRes.value  : null;
 
         if(graded){
           setImage(graded);
@@ -164,10 +235,10 @@ export default function MobileEditor({ user, token, apiUrl, onSwitchToDesktop })
           const presets = ['cinematic','warm','cool','neon','vibrant'];
           const chosen  = presets[Math.floor(Math.random()*presets.length)];
           setProgress(20);
-          const d = await apiPost('/api/color-grade', { image, preset:chosen, intensity:85 });
+          const graded = await colorGradeClientSide(image, chosen, 0.85);
           setProgress(100);
-          if(d.success){ setImage(d.image); showToast(`Applied ${chosen} grade`, 'success'); }
-          else showToast(d.error||'Grade failed', 'error');
+          setImage(graded);
+          showToast(`Applied ${chosen} grade`, 'success');
           break;
         }
 
