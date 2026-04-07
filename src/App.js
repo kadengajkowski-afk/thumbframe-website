@@ -660,9 +660,6 @@ function Settings({ setPage, user }) {
 }
 
 // ── App ────────────────────────────────────────────────────────────────────────
-const API_BASE = process.env.NODE_ENV === 'development'
-  ? 'http://localhost:5000'
-  : 'https://thumbframe-api-production.up.railway.app';
 
 function getInitialPage() {
   const path = window.location.pathname.toLowerCase();
