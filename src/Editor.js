@@ -2341,7 +2341,7 @@ PHASE 4 — Toolbar button:
         const [remoteDesignResult, brandKitResult, profileResult] = await Promise.allSettled([
           // 1. Remote design from Supabase (if URL has project ID)
           urlDesignId
-            ? supabase.from('thumbnails').select('*').eq('id', urlDesignId).single()
+            ? supabase.from('thumbnails').select('*').eq('id', urlDesignId).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
           // 2. Brand kit
           supabase.from('brand_kits').select('*').eq('user_id', safeUser.id).limit(1),

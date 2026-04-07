@@ -729,14 +729,15 @@ export default function App() {
     }
   }, [page, user]);
 
-  // Load brand kit whenever the user changes — use fresh token from context.
+  // Load brand kit whenever the user changes — read from Supabase directly.
   useEffect(() => {
-    if (!authToken) { setBrandKit(null); return; }
-    fetch(`${API_BASE}/brand-kit`, { headers: { Authorization: `Bearer ${authToken}` } })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => setBrandKit(data.brandKit))
+    if (!user?.id) { setBrandKit(null); return; }
+    import('./supabaseClient').then(m => m.default
+      .from('brand_kits').select('primary_color,secondary_color,face_image_url')
+      .eq('user_id', user.id).maybeSingle()
+    ).then(({ data }) => setBrandKit(data || null))
       .catch(() => {});
-  }, [user?.id, authToken]);
+  }, [user?.id]);
 
 
   if (page === 'editor') {
