@@ -16,6 +16,10 @@ import SelectionOverlay from './SelectionOverlay';
 import { rectMask, ellipseMask, pathMask, magicWandMask, combineMasks, invertMask, selectAllMask, maskBounds, featherMask } from './selectionUtils'; // eslint-disable-line no-unused-vars
 import db from './db';
 import { renderLayersWithPixi } from './pixiCompositor';
+import { analyzeImage as runThumbnailAnalysis } from './ai/ThumbnailAnalyzer';
+import { autoBrighten, autoContrast, autoSaturate, autoDesaturate, autoVignette, autoWhiteBalance, gamingEnhance, autoFixAll } from './ai/ThumbnailEnhancer';
+import DevicePreview from './ai/DevicePreview';
+import ColorBlindSimulator from './ai/ColorBlindSimulator';
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
 const BrandKitSetupModal = lazy(() => import('./BrandKit'));
@@ -1665,6 +1669,10 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [autoMetrics,setAutoMetrics]                   = useState(null);
   const [autoDismissed,setAutoDismissed]               = useState(new Set());
   const [autoFixRunning,setAutoFixRunning]             = useState(false);
+  const [autoShowDevicePreview,setAutoShowDevicePreview] = useState(false);
+  const [autoShowColorBlind,setAutoShowColorBlind]       = useState(false);
+  const [autoPreviewUrl,setAutoPreviewUrl]               = useState(null);
+  const autoAnalysisDebounceRef                          = useRef(null);
 
   // ── Tier 3 Item 3: Competitor Comparison ─────────────────────────────────
   const [showCompetitor,setShowCompetitor]       = useState(false);
@@ -5798,221 +5806,89 @@ PHASE 4 — Toolbar button:
     }
   }
 
-  // ── Automation Pipeline — client-side image analysis ─────────────────────
-  function _analyzeImageData(imageData){
-    const{data,width,height}=imageData;
-    const totalPixels=width*height;
-
-    // Average brightness (luma)
-    let totalBrightness=0;
-    for(let i=0;i<data.length;i+=4){
-      totalBrightness+=(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114);
-    }
-    const avgBrightness=totalBrightness/totalPixels;
-
-    // Average saturation
-    let totalSat=0;
-    for(let i=0;i<data.length;i+=4){
-      const max=Math.max(data[i],data[i+1],data[i+2]);
-      const min=Math.min(data[i],data[i+1],data[i+2]);
-      totalSat+=max>0?(max-min)/max:0;
-    }
-    const avgSaturation=totalSat/totalPixels;
-
-    // Contrast (stddev of luma)
-    let sumSqDiff=0;
-    for(let i=0;i<data.length;i+=4){
-      const b=data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114;
-      sumSqDiff+=(b-avgBrightness)**2;
-    }
-    const contrast=Math.sqrt(sumSqDiff/totalPixels);
-
-    // Edge density (simple gradient — indicates visual complexity)
-    let edgeCount=0;
-    for(let y=1;y<height-1;y++){
-      for(let x=1;x<width-1;x++){
-        const idx=(y*width+x)*4;
-        const gx=Math.abs(data[idx]-data[idx-4])+Math.abs(data[idx]-data[idx+4]);
-        const gy=Math.abs(data[idx]-data[idx-width*4])+Math.abs(data[idx]-data[idx+width*4]);
-        if(gx+gy>60) edgeCount++;
-      }
-    }
-    const edgeDensity=edgeCount/totalPixels;
-
-    const correctSize=(width===1280&&height===720);
-    // Large-text heuristic: edge density in the moderate-high range
-    const hasLargeText=edgeDensity>0.15;
-
-    return{avgBrightness,avgSaturation,contrast,edgeDensity,correctSize,hasLargeText,width,height};
-  }
-
-  function _generateRecommendations(analysis){
-    const recs=[];
-    if(analysis.avgBrightness<60){
-      recs.push({id:'brighten',icon:'☀️',title:'Boost Brightness',desc:`Average brightness is ${Math.round(analysis.avgBrightness)}/255 — this will look muddy on mobile. Lift shadows and midtones.`,action:'auto_brighten',actionLabel:'Auto Brighten'});
-    } else if(analysis.avgBrightness>220){
-      recs.push({id:'darken',icon:'🌙',title:'Too Bright — Add Depth',desc:'The image is washed out. Add contrast or darken shadows to create visual depth.',action:'auto_contrast',actionLabel:'Add Contrast'});
-    }
-    if(analysis.contrast<35){
-      recs.push({id:'contrast',icon:'⚡',title:'Increase Contrast',desc:'Low contrast makes thumbnails blend in with other videos. Boost the difference between lights and darks.',action:'auto_contrast',actionLabel:'Boost Contrast'});
-    }
-    if(analysis.avgSaturation<0.2){
-      recs.push({id:'saturate',icon:'🎨',title:'Boost Color Saturation',desc:'Colors look muted. Punch up the saturation to make this pop in search results.',action:'auto_saturate',actionLabel:'Boost Colors'});
-    } else if(analysis.avgSaturation>0.7){
-      recs.push({id:'desaturate',icon:'🎨',title:'Oversaturated',desc:'Colors are very intense — this might look unnatural. Consider dialing saturation back slightly.',action:'auto_desaturate',actionLabel:'Tone Down'});
-    }
-    if(!analysis.hasLargeText){
-      recs.push({id:'text',icon:'🔤',title:'Add Bold Text',desc:"No large text detected. Thumbnails with 1–3 bold words get higher CTR. Use the Text tool to add a title.",action:null,actionLabel:null});
-    }
-    if(!analysis.correctSize){
-      recs.push({id:'size',icon:'📐',title:'Wrong Dimensions',desc:`Image is ${analysis.width}×${analysis.height}. YouTube thumbnails should be 1280×720 for best quality.`,action:null,actionLabel:null});
-    }
-    if(analysis.edgeDensity>0.3){
-      recs.push({id:'busy',icon:'👁️',title:'Too Visually Busy',desc:'Lots of detail competing for attention. Add a vignette to darken the edges and draw focus to the center.',action:'auto_vignette',actionLabel:'Add Vignette'});
-    }
-    if(recs.length===0){
-      recs.push({id:'good',icon:'✅',title:'Looking Good',desc:"Brightness, contrast, and saturation are all in a solid range. Consider adding bold text if you haven't already.",action:null,actionLabel:null});
-    }
-    return recs.slice(0,4);
-  }
-
-  function _calculateCTRScore(analysis){
-    let score=30;
-    if(analysis.avgBrightness>=60&&analysis.avgBrightness<=200) score+=15;
-    if(analysis.contrast>=35) score+=15;
-    if(analysis.avgSaturation>=0.2&&analysis.avgSaturation<=0.7) score+=10;
-    if(analysis.hasLargeText) score+=15;
-    if(analysis.correctSize) score+=5;
-    if(analysis.edgeDensity<0.3) score+=10;
-    return Math.min(100,score);
-  }
-
+  // ── Automation Pipeline — ThumbnailAnalyzer + ThumbnailEnhancer ─────────
   function runAutoAnalysis(imageDataUrl){
     setAutoPanel(true);
     setAutoLoading(true);
     setAutoRecs([]);
     setAutoMetrics(null);
     setAutoDismissed(new Set());
-    // Use setTimeout to let loading state render before the synchronous pixel loop
-    setTimeout(()=>{
+    setAutoPreviewUrl(imageDataUrl);
+    setTimeout(async ()=>{
       try{
-        const img=new Image();
-        img.onload=()=>{
-          const c=document.createElement('canvas');
-          c.width=img.naturalWidth; c.height=img.naturalHeight;
-          const ctx=c.getContext('2d');
-          ctx.drawImage(img,0,0);
-          const imageData=ctx.getImageData(0,0,c.width,c.height);
-          const analysis=_analyzeImageData(imageData);
-          const recs=_generateRecommendations(analysis);
-          const ctrScore=_calculateCTRScore(analysis);
-          setAutoRecs(recs);
-          setAutoMetrics({ctrScore,analysis});
-          setAutoLoading(false);
-        };
-        img.onerror=()=>{
-          console.error('[AUTO-ANALYZE] Image load failed');
-          setAutoPanel(false);
-          setAutoLoading(false);
-        };
-        img.src=imageDataUrl;
+        const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=imageDataUrl;});
+        const c=document.createElement('canvas');
+        c.width=img.naturalWidth; c.height=img.naturalHeight;
+        c.getContext('2d').drawImage(img,0,0);
+        const result=await runThumbnailAnalysis(c);
+        setAutoRecs(result.recommendations);
+        setAutoMetrics(result);
       }catch(err){
         console.error('[AUTO-ANALYZE]',err);
         setAutoPanel(false);
+      }finally{
         setAutoLoading(false);
       }
     },50);
   }
 
-  // Apply a pixel-level action to the first visible image layer, then re-analyze
   async function applyAutoAction(action){
+    if(action==='show_safe_zones'){ setShowSafeZones(true); return; }
+
     const imgLayer=layers.find(l=>l.type==='image'&&!l.hidden);
     if(!imgLayer?.src) return;
+
     const img=await new Promise((res,rej)=>{
       const i=new Image(); i.crossOrigin='Anonymous';
       i.onload=()=>res(i); i.onerror=rej; i.src=imgLayer.src;
     });
     const c=document.createElement('canvas');
     c.width=img.naturalWidth; c.height=img.naturalHeight;
-    const ctx=c.getContext('2d');
-    ctx.drawImage(img,0,0);
-    const imageData=ctx.getImageData(0,0,c.width,c.height);
-    const d=imageData.data;
+    c.getContext('2d').drawImage(img,0,0);
 
-    if(action==='auto_brighten'){
-      for(let i=0;i<d.length;i+=4){
-        d[i]  =Math.min(255,d[i]  +40);
-        d[i+1]=Math.min(255,d[i+1]+40);
-        d[i+2]=Math.min(255,d[i+2]+40);
-      }
-    } else if(action==='auto_contrast'){
-      // Compute mean luma, then stretch contrast around it
-      let mean=0;
-      for(let i=0;i<d.length;i+=4) mean+=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114);
-      mean/=(d.length/4);
-      const factor=1.4;
-      for(let i=0;i<d.length;i+=4){
-        d[i]  =Math.min(255,Math.max(0,Math.round((d[i]  -mean)*factor+mean)));
-        d[i+1]=Math.min(255,Math.max(0,Math.round((d[i+1]-mean)*factor+mean)));
-        d[i+2]=Math.min(255,Math.max(0,Math.round((d[i+2]-mean)*factor+mean)));
-      }
-    } else if(action==='auto_saturate'||action==='auto_desaturate'){
-      const delta=action==='auto_saturate'?0.25:-0.2;
-      for(let i=0;i<d.length;i+=4){
-        // RGB → HSL → tweak S → HSL → RGB
-        const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255;
-        const max=Math.max(r,g,b),min=Math.min(r,g,b);
-        const l=(max+min)/2;
-        if(max===min){continue;} // achromatic
-        const s=l>0.5?(max-min)/(2-max-min):(max-min)/(max+min);
-        const ns=Math.min(1,Math.max(0,s+delta));
-        // back to RGB via hue
-        const hue60=max===r?((g-b)/(max-min)%6):max===g?((b-r)/(max-min)+2):((r-g)/(max-min)+4);
-        const h=(hue60/6+1)%1;
-        const q=l<0.5?l*(1+ns):l+ns-l*ns;
-        const p2=2*l-q;
-        const hq=(hv)=>{
-          const hh=((hv%1)+1)%1;
-          if(hh<1/6) return p2+(q-p2)*6*hh;
-          if(hh<1/2) return q;
-          if(hh<2/3) return p2+(q-p2)*(2/3-hh)*6;
-          return p2;
-        };
-        d[i]  =Math.round(hq(h+1/3)*255);
-        d[i+1]=Math.round(hq(h)*255);
-        d[i+2]=Math.round(hq(h-1/3)*255);
-      }
-    } else if(action==='auto_vignette'){
-      const W=c.width,H=c.height,cx=W/2,cy=H/2,maxD=Math.sqrt(cx*cx+cy*cy);
-      for(let y=0;y<H;y++){
-        for(let x=0;x<W;x++){
-          const idx=(y*W+x)*4;
-          const dist=Math.sqrt((x-cx)**2+(y-cy)**2);
-          const t=dist/maxD; // 0 center, 1 corner
-          const darken=t>0.5?((t-0.5)/0.5)*0.55:0; // fade in from 50% radius
-          d[idx]  =Math.round(d[idx]  *(1-darken));
-          d[idx+1]=Math.round(d[idx+1]*(1-darken));
-          d[idx+2]=Math.round(d[idx+2]*(1-darken));
-        }
-      }
-    }
+    const actionMap={
+      auto_brighten:     autoBrighten,
+      auto_darken:       autoContrast,
+      auto_contrast:     autoContrast,
+      auto_saturate:     autoSaturate,
+      auto_desaturate:   autoDesaturate,
+      auto_vignette:     autoVignette,
+      auto_white_balance:autoWhiteBalance,
+      gaming_enhance:    gamingEnhance,
+    };
+    const fn=actionMap[action];
+    if(!fn) return;
+    fn(c);
 
-    ctx.putImageData(imageData,0,0);
     const newSrc=c.toDataURL('image/png');
     updateLayer(imgLayer.id,{src:newSrc});
-    // Re-analyze with new pixel data
-    runAutoAnalysis(newSrc);
+    setAutoPreviewUrl(newSrc);
+
+    // Debounced re-analysis
+    clearTimeout(autoAnalysisDebounceRef.current);
+    autoAnalysisDebounceRef.current=setTimeout(()=>runAutoAnalysis(newSrc),1000);
   }
 
   async function runAutoFix(){
     setAutoFixRunning(true);
     try{
-      const actionableRecs=autoRecs.filter(r=>!autoDismissed.has(r.id)&&r.action&&r.action!==null);
-      for(const rec of actionableRecs){
-        await applyAutoAction(rec.action);
-        await new Promise(r=>setTimeout(r,120));
-      }
+      const imgLayer=layers.find(l=>l.type==='image'&&!l.hidden);
+      if(!imgLayer?.src){showToastMsg('No image layer found','error');return;}
+      const img=await new Promise((res,rej)=>{
+        const i=new Image();i.crossOrigin='Anonymous';i.onload=()=>res(i);i.onerror=rej;i.src=imgLayer.src;
+      });
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth; c.height=img.naturalHeight;
+      c.getContext('2d').drawImage(img,0,0);
+      const fixable=autoRecs.filter(r=>!autoDismissed.has(r.id)&&r.action&&!['show_safe_zones','crop_to_face','resize_canvas'].includes(r.action));
+      autoFixAll(c,fixable);
+      const newSrc=c.toDataURL('image/png');
+      updateLayer(imgLayer.id,{src:newSrc});
+      setAutoPreviewUrl(newSrc);
       showToastMsg('Auto-fix applied ✓','success');
+      // Re-analyze after a beat
+      clearTimeout(autoAnalysisDebounceRef.current);
+      autoAnalysisDebounceRef.current=setTimeout(()=>runAutoAnalysis(newSrc),1000);
       setAutoPanel(false);
     }catch(err){
       console.error('[AUTO-FIX]',err);
@@ -15128,118 +15004,193 @@ PHASE 4 — Toolbar button:
       )}
 
       {/* ── Automation Recommendation Panel ─────────────────────────────── */}
-      {autoPanel && (
+      {autoPanel && (()=>{
+        const score = autoMetrics?.ctrScore?.overall ?? autoMetrics?.ctrScore ?? null;
+        const scoreColor = score!=null ? (score>=85?'#4ade80':score>=70?'#22d3ee':score>=50?'#fbbf24':score>=30?'#fb923c':'#ef4444') : '#888';
+        const scoreLabel = score!=null ? (score>=85?'Excellent':score>=70?'Strong':score>=50?'Good Start':score>=30?'Needs Work':'Major Issues') : '';
+        const breakdown = autoMetrics?.ctrScore?.breakdown;
+        const bdEntries = breakdown ? [
+          {key:'technical',   label:'Technical',   max:25},
+          {key:'subject',     label:'Subject',     max:25},
+          {key:'textClarity', label:'Text',        max:20},
+          {key:'composition', label:'Composition', max:15},
+          {key:'colorImpact', label:'Color',       max:15},
+        ] : [];
+        // SVG arc gauge
+        const R=32, circ=2*Math.PI*R, pct=(score??0)/100;
+        const visibleRecs = autoRecs.filter(r=>!autoDismissed.has(r.id));
+        const actionableCount = autoRecs.filter(r=>!autoDismissed.has(r.id)&&!!r.action&&!['show_safe_zones'].includes(r.action)).length;
+        return (
         <div style={{
           position:'fixed', top:0, right:0, bottom:0, width:340,
-          background:'#1a1a2e', borderLeft:'1px solid rgba(255,255,255,0.08)',
+          background:'#131320', borderLeft:'1px solid rgba(255,255,255,0.07)',
           zIndex:1200, display:'flex', flexDirection:'column',
-          boxShadow:'-8px 0 40px rgba(0,0,0,0.5)',
+          boxShadow:'-8px 0 40px rgba(0,0,0,0.6)',
           animation:'tf-auto-slide 0.28s ease-out',
           fontFamily:'inherit',
         }}>
           <style>{`@keyframes tf-auto-slide{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}`}</style>
+
           {/* Header */}
-          <div style={{padding:'16px 20px', borderBottom:'1px solid rgba(255,255,255,0.08)', display:'flex', alignItems:'center', gap:10, flexShrink:0}}>
-            <div style={{fontSize:20}}>✨</div>
+          <div style={{padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.07)', display:'flex', alignItems:'center', gap:10, flexShrink:0}}>
             <div style={{flex:1}}>
-              <div style={{fontSize:14, fontWeight:700, color:'#fff'}}>Image Analysis</div>
-              {autoMetrics?.ctrScore!=null && (
-                <div style={{fontSize:11, color:'rgba(255,255,255,0.4)', marginTop:2}}>
-                  CTR score: <span style={{color: autoMetrics.ctrScore>=70?'#4ade80':autoMetrics.ctrScore>=45?'#fbbf24':'#f87171', fontWeight:700}}>{autoMetrics.ctrScore}/100</span>
+              <div style={{fontSize:13, fontWeight:700, color:'#fff'}}>Image Analysis</div>
+              {autoMetrics?.details?.nicheAnalysis && (
+                <div style={{fontSize:10, color:'rgba(255,255,255,0.3)', marginTop:1}}>
+                  Detected: {autoMetrics.details.nicheAnalysis.label}
                 </div>
               )}
             </div>
-            <button
-              onClick={()=>setAutoPanel(false)}
-              style={{background:'transparent',border:'none',color:'rgba(255,255,255,0.4)',cursor:'pointer',fontSize:18,padding:'4px 6px',borderRadius:6,lineHeight:1}}
-              title="Close"
-            >×</button>
+            <button onClick={()=>setAutoPanel(false)}
+              style={{background:'transparent',border:'none',color:'rgba(255,255,255,0.35)',cursor:'pointer',fontSize:18,padding:'4px 6px',borderRadius:6,lineHeight:1}}>×</button>
           </div>
 
-          {/* Body */}
-          <div style={{flex:1, overflowY:'auto', padding:'12px 16px', display:'flex', flexDirection:'column', gap:10}}>
+          {/* Body — scrollable */}
+          <div style={{flex:1, overflowY:'auto', padding:'12px 14px', display:'flex', flexDirection:'column', gap:10}}>
             {autoLoading ? (
-              <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:16, color:'rgba(255,255,255,0.5)'}}>
-                <div style={{width:40, height:40, borderRadius:'50%', border:'3px solid rgba(249,115,22,0.3)', borderTopColor:'#f97316', animation:'editor-spin 0.8s linear infinite'}} />
-                <div style={{fontSize:13, textAlign:'center', lineHeight:1.5}}>Analyzing pixels…<br/><span style={{fontSize:11}}>Checking brightness, contrast & saturation</span></div>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flex:1,gap:16,color:'rgba(255,255,255,0.4)',padding:'40px 0'}}>
+                <div style={{width:40,height:40,borderRadius:'50%',border:'3px solid rgba(249,115,22,0.25)',borderTopColor:'#f97316',animation:'editor-spin 0.8s linear infinite'}}/>
+                <div style={{fontSize:12,textAlign:'center',lineHeight:1.6}}>
+                  Analyzing image…<br/>
+                  <span style={{fontSize:10,color:'rgba(255,255,255,0.25)'}}>Running pixel analysis + face detection</span>
+                </div>
               </div>
             ) : (
               <>
-                {autoRecs.filter(r=>!autoDismissed.has(r.id)).map(rec=>(
-                  <div key={rec.id} style={{
-                    background:'rgba(255,255,255,0.04)', borderRadius:10,
-                    border:'1px solid rgba(255,255,255,0.08)', padding:'12px 14px',
-                    display:'flex', flexDirection:'column', gap:8,
-                  }}>
-                    <div style={{display:'flex', alignItems:'flex-start', gap:10}}>
-                      <div style={{fontSize:20, flexShrink:0, lineHeight:1, marginTop:1}}>{rec.icon}</div>
+                {/* CTR Gauge + Breakdown */}
+                {score!=null && (
+                  <div style={{background:'rgba(255,255,255,0.03)',borderRadius:10,border:'1px solid rgba(255,255,255,0.06)',padding:'14px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:14}}>
+                      {/* SVG Arc Gauge */}
+                      <svg width={80} height={80} viewBox="0 0 80 80" style={{flexShrink:0}}>
+                        <circle cx={40} cy={40} r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={7}/>
+                        <circle cx={40} cy={40} r={R} fill="none" stroke={scoreColor} strokeWidth={7}
+                          strokeDasharray={`${circ*pct} ${circ*(1-pct)}`}
+                          strokeLinecap="round"
+                          transform="rotate(-90 40 40)"
+                          style={{transition:'stroke-dasharray 0.6s ease'}}/>
+                        <text x={40} y={37} textAnchor="middle" fill="#fff" fontSize={16} fontWeight={700}>{score}</text>
+                        <text x={40} y={50} textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize={8}>/100</text>
+                      </svg>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:13, fontWeight:700, color:'#fff', lineHeight:1.3}}>{rec.title}</div>
-                        <div style={{fontSize:11, color:'rgba(255,255,255,0.5)', marginTop:4, lineHeight:1.5}}>{rec.desc}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:scoreColor,marginBottom:6}}>{scoreLabel}</div>
+                        {bdEntries.map(({key,label,max})=>{
+                          const val=breakdown[key]??0;
+                          const pctBar=val/max;
+                          return (
+                            <div key={key} style={{marginBottom:4}}>
+                              <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                                <span style={{fontSize:9,color:'rgba(255,255,255,0.35)'}}>{label}</span>
+                                <span style={{fontSize:9,color:'rgba(255,255,255,0.4)'}}>{val}/{max}</span>
+                              </div>
+                              <div style={{height:3,borderRadius:2,background:'rgba(255,255,255,0.06)'}}>
+                                <div style={{height:'100%',borderRadius:2,background:pctBar>=0.7?'#4ade80':pctBar>=0.4?'#fbbf24':'#f87171',width:`${pctBar*100}%`,transition:'width 0.5s ease'}}/>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                    {(rec.action || rec.id==='good') ? (
-                      <div style={{display:'flex', gap:8, marginTop:2}}>
-                        {rec.action && (
-                          <button
-                            onClick={async()=>{
-                              setAutoDismissed(prev=>new Set([...prev,rec.id]));
-                              await applyAutoAction(rec.action);
-                              showToastMsg(`${rec.title} applied ✓`,'success');
-                            }}
-                            style={{flex:1, padding:'7px 10px', borderRadius:7, border:'none', background:'#f97316', color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer'}}
-                          >{rec.actionLabel}</button>
-                        )}
-                        <button
-                          onClick={()=>setAutoDismissed(prev=>new Set([...prev,rec.id]))}
-                          style={{padding:'7px 10px', borderRadius:7, border:'1px solid rgba(255,255,255,0.12)', background:'transparent', color:'rgba(255,255,255,0.4)', fontSize:11, cursor:'pointer'}}
-                        >Dismiss</button>
-                      </div>
-                    ) : (
-                      <div style={{display:'flex', gap:8, marginTop:2}}>
-                        <button
-                          onClick={()=>setAutoDismissed(prev=>new Set([...prev,rec.id]))}
-                          style={{padding:'7px 10px', borderRadius:7, border:'1px solid rgba(255,255,255,0.12)', background:'transparent', color:'rgba(255,255,255,0.4)', fontSize:11, cursor:'pointer'}}
-                        >Dismiss</button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {autoRecs.filter(r=>!autoDismissed.has(r.id)).length===0 && (
-                  <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:12, color:'rgba(255,255,255,0.4)', padding:'32px 0'}}>
-                    <div style={{fontSize:32}}>🎉</div>
-                    <div style={{fontSize:13, textAlign:'center'}}>All recommendations dismissed.</div>
                   </div>
                 )}
+
+                {/* Recommendation Cards */}
+                {visibleRecs.map(rec=>(
+                  <div key={rec.id} style={{
+                    background:'rgba(255,255,255,0.03)',borderRadius:9,
+                    border:'1px solid rgba(255,255,255,0.07)',padding:'11px 13px',
+                    display:'flex',flexDirection:'column',gap:7,
+                  }}>
+                    <div style={{display:'flex',alignItems:'flex-start',gap:9}}>
+                      <div style={{fontSize:18,flexShrink:0,lineHeight:1,marginTop:1}}>{rec.icon}</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,fontWeight:700,color:'#fff',lineHeight:1.3,display:'flex',alignItems:'center',gap:6}}>
+                          {rec.title}
+                          {rec.impact==='high' && <span style={{fontSize:8,padding:'1px 5px',borderRadius:3,background:'rgba(249,115,22,0.2)',color:'#f97316',fontWeight:600}}>HIGH</span>}
+                        </div>
+                        <div style={{fontSize:10,color:'rgba(255,255,255,0.4)',marginTop:3,lineHeight:1.5}}>{rec.desc}</div>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:6,marginTop:1}}>
+                      {rec.action && (
+                        <button
+                          onClick={async()=>{
+                            setAutoDismissed(prev=>new Set([...prev,rec.id]));
+                            await applyAutoAction(rec.action);
+                            if(rec.action!=='show_safe_zones') showToastMsg(`${rec.title} applied ✓`,'success');
+                          }}
+                          style={{flex:1,padding:'6px 10px',borderRadius:6,border:'none',background:'#f97316',color:'#fff',fontSize:10,fontWeight:700,cursor:'pointer'}}
+                        >{rec.actionLabel}</button>
+                      )}
+                      <button
+                        onClick={()=>setAutoDismissed(prev=>new Set([...prev,rec.id]))}
+                        style={{padding:'6px 10px',borderRadius:6,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:'rgba(255,255,255,0.35)',fontSize:10,cursor:'pointer'}}
+                      >Dismiss</button>
+                    </div>
+                  </div>
+                ))}
+
+                {visibleRecs.length===0 && !autoLoading && (
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,color:'rgba(255,255,255,0.35)',padding:'32px 0'}}>
+                    <div style={{fontSize:28}}>🎉</div>
+                    <div style={{fontSize:12,textAlign:'center'}}>All recommendations dismissed.</div>
+                  </div>
+                )}
+
+                {/* ── Device Preview ── */}
+                <div style={{borderRadius:9,overflow:'hidden',border:'1px solid rgba(255,255,255,0.07)'}}>
+                  <button
+                    onClick={()=>setAutoShowDevicePreview(v=>!v)}
+                    style={{width:'100%',padding:'10px 13px',background:'rgba(255,255,255,0.03)',border:'none',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',color:'rgba(255,255,255,0.5)',fontSize:11,fontWeight:600}}
+                  >
+                    <span>📱 Device Preview</span>
+                    <span style={{fontSize:9}}>{autoShowDevicePreview?'▲':'▼'}</span>
+                  </button>
+                  {autoShowDevicePreview && (
+                    <div style={{padding:'0 8px 8px'}}>
+                      <DevicePreview canvasDataUrl={autoPreviewUrl} visible={true}/>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Color Blind Simulator ── */}
+                <div style={{borderRadius:9,overflow:'hidden',border:'1px solid rgba(255,255,255,0.07)'}}>
+                  <button
+                    onClick={()=>setAutoShowColorBlind(v=>!v)}
+                    style={{width:'100%',padding:'10px 13px',background:'rgba(255,255,255,0.03)',border:'none',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',color:'rgba(255,255,255,0.5)',fontSize:11,fontWeight:600}}
+                  >
+                    <span>👁 Color Blind Preview</span>
+                    <span style={{fontSize:9}}>{autoShowColorBlind?'▲':'▼'}</span>
+                  </button>
+                  {autoShowColorBlind && (
+                    <div style={{padding:'0 8px 8px'}}>
+                      <ColorBlindSimulator canvasDataUrl={autoPreviewUrl} visible={true}/>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
 
-          {/* Footer — Auto-Fix Everything */}
-          {!autoLoading && autoRecs.filter(r=>!autoDismissed.has(r.id)&&!!r.action).length>0 && (
-            <div style={{padding:'12px 16px', borderTop:'1px solid rgba(255,255,255,0.08)', flexShrink:0}}>
-              <button
-                onClick={runAutoFix}
-                disabled={autoFixRunning}
-                style={{
-                  width:'100%', padding:'11px 16px', borderRadius:9, border:'none',
-                  background: autoFixRunning ? 'rgba(249,115,22,0.3)' : 'linear-gradient(135deg,#f97316,#fb923c)',
-                  color:'#fff', fontSize:13, fontWeight:700, cursor: autoFixRunning ? 'not-allowed' : 'pointer',
-                  display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-                }}
-              >
+          {/* Footer */}
+          {!autoLoading && actionableCount>0 && (
+            <div style={{padding:'10px 14px',borderTop:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
+              <button onClick={runAutoFix} disabled={autoFixRunning} style={{
+                width:'100%',padding:'10px 14px',borderRadius:8,border:'none',
+                background:autoFixRunning?'rgba(249,115,22,0.25)':'linear-gradient(135deg,#f97316,#fb923c)',
+                color:'#fff',fontSize:12,fontWeight:700,cursor:autoFixRunning?'not-allowed':'pointer',
+                display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+              }}>
                 {autoFixRunning
-                  ? <><div style={{width:14,height:14,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'#fff',animation:'editor-spin 0.8s linear infinite'}} />Applying fixes…</>
-                  : '✨ Auto-Fix Everything'
+                  ? <><div style={{width:13,height:13,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'#fff',animation:'editor-spin 0.8s linear infinite'}}/>Applying fixes…</>
+                  : `✨ Auto-Fix Everything (${actionableCount})`
                 }
               </button>
-              <div style={{fontSize:10,color:'rgba(255,255,255,0.25)',textAlign:'center',marginTop:6}}>
-                {autoRecs.filter(r=>!autoDismissed.has(r.id)&&!!r.action).length} fix{autoRecs.filter(r=>!autoDismissed.has(r.id)&&!!r.action).length!==1?'es':''} queued
-              </div>
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Toast Notification */}
       {showToast && (
