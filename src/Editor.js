@@ -2143,7 +2143,6 @@ PHASE 4 — Toolbar button:
 
   const selectedLayer   = selectedId ? findInTree(layers,selectedId) : null;
   const bg              = layers.find(l=>l.type==='background');
-  const currentUserId   = user?.id;
   const canvasFilter    = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
   const RETOUCH_TOOLS = ['dodge','burn','smudge','blur-brush','sharpen-brush'];
   const canDrag         = activeTool!=='brush' && activeTool!=='rimlight' && activeTool!=='zoom' && !RETOUCH_TOOLS.includes(activeTool);
