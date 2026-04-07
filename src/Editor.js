@@ -4890,27 +4890,21 @@ PHASE 4 — Toolbar button:
   // ── Feature J: Niche setter ───────────────────────────────────────────────
   async function setNiche(niche){
     setNicheSaving(true);
+    // Always save locally and close — API is fire-and-forget
+    setUserNicheState(niche);
+    localStorage.setItem('tf_niche',niche);
     try{
       const { data: { session } } = await supabase.auth.getSession();
       const tok = session?.access_token;
-      // H7: null guard — don't call API without a token
-      if(!tok){
-        setCmdLog('Please log in to set your niche.');
-        setNicheSaving(false);
-        return;
+      if(tok){
+        fetch(`${resolvedApiUrl}/api/set-niche`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
+          body:JSON.stringify({niche}),
+        }).catch(()=>{});
       }
-      const res=await fetch(`${resolvedApiUrl}/api/set-niche`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
-        body:JSON.stringify({niche}),
-      });
-      const data=await res.json();
-      if(data.success){
-        setUserNicheState(niche);
-        localStorage.setItem('tf_niche',niche);
-        setNicheOnboarding(false);
-      }
-    } catch(e){ /* niche set failed, leave modal open */ }
+    } catch(e){}
+    setNicheOnboarding(false);
     setNicheSaving(false);
   }
 
