@@ -44,6 +44,27 @@ function SpaceCanvas() {
       ph: Math.random() * Math.PI * 2,
     }));
 
+    // Layer 4b — ambient drifting starfield (orange + white, 100 stars)
+    const driftStars = Array.from({ length: 100 }, () => {
+      const isOrange = Math.random() < 0.38;
+      const pick = Math.random();
+      const [cr, cg, cb] = isOrange
+        ? (pick < 0.5 ? [255, 106,  0] : [255, 140, 51])   // #ff6a00 / #ff8c33
+        : (pick < 0.5 ? [255, 255, 255] : [224, 224, 224]); // #ffffff / #e0e0e0
+      const speed = 0.1 + Math.random() * 0.4;
+      const angle = Math.random() * Math.PI * 2;
+      return {
+        x:  Math.random() * W,
+        y:  Math.random() * H,
+        r:  0.5 + Math.random() * 1.0,          // 0.5–1.5px radius → 1–3px diameter
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        ph: Math.random() * Math.PI * 2,
+        ts: 0.4 + Math.random() * 0.8,          // twinkle speed
+        cr, cg, cb,
+      };
+    });
+
     // Layer 1+3 — spiral particles (3 arms × 200)
     const particles = [];
     const ARMS = 3;
@@ -88,6 +109,21 @@ function SpaceCanvas() {
         ctx.beginPath();
         ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(255,200,150,${a})`;
+        ctx.fill();
+      });
+
+      // Layer 4b — drifting ambient starfield
+      driftStars.forEach(s => {
+        s.x += s.vx;
+        s.y += s.vy;
+        if (s.x < -3) s.x = W + 3;
+        else if (s.x > W + 3) s.x = -3;
+        if (s.y < -3) s.y = H + 3;
+        else if (s.y > H + 3) s.y = -3;
+        const a = 0.65 + 0.35 * Math.sin(time * s.ts + s.ph); // oscillates 0.3–1.0
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${s.cr},${s.cg},${s.cb},${a})`;
         ctx.fill();
       });
 
