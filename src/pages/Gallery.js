@@ -220,7 +220,7 @@ export default function Gallery({ setPage }) {
   useEffect(() => {
     if (!user) return;
     setProjLoading(true);
-    db.projects.orderBy('updatedAt').reverse().toArray()
+    db.projects.where('userId').equals(user.id).reverse().sortBy('updatedAt')
       .then((rows) => { setProjects(rows); setProjLoading(false); })
       .catch(() => setProjLoading(false));
   }, [user]);

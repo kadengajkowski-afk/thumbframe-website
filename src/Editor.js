@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, memo, lazy, Suspense } from 'react';
+import { handleUpgrade } from './utils/checkout';
 import BrushTool, { BrushOverlay } from './Brush';
 import supabase from './supabaseClient';
 import { createSaveEngine } from './saveEngine';
@@ -1879,6 +1880,7 @@ PHASE 4 — Toolbar button:
     saturation,
     strokeColor,
     textColor,
+    userId: user?.id || null,
   };
 
   const buildProjectSnapshot = useCallback((layerSnapshot = layersRef.current)=>(
@@ -2312,13 +2314,9 @@ PHASE 4 — Toolbar button:
             : Promise.resolve({ data: null, error: null }),
           // 2. Brand kit
           supabase.from('brand_kits').select('*').eq('user_id', safeUser.id).limit(1),
-          // 3. Pro profile — try by UUID first, fall back to email if schema uses bigint id
-          safeUser?.id
-            ? supabase.from('profiles').select('is_pro').eq('id', safeUser.id).maybeSingle()
-                .then(r => {
-                  if(r.error){ console.warn('[BOOTSTRAP] profiles by id error:',r.error.message,'— retrying by email'); return supabase.from('profiles').select('is_pro').ilike('email',safeUser.email).maybeSingle(); }
-                  return r;
-                })
+          // 3. Pro profile — query by email (avoids bigint vs UUID mismatch)
+          safeUser?.email
+            ? supabase.from('profiles').select('is_pro').eq('email', safeUser.email).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
         ]);
 
@@ -6788,16 +6786,7 @@ PHASE 4 — Toolbar button:
       const isActuallyPro = wantsProDownload && hasProAccess;
 
       if(wantsProDownload && !hasProAccess){
-        supabase.auth.getSession().then(({data:{session:ckSess}})=>{
-          fetch(`${resolvedApiUrl}/checkout`,{
-            method:'POST',
-            headers:{'Content-Type':'application/json','Authorization':`Bearer ${ckSess?.access_token}`},
-            body:JSON.stringify({email: user?.email, plan:'pro'}),
-          }).then(r=>r.json()).then(d=>{
-            if(d?.url)window.location.href=d.url;
-            else alert('Upgrade to Pro to unlock 4K downloads.');
-          }).catch(()=>alert('Upgrade to Pro to unlock 4K downloads.'));
-        });
+        handleUpgrade();
         return;
       }
 
@@ -8771,13 +8760,7 @@ PHASE 4 — Toolbar button:
               setShowAlreadyPro(true);
               return;
             }
-            supabase.auth.getSession().then(({data:{session:ckSess2}})=>{
-              fetch(`${resolvedApiUrl}/checkout`,{
-                method:'POST',
-                headers:{'Content-Type':'application/json','Authorization':`Bearer ${ckSess2?.access_token}`},
-                body:JSON.stringify({email: user?.email, plan:'pro'}),
-              }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
-            });
+            handleUpgrade();
           }}
             style={{
               padding:'6px 13px',borderRadius:7,
@@ -11662,7 +11645,7 @@ PHASE 4 — Toolbar button:
                     <div style={{fontSize:30,marginBottom:10}}>⊕</div>
                     <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Pro Feature</div>
                     <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Invite team members, share projects, leave canvas comments, and track approval status — all in one workspace.</div>
-                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({email:user?.email,plan:'pro'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
+                    <button onClick={handleUpgrade} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
                   </div>
                 </div>
               );
@@ -11725,7 +11708,7 @@ PHASE 4 — Toolbar button:
                     <div style={{fontSize:30,marginBottom:10}}>⊘</div>
                     <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Pro Feature</div>
                     <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Save named snapshots of your canvas and roll back to any previous version instantly.</div>
-                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({email:user?.email,plan:'pro'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
+                    <button onClick={handleUpgrade} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
                   </div>
                 </div>
               );
@@ -11785,7 +11768,7 @@ PHASE 4 — Toolbar button:
                     <div style={{fontSize:30,marginBottom:10}}>◌</div>
                     <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Pro Feature</div>
                     <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Drop comment pins anywhere on the canvas. Pin positions, reply threads, and resolve status all sync in real time with your team.</div>
-                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({email:user?.email,plan:'pro'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
+                    <button onClick={handleUpgrade} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
                   </div>
                 </div>
               );
@@ -11873,10 +11856,7 @@ PHASE 4 — Toolbar button:
                           ))}
                         </div>
                         <button
-                          onClick={()=>{
-                            fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({email:user?.email,plan:'pro'})})
-                            .then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
-                          }}
+                          onClick={handleUpgrade}
                           style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800',letterSpacing:'0.02em'}}>
                           Upgrade to Pro →
                         </button>
@@ -12088,7 +12068,7 @@ PHASE 4 — Toolbar button:
                     <div style={{fontSize:30,marginBottom:10}}>⚔</div>
                     <div style={{fontSize:14,fontWeight:'800',color:T.text,marginBottom:6}}>Pro Feature</div>
                     <div style={{fontSize:11,color:T.muted,lineHeight:1.7,marginBottom:14}}>Search YouTube to see how your thumbnail stacks up against the competition. Pro and Agency plans only.</div>
-                    <button onClick={()=>{fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({email:user?.email,plan:'pro'})}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});}} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
+                    <button onClick={handleUpgrade} style={{...css.addBtn,marginTop:0,background:'linear-gradient(135deg,#f97316,#ea580c)',fontSize:13,fontWeight:'800'}}>Upgrade to Pro →</button>
                   </div>
                 </div>
               );
@@ -13749,10 +13729,7 @@ PHASE 4 — Toolbar button:
           ⚠ {segmentError}
           {segmentError.toLowerCase().includes('limit')&&(
             <div style={{marginTop:8}}>
-              <button onClick={()=>{
-                fetch(`${resolvedApiUrl}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user?.email,plan:'pro'})})
-                  .then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
-              }} style={{padding:'5px 14px',borderRadius:6,border:'none',background:T.accent,color:'#fff',fontSize:11,cursor:'pointer',fontWeight:'700'}}>
+              <button onClick={handleUpgrade} style={{padding:'5px 14px',borderRadius:6,border:'none',background:T.accent,color:'#fff',fontSize:11,cursor:'pointer',fontWeight:'700'}}>
                 Upgrade →
               </button>
             </div>
@@ -14774,13 +14751,7 @@ PHASE 4 — Toolbar button:
                   setShowAlreadyPro(true);
                   return;
                 }
-                supabase.auth.getSession().then(({data:{session:ckSess3}})=>{
-                  fetch(`${resolvedApiUrl}/checkout`,{
-                    method:'POST',
-                    headers:{'Content-Type':'application/json','Authorization':`Bearer ${ckSess3?.access_token}`},
-                    body:JSON.stringify({email: user?.email, plan:'pro'}),
-                  }).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url;});
-                });
+                handleUpgrade();
               }}
               style={{
                 width:'100%',padding:'14px 24px',borderRadius:10,border:'none',

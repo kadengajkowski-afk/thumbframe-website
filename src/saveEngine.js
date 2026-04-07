@@ -147,7 +147,7 @@ export function createSaveEngine({ getSnapshot, onSaveStart, onSaveEnd, onDirty 
         return;
       }
 
-      const { layers = [], projectId, designName = 'Untitled', ...meta } = snapshot;
+      const { layers = [], projectId, designName = 'Untitled', userId = null, ...meta } = snapshot;
       const id = String(projectId || 'local-draft');
 
       // Split binary blobs out of layers
@@ -165,6 +165,7 @@ export function createSaveEngine({ getSnapshot, onSaveStart, onSaveEnd, onDirty 
         id,
         updatedAt: now,
         name: designName,
+        userId,
         data: { ...meta, layers: cleanLayers, designName },
       });
 
