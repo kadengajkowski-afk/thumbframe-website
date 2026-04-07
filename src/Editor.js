@@ -3,6 +3,7 @@ import { handleUpgrade } from './utils/checkout';
 import { trackEvent } from './utils/analytics';
 import BrushTool, { BrushOverlay } from './Brush';
 import supabase from './supabaseClient';
+import ErrorBoundary from './components/ErrorBoundary';
 import { createSaveEngine } from './saveEngine';
 import { saveAs } from 'file-saver';
 import { renderTextLayer, applyTextTransform } from './textRenderer';
@@ -13082,7 +13083,7 @@ PHASE 4 — Toolbar button:
               </div>
             )}
 
-            {activeTool==='ctr'&&(()=>{
+            {activeTool==='ctr'&&<ErrorBoundary fallbackMessage="CTR panel error">{(()=>{
               const CAT_LABELS={
                 face_prominence:'Face',text_readability:'Text',
                 color_contrast:'Contrast',emotional_intensity:'Emotion',
@@ -13275,7 +13276,7 @@ PHASE 4 — Toolbar button:
                             }}>{checked?'✓':''}</span>
                             <span style={{fontSize:11,color:checked?T.muted:T.text,lineHeight:1.45,
                               textDecoration:checked?'line-through':'none'}}>
-                              {issue}
+                              {typeof issue==='string'?issue:(issue?.title||'')}
                             </span>
                           </button>
                         );
@@ -13295,7 +13296,7 @@ PHASE 4 — Toolbar button:
                           border:`1px solid ${T.success}33`,
                         }}>
                           <span style={{color:T.success,fontSize:12,flexShrink:0,marginTop:1}}>✓</span>
-                          <span style={{fontSize:11,color:T.text,lineHeight:1.45}}>{win}</span>
+                          <span style={{fontSize:11,color:T.text,lineHeight:1.45}}>{typeof win==='string'?win:(win?.title||'')}</span>
                         </div>
                       ))}
                     </div>
@@ -13309,9 +13310,9 @@ PHASE 4 — Toolbar button:
                 </>)}
               </div>
               );
-            })()}
+            })()}</ErrorBoundary>}
 
-            {activeTool==='composition'&&(
+            {activeTool==='composition'&&<ErrorBoundary fallbackMessage="Composition panel error">
               <div>
                 <span style={css.label}>Composition AI</span>
 
@@ -13438,7 +13439,7 @@ PHASE 4 — Toolbar button:
                               fontSize:11,color:checked?T.muted:T.text,
                               lineHeight:1.5,
                               textDecoration:checked?'line-through':'none',
-                            }}>{issue}</span>
+                            }}>{typeof issue==='string'?issue:(issue?.title||'')}</span>
                           </button>
                         );
                       })}
@@ -13473,7 +13474,7 @@ PHASE 4 — Toolbar button:
                   </button>
                 </>)}
               </div>
-            )}
+            </ErrorBoundary>}
 
             {activeTool==='aitext'&&(
               <div>
