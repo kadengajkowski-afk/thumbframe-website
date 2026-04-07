@@ -234,7 +234,9 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     const cx = imgX, cy = imgY;
 
     if (brushType === 'dodge' || brushType === 'burn') {
+      // Photoshop midtones transfer functions (ref: Andy Finnell reverse-engineering)
       const isDodge = brushType === 'dodge';
+      const exp = Math.min(1, exposure * 1.5); // scale exposure for perceptual feel
       const x0 = Math.max(0, Math.floor(cx - radius));
       const y0 = Math.max(0, Math.floor(cy - radius));
       const x1 = Math.min(W - 1, Math.ceil(cx + radius));
@@ -245,16 +247,20 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist > radius) continue;
           const fo = hardness >= 1 ? 1 : Math.max(0, 1 - (Math.max(0, dist / radius - hardness) / (1 - hardness + 0.001)));
-          const s = exposure * fo;
+          const s = exp * fo;
+          if (s <= 0) continue;
           const i = (y * W + x) * 4;
-          if (isDodge) {
-            d[i]   = Math.min(255, d[i]   + (255 - d[i])   * s);
-            d[i+1] = Math.min(255, d[i+1] + (255 - d[i+1]) * s);
-            d[i+2] = Math.min(255, d[i+2] + (255 - d[i+2]) * s);
-          } else {
-            d[i]   = Math.max(0, d[i]   * (1 - s));
-            d[i+1] = Math.max(0, d[i+1] * (1 - s));
-            d[i+2] = Math.max(0, d[i+2] * (1 - s));
+          for (let c = 0; c < 3; c++) {
+            const v = d[i + c] / 255;
+            let nv;
+            if (isDodge) {
+              // Midtones dodge: bell curve peaks at v=0.5, zero effect at v=0 and v=1
+              nv = v + s * 0.3 * Math.sin(v * Math.PI);
+            } else {
+              // Midtones burn: same bell curve, subtractive
+              nv = v - s * 0.3 * Math.sin(v * Math.PI);
+            }
+            d[i + c] = Math.min(255, Math.max(0, Math.round(nv * 255)));
           }
         }
       }
@@ -279,6 +285,9 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
       const wetness = (brushStrength ?? 50) / 100;
       _wetmixDab(strokeCtxRef.current, imgX, imgY, radius, hardness, rgb.r, rgb.g, rgb.b, wetness);
       _syncDirectToMainCanvas();
+      return;
+    } else if (brushType === 'sponge') {
+      _spongeDab(imgX, imgY, radius, hardness, strength * flow * effPressure);
       return;
     }
 
@@ -361,37 +370,82 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     const imgData = strokeImageDataRef.current;
     const W = imgData.width, H = imgData.height;
     const d = imgData.data;
-    const blurR = Math.max(1, Math.round(radius * 0.25));
 
-    const x0 = Math.max(1, Math.floor(cx - radius));
-    const y0 = Math.max(1, Math.floor(cy - radius));
-    const x1 = Math.min(W - 2, Math.ceil(cx + radius));
-    const y1 = Math.min(H - 2, Math.ceil(cy + radius));
-    const src = new Uint8ClampedArray(d);
+    // Dirty-rect: only process the dab bounding box
+    const rx0 = Math.max(0, Math.floor(cx - radius));
+    const ry0 = Math.max(0, Math.floor(cy - radius));
+    const rx1 = Math.min(W - 1, Math.ceil(cx + radius));
+    const ry1 = Math.min(H - 1, Math.ceil(cy + radius));
+    const rW = rx1 - rx0 + 1, rH = ry1 - ry0 + 1;
+    if (rW <= 0 || rH <= 0) return;
 
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        const dx = x - cx, dy = y - cy;
+    // Box blur radius — scales with brush radius; 3 passes approximate Gaussian
+    const blurR = Math.max(1, Math.round(radius * 0.18));
+    const winSize = blurR * 2 + 1;
+
+    // Extract dirty rect into a Float32 buffer for 3-pass blur (avoids clamping between passes)
+    const buf = new Float32Array(rW * rH * 4);
+    for (let y = 0; y < rH; y++) {
+      for (let x = 0; x < rW; x++) {
+        const si = ((ry0 + y) * W + (rx0 + x)) * 4;
+        const bi = (y * rW + x) * 4;
+        buf[bi] = d[si]; buf[bi+1] = d[si+1]; buf[bi+2] = d[si+2]; buf[bi+3] = d[si+3];
+      }
+    }
+
+    // Separable box blur: horizontal pass then vertical pass, repeated 3× (≈ Gaussian)
+    const tmp = new Float32Array(buf.length);
+    for (let pass = 0; pass < 3; pass++) {
+      // Horizontal pass: buf → tmp
+      for (let y = 0; y < rH; y++) {
+        let sR = 0, sG = 0, sB = 0;
+        for (let bx = -blurR; bx <= blurR; bx++) {
+          const sx = Math.max(0, Math.min(rW - 1, bx));
+          const si = (y * rW + sx) * 4;
+          sR += buf[si]; sG += buf[si+1]; sB += buf[si+2];
+        }
+        for (let x = 0; x < rW; x++) {
+          const di = (y * rW + x) * 4;
+          tmp[di] = sR / winSize; tmp[di+1] = sG / winSize; tmp[di+2] = sB / winSize; tmp[di+3] = buf[di+3];
+          const addX = Math.min(rW - 1, x + blurR + 1);
+          const remX = Math.max(0, x - blurR);
+          const addSi = (y * rW + addX) * 4, remSi = (y * rW + remX) * 4;
+          sR += buf[addSi] - buf[remSi]; sG += buf[addSi+1] - buf[remSi+1]; sB += buf[addSi+2] - buf[remSi+2];
+        }
+      }
+      // Vertical pass: tmp → buf
+      for (let x = 0; x < rW; x++) {
+        let sR = 0, sG = 0, sB = 0;
+        for (let by = -blurR; by <= blurR; by++) {
+          const sy = Math.max(0, Math.min(rH - 1, by));
+          const si = (sy * rW + x) * 4;
+          sR += tmp[si]; sG += tmp[si+1]; sB += tmp[si+2];
+        }
+        for (let y = 0; y < rH; y++) {
+          const di = (y * rW + x) * 4;
+          buf[di] = sR / winSize; buf[di+1] = sG / winSize; buf[di+2] = sB / winSize; buf[di+3] = tmp[di+3];
+          const addY = Math.min(rH - 1, y + blurR + 1);
+          const remY = Math.max(0, y - blurR);
+          const addSi = (addY * rW + x) * 4, remSi = (remY * rW + x) * 4;
+          sR += tmp[addSi] - tmp[remSi]; sG += tmp[addSi+1] - tmp[remSi+1]; sB += tmp[addSi+2] - tmp[remSi+2];
+        }
+      }
+    }
+
+    // Write blurred result back, blended by brush-tip falloff
+    for (let y = 0; y < rH; y++) {
+      for (let x = 0; x < rW; x++) {
+        const dx = (rx0 + x) - cx, dy = (ry0 + y) - cy;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > radius) continue;
         const fo = hardness >= 1 ? 1 : Math.max(0, 1 - (dist / radius) ** 1.5);
-        const blend = strength * fo;
+        const blend = Math.min(1, strength * fo);
         if (blend <= 0) continue;
-        let rA = 0, gA = 0, bA = 0, cnt = 0;
-        for (let bj = -blurR; bj <= blurR; bj++) {
-          for (let bi = -blurR; bi <= blurR; bi++) {
-            const sx = Math.max(0, Math.min(W - 1, x + bi));
-            const sy = Math.max(0, Math.min(H - 1, y + bj));
-            const si = (sy * W + sx) * 4;
-            rA += src[si]; gA += src[si+1]; bA += src[si+2]; cnt++;
-          }
-        }
-        if (cnt > 0) {
-          const di = (y * W + x) * 4;
-          d[di]   = Math.round(d[di]   * (1 - blend) + (rA / cnt) * blend);
-          d[di+1] = Math.round(d[di+1] * (1 - blend) + (gA / cnt) * blend);
-          d[di+2] = Math.round(d[di+2] * (1 - blend) + (bA / cnt) * blend);
-        }
+        const di = ((ry0 + y) * W + (rx0 + x)) * 4;
+        const bi = (y * rW + x) * 4;
+        d[di]   = Math.round(d[di]   * (1 - blend) + buf[bi]   * blend);
+        d[di+1] = Math.round(d[di+1] * (1 - blend) + buf[bi+1] * blend);
+        d[di+2] = Math.round(d[di+2] * (1 - blend) + buf[bi+2] * blend);
       }
     }
     strokeCtxRef.current.putImageData(imgData, 0, 0);
@@ -467,46 +521,73 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     _syncDirectToMainCanvas();
   }
 
-  // ── Heal dab: sample surrounding texture and blend it into the dab area ───
+  // ── Heal dab: texture from boundary ring, color from destination ─────────────
+  // Samples the outer boundary ring to compute a color offset, then shifts the
+  // interior pixels toward the surrounding background color — "texture stays,
+  // color adapts." This is the simplified Poisson approximation from the reference.
   function _healDab(ctx, cx, cy, radius, hardness) {
     const r = Math.ceil(radius);
-    const x0 = Math.max(0, cx - r * 2), y0 = Math.max(0, cy - r * 2);
-    const x1 = Math.min(ctx.canvas.width - 1, cx + r * 2);
-    const y1 = Math.min(ctx.canvas.height - 1, cy + r * 2);
+    // Sample area: 2× radius to include boundary ring
+    const x0 = Math.max(0, Math.floor(cx - r * 2));
+    const y0 = Math.max(0, Math.floor(cy - r * 2));
+    const x1 = Math.min(ctx.canvas.width - 1, Math.ceil(cx + r * 2));
+    const y1 = Math.min(ctx.canvas.height - 1, Math.ceil(cy + r * 2));
     const w = x1 - x0 + 1, h = y1 - y0 + 1;
     if (w <= 0 || h <= 0) return;
 
-    const src = ctx.getImageData(x0, y0, w, h);
-    const d = src.data;
+    const idata = ctx.getImageData(x0, y0, w, h);
+    const d = idata.data;
 
+    // Step 1: Sample boundary ring (outermost 20% of radius) for average color
+    const innerR = radius * 0.8, outerR = radius * 1.5;
     let sumR = 0, sumG = 0, sumB = 0, cnt = 0;
     for (let py = 0; py < h; py++) {
       for (let px = 0; px < w; px++) {
         const dx = (x0 + px) - cx, dy = (y0 + py) - cy;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist >= radius && dist <= radius * 1.8) {
+        if (dist >= innerR && dist <= outerR) {
           const i = (py * w + px) * 4;
-          sumR += d[i]; sumG += d[i + 1]; sumB += d[i + 2]; cnt++;
+          sumR += d[i]; sumG += d[i+1]; sumB += d[i+2]; cnt++;
         }
       }
     }
     if (cnt === 0) return;
-    const avgR = sumR / cnt, avgG = sumG / cnt, avgB = sumB / cnt;
+    const bgR = sumR / cnt, bgG = sumG / cnt, bgB = sumB / cnt;
 
+    // Step 2: Average interior (dab center) color — this is what we're replacing
+    let intR = 0, intG = 0, intB = 0, intCnt = 0;
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const dx = (x0 + px) - cx, dy = (y0 + py) - cy;
+        if (Math.sqrt(dx * dx + dy * dy) <= radius * 0.5) {
+          const i = (py * w + px) * 4;
+          intR += d[i]; intG += d[i+1]; intB += d[i+2]; intCnt++;
+        }
+      }
+    }
+    if (intCnt === 0) return;
+    // Color offset: shift interior toward boundary background
+    const offR = bgR - intR / intCnt;
+    const offG = bgG - intG / intCnt;
+    const offB = bgB - intB / intCnt;
+
+    // Step 3: Apply offset to interior pixels, blended by distance from center
     for (let py = 0; py < h; py++) {
       for (let px = 0; px < w; px++) {
         const dx = (x0 + px) - cx, dy = (y0 + py) - cy;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > radius) continue;
-        const falloff = hardness >= 0.99 ? 1 : Math.max(0, 1 - (dist / radius - hardness) / (1 - hardness + 0.001));
-        const strength = falloff * 0.4;
+        // Falloff strongest at center, zero at edge (smooth healing boundary)
+        const t = 1 - dist / radius;
+        const fo = hardness >= 0.99 ? t : t * t;
+        const blend = fo * 0.55;
         const i = (py * w + px) * 4;
-        d[i]     = Math.round(d[i]     * (1 - strength) + avgR * strength);
-        d[i + 1] = Math.round(d[i + 1] * (1 - strength) + avgG * strength);
-        d[i + 2] = Math.round(d[i + 2] * (1 - strength) + avgB * strength);
+        d[i]   = Math.min(255, Math.max(0, Math.round(d[i]   + offR * blend)));
+        d[i+1] = Math.min(255, Math.max(0, Math.round(d[i+1] + offG * blend)));
+        d[i+2] = Math.min(255, Math.max(0, Math.round(d[i+2] + offB * blend)));
       }
     }
-    ctx.putImageData(src, x0, y0);
+    ctx.putImageData(idata, x0, y0);
   }
 
   // ── Wet mix dab: blends brush color with canvas color (wet paint) ─────────
@@ -541,35 +622,139 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     ctx.putImageData(idata, x0, y0);
   }
 
-  // ── Flood fill ────────────────────────────────────────────────────────────
+  // ── Sponge dab: HSL saturation adjustment ────────────────────────────────
+  // Mode toggles via brushStrength polarity: >50 = saturate, <=50 = desaturate.
+  function _spongeDab(cx, cy, radius, hardness, strength) {
+    if (!strokeImageDataRef.current) return;
+    const imgData = strokeImageDataRef.current;
+    const W = imgData.width, H = imgData.height;
+    const d = imgData.data;
+    // strength > 0.5 = saturate, <= 0.5 = desaturate
+    const saturate = strength > 0.5;
+    const s = Math.abs(strength - 0.5) * 2; // remap 0.5-1 → 0-1
+
+    const x0 = Math.max(0, Math.floor(cx - radius));
+    const y0 = Math.max(0, Math.floor(cy - radius));
+    const x1 = Math.min(W - 1, Math.ceil(cx + radius));
+    const y1 = Math.min(H - 1, Math.ceil(cy + radius));
+
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx, dy = y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius) continue;
+        const fo = hardness >= 1 ? 1 : Math.max(0, 1 - dist / radius);
+        const blend = s * fo * 0.4;
+        if (blend <= 0) continue;
+
+        const i = (y * W + x) * 4;
+        const r = d[i] / 255, g = d[i+1] / 255, b = d[i+2] / 255;
+
+        // RGB → HSL
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        const l = (max + min) / 2;
+        const delta = max - min;
+        let h2 = 0, sl = 0;
+        if (delta > 0.0001) {
+          sl = delta / (1 - Math.abs(2 * l - 1));
+          if      (max === r) h2 = ((g - b) / delta) % 6;
+          else if (max === g) h2 = (b - r) / delta + 2;
+          else                h2 = (r - g) / delta + 4;
+          h2 = ((h2 * 60) + 360) % 360;
+        }
+
+        const newSl = saturate
+          ? Math.min(1, sl + blend)
+          : Math.max(0, sl - blend);
+
+        // HSL → RGB
+        const c2 = (1 - Math.abs(2 * l - 1)) * newSl;
+        const x2 = c2 * (1 - Math.abs((h2 / 60) % 2 - 1));
+        const m  = l - c2 / 2;
+        let nr = 0, ng = 0, nb = 0;
+        const sect = Math.floor(h2 / 60);
+        if      (sect === 0) { nr = c2; ng = x2; nb = 0; }
+        else if (sect === 1) { nr = x2; ng = c2; nb = 0; }
+        else if (sect === 2) { nr = 0;  ng = c2; nb = x2; }
+        else if (sect === 3) { nr = 0;  ng = x2; nb = c2; }
+        else if (sect === 4) { nr = x2; ng = 0;  nb = c2; }
+        else                 { nr = c2; ng = 0;  nb = x2; }
+        d[i]   = Math.round((nr + m) * 255);
+        d[i+1] = Math.round((ng + m) * 255);
+        d[i+2] = Math.round((nb + m) * 255);
+      }
+    }
+    strokeCtxRef.current.putImageData(imgData, 0, 0);
+    _syncDirectToMainCanvas();
+  }
+
+  // ── Flood fill: scanline algorithm with Uint32Array (~4× faster than BFS) ──
   function _floodFill(layerCtx, startX, startY, fillR, fillG, fillB, tolerance) {
     const canvas = layerCtx.canvas;
     const W = canvas.width, H = canvas.height;
     const idata = layerCtx.getImageData(0, 0, W, H);
-    const d = idata.data;
-    const si = (Math.floor(startY) * W + Math.floor(startX)) * 4;
-    const tr = d[si], tg = d[si + 1], tb = d[si + 2];
+    const d   = idata.data;
+    const d32 = new Uint32Array(idata.data.buffer); // 4× faster pixel compare
 
-    if (tr === fillR && tg === fillG && tb === fillB) return;
+    const sx = Math.max(0, Math.min(W - 1, Math.floor(startX)));
+    const sy = Math.max(0, Math.min(H - 1, Math.floor(startY)));
+    const seedIdx = sy * W + sx;
 
-    function diff(idx) { return Math.abs(d[idx] - tr) + Math.abs(d[idx + 1] - tg) + Math.abs(d[idx + 2] - tb); }
+    // Target color components (sampled from seed pixel)
+    const tr = d[seedIdx * 4], tg = d[seedIdx * 4 + 1], tb = d[seedIdx * 4 + 2];
 
+    // Fill color as Uint32 in little-endian ABGR layout used by Canvas 2D
+    const fillColor32 = (255 << 24) | (fillB << 16) | (fillG << 8) | fillR;
+
+    // Already the fill color — nothing to do
+    if (d32[seedIdx] === fillColor32) return;
+
+    const tolSq = tolerance * tolerance * 3; // Euclidean³ threshold
+
+    function matches(idx) {
+      const i = idx << 2;
+      const dr = d[i] - tr, dg = d[i + 1] - tg, db = d[i + 2] - tb;
+      return (dr * dr + dg * dg + db * db) <= tolSq;
+    }
+
+    // Scanline stack: each entry is [x, y]
+    const stack = [[sx, sy]];
     const visited = new Uint8Array(W * H);
-    const q = [Math.floor(startY) * W + Math.floor(startX)];
 
-    while (q.length) {
-      const idx = q.pop();
-      if (visited[idx]) continue;
-      if (idx < 0 || idx >= W * H) continue;
-      if (diff(idx * 4) > tolerance * 3) continue;
-      visited[idx] = 1;
-      const i = idx * 4;
-      d[i] = fillR; d[i + 1] = fillG; d[i + 2] = fillB; d[i + 3] = 255;
-      const x = idx % W, y = (idx / W) | 0;
-      if (x > 0) q.push(idx - 1);
-      if (x < W - 1) q.push(idx + 1);
-      if (y > 0) q.push(idx - W);
-      if (y < H - 1) q.push(idx + W);
+    while (stack.length) {
+      let [x, y] = stack.pop();
+
+      // Scan left to find leftmost matching pixel on this row
+      while (x > 0 && !visited[y * W + x - 1] && matches(y * W + x - 1)) x--;
+
+      let spanAbove = false, spanBelow = false;
+
+      // Scan right, filling as we go
+      while (x < W && !visited[y * W + x] && matches(y * W + x)) {
+        const idx = y * W + x;
+        d32[idx] = fillColor32;
+        visited[idx] = 1;
+
+        // Seed span above
+        if (y > 0) {
+          const aIdx = (y - 1) * W + x;
+          if (!visited[aIdx] && matches(aIdx)) {
+            if (!spanAbove) { stack.push([x, y - 1]); spanAbove = true; }
+          } else {
+            spanAbove = false;
+          }
+        }
+        // Seed span below
+        if (y < H - 1) {
+          const bIdx = (y + 1) * W + x;
+          if (!visited[bIdx] && matches(bIdx)) {
+            if (!spanBelow) { stack.push([x, y + 1]); spanBelow = true; }
+          } else {
+            spanBelow = false;
+          }
+        }
+        x++;
+      }
     }
     layerCtx.putImageData(idata, 0, 0);
   }
@@ -1039,6 +1224,7 @@ export default function BrushTool({
     { key: 'airbrush', label: 'Air',     icon: '∴', desc: 'Soft scattered spray'                         },
     { key: 'dodge',    label: 'Dodge',   icon: '☀', desc: 'Brightens — add highlights and rim light'     },
     { key: 'burn',     label: 'Burn',    icon: '◑', desc: 'Darkens — add shadows and depth'              },
+    { key: 'sponge',   label: 'Sponge',  icon: '◉', desc: 'Saturate or desaturate — strength sets mode'  },
     { key: 'heal',     label: 'Heal',    icon: '✚', desc: 'Removes blemishes using surrounding texture'  },
     { key: 'wetmix',   label: 'Wet',     icon: '≈', desc: 'Wet mix — picks up and blends color like paint'},
     { key: 'eraser',   label: 'Erase',   icon: '○', desc: 'Erases to transparent'                        },
