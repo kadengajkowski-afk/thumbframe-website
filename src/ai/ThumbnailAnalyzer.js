@@ -419,13 +419,19 @@ function analyzeDimensions(width, height) {
 
 function detectNiche(objectAnalysis, colorAnalysis, edgeAnalysis, faceAnalysis) {
   const objects = objectAnalysis.categories || [];
-  if (edgeAnalysis.isVeryBusy && !objectAnalysis.hasPerson && !faceAnalysis.hasFaces)
-    return { niche:'gaming', confidence:0.7, label:'Gaming / Gameplay' };
-  if (edgeAnalysis.isBusy && !objectAnalysis.hasPerson)
-    return { niche:'gaming', confidence:0.5, label:'Gaming / Gameplay' };
+  const hasFaces = faceAnalysis.hasFaces;
+  const hasPerson = objectAnalysis.hasPerson;
+
+  // Gaming: busy visuals without real people = almost certainly gameplay
+  if (!hasPerson && !hasFaces && (edgeAnalysis.isVeryBusy || edgeAnalysis.isBusy))
+    return { niche:'gaming', confidence:0.8, label:'Gaming / Gameplay' };
+  // Also gaming if any meaningful edge density and no person present
+  if (!hasPerson && !hasFaces && edgeAnalysis.overallDensity > 0.15)
+    return { niche:'gaming', confidence:0.6, label:'Gaming / Gameplay' };
+
   if (objects.includes('laptop')||objects.includes('cell phone')||objects.includes('keyboard'))
     return { niche:'tech', confidence:0.6, label:'Tech / Review' };
-  if (faceAnalysis.hasFaces && faceAnalysis.largestFaceRatio>0.1 && !edgeAnalysis.isBusy)
+  if (hasFaces && faceAnalysis.largestFaceRatio>0.1 && !edgeAnalysis.isBusy)
     return { niche:'vlog', confidence:0.6, label:'Vlog / Talking Head' };
   if (objects.includes('bowl')||objects.includes('cup')||objects.includes('dining table'))
     return { niche:'food', confidence:0.5, label:'Food / Cooking' };
@@ -460,8 +466,17 @@ function calculateCTRScore(analyses) {
     if (faceAnalysis.largestFaceRatio>=0.05&&faceAnalysis.largestFaceRatio<=0.4) face+=8; else if (faceAnalysis.largestFaceRatio>0.01) face+=4;
     face += 7;
   } else {
-    if (['gaming','food','tech'].includes(nicheAnalysis.niche)) face+=12;
-    if (contrastAnalysis.subjectStandsOut) face+=8; else if (contrastAnalysis.hasGoodSeparation) face+=4;
+    if (nicheAnalysis.niche === 'gaming') {
+      face += 20; // Full credit — gaming thumbnails don't need faces
+      if (contrastAnalysis.subjectStandsOut) face += 5;
+    } else if (nicheAnalysis.niche === 'food' || nicheAnalysis.niche === 'tech') {
+      face += 15;
+      if (contrastAnalysis.subjectStandsOut) face += 5;
+    } else {
+      // Only deduct for vlog/general where faces are expected
+      if (contrastAnalysis.subjectStandsOut) face += 8;
+      else if (contrastAnalysis.hasGoodSeparation) face += 4;
+    }
   }
   breakdown.subject = Math.min(25, face); score += breakdown.subject;
 
@@ -541,7 +556,11 @@ function generateRecommendations(analyses) {
       priority:6,action:null,actionLabel:null,impact:'medium',category:'content'});
   }
 
-  if (!faceAnalysis.hasFaces && (nicheAnalysis.niche==='vlog'||nicheAnalysis.niche==='general')) {
+  // Face recommendation: ONLY for vlog/general content — never for gaming, food, or tech
+  if (!faceAnalysis.hasFaces
+      && nicheAnalysis.niche !== 'gaming'
+      && nicheAnalysis.niche !== 'food'
+      && nicheAnalysis.niche !== 'tech') {
     recs.push({id:'face',icon:'😀',title:'Add a Face for Engagement',
       desc:'No faces detected. Thumbnails with faces get 20–38% higher CTR. Consider adding a reaction or portrait.',
       priority:6,action:null,actionLabel:null,impact:'high',category:'content'});
@@ -583,10 +602,23 @@ function generateRecommendations(analyses) {
       priority:5,action:'auto_white_balance',actionLabel:'Fix White Balance',impact:'medium',category:'technical'});
   }
 
-  if (nicheAnalysis.niche==='gaming' && !saturationAnalysis.isVibrant) {
-    recs.push({id:'niche_gaming',icon:'🎮',title:'Gaming Thumbnails Need Pop',
-      desc:'Gaming content performs 23% better with vibrant, saturated colors. Boost saturation and contrast.',
-      priority:5,action:'gaming_enhance',actionLabel:'Gaming Boost',impact:'medium',category:'niche'});
+  // Gaming-specific recommendations (replace generic face rec with actionable game-focused ones)
+  if (nicheAnalysis.niche === 'gaming') {
+    if (brightnessAnalysis.isDark) {
+      recs.push({id:'gaming_bright',icon:'💡',title:'Brighten for Mobile Gamers',
+        desc:'70%+ of gaming viewers are on mobile. Dark screenshots look muddy on phone screens. Brighten up.',
+        priority:8,action:'auto_brighten',actionLabel:'Auto Brighten',impact:'high',category:'technical'});
+    }
+    if (!textAnalysis.hasLargeText) {
+      recs.push({id:'gaming_text',icon:'🔤',title:'Add a Bold Title',
+        desc:'Gaming thumbnails with big, stylized text (map name, event, challenge) get more clicks than screenshots alone.',
+        priority:8,action:null,actionLabel:null,impact:'high',category:'content'});
+    }
+    if (!saturationAnalysis.isVibrant) {
+      recs.push({id:'gaming_color',icon:'🎮',title:'Gaming Thumbnails Need Vivid Colors',
+        desc:'Gaming content gets 23% more clicks with vibrant, punchy colors. Boost saturation and contrast.',
+        priority:7,action:'gaming_enhance',actionLabel:'Gaming Color Boost',impact:'high',category:'niche'});
+    }
   }
 
   recs.sort((a,b)=>b.priority-a.priority);
