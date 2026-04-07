@@ -8037,7 +8037,7 @@ PHASE 4 — Toolbar button:
   }, (prevProps, nextProps) => prevProps.layers === nextProps.layers);
 
   return(
-    <div style={{display:'flex',flexDirection:'column',height:'100vh',background:T.bg,color:T.text,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',overflow:'hidden'}}>
+    <div style={{display:'flex',flexDirection:'column',height:'100vh',minHeight:'-webkit-fill-available',background:T.bg,color:T.text,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',overflow:'hidden'}}>
       <style>{`@keyframes tf-pulse{0%,100%{opacity:1}50%{opacity:0.25}}`}</style>
 
       {showFileTab&&(
@@ -14766,7 +14766,8 @@ PHASE 4 — Toolbar button:
       {/* Mobile bottom toolbar */}
       {isMobile&&(
         <div style={{
-          display:'flex',gap:2,padding:'6px 8px',
+          display:'flex',gap:2,
+          padding:'6px 8px',paddingBottom:'calc(6px + env(safe-area-inset-bottom, 0px))',
           background:T.panel,borderTop:`1px solid ${T.border}`,
           overflowX:'auto',flexShrink:0,
           WebkitOverflowScrolling:'touch',
