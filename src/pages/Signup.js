@@ -32,9 +32,9 @@ export default function Signup({ setPage }) {
         setError(
           <span>
             You already have an account.{' '}
-            <span onClick={() => setPage('login')} style={{ color: '#FF6B00', cursor: 'pointer', textDecoration: 'underline' }}>
+            <button onClick={() => setPage('login')} style={{ color: '#FF6B00', cursor: 'pointer', textDecoration: 'underline', background: 'none', border: 'none', padding: 0, font: 'inherit', touchAction: 'manipulation' }}>
               Log in instead →
-            </span>
+            </button>
           </span>
         );
       } else {
@@ -49,9 +49,9 @@ export default function Signup({ setPage }) {
       setError(
         <span>
           An account with this email already exists.{' '}
-          <span onClick={() => setPage('login')} style={{ color: '#FF6B00', cursor: 'pointer', textDecoration: 'underline' }}>
+          <button onClick={() => setPage('login')} style={{ color: '#FF6B00', cursor: 'pointer', textDecoration: 'underline', background: 'none', border: 'none', padding: 0, font: 'inherit', touchAction: 'manipulation' }}>
             Log in instead →
-          </span>
+          </button>
         </span>
       );
       setLoading(false);
