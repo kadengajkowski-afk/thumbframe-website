@@ -142,7 +142,7 @@ export default function Features({ setPage }) {
               fontFamily: "'Satoshi', sans-serif",
             }}
           >
-            See Pro features →
+            Start Free Trial →
           </button>
         </motion.div>
       </motion.div>
@@ -228,7 +228,7 @@ export default function Features({ setPage }) {
                 fontFamily: "'Satoshi', sans-serif",
               }}
             >
-              Upgrade to Pro — $15/mo
+              Start Free Trial — 7 Days Free
             </button>
           </div>
         </motion.div>

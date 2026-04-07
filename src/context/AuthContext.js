@@ -91,6 +91,8 @@ export function AuthProvider({ children }) {
                 ...enriched,
                 plan:             u.plan || enriched.plan,
                 is_pro:           u.plan === 'pro',
+                stripeStatus:     u.stripeStatus || null,
+                trialEndsAt:      u.trialEndsAt  || null,
                 stripeCustomerId: u.stripeCustomerId || enriched.stripeCustomerId,
                 createdAt:        u.createdAt || enriched.createdAt,
                 name:             u.name || enriched.name,

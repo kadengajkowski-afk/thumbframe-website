@@ -6,7 +6,27 @@ import supabase from '../supabaseClient';
 
 const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
 
-function PlanBadge({ plan }) {
+// ── Trial helpers ─────────────────────────────────────────────────────────────
+function getDaysLeft(trialEndsAt) {
+  if (!trialEndsAt) return 0;
+  const ms = new Date(trialEndsAt).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+
+function PlanBadge({ plan, stripeStatus }) {
+  if (plan === 'pro' && stripeStatus === 'trialing') {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '3px 10px', borderRadius: 999,
+        background: 'rgba(255,107,0,0.12)', border: '1px solid rgba(255,107,0,0.3)',
+        fontSize: 12, fontWeight: 700, color: '#FF6B00',
+        letterSpacing: '0.04em', textTransform: 'uppercase',
+      }}>
+        ⚡ Pro Trial
+      </span>
+    );
+  }
   if (plan === 'pro') {
     return (
       <span style={{
@@ -49,8 +69,7 @@ function SectionLabel({ children }) {
   return (
     <p style={{
       fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
-      textTransform: 'uppercase', color: '#FF6B00',
-      margin: '0 0 20px',
+      textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 20px',
     }}>
       {children}
     </p>
@@ -71,13 +90,12 @@ function Row({ label, value }) {
 
 export default function Account({ setPage }) {
   const { user, logout } = useAuth();
-  const [liveUser,     setLiveUser]     = useState(null);
+  const [liveUser,      setLiveUser]      = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const checkoutSuccess = new URLSearchParams(window.location.search).get('checkout') === 'success';
 
-  // Fetch up-to-date user data from backend
   useEffect(() => {
     const token = localStorage.getItem('thumbframe_token');
     if (!token) return;
@@ -90,8 +108,14 @@ export default function Account({ setPage }) {
   const displayUser = liveUser || user;
   if (!displayUser) return null;
 
-  const plan       = displayUser.plan || 'free';
-  const isPro      = plan === 'pro';
+  const plan         = displayUser.plan || 'free';
+  const stripeStatus = displayUser.stripeStatus || null;
+  const trialEndsAt  = displayUser.trialEndsAt  || null;
+  const isPro        = plan === 'pro';
+  const isTrialing   = isPro && stripeStatus === 'trialing' && trialEndsAt;
+  const daysLeft     = isTrialing ? getDaysLeft(trialEndsAt) : 0;
+  const trialProgress = isTrialing ? Math.max(0, Math.min(100, ((7 - daysLeft) / 7) * 100)) : 0;
+
   const memberSince = displayUser.createdAt
     ? new Date(displayUser.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     : '—';
@@ -139,23 +163,86 @@ export default function Account({ setPage }) {
         {/* Checkout success banner */}
         {checkoutSuccess && (
           <div style={{
-            marginBottom: 32, padding: '16px 20px', borderRadius: 10,
+            marginBottom: 24, padding: '16px 20px', borderRadius: 10,
             background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
             display: 'flex', alignItems: 'center', gap: 12,
           }}>
             <span style={{ fontSize: 20 }}>🎉</span>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#4ade80' }}>You're on Pro!</div>
-              <div style={{ fontSize: 13, color: '#8a8a93', marginTop: 2 }}>All Pro features are now unlocked. Go make some great thumbnails.</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#4ade80' }}>
+                {isTrialing ? 'Your free trial is live!' : "You're on Pro!"}
+              </div>
+              <div style={{ fontSize: 13, color: '#8a8a93', marginTop: 2 }}>
+                {isTrialing
+                  ? `You have ${daysLeft} days of full Pro access. No charge until the trial ends.`
+                  : 'All Pro features are now unlocked. Go make some great thumbnails.'}
+              </div>
             </div>
+          </div>
+        )}
+
+        {/* Trial ending soon banner (≤3 days) */}
+        {isTrialing && daysLeft <= 3 && !checkoutSuccess && (
+          <div style={{
+            marginBottom: 24, padding: '16px 20px', borderRadius: 10,
+            background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.25)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 16, flexWrap: 'wrap',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 18 }}>⏳</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#fb923c' }}>
+                  Your free trial ends in {daysLeft} day{daysLeft !== 1 ? 's' : ''}
+                </div>
+                <div style={{ fontSize: 13, color: '#8a8a93', marginTop: 2 }}>
+                  Add a payment method to keep Pro access after your trial.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={handleManageSubscription}
+              style={{
+                padding: '8px 16px', borderRadius: 8, border: 'none',
+                background: '#FF6B00', color: '#fff',
+                fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                fontFamily: "'Satoshi', sans-serif", whiteSpace: 'nowrap',
+              }}
+            >
+              Add payment method
+            </button>
+          </div>
+        )}
+
+        {/* Trial expired banner */}
+        {isPro && stripeStatus === 'canceled' && (
+          <div style={{
+            marginBottom: 24, padding: '16px 20px', borderRadius: 10,
+            background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 16, flexWrap: 'wrap',
+          }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#f87171' }}>Your trial has ended</div>
+              <div style={{ fontSize: 13, color: '#8a8a93', marginTop: 2 }}>Upgrade to keep Pro features.</div>
+            </div>
+            <button
+              onClick={handleUpgrade}
+              style={{
+                padding: '8px 16px', borderRadius: 8, border: 'none',
+                background: '#FF6B00', color: '#fff',
+                fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                fontFamily: "'Satoshi', sans-serif", whiteSpace: 'nowrap',
+              }}
+            >
+              Upgrade to Pro — $15/mo
+            </button>
           </div>
         )}
 
         {/* Page header */}
         <div style={{ marginBottom: 40 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 8px' }}>
-            Account
-          </h1>
+          <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 8px' }}>Account</h1>
           <p style={{ color: '#8a8a93', margin: 0, fontSize: 15 }}>
             Manage your profile, subscription, and settings.
           </p>
@@ -175,10 +262,15 @@ export default function Account({ setPage }) {
           <Card>
             <SectionLabel>Subscription</SectionLabel>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 20, paddingBottom: 16,
+              borderBottom: '1px solid rgba(255,255,255,0.04)',
+              flexWrap: 'wrap', gap: 12,
+            }}>
               <div>
                 <div style={{ fontSize: 14, color: '#8a8a93', marginBottom: 6 }}>Current plan</div>
-                <PlanBadge plan={plan} />
+                <PlanBadge plan={plan} stripeStatus={stripeStatus} />
               </div>
               {isPro ? (
                 <button
@@ -206,10 +298,38 @@ export default function Account({ setPage }) {
                     fontFamily: "'Satoshi', sans-serif",
                   }}
                 >
-                  Upgrade to Pro — $15/mo
+                  Start Free Trial
                 </button>
               )}
             </div>
+
+            {/* Trial progress bar */}
+            {isTrialing && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, color: '#8a8a93' }}>
+                    Trial period — {daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining
+                  </span>
+                  <span style={{ fontSize: 13, color: '#FF6B00', fontWeight: 600 }}>
+                    {Math.round(trialProgress)}% used
+                  </span>
+                </div>
+                <div style={{ height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 999,
+                    width: `${trialProgress}%`,
+                    background: daysLeft <= 3
+                      ? 'linear-gradient(90deg, #FF6B00, #fb923c)'
+                      : 'linear-gradient(90deg, #FF6B00, #FF8533)',
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+                <p style={{ fontSize: 12, color: '#55555e', margin: '8px 0 0' }}>
+                  No charge until {new Date(trialEndsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.
+                  {' '}Cancel anytime before then — completely free.
+                </p>
+              </div>
+            )}
 
             {!isPro && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -234,7 +354,11 @@ export default function Account({ setPage }) {
             <SectionLabel>Usage</SectionLabel>
             <Row label="AI operations this month" value={isPro ? 'Unlimited' : `${displayUser.aiUsage ?? '—'} / 5`} />
             <Row label="Saved projects"            value={displayUser.projectCount ?? '—'} />
-            <Row label="Plan"                      value={isPro ? 'Pro' : 'Free'} />
+            <Row label="Plan"                      value={
+              isTrialing
+                ? `Pro Trial (${daysLeft}d left)`
+                : isPro ? 'Pro' : 'Free'
+            } />
           </Card>
 
           {/* Danger zone */}

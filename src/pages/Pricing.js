@@ -206,24 +206,25 @@ export default function Pricing({ setPage }) {
           position: 'relative',
           boxShadow: '0 0 60px rgba(255,107,0,0.07)',
         }}>
-          {/* Popular badge */}
+          {/* Trial badge */}
           <div style={{
             position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)',
             background: '#FF6B00', color: '#fff', borderRadius: 999,
             fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
             textTransform: 'uppercase', padding: '4px 12px', whiteSpace: 'nowrap',
           }}>
-            Most Popular
+            7-Day Free Trial
           </div>
           <div style={{ fontSize: 22, fontWeight: 700, color: '#f0f0f3', marginBottom: 4 }}>Pro</div>
           <p style={{ fontSize: 13, color: '#55555e', marginBottom: 24, lineHeight: 1.5 }}>
             Everything you need to grow your channel with great thumbnails.
           </p>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
             <span style={{ fontSize: 52, fontWeight: 800, color: '#f0f0f3', letterSpacing: '-0.04em', lineHeight: 1 }}>$15</span>
             <span style={{ fontSize: 14, color: '#55555e' }}>/ month</span>
           </div>
-          <p style={{ fontSize: 12, color: '#55555e', marginBottom: 28 }}>7-day free trial. Cancel anytime.</p>
+          <p style={{ fontSize: 12, color: '#FF6B00', marginBottom: 4, fontWeight: 600 }}>after 7-day free trial</p>
+          <p style={{ fontSize: 12, color: '#55555e', marginBottom: 28 }}>No credit card required. Cancel anytime.</p>
           <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', marginBottom: 24 }} />
           <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 32px', display: 'flex', flexDirection: 'column', gap: 11, flex: 1 }}>
             {PRO_FEATURES.map((f, i) => (
@@ -243,7 +244,7 @@ export default function Pricing({ setPage }) {
               boxShadow: '0 0 28px rgba(255,107,0,0.3)',
             }}
           >
-            Start Pro Trial →
+            Start Free Trial →
           </button>
         </motion.div>
       </motion.div>
