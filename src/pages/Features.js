@@ -50,13 +50,11 @@ function FeatureCard({ icon, tag, title, desc }) {
       variants={fadeUp}
       style={{
         background: '#0c0c0f',
-        border: '1px solid rgba(255,255,255,0.06)',
+        borderWidth: 1, borderStyle: 'solid',
+        borderColor: 'rgba(255,255,255,0.06)',
         borderRadius: 12, padding: '24px',
-        transition: 'border-color 0.2s',
       }}
-      whileHover={{ y: -3, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } }}
-      onHoverStart={e => { e.currentTarget.style.borderColor = 'rgba(255,107,0,0.18)'; }}
-      onHoverEnd={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
+      whileHover={{ y: -3, borderColor: 'rgba(255,107,0,0.18)', transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{
