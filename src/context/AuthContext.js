@@ -52,6 +52,13 @@ function buildUser(session) {
   };
 }
 
+// ── Fresh token helper — always calls getSession() so Supabase auto-refreshes ─
+export async function getFreshToken() {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session) return null;
+  return session.access_token;
+}
+
 // ── Provider ──────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }) {
   // Instantly paint from cache so returning users never see a blank flash.
@@ -63,6 +70,9 @@ export function AuthProvider({ children }) {
       return null;
     }
   });
+
+  // Reactive token — always in sync with Supabase's auto-refresh
+  const [token, setToken] = useState(() => localStorage.getItem('thumbframe_token') || null);
 
   // Only block render if we have no cached user to show.
   const [loading, setLoading] = useState(() => !localStorage.getItem('thumbframe_user'));
@@ -78,6 +88,7 @@ export function AuthProvider({ children }) {
         if (session?.user) {
           const token = session.access_token;
           localStorage.setItem('thumbframe_token', token);
+          setToken(token);
 
           // Try to enrich user data from backend /api/me (non-fatal if absent).
           let enriched = buildUser(session);
@@ -130,18 +141,21 @@ export function AuthProvider({ children }) {
 
       if (event === 'TOKEN_REFRESHED' && session) {
         localStorage.setItem('thumbframe_token', session.access_token);
+        setToken(session.access_token);
         return;
       }
 
       if (session?.user) {
-        const token = session.access_token;
-        localStorage.setItem('thumbframe_token', token);
+        const freshToken = session.access_token;
+        localStorage.setItem('thumbframe_token', freshToken);
+        setToken(freshToken);
         const u = buildUser(session);
         setUser(u);
         localStorage.setItem('thumbframe_user', JSON.stringify(u));
       } else if (event === 'SIGNED_OUT') {
         localStorage.removeItem('thumbframe_token');
         localStorage.removeItem('thumbframe_user');
+        setToken(null);
         setUser(null);
       }
 
@@ -158,13 +172,14 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
     localStorage.removeItem('thumbframe_token');
     localStorage.removeItem('thumbframe_user');
+    setToken(null);
     setUser(null);
   };
 
   if (loading) return <LoadingSpinner />;
 
   return (
-    <AuthContext.Provider value={{ user, setUser, logout }}>
+    <AuthContext.Provider value={{ user, setUser, token, logout }}>
       {children}
     </AuthContext.Provider>
   );

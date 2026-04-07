@@ -714,8 +714,8 @@ export default function App() {
     return p.startsWith('/blog/') ? p.replace('/blog/', '') : null;
   });
 
-  // Auth state comes from context — no local duplication.
-  const { user, logout: handleLogout } = useAuth();
+  // Auth state comes from context — token is reactive, auto-refreshed by Supabase.
+  const { user, token: authToken, logout: handleLogout } = useAuth();
 
   useEffect(() => {
     syncPath(page);
@@ -729,15 +729,14 @@ export default function App() {
     }
   }, [page, user]);
 
-  // Load brand kit whenever the user changes.
+  // Load brand kit whenever the user changes — use fresh token from context.
   useEffect(() => {
-    const token = localStorage.getItem('thumbframe_token');
-    if (!token) { setBrandKit(null); return; }
-    fetch(`${API_BASE}/brand-kit`, { headers: { Authorization: `Bearer ${token}` } })
+    if (!authToken) { setBrandKit(null); return; }
+    fetch(`${API_BASE}/brand-kit`, { headers: { Authorization: `Bearer ${authToken}` } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setBrandKit(data.brandKit))
       .catch(() => {});
-  }, [user?.id]);
+  }, [user?.id, authToken]);
 
 
   if (page === 'editor') {
@@ -746,7 +745,7 @@ export default function App() {
     if (useFabric) {
       return <FabricCanvas user={user} darkMode={true} />;
     }
-    return <Editor onExit={() => setPage('home')} user={user} token={localStorage.getItem('thumbframe_token')} brandKit={brandKit} />;
+    return <Editor onExit={() => setPage('home')} user={user} token={authToken} brandKit={brandKit} />;
   }
 
   // Marketing pages — self-contained with own Navbar/Footer (code-split with Suspense)
@@ -760,7 +759,7 @@ export default function App() {
     account:     <Account setPage={setPage} />,
     blog:        <Blog setPage={setPage} onOpenPost={(slug) => { setBlogSlug(slug); setPage('blog-post'); window.history.pushState(null, '', `/blog/${slug}`); }} />,
     'blog-post': <BlogPost slug={blogSlug} setPage={setPage} onBack={() => { setPage('blog'); window.history.pushState(null, '', '/blog'); }} />,
-    'admin-blog': <BlogAdmin setPage={setPage} user={user} token={localStorage.getItem('thumbframe_token')} />,
+    'admin-blog': <BlogAdmin setPage={setPage} user={user} token={authToken} />,
     support:     <Support setPage={setPage} />,
     privacy:     <Privacy setPage={setPage} />,
     terms:       <Terms setPage={setPage} />,

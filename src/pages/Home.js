@@ -659,45 +659,134 @@ export default function Home({ setPage }) {
         </div>
       </motion.section>
 
+      {/* ─── HOW IT WORKS ─────────────────────────────────────────────────── */}
+      <motion.section
+        variants={stagger} initial="hidden" whileInView="visible"
+        viewport={{ once: true, margin: '-80px' }}
+        style={{ padding: '80px 24px', position: 'relative', zIndex: 1 }}
+      >
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <motion.div variants={fadeUp} style={{ textAlign: 'center', marginBottom: 56 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 12px' }}>
+              HOW IT WORKS
+            </p>
+            <h2 style={{ margin: '0 0 12px' }}>Create Thumbnails That Get Clicked</h2>
+            <p style={{ fontSize: 16, color: '#55555e', margin: 0 }}>Three steps. Zero design experience needed.</p>
+          </motion.div>
+          <div className="tf-how-grid">
+            {[
+              { n: '01', title: 'Upload', desc: 'Drop any screenshot, photo, or design. ThumbFrame auto-detects YouTube dimensions and sets up your canvas instantly.' },
+              { n: '02', title: 'Enhance', desc: 'AI analyzes your image and suggests improvements. One-click fixes for brightness, contrast, color, and composition.' },
+              { n: '03', title: 'Export', desc: 'Download at perfect 1280×720 or test multiple variants. A/B test layouts to find what clicks more.' },
+            ].map(({ n, title, desc }) => (
+              <motion.div key={n} variants={fadeUp} style={{
+                background: '#0c0c0f', borderRadius: 16,
+                border: '1px solid rgba(255,255,255,0.06)',
+                padding: '36px 32px', position: 'relative', overflow: 'hidden',
+                transition: 'border-color 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,107,0,0.18)'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'}>
+                <div style={{
+                  position: 'absolute', top: 16, right: 20,
+                  fontSize: 'clamp(52px,6vw,72px)', fontWeight: 900,
+                  color: 'rgba(255,107,0,0.07)', lineHeight: 1, userSelect: 'none',
+                  letterSpacing: '-0.04em',
+                }}>{n}</div>
+                <div style={{
+                  width: 38, height: 38, borderRadius: 10, marginBottom: 20,
+                  background: 'rgba(255,107,0,0.1)', border: '1px solid rgba(255,107,0,0.2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16, fontWeight: 900, color: '#FF6B00',
+                }}>{n}</div>
+                <h3 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 700, color: '#f0f0f3' }}>{title}</h3>
+                <p style={{ margin: 0, fontSize: 15, color: '#8a8a93', lineHeight: 1.65 }}>{desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </motion.section>
+
+      {/* ─── AI FEATURES 2×3 ──────────────────────────────────────────────── */}
+      <motion.section
+        variants={stagger} initial="hidden" whileInView="visible"
+        viewport={{ once: true, margin: '-80px' }}
+        style={{ padding: '80px 24px', position: 'relative', zIndex: 1, borderTop: '1px solid rgba(255,255,255,0.04)' }}
+      >
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <motion.div variants={fadeUp} style={{ textAlign: 'center', marginBottom: 52 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 12px' }}>
+              AI-POWERED ANALYSIS
+            </p>
+            <h2 style={{ margin: 0 }}>Intelligence built into every pixel</h2>
+          </motion.div>
+          <div className="tf-ai-grid">
+            {[
+              { icon: '◉', title: 'Smart CTR Score', desc: 'Real image analysis, not guesswork. Face detection, color metrics, composition scoring — all calculated from your actual pixels.' },
+              { icon: '⚠', title: 'YouTube Safe Zones', desc: 'See exactly where timestamps, progress bars, and UI elements overlap your thumbnail. No more hidden text.' },
+              { icon: '📱', title: 'Multi-Device Preview', desc: 'See your thumbnail at every YouTube size simultaneously. If it works at 116px wide, it works everywhere.' },
+              { icon: '👁', title: 'Color Blind Check', desc: '8% of male viewers have color vision deficiency. Preview your thumbnail through their eyes in one click.' },
+              { icon: '⚡', title: 'One-Click Fixes', desc: 'Auto brighten, boost contrast, add vignette, fix white balance — each button does exactly what it says.' },
+              { icon: '🎯', title: 'Niche Intelligence', desc: 'Gaming thumbnails get different advice than vlogs. The AI adapts recommendations to your content type.' },
+            ].map(({ icon, title, desc }) => (
+              <motion.div key={title} variants={fadeUp} style={{
+                background: '#0c0c0f', borderRadius: 14,
+                border: '1px solid rgba(255,255,255,0.06)',
+                padding: '28px', transition: 'border-color 0.2s, transform 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,107,0,0.2)'; e.currentTarget.style.transform = 'translateY(-3px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 9, marginBottom: 16,
+                  background: 'rgba(255,107,0,0.08)', border: '1px solid rgba(255,107,0,0.15)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16, color: '#FF6B00',
+                }}>{icon}</div>
+                <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#f0f0f3', letterSpacing: '-0.01em' }}>{title}</h3>
+                <p style={{ margin: 0, fontSize: 14, color: '#8a8a93', lineHeight: 1.6 }}>{desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </motion.section>
+
       {/* ─── TESTIMONIALS ─────────────────────────────────────────────────── */}
       <motion.section
         variants={stagger} initial="hidden" whileInView="visible"
         viewport={{ once: true, margin: '-60px' }}
-        style={{ maxWidth: 960, margin: '0 auto', padding: '100px 24px', position: 'relative', zIndex: 1 }}
+        style={{ maxWidth: 1000, margin: '0 auto', padding: '80px 24px', position: 'relative', zIndex: 1 }}
       >
-        <motion.div variants={fadeUp} style={{ textAlign: 'center', marginBottom: 56 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#55555e', margin: 0 }}>
-            WHAT CREATORS ARE SAYING
+        <motion.div variants={fadeUp} style={{ textAlign: 'center', marginBottom: 52 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 12px' }}>
+            TRUSTED BY CREATORS
           </p>
+          <h2 style={{ margin: 0 }}>Real results from real channels</h2>
         </motion.div>
 
-        <div className="tf-testimonials-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-          {TESTIMONIALS.map((t, i) => (
-            <motion.div key={i} variants={fadeUp} style={{
+        <div className="tf-testimonials-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          {[
+            { quote: 'I was spending 2 hours per thumbnail in Photoshop. ThumbFrame cut that to 15 minutes and the results look better.', name: 'Alex R.', sub: '45K subscribers', init: 'A', color: '#f97316' },
+            { quote: "The safe zone overlay alone is worth it. I kept putting text where YouTube's timestamp was covering it. Can't believe I didn't know.", name: 'Maya L.', sub: '12K subscribers', init: 'M', color: '#22c55e' },
+            { quote: "The AI actually understands gaming thumbnails. It doesn't tell me to add a face to my Minecraft builds. That's huge.", name: 'Jordan K.', sub: '89K subscribers', init: 'J', color: '#0ea5e9' },
+          ].map(({ quote, name, sub, init, color }) => (
+            <motion.div key={name} variants={fadeUp} style={{
               background: '#0c0c0f',
               border: '1px solid rgba(255,255,255,0.06)',
-              borderLeft: t.highlight ? '3px solid #FF6B00' : undefined,
-              borderRadius: 12, padding: '24px 28px',
+              borderRadius: 14, padding: '28px',
             }}>
-              <p style={{
-                fontSize: 15, color: '#8a8a93', lineHeight: 1.7,
-                margin: '0 0 16px', fontStyle: 'normal',
-              }}>
-                "{t.quote}"
+              <p style={{ fontSize: 15, color: '#8a8a93', lineHeight: 1.7, margin: '0 0 20px', fontStyle: 'italic' }}>
+                "{quote}"
               </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
-                  width: 28, height: 28, borderRadius: '50%',
-                  background: 'rgba(255,107,0,0.1)',
-                  border: '1px solid rgba(255,107,0,0.2)',
+                  width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                  background: `${color}22`, border: `1px solid ${color}55`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: 700, color: '#FF6B00',
-                }}>
-                  {t.handle[0] === '@' ? 'Y' : 'R'}
-                </div>
+                  fontSize: 13, fontWeight: 700, color,
+                }}>{init}</div>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#f0f0f3' }}>{t.handle}</div>
-                  <div style={{ fontSize: 12, color: '#55555e' }}>{t.sub}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#f0f0f3' }}>{name}</div>
+                  <div style={{ fontSize: 12, color: '#55555e' }}>{sub}</div>
                 </div>
               </div>
             </motion.div>
@@ -710,26 +799,25 @@ export default function Home({ setPage }) {
         variants={stagger} initial="hidden" whileInView="visible"
         viewport={{ once: true, margin: '-60px' }}
         style={{
-          textAlign: 'center', padding: '100px 24px 120px',
+          textAlign: 'center', padding: '80px 24px 100px',
           position: 'relative', zIndex: 1, overflow: 'hidden',
+          background: 'linear-gradient(180deg, transparent 0%, rgba(255,107,0,0.03) 50%, transparent 100%)',
         }}
       >
-        {/* Glow orb */}
         <div style={{
           position: 'absolute', top: '50%', left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: 500, height: 500,
-          background: 'radial-gradient(circle, rgba(255,107,0,0.07) 0%, transparent 70%)',
+          width: 600, height: 600,
+          background: 'radial-gradient(circle, rgba(255,107,0,0.06) 0%, transparent 70%)',
           pointerEvents: 'none',
         }} />
-
-        <motion.h2 variants={fadeUp} style={{ margin: '0 0 16px' }}>
-          Stop overthinking your thumbnails.
+        <motion.h2 variants={fadeUp} style={{ margin: '0 0 14px', fontSize: 'clamp(28px,4vw,44px)' }}>
+          Your Next Thumbnail Starts Here
         </motion.h2>
-        <motion.p variants={fadeUp} style={{ fontSize: 17, color: '#8a8a93', margin: '0 0 40px' }}>
-          Join 50+ creators who make better thumbnails in less time.
+        <motion.p variants={fadeUp} style={{ fontSize: 17, color: '#8a8a93', margin: '0 0 36px', maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>
+          Free to use. No credit card required. Pro features for creators who want more.
         </motion.p>
-        <motion.div variants={fadeUp}>
+        <motion.div variants={fadeUp} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
           <button
             onClick={() => go('editor')}
             style={{
@@ -739,11 +827,17 @@ export default function Home({ setPage }) {
               boxShadow: '0 0 40px rgba(255,107,0,0.3)',
               fontFamily: "'Satoshi', sans-serif",
               display: 'inline-flex', alignItems: 'center', gap: 10,
+              transition: 'box-shadow 0.2s',
             }}
+            onMouseEnter={e => e.currentTarget.style.boxShadow = '0 0 60px rgba(255,107,0,0.45)'}
+            onMouseLeave={e => e.currentTarget.style.boxShadow = '0 0 40px rgba(255,107,0,0.3)'}
           >
-            Create Your First Thumbnail — Free
+            Open Editor — It's Free
             <ArrowRight size={18} weight="bold" />
           </button>
+          <p style={{ fontSize: 13, color: '#55555e', margin: 0 }}>
+            Join 500+ creators already using ThumbFrame
+          </p>
         </motion.div>
       </motion.section>
 
@@ -757,10 +851,30 @@ export default function Home({ setPage }) {
           50% { opacity: 0.6; box-shadow: 0 0 4px rgba(255,107,0,0.4); }
         }
 
+        /* ── How It Works grid ── */
+        .tf-how-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 24px;
+        }
+
+        /* ── AI Features grid ── */
+        .tf-ai-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 20px;
+        }
+
         /* ── Mobile responsive ── */
         .tf-bento-wide { grid-column: span 2; }
 
         @media (max-width: 900px) {
+          .tf-how-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .tf-ai-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
           .tf-hero-section {
             min-height: auto !important;
             padding-top: 120px !important;
@@ -780,6 +894,12 @@ export default function Home({ setPage }) {
             grid-column: span 1 !important;
           }
           .tf-testimonials-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .tf-how-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .tf-ai-grid {
             grid-template-columns: 1fr !important;
           }
         }
