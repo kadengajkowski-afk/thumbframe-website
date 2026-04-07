@@ -17,7 +17,7 @@ import { rectMask, ellipseMask, pathMask, magicWandMask, combineMasks, invertMas
 import db from './db';
 import { renderLayersWithPixi } from './pixiCompositor';
 import { analyzeImage as runThumbnailAnalysis } from './ai/ThumbnailAnalyzer';
-import { autoBrighten, autoContrast, autoSaturate, autoDesaturate, autoVignette, autoWhiteBalance, gamingEnhance, autoFixAll } from './ai/ThumbnailEnhancer';
+import { autoBrighten, autoContrast, autoSaturate, autoDesaturate, autoVignette, autoWhiteBalance, gamingEnhance, autoFixAll, enhanceWithWorker } from './ai/ThumbnailEnhancer';
 import DevicePreview from './ai/DevicePreview';
 import ColorBlindSimulator from './ai/ColorBlindSimulator';
 import PromptToThumbnail from './ai/PromptToThumbnail';
@@ -5895,7 +5895,7 @@ PHASE 4 — Toolbar button:
       c.width=img.naturalWidth; c.height=img.naturalHeight;
       c.getContext('2d').drawImage(img,0,0);
       const fixable=autoRecs.filter(r=>!autoDismissed.has(r.id)&&r.action&&!['show_safe_zones','crop_to_face','resize_canvas'].includes(r.action));
-      autoFixAll(c,fixable);
+      await enhanceWithWorker(c,fixable);
       const newSrc=c.toDataURL('image/png');
       updateLayer(imgLayer.id,{src:newSrc});
       setAutoPreviewUrl(newSrc);

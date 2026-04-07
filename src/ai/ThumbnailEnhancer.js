@@ -182,6 +182,76 @@ export function gamingEnhance(canvas) {
   return canvas;
 }
 
+// ── Web Worker path (used on mobile to avoid main-thread blocking) ────────────
+let _worker = null;
+let _nextId = 0;
+const _pending = {};
+
+function getWorker() {
+  if (!_worker) {
+    _worker = new Worker(new URL('../workers/enhanceWorker.js', import.meta.url));
+    _worker.onmessage = (e) => {
+      const { id, buffer, error } = e.data;
+      const resolve = _pending[id];
+      delete _pending[id];
+      if (resolve) resolve({ buffer, error });
+    };
+  }
+  return _worker;
+}
+
+/**
+ * Runs all enhancement actions off the main thread via a Web Worker.
+ * Falls back to synchronous autoFixAll if Workers aren't available.
+ * Uses willReadFrequently:true on the processing canvas for CPU-side reads.
+ */
+export async function enhanceWithWorker(canvas, recommendations) {
+  const actions = recommendations
+    .filter(r => r.action && !['show_safe_zones','crop_to_face','resize_canvas'].includes(r.action))
+    .map(r => r.action);
+  if (!actions.length) return canvas;
+
+  // Processing canvas: willReadFrequently avoids Chrome GPU-disable heuristic
+  const proc = document.createElement('canvas');
+  proc.width = canvas.width;
+  proc.height = canvas.height;
+  const pCtx = proc.getContext('2d', { willReadFrequently: true });
+  pCtx.drawImage(canvas, 0, 0);
+  const imageData = pCtx.getImageData(0, 0, proc.width, proc.height);
+
+  if (typeof Worker === 'undefined') {
+    // No Worker support — fall back to sync (e.g. some webviews)
+    autoFixAll(canvas, recommendations);
+    return canvas;
+  }
+
+  const id = _nextId++;
+  const worker = getWorker();
+  const result = await new Promise((resolve) => {
+    _pending[id] = resolve;
+    // Transfer the ArrayBuffer so the main thread doesn't block on a copy
+    worker.postMessage(
+      { id, buffer: imageData.data.buffer, width: proc.width, height: proc.height, actions },
+      [imageData.data.buffer]
+    );
+  });
+
+  if (result.error) {
+    console.error('[enhanceWorker]', result.error);
+    return canvas;
+  }
+
+  // Write result from worker back to the display canvas
+  const outData = new ImageData(new Uint8ClampedArray(result.buffer), proc.width, proc.height);
+  const displayCtx = canvas.getContext('2d');
+  displayCtx.putImageData(outData, 0, 0);
+
+  // Release processing canvas memory (Safari hoards canvas memory)
+  proc.width = 1; proc.height = 1;
+
+  return canvas;
+}
+
 export function autoFixAll(canvas, recommendations) {
   const actionMap = {
     auto_brighten:     autoBrighten,
