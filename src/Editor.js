@@ -8746,31 +8746,6 @@ PHASE 4 — Toolbar button:
             }}>BETA</span>
           </button>
         )}
-        {!isMobile&&(
-          <button
-            onClick={()=>{
-              const isPro=isProUser;
-              const isAdmin=user?.is_admin||user?.is_admin;
-              if(!isPro&&!isAdmin){setShowPaywall(true);return;}
-              setActiveTool('ai');
-            }}
-            style={{
-              display:'flex',alignItems:'center',gap:5,
-              padding:'6px 12px',borderRadius:7,
-              border:'1px solid rgba(245,158,11,0.25)',
-              background:'rgba(245,158,11,0.07)',
-              color:'#f59e0b',cursor:'pointer',fontSize:11,fontWeight:'600',
-              flexShrink:0,
-            }}
-            title="AI Generate thumbnail from text prompt">
-            ✦ Generate
-            <span style={{
-              fontSize:8,fontWeight:'700',color:'#fff',
-              background:'linear-gradient(135deg,#f59e0b,#ef4444)',
-              padding:'1px 5px',borderRadius:4,letterSpacing:'0.5px',
-            }}>PRO</span>
-          </button>
-        )}
         {/* Feature J: Niche badge pill */}
         {userNiche&&NICHE_CONFIG[userNiche]&&(
           <button
@@ -8970,17 +8945,22 @@ PHASE 4 — Toolbar button:
           )}
           {!isMobile&&(
             <button
-              onClick={()=>isProUser?setShowPromptEngine(true):handleUpgrade()}
-              title="AI Prompt-to-Thumbnail Engine"
+              onClick={async ()=>{
+                const flat=document.createElement('canvas');
+                flat.width=p.preview.w; flat.height=p.preview.h;
+                await renderLayersToCanvas(flat,layers);
+                runAutoAnalysis(flat.toDataURL('image/jpeg',0.9));
+              }}
+              title="AI thumbnail analysis — CTR score and recommendations"
               style={{
                 padding:'6px 13px',borderRadius:7,
                 border:'1px solid rgba(249,115,22,0.3)',
-                background:showPromptEngine?'rgba(249,115,22,0.2)':'rgba(249,115,22,0.08)',
+                background:autoPanel?'rgba(249,115,22,0.2)':'rgba(249,115,22,0.08)',
                 color:T.accent,cursor:'pointer',fontSize:11,fontWeight:'700',
                 display:'flex',alignItems:'center',gap:5,flexShrink:0,
                 letterSpacing:'0.1px',
               }}>
-              ✦ AI Generate
+              ✦ AI
             </button>
           )}
           <button onClick={()=>{
