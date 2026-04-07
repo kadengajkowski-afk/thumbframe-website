@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Lightning, Scissors, TextT, Shuffle, PaintBrush, ArrowRight, Sparkle
+  Lightning, Scissors, TextT, Shuffle, PaintBrush, ArrowRight
 } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -302,173 +302,6 @@ const TESTIMONIALS = [
   },
 ];
 
-// ─── Editor mockup (hero right side) ──────────────────────────────────────────
-function EditorMockup() {
-  return (
-    <div style={{ position: 'relative' }}>
-      {/* Main mockup card */}
-      <div style={{
-        background: '#0c0c0f',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 16,
-        overflow: 'hidden',
-        boxShadow: '0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,107,0,0.05)',
-        width: '100%', maxWidth: 500,
-      }}>
-        {/* Toolbar */}
-        <div style={{
-          height: 40, background: '#141418',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex', alignItems: 'center', padding: '0 14px', gap: 8,
-        }}>
-          {['#f87171','#fbbf24','#4ade80'].map((c, i) => (
-            <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />
-          ))}
-          <div style={{ flex: 1, height: 20, borderRadius: 4, background: 'rgba(255,255,255,0.04)', margin: '0 8px' }} />
-          {[...Array(4)].map((_, i) => (
-            <div key={i} style={{ width: 24, height: 20, borderRadius: 4, background: 'rgba(255,255,255,0.04)' }} />
-          ))}
-        </div>
-        {/* Canvas area */}
-        <div style={{
-          display: 'flex', height: 280, position: 'relative',
-        }}>
-          {/* Left tool panel */}
-          <div style={{
-            width: 44, background: '#141418',
-            borderRight: '1px solid rgba(255,255,255,0.06)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            padding: '12px 0', gap: 8,
-          }}>
-            {[...Array(6)].map((_, i) => (
-              <div key={i} style={{
-                width: 26, height: 26, borderRadius: 6,
-                background: i === 0 ? 'rgba(255,107,0,0.15)' : 'rgba(255,255,255,0.04)',
-                border: i === 0 ? '1px solid rgba(255,107,0,0.3)' : 'none',
-              }} />
-            ))}
-          </div>
-          {/* Thumbnail canvas */}
-          <div style={{
-            flex: 1, background: '#1e1e24',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            position: 'relative', overflow: 'hidden',
-          }}>
-            {/* Fake thumbnail content */}
-            <div style={{
-              width: '80%', height: '78%',
-              background: 'linear-gradient(135deg, #1a0a00 0%, #2d1200 50%, #0a0a0a 100%)',
-              borderRadius: 8, position: 'relative', overflow: 'hidden',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-            }}>
-              <div style={{
-                position: 'absolute', inset: 0,
-                background: 'radial-gradient(ellipse 80% 60% at 30% 40%, rgba(255,107,0,0.25) 0%, transparent 60%)',
-              }} />
-              <div style={{
-                position: 'absolute', bottom: 16, left: 16,
-                fontSize: 13, fontWeight: 900, color: '#FF6B00',
-                textShadow: '0 0 20px rgba(255,107,0,0.6)',
-                letterSpacing: '-0.03em', lineHeight: 1,
-                fontFamily: "'Satoshi', sans-serif",
-              }}>
-                GET<br />CLICKED
-              </div>
-            </div>
-          </div>
-          {/* Right layers panel */}
-          <div style={{
-            width: 120, background: '#141418',
-            borderLeft: '1px solid rgba(255,255,255,0.06)',
-            padding: '10px',
-          }}>
-            <div style={{ fontSize: 9, color: '#55555e', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Layers</div>
-            {['Text — Title', 'BG Removed', 'Background'].map((l, i) => (
-              <div key={i} style={{
-                padding: '5px 8px', borderRadius: 5, marginBottom: 4, fontSize: 10,
-                background: i === 0 ? 'rgba(255,107,0,0.1)' : 'rgba(255,255,255,0.03)',
-                border: i === 0 ? '1px solid rgba(255,107,0,0.2)' : '1px solid transparent',
-                color: i === 0 ? '#FF8533' : '#55555e',
-              }}>
-                {l}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Floating card 1 — A/B Testing */}
-      <motion.div
-        initial={{ opacity: 0, x: 20, y: -10 }}
-        animate={{ opacity: 1, x: 0, y: 0 }}
-        transition={{ delay: 0.6, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        style={{
-          position: 'absolute', top: -14, right: -20,
-          background: 'rgba(12,12,15,0.9)',
-          backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 10, padding: '10px 14px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-          zIndex: 2,
-        }}
-      >
-        <div style={{ fontSize: 11, color: '#55555e', marginBottom: 4 }}>A/B TEST RESULT</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 10, color: '#8a8a93' }}>Variant A</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#f0f0f3' }}>4.2% CTR</div>
-          </div>
-          <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.08)' }} />
-          <div>
-            <div style={{ fontSize: 10, color: '#FF6B00' }}>Variant B ↑</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#FF6B00' }}>8.1% CTR</div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Floating card 2 — Speed stat */}
-      <motion.div
-        initial={{ opacity: 0, x: -20, y: 10 }}
-        animate={{ opacity: 1, x: 0, y: 0 }}
-        transition={{ delay: 0.8, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        style={{
-          position: 'absolute', bottom: 24, left: -24,
-          background: 'rgba(12,12,15,0.9)',
-          backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 10, padding: '10px 14px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-          zIndex: 2,
-        }}
-      >
-        <div style={{ fontSize: 11, color: '#55555e', marginBottom: 2 }}>vs Photoshop</div>
-        <div style={{ fontSize: 15, fontWeight: 800, color: '#4ade80', letterSpacing: '-0.02em' }}>2× faster</div>
-      </motion.div>
-
-      {/* Floating card 3 — AI Cutout */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 1.0, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        style={{
-          position: 'absolute', bottom: 80, right: -18,
-          background: 'rgba(12,12,15,0.9)',
-          backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255,107,0,0.2)',
-          borderRadius: 10, padding: '8px 12px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-          zIndex: 2,
-          display: 'flex', alignItems: 'center', gap: 8,
-        }}
-      >
-        <Sparkle size={14} weight="fill" color="#FF6B00" />
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#f0f0f3' }}>AI Cutout</span>
-        <span style={{ fontSize: 10, color: '#4ade80' }}>✓ done</span>
-      </motion.div>
-    </div>
-  );
-}
-
 // ─── Home page ─────────────────────────────────────────────────────────────────
 export default function Home({ setPage }) {
   useSEO({
@@ -487,14 +320,13 @@ export default function Home({ setPage }) {
       {/* ─── HERO ──────────────────────────────────────────────────────────── */}
       <section className="tf-hero-section" style={{
         minHeight: '100vh', display: 'flex', alignItems: 'center',
-        padding: '100px 24px 60px', maxWidth: 1200, margin: '0 auto',
+        padding: '100px 24px 60px', maxWidth: 800, margin: '0 auto',
         position: 'relative', zIndex: 1,
-        gap: 60, flexWrap: 'wrap',
       }}>
         {/* Left */}
         <motion.div
           variants={stagger} initial="hidden" animate="visible"
-          style={{ flex: '1 1 480px', minWidth: 0 }}
+          style={{ width: '100%' }}
         >
           {/* Badge */}
           <motion.div variants={fadeUp} style={{ marginBottom: 28 }}>
@@ -580,10 +412,6 @@ export default function Home({ setPage }) {
           </motion.p>
         </motion.div>
 
-        {/* Right — editor mockup */}
-        <div className="tf-hero-mockup" style={{ flex: '1 1 400px', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
-          <EditorMockup />
-        </div>
       </section>
 
       {/* ─── MARQUEE ──────────────────────────────────────────────────────── */}
@@ -756,15 +584,8 @@ export default function Home({ setPage }) {
 
         @media (max-width: 900px) {
           .tf-hero-section {
-            flex-direction: column !important;
-            align-items: flex-start !important;
             min-height: auto !important;
             padding-top: 120px !important;
-            gap: 48px !important;
-          }
-          .tf-hero-mockup {
-            width: 100% !important;
-            flex: none !important;
           }
           .tf-bento-grid {
             grid-template-columns: repeat(2, 1fr) !important;
