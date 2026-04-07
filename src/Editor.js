@@ -15033,29 +15033,37 @@ PHASE 4 — Toolbar button:
             @keyframes niche-float { 0%,100%{transform:translateY(0px)} 50%{transform:translateY(-6px)} }
             @keyframes niche-glow  { 0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,0)} 50%{box-shadow:0 0 32px 8px rgba(249,115,22,0.35)} }
             @keyframes niche-fade-in { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
-            .niche-card { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease !important; cursor:pointer; }
+            .niche-card { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease !important; cursor:pointer; background:none; border:none; text-align:left; touch-action:manipulation; }
             .niche-card:hover { transform: translateY(-4px) scale(1.03) !important; }
+            @media (max-width: 600px) {
+              .niche-grid { grid-template-columns: repeat(2,1fr) !important; }
+              .niche-header-title { font-size: 28px !important; }
+              .niche-header-sub { display: none !important; }
+              .niche-card-emoji { font-size: 28px !important; margin-bottom: 8px !important; }
+              .niche-card-label { font-size: 14px !important; }
+              .niche-card-desc  { display: none !important; }
+            }
           `}</style>
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',maxWidth:820,width:'100%',padding:'0 24px',animation:'niche-fade-in 0.5s ease both'}}>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',maxWidth:820,width:'100%',padding:'0 16px',animation:'niche-fade-in 0.5s ease both',overflowY:'auto',maxHeight:'100vh'}}>
             {/* Header */}
             <div style={{textAlign:'center',marginBottom:48}}>
               <div style={{fontSize:13,fontWeight:'700',letterSpacing:'0.18em',color:'#f97316',textTransform:'uppercase',marginBottom:16}}>
                 Welcome to ThumbFrame
               </div>
-              <div style={{fontSize:42,fontWeight:'900',color:'#fff',lineHeight:1.05,marginBottom:12,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
+              <div className="niche-header-title" style={{fontSize:42,fontWeight:'900',color:'#fff',lineHeight:1.05,marginBottom:12,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
                 What kind of channel<br/>do you create for?
               </div>
-              <div style={{fontSize:16,color:'rgba(255,255,255,0.45)',lineHeight:1.6}}>
+              <div className="niche-header-sub" style={{fontSize:16,color:'rgba(255,255,255,0.45)',lineHeight:1.6}}>
                 We'll tailor every AI feature to your audience so you get<br/>thumbnails that actually perform.
               </div>
             </div>
 
-            {/* 2×3 niche card grid */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,width:'100%',marginBottom:40}}>
+            {/* Niche card grid — 3 cols desktop, 2 cols mobile */}
+            <div className="niche-grid" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,width:'100%',marginBottom:40}}>
               {Object.entries(NICHE_CONFIG).map(([key,cfg])=>{
                 const isSelected=nicheHovered===key;
                 return (
-                  <div
+                  <button
                     key={key}
                     className="niche-card"
                     onClick={()=>setNicheHovered(key)}
@@ -15069,7 +15077,7 @@ PHASE 4 — Toolbar button:
                       padding:'28px 24px 24px',
                       animation: isSelected ? 'niche-glow 2s ease infinite' : 'none',
                       boxShadow: isSelected ? `0 8px 40px ${cfg.accentColor}55` : '0 2px 12px rgba(0,0,0,0.4)',
-                      userSelect:'none',
+                      userSelect:'none', minHeight:48,
                     }}
                   >
                     {isSelected && (
@@ -15079,10 +15087,10 @@ PHASE 4 — Toolbar button:
                         fontSize:12,fontWeight:'900',color:'#fff',boxShadow:`0 2px 8px ${cfg.accentColor}88`,
                       }}>✓</div>
                     )}
-                    <div style={{fontSize:40,marginBottom:14,display:'block',animation:isSelected?'niche-float 3s ease infinite':undefined}}>{cfg.emoji}</div>
-                    <div style={{fontSize:17,fontWeight:'800',color:'#fff',marginBottom:6}}>{cfg.label}</div>
-                    <div style={{fontSize:13,color:isSelected?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.4)',lineHeight:1.5}}>{cfg.desc}</div>
-                  </div>
+                    <div className="niche-card-emoji" style={{fontSize:40,marginBottom:14,display:'block',animation:isSelected?'niche-float 3s ease infinite':undefined}}>{cfg.emoji}</div>
+                    <div className="niche-card-label" style={{fontSize:17,fontWeight:'800',color:'#fff',marginBottom:6}}>{cfg.label}</div>
+                    <div className="niche-card-desc" style={{fontSize:13,color:isSelected?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.4)',lineHeight:1.5}}>{cfg.desc}</div>
+                  </button>
                 );
               })}
             </div>
