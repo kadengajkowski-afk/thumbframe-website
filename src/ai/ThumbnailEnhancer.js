@@ -1,0 +1,195 @@
+// src/ai/ThumbnailEnhancer.js
+// Pixel-level enhancement functions. Each takes a canvas, modifies it in-place, returns it.
+
+export function autoBrighten(canvas) {
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  const total = canvas.width * canvas.height;
+
+  // Auto Levels: clip 0.5% per channel
+  for (let c = 0; c < 3; c++) {
+    const histogram = new Array(256).fill(0);
+    for (let i = c; i < data.length; i += 4) histogram[data[i]]++;
+    let low = 0, high = 255, cumLow = 0, cumHigh = 0;
+    for (let i = 0; i <= 255; i++) {
+      cumLow += histogram[i];
+      if (cumLow > total * 0.005) { low = i; break; }
+    }
+    for (let i = 255; i >= 0; i--) {
+      cumHigh += histogram[i];
+      if (cumHigh > total * 0.005) { high = i; break; }
+    }
+    const range = (high - low) || 1;
+    for (let i = c; i < data.length; i += 4) {
+      data[i] = Math.min(255, Math.max(0, Math.round((data[i] - low) * 255 / range)));
+    }
+  }
+
+  // Mild S-curve for pop
+  const k = 6;
+  for (let i = 0; i < data.length; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      const n = data[i+c] / 255;
+      data[i+c] = Math.round(255 / (1 + Math.exp(-k * (n - 0.5))));
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+export function autoContrast(canvas) {
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  let mean = 0, count = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    mean += data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114;
+    count++;
+  }
+  mean /= count;
+  const factor = 1.3;
+  for (let i = 0; i < data.length; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      data[i+c] = Math.min(255, Math.max(0, Math.round(mean + (data[i+c] - mean) * factor)));
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+export function autoSaturate(canvas, amount = 0.25) {
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+
+  const hue2rgb = (p, q, t) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q-p)*6*t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q-p)*(2/3-t)*6;
+    return p;
+  };
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i]/255, g = data[i+1]/255, b = data[i+2]/255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b);
+    const l = (max+min)/2;
+    if (max === min) continue;
+    const d = max - min;
+    let s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+    let h;
+    switch (max) {
+      case r: h = ((g-b)/d + (g<b?6:0)) / 6; break;
+      case g: h = ((b-r)/d + 2) / 6; break;
+      default: h = ((r-g)/d + 4) / 6;
+    }
+    // Vibrance: boost undersaturated pixels more
+    const vibranceBoost = amount * (1 - s);
+    s = Math.min(1, s + vibranceBoost);
+    const q = l < 0.5 ? l*(1+s) : l+s-l*s;
+    const p = 2*l - q;
+    data[i]   = Math.round(hue2rgb(p,q,h+1/3)*255);
+    data[i+1] = Math.round(hue2rgb(p,q,h)*255);
+    data[i+2] = Math.round(hue2rgb(p,q,h-1/3)*255);
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+export function autoDesaturate(canvas) {
+  return autoSaturate(canvas, -0.15);
+}
+
+export function autoVignette(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const cx = w/2, cy = h/2;
+  const maxDist = Math.sqrt(cx*cx + cy*cy);
+  const gradient = ctx.createRadialGradient(cx,cy,maxDist*0.5, cx,cy,maxDist);
+  gradient.addColorStop(0,   'rgba(0,0,0,0)');
+  gradient.addColorStop(0.7, 'rgba(0,0,0,0.1)');
+  gradient.addColorStop(1,   'rgba(0,0,0,0.4)');
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0,0,w,h);
+  ctx.restore();
+  return canvas;
+}
+
+export function autoWhiteBalance(canvas) {
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  const count = canvas.width * canvas.height;
+  let avgR=0, avgG=0, avgB=0;
+  for (let i = 0; i < data.length; i += 4) {
+    avgR += data[i]; avgG += data[i+1]; avgB += data[i+2];
+  }
+  avgR /= count; avgG /= count; avgB /= count;
+  const avg = (avgR+avgG+avgB)/3;
+  const sR = avg/avgR, sG = avg/avgG, sB = avg/avgB;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i]   = Math.min(255, Math.round(data[i]*sR));
+    data[i+1] = Math.min(255, Math.round(data[i+1]*sG));
+    data[i+2] = Math.min(255, Math.round(data[i+2]*sB));
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+export function autoSharpen(canvas) {
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  const w = canvas.width, h = canvas.height;
+  const src = new Uint8ClampedArray(data);
+  const amount = 0.8, threshold = 3;
+  for (let y = 1; y < h-1; y++) {
+    for (let x = 1; x < w-1; x++) {
+      const i = (y*w+x)*4;
+      for (let c = 0; c < 3; c++) {
+        const blurred = (
+          src[((y-1)*w+x-1)*4+c] + src[((y-1)*w+x)*4+c]   + src[((y-1)*w+x+1)*4+c] +
+          src[(y*w+x-1)*4+c]     + src[i+c]                 + src[(y*w+x+1)*4+c] +
+          src[((y+1)*w+x-1)*4+c] + src[((y+1)*w+x)*4+c]   + src[((y+1)*w+x+1)*4+c]
+        ) / 9;
+        const diff = src[i+c] - blurred;
+        if (Math.abs(diff) > threshold) {
+          data[i+c] = Math.min(255, Math.max(0, Math.round(src[i+c] + diff*amount)));
+        }
+      }
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+export function gamingEnhance(canvas) {
+  autoSaturate(canvas, 0.3);
+  autoContrast(canvas);
+  autoVignette(canvas);
+  return canvas;
+}
+
+export function autoFixAll(canvas, recommendations) {
+  const actionMap = {
+    auto_brighten:     autoBrighten,
+    auto_darken:       autoContrast,
+    auto_contrast:     autoContrast,
+    auto_saturate:     autoSaturate,
+    auto_desaturate:   autoDesaturate,
+    auto_vignette:     autoVignette,
+    auto_white_balance:autoWhiteBalance,
+    gaming_enhance:    gamingEnhance,
+  };
+  for (const rec of recommendations) {
+    if (rec.action && actionMap[rec.action]) {
+      actionMap[rec.action](canvas);
+    }
+  }
+  return canvas;
+}
