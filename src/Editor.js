@@ -5,6 +5,7 @@ import BrushTool, { BrushOverlay } from './Brush';
 import supabase from './supabaseClient';
 import ErrorBoundary from './components/ErrorBoundary';
 import { createSaveEngine } from './saveEngine';
+import { loadProject as loadProjectFromStorage } from './utils/projectStorage';
 import { saveAs } from 'file-saver';
 import { renderTextLayer, applyTextTransform } from './textRenderer';
 import { SHORTCUT_GROUPS, TOOL_SHORTCUT_MAP } from './shortcuts';
@@ -2265,17 +2266,32 @@ PHASE 4 — Toolbar button:
           if(!urlDesignId) syncProjectIdToUrl(resolvedProjectId);
         }
 
+        // ── Path 0: IndexedDB local project (Gallery → Editor nav) ──────────────
+        // When the Gallery sets ?project=<id> in the URL, try IndexedDB first.
+        // This is instant (no network) and is the primary source of truth for
+        // projects created/auto-saved in the browser.
+        let idbProject = null;
+        if(urlDesignId){
+          try{
+            idbProject = await loadProjectFromStorage(urlDesignId);
+          }catch(e){
+            console.warn('[BOOTSTRAP] IndexedDB load failed, falling back:', e);
+          }
+        }
+
         // ── Read localStorage draft synchronously (no network, instant) ──
         let restoredDraft = null;
-        if(urlDesignId){
-          // If there's a URL project ID we'll prefer the remote — skip draft for now
-        } else {
-          try{
-            const rawDraft = localStorage.getItem(getProjectStorageKey(resolvedProjectId));
-            if(rawDraft) restoredDraft = JSON.parse(rawDraft);
-          }catch(e){
-            console.error('Draft restore failed:', e);
-            localStorage.removeItem(getProjectStorageKey(resolvedProjectId));
+        if(!idbProject){
+          if(urlDesignId){
+            // URL project ID found but not in IndexedDB — might be a Supabase UUID, continue
+          } else {
+            try{
+              const rawDraft = localStorage.getItem(getProjectStorageKey(resolvedProjectId));
+              if(rawDraft) restoredDraft = JSON.parse(rawDraft);
+            }catch(e){
+              console.error('Draft restore failed:', e);
+              localStorage.removeItem(getProjectStorageKey(resolvedProjectId));
+            }
           }
         }
 
@@ -2350,7 +2366,46 @@ PHASE 4 — Toolbar button:
 
         const stateToRestore = restoredDraft;
 
-        if(remoteDesign){
+        if(idbProject){
+          // ── Path 0: Hydrate from IndexedDB (Gallery → Editor nav, or offline) ──
+          const idbLayers = idbProject.layers || [];
+          const idbPlatform = idbProject.platform || 'youtube';
+          const maxIdbId = idbLayers.reduce((m,l)=>Math.max(m,typeof l.id==='number'?l.id:0),0);
+          if(maxIdbId>=idCounter) idCounter=maxIdbId+1;
+
+          setPlatform(idbPlatform);
+          setLayers(idbLayers);
+          layersRef.current=idbLayers;
+          setBrightness(idbProject.brightness??100);
+          setContrast(idbProject.contrast??100);
+          setSaturation(idbProject.saturation??100);
+          setHue(idbProject.hue??0);
+          setDesignName(idbProject.designName||idbProject.name||'My Design');
+          setProjectId(idbProject.projectId||resolvedProjectId);
+          currentDesignIdRef.current=idbProject.projectId||resolvedProjectId;
+          setCurrentDesignId(idbProject.projectId||resolvedProjectId);
+
+          const snapshot=JSON.parse(JSON.stringify(idbLayers));
+          historyRef.current=[snapshot];
+          historyIndexRef.current=0;
+          setHistory([snapshot]);
+          setHistoryIndex(0);
+          historyLabelsRef.current=['Open'];historyTimestampsRef.current=[Date.now()];
+          setHistoryLabels(['Open']);setHistoryTimestamps([Date.now()]);setHistoryThumbnails({});
+          loadDbSnapshots();
+          lastSavedSignatureRef.current=buildSaveSignature({
+            projectId:idbProject.projectId||resolvedProjectId,
+            platform:idbPlatform,
+            layers:idbLayers,
+            brightness:idbProject.brightness??100,
+            contrast:idbProject.contrast??100,
+            saturation:idbProject.saturation??100,
+            hue:idbProject.hue??0,
+            designName:idbProject.designName||idbProject.name||'My Design',
+            aiPrompt:'',
+            lastGeneratedImageUrl:'',
+          });
+        }else if(remoteDesign){
           // ── Path A: Hydrate from Supabase remote design (Dashboard → Editor nav) ──
           const jsonData = remoteDesign.json_data || {};
           const remoteLayers = Array.isArray(jsonData.layers) && jsonData.layers.length > 0
@@ -5426,6 +5481,10 @@ PHASE 4 — Toolbar button:
       };
 
       lastSavedSignatureRef.current = signature;
+
+      // Always sync IndexedDB immediately after a successful Railway save.
+      // This keeps the Gallery (which reads IndexedDB) in sync at all times.
+      saveEngineRef.current?.saveImmediate();
 
       if(!silent){
         clearTimeout(saveStatusTimerRef.current);

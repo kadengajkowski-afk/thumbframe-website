@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import { useSEO } from '../hooks/useSEO';
 import { useAuth } from '../context/AuthContext';
 import db from '../db';
+import { listProjects, deleteProject as deleteProjectFromStorage, duplicateProject } from '../utils/projectStorage';
 
 const SHOWCASE = [
   { bg: 'linear-gradient(135deg,#1a1a2e,#4a3060)', text: 'WATCH THIS',        color: '#FFD700' },
@@ -160,7 +161,7 @@ const navBtnStyle = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
 };
 
-function ProjectCard({ project, onOpen, onDelete }) {
+function ProjectCard({ project, onOpen, onDelete, onDuplicate }) {
   const [thumbSrc, setThumbSrc] = useState(null);
 
   useEffect(() => {
@@ -188,6 +189,11 @@ function ProjectCard({ project, onOpen, onDelete }) {
         </div>
       </div>
       <div className="tf-project-actions">
+        <button
+          style={{ width: 26, height: 26, borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.12)', color: '#fff' }}
+          title="Duplicate project"
+          onClick={(e) => { e.stopPropagation(); onDuplicate(project.id); }}
+        >⧉</button>
         <button
           style={{ width: 26, height: 26, borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(239,68,68,0.85)', color: '#fff' }}
           title="Delete project"
@@ -220,18 +226,13 @@ export default function Gallery({ setPage }) {
   useEffect(() => {
     if (!user) return;
     setProjLoading(true);
-    db.projects.orderBy('updatedAt').reverse().toArray()
-      .then(async (all) => {
-        // Include projects owned by this user OR projects with no userId (pre-fix,
-        // local to this browser so they belong to whoever is logged in).
-        const mine = all.filter(p => !p.userId || p.userId === user.id);
-
+    listProjects(user.id)
+      .then(async (mine) => {
         // Backfill missing userId so future queries work correctly.
         const untagged = mine.filter(p => !p.userId);
         if (untagged.length > 0) {
           await Promise.all(untagged.map(p => db.projects.update(p.id, { userId: user.id })));
         }
-
         setProjects(mine);
         setProjLoading(false);
       })
@@ -239,16 +240,24 @@ export default function Gallery({ setPage }) {
   }, [user]);
 
   function openProject(id) {
-    localStorage.setItem('tf_open_project', id);
+    // Put the project ID in the URL so the editor's getProjectIdFromUrl() finds it.
+    const url = new URL(window.location.href);
+    url.searchParams.set('project', id);
+    window.history.pushState(null, '', url.pathname + url.search);
     setPage('editor');
     window.scrollTo({ top: 0 });
   }
 
-  async function deleteProject(id) {
+  async function handleDelete(id) {
     if (!window.confirm('Delete this project? This cannot be undone.')) return;
-    await db.projects.delete(id);
-    await db.blobs.where('projectId').equals(id).delete().catch(() => {});
+    await deleteProjectFromStorage(id);
     setProjects((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  async function handleDuplicate(id) {
+    await duplicateProject(id);
+    const updated = await listProjects(user?.id);
+    setProjects(updated);
   }
 
   return (
@@ -345,7 +354,7 @@ export default function Gallery({ setPage }) {
             </div>
           ) : (
             projects.map((project) => (
-              <ProjectCard key={project.id} project={project} onOpen={openProject} onDelete={deleteProject} />
+              <ProjectCard key={project.id} project={project} onOpen={openProject} onDelete={handleDelete} onDuplicate={handleDuplicate} />
             ))
           )}
         </div>
