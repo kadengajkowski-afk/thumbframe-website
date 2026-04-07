@@ -15,6 +15,7 @@ import FiltersModal from './FiltersModal';
 import SelectionOverlay from './SelectionOverlay';
 import { rectMask, ellipseMask, pathMask, magicWandMask, combineMasks, invertMask, selectAllMask, maskBounds, featherMask } from './selectionUtils'; // eslint-disable-line no-unused-vars
 import db from './db';
+import { renderLayersWithPixi } from './pixiCompositor';
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
 const BrandKitSetupModal = lazy(() => import('./BrandKit'));
@@ -4339,6 +4340,34 @@ PHASE 4 — Toolbar button:
   // ── Shared canvas renderer (single source of truth) ──────────────────────
   // Used by: exportAllPlatforms, exportCanvas, downloadVariantsAsZip
   async function renderLayersToCanvas(canvas, layerArray, opts={}){
+    // ── Phase 2: Try PixiJS WebGL compositor first (image/background layers, standard blend modes)
+    // Falls back to 2D canvas path when layers have text, shapes, groups, adjustments,
+    // clipping masks, glow/shadow effects, or HSL blend modes.
+    if (!opts.skipGlobalFilter) {
+      const pixiOk = await renderLayersWithPixi(canvas, layerArray, {
+        previewW: opts.previewW || p.preview.w,
+        previewH: opts.previewH || p.preview.h,
+      });
+      if (pixiOk) {
+        // PixiJS rendered successfully — apply global brightness/contrast/saturation/hue
+        // via a second 2D pass using canvas filter (PixiJS doesn't apply the global editor filter)
+        const hasGlobalFilter = brightness !== 100 || contrast !== 100 || saturation !== 100 || hue !== 0;
+        if (hasGlobalFilter) {
+          const tmp = document.createElement('canvas');
+          tmp.width = canvas.width; tmp.height = canvas.height;
+          const tmpCtx = tmp.getContext('2d');
+          tmpCtx.drawImage(canvas, 0, 0);
+          const ctx2 = canvas.getContext('2d');
+          ctx2.clearRect(0, 0, canvas.width, canvas.height);
+          ctx2.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
+          ctx2.drawImage(tmp, 0, 0);
+          ctx2.filter = 'none';
+        }
+        return;
+      }
+    }
+    // ── Fallback: 2D canvas compositor (handles all layer types) ─────────────
+
     const ctx = canvas.getContext('2d');
     const previewW = opts.previewW || p.preview.w;
     const previewH = opts.previewH || p.preview.h;
