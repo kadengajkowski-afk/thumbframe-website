@@ -87,7 +87,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
 
     const loadImg = (img) => {
       const z   = zoom || 1;
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const px  = z * dpr;
       canvas.width  = Math.round(layer.width  * px);
       canvas.height = Math.round(layer.height * px);
@@ -1096,7 +1096,7 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     const rect   = canvas ? canvas.getBoundingClientRect() : null;
 
     // DPR-correct canvas resolution for crisp cursor on retina displays
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const cssW = rect ? rect.width  : 300;
     const cssH = rect ? rect.height : 200;
     if (cc.width !== Math.round(cssW * dpr) || cc.height !== Math.round(cssH * dpr)) {

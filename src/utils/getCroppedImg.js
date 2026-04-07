@@ -16,7 +16,7 @@ export default async function getCroppedImg(imageSrc, pixelCrop, options = {}) {
   const safeWidth = Math.max(1, Math.floor(pixelCrop.width));
   const safeHeight = Math.max(1, Math.floor(pixelCrop.height));
 
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
   const canvas = document.createElement('canvas');
   canvas.width = Math.floor(safeWidth * dpr);
   canvas.height = Math.floor(safeHeight * dpr);
