@@ -1083,62 +1083,108 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     setTimeout(() => { onUpdate({ src: dataUrl }); }, 50);
   }
 
-  // ── Item 7: Brush cursor (OffscreenCanvas-rendered) ───────────────────────
+  // ── Item 7: Brush cursor — DPR-crisp, per-tool variants ──────────────────
   function updateBrushCursor(clientX, clientY) {
     const cc = brushCursorCanvasRef.current;
     if (!cc) return;
 
     const canvas = canvasRef.current;
     const rect   = canvas ? canvas.getBoundingClientRect() : null;
+
+    // DPR-correct canvas resolution for crisp cursor on retina displays
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = rect ? rect.width  : 300;
+    const cssH = rect ? rect.height : 200;
+    if (cc.width !== Math.round(cssW * dpr) || cc.height !== Math.round(cssH * dpr)) {
+      cc.width  = Math.round(cssW * dpr);
+      cc.height = Math.round(cssH * dpr);
+    }
+    const ctx = cc.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+
     const displayX = clientX - (rect ? rect.left : 0);
     const displayY = clientY - (rect ? rect.top  : 0);
 
-    cc.width  = rect ? rect.width  : cc.width;
-    cc.height = rect ? rect.height : cc.height;
-
-    const ctx = cc.getContext('2d');
-    ctx.clearRect(0, 0, cc.width, cc.height);
+    // Out-of-bounds: don't draw cursor
+    if (displayX < 0 || displayX > cssW || displayY < 0 || displayY > cssH) return;
 
     const dispRadius = brushSize * (zoom || 1);
     const hardness   = brushEdge === 'hard' ? 0.99 : 0.0;
 
+    // ── Fill tool: crosshair only ─────────────────────────────────────────
+    if (brushType === 'fill') {
+      _drawCrosshair(ctx, displayX, displayY, 8);
+      return;
+    }
+
+    // ── Clone tool: cursor circle + source crosshair ──────────────────────
+    if (brushType === 'clone' && cloneSourceRef.current && canvas) {
+      const srcImgX = cloneSourceRef.current.x;
+      const srcImgY = cloneSourceRef.current.y;
+      // Convert image coords back to CSS display coords
+      const srcCSSX = srcImgX * (cssW / canvas.width);
+      const srcCSSY = srcImgY * (cssH / canvas.height);
+      // Small + marker at source point
+      _drawCrosshair(ctx, srcCSSX, srcCSSY, 6);
+      ctx.strokeStyle = 'rgba(64,192,255,0.9)';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.arc(srcCSSX, srcCSSY, 10, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // ── Standard circle cursor ────────────────────────────────────────────
     if (dispRadius < 3) {
-      // Crosshair for tiny brushes
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-      ctx.lineWidth   = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(displayX - 7, displayY); ctx.lineTo(displayX + 7, displayY);
-      ctx.moveTo(displayX, displayY - 7); ctx.lineTo(displayX, displayY + 7);
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-      ctx.lineWidth   = 1;
-      ctx.beginPath();
-      ctx.moveTo(displayX - 6, displayY); ctx.lineTo(displayX + 6, displayY);
-      ctx.moveTo(displayX, displayY - 6); ctx.lineTo(displayX, displayY + 6);
-      ctx.stroke();
+      _drawCrosshair(ctx, displayX, displayY, 7);
     } else {
-      // Outer ring
+      // Drop shadow for visibility on any background
+      ctx.beginPath();
+      ctx.arc(displayX, displayY, dispRadius + 0.5, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+      ctx.lineWidth   = 2;
+      ctx.stroke();
+      // White ring
       ctx.beginPath();
       ctx.arc(displayX, displayY, dispRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
       ctx.lineWidth   = 1.5;
       ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(displayX, displayY, dispRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-      ctx.lineWidth   = 1;
-      ctx.stroke();
-      // Inner core ring for soft brushes
-      if (hardness < 0.9) {
+      // Soft-brush inner hardness ring
+      if (hardness < 0.9 && dispRadius > 6) {
         ctx.beginPath();
         ctx.arc(displayX, displayY, dispRadius * Math.max(0.1, hardness), 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.28)';
         ctx.lineWidth   = 1;
-        ctx.setLineDash([2, 2]);
+        ctx.setLineDash([3, 3]);
         ctx.stroke();
         ctx.setLineDash([]);
       }
+      // Sponge: show S (saturate) or D (desaturate) label inside circle
+      if (brushType === 'sponge') {
+        const mode = (brushStrength ?? 50) > 50 ? 'S' : 'D';
+        ctx.font      = `bold ${Math.max(9, Math.min(14, dispRadius * 0.6))}px sans-serif`;
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(mode, displayX, displayY);
+      }
     }
+  }
+
+  function _drawCrosshair(ctx, x, y, size) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - size, y); ctx.lineTo(x + size, y);
+    ctx.moveTo(x, y - size); ctx.lineTo(x, y + size);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(x - size + 1, y); ctx.lineTo(x + size - 1, y);
+    ctx.moveTo(x, y - size + 1); ctx.lineTo(x, y + size - 1);
+    ctx.stroke();
   }
 
   if (!active || !layer?.src) return null;
@@ -1276,6 +1322,14 @@ export default function BrushTool({
       {brushType === 'clone' && (
         <div style={{ ...css.section, fontSize: 11, color: T.muted, lineHeight: 1.6, marginTop: 6 }}>
           <strong style={{ color: T.text }}>Alt+click</strong> to set source, then paint.
+        </div>
+      )}
+
+      {brushType === 'sponge' && (
+        <div style={{ ...css.section, fontSize: 11, lineHeight: 1.6, marginTop: 6,
+          color: (brushStrength ?? 50) > 50 ? '#22c55e' : T.muted }}>
+          Mode: <strong>{(brushStrength ?? 50) > 50 ? 'Saturate ↑' : 'Desaturate ↓'}</strong>
+          <span style={{ color: T.muted }}> — drag Strength to switch</span>
         </div>
       )}
 
