@@ -45,23 +45,25 @@ function SpaceCanvas() {
     }));
 
     // Layer 4b — ambient drifting starfield (orange + white, 100 stars)
+    // Initial speed is low — gravitational pull does the work
     const driftStars = Array.from({ length: 100 }, () => {
       const isOrange = Math.random() < 0.38;
       const pick = Math.random();
       const [cr, cg, cb] = isOrange
-        ? (pick < 0.5 ? [255, 106,  0] : [255, 140, 51])   // #ff6a00 / #ff8c33
-        : (pick < 0.5 ? [255, 255, 255] : [224, 224, 224]); // #ffffff / #e0e0e0
-      const speed = 0.1 + Math.random() * 0.4;
+        ? (pick < 0.5 ? [255, 106,  0] : [255, 140, 51])
+        : (pick < 0.5 ? [255, 255, 255] : [224, 224, 224]);
+      const speed = 0.04 + Math.random() * 0.18; // slower base — gravity accelerates
       const angle = Math.random() * Math.PI * 2;
       return {
         x:  Math.random() * W,
         y:  Math.random() * H,
-        r:  0.5 + Math.random() * 1.0,          // 0.5–1.5px radius → 1–3px diameter
+        r:  0.5 + Math.random() * 1.0,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         ph: Math.random() * Math.PI * 2,
-        ts: 0.4 + Math.random() * 0.8,          // twinkle speed
+        ts: 0.4 + Math.random() * 0.8,
         cr, cg, cb,
+        bcr: cr, bcg: cg, bcb: cb, // base color (for lerp)
       };
     });
 
@@ -92,6 +94,28 @@ function SpaceCanvas() {
       freq:  0.0025 + i * 0.0008,
     }));
 
+    // Color lerp helper (component arrays — no hex parsing in hot loop)
+    function lerpRGB(r1, g1, b1, r2, g2, b2, t) {
+      return [
+        Math.round(r1 + (r2 - r1) * t),
+        Math.round(g1 + (g2 - g1) * t),
+        Math.round(b1 + (b2 - b1) * t),
+      ];
+    }
+
+    // Center sparks — matter being consumed by singularity (10 tiny orbiting dots)
+    const sparks = Array.from({ length: 10 }, (_, i) => ({
+      angle:    (i / 10) * Math.PI * 2,
+      orbitR:   10 + Math.random() * 15,
+      speed:    (0.05 + Math.random() * 0.06) * (Math.random() < 0.5 ? 1 : -1),
+      size:     0.8 + Math.random() * 0.7,
+      alpha:    0.8 + Math.random() * 0.2,
+      trail:    [],
+      fallIn:   false,
+      fallProgress: 0,
+      respawnTimer: Math.floor(90 + Math.random() * 210),
+    }));
+
     let rot  = 0;
     let time = 0;
 
@@ -112,18 +136,47 @@ function SpaceCanvas() {
         ctx.fill();
       });
 
-      // Layer 4b — drifting ambient starfield
+      // Layer 4b — drifting starfield with gravitational attraction toward singularity
       driftStars.forEach(s => {
+        const dx = s.x - cx;
+        const dy = s.y - pcy;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        // Inverse-square gravity (capped to prevent escape velocity)
+        const gravity = Math.min(0.5, 800 / (dist * dist + 100));
+        s.vx -= (dx / dist) * gravity;
+        s.vy -= (dy / dist) * gravity;
+
+        // Tangential nudge — keeps stars orbiting instead of falling straight in
+        s.vx += (-dy / dist) * gravity * 0.3;
+        s.vy += ( dx / dist) * gravity * 0.3;
+
+        // Velocity damping
+        s.vx *= 0.995;
+        s.vy *= 0.995;
+
         s.x += s.vx;
         s.y += s.vy;
-        if (s.x < -3) s.x = W + 3;
-        else if (s.x > W + 3) s.x = -3;
-        if (s.y < -3) s.y = H + 3;
-        else if (s.y > H + 3) s.y = -3;
-        const a = 0.65 + 0.35 * Math.sin(time * s.ts + s.ph); // oscillates 0.3–1.0
+
+        // Consumed by singularity → respawn at a random screen edge
+        if (dist < 15) {
+          const edge = Math.floor(Math.random() * 4);
+          if      (edge === 0) { s.x = 0; s.y = Math.random() * H; }
+          else if (edge === 1) { s.x = W; s.y = Math.random() * H; }
+          else if (edge === 2) { s.x = Math.random() * W; s.y = 0; }
+          else                 { s.x = Math.random() * W; s.y = H; }
+          s.vx = 0; s.vy = 0;
+        }
+
+        // Proximity effects — bigger and more orange near the center
+        const sizeMult   = 1 + Math.max(0, (200 - dist) / 200) * 2;     // up to 3× near center
+        const orangeT    = Math.max(0, Math.min(1, (300 - dist) / 300)) * 0.7;
+        const [rr, rg, rb] = lerpRGB(s.bcr, s.bcg, s.bcb, 255, 106, 0, orangeT);
+
+        const a = 0.65 + 0.35 * Math.sin(time * s.ts + s.ph);
         ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${s.cr},${s.cg},${s.cb},${a})`;
+        ctx.arc(s.x, s.y, s.r * sizeMult, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${rr},${rg},${rb},${a})`;
         ctx.fill();
       });
 
@@ -153,6 +206,95 @@ function SpaceCanvas() {
         ctx.arc(px, py, p.sz, 0, Math.PI * 2);
         ctx.fillStyle = `hsla(${p.hue},100%,65%,${a})`;
         ctx.fill();
+      });
+
+      // ── Singularity — pulsing black hole aura ────────────────────────────
+      const pulse1 = 1 + 0.15 * Math.sin(time * 2.0);
+      const pulse2 = 1 + 0.15 * Math.sin(time * 2.0 + Math.PI * 0.5);
+      const pulse3 = 1 + 0.15 * Math.sin(time * 2.0 + Math.PI);
+      const auraRot = time * 0.3;
+
+      // Ring 3 — faint wide warm glow
+      const gr3 = ctx.createRadialGradient(cx, pcy, 0, cx, pcy, 150 * pulse3);
+      gr3.addColorStop(0,   'rgba(255,106,0,0.05)');
+      gr3.addColorStop(1,   'transparent');
+      ctx.beginPath(); ctx.arc(cx, pcy, 150 * pulse3, 0, Math.PI * 2);
+      ctx.fillStyle = gr3; ctx.fill();
+
+      // Ring 2 — mid orange halo
+      const gr2 = ctx.createRadialGradient(cx, pcy, 0, cx, pcy, 80 * pulse2);
+      gr2.addColorStop(0,   'rgba(255,140,51,0.10)');
+      gr2.addColorStop(1,   'transparent');
+      ctx.beginPath(); ctx.arc(cx, pcy, 80 * pulse2, 0, Math.PI * 2);
+      ctx.fillStyle = gr2; ctx.fill();
+
+      // Ring 1 — bright inner corona
+      const gr1 = ctx.createRadialGradient(cx, pcy, 0, cx, pcy, 40 * pulse1);
+      gr1.addColorStop(0,   'rgba(255,106,0,0.18)');
+      gr1.addColorStop(0.4, 'rgba(255,106,0,0.08)');
+      gr1.addColorStop(1,   'transparent');
+      ctx.beginPath(); ctx.arc(cx, pcy, 40 * pulse1, 0, Math.PI * 2);
+      ctx.fillStyle = gr1; ctx.fill();
+
+      // Rotating off-center swirl — makes it look like matter spiraling in
+      const swX = cx  + Math.cos(auraRot) * 12;
+      const swY = pcy + Math.sin(auraRot) * 8;
+      const gSwirl = ctx.createRadialGradient(swX, swY, 0, cx, pcy, 50 * pulse1);
+      gSwirl.addColorStop(0,   'rgba(255,170,60,0.14)');
+      gSwirl.addColorStop(1,   'transparent');
+      ctx.beginPath(); ctx.arc(cx, pcy, 50 * pulse1, 0, Math.PI * 2);
+      ctx.fillStyle = gSwirl; ctx.fill();
+
+      // Black core — the event horizon
+      ctx.beginPath();
+      ctx.arc(cx, pcy, 15, 0, Math.PI * 2);
+      ctx.fillStyle = '#000000';
+      ctx.fill();
+
+      // ── Center sparks — matter orbiting the event horizon ────────────────
+      sparks.forEach(sp => {
+        if (!sp.fallIn) {
+          sp.angle += sp.speed;
+          sp.respawnTimer--;
+          if (sp.respawnTimer <= 0) {
+            sp.fallIn = true;
+            sp.fallProgress = 0;
+          }
+          const spx = cx  + Math.cos(sp.angle) * sp.orbitR;
+          const spy = pcy + Math.sin(sp.angle) * sp.orbitR * 0.55; // elliptical
+          sp.trail.push({ x: spx, y: spy });
+          if (sp.trail.length > 3) sp.trail.shift();
+          // Trail
+          sp.trail.forEach((pt, ti) => {
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, sp.size * 0.5, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255,106,0,${(ti + 1) / sp.trail.length * 0.35})`;
+            ctx.fill();
+          });
+          // Spark
+          ctx.beginPath();
+          ctx.arc(spx, spy, sp.size, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255,170,60,${sp.alpha})`;
+          ctx.fill();
+        } else {
+          // Falling into the black hole — shrinks and vanishes
+          sp.fallProgress += 0.035;
+          if (sp.fallProgress >= 1) {
+            sp.fallIn = false; sp.fallProgress = 0;
+            sp.angle    = Math.random() * Math.PI * 2;
+            sp.orbitR   = 10 + Math.random() * 15;
+            sp.respawnTimer = Math.floor(90 + Math.random() * 210);
+            sp.trail    = [];
+          } else {
+            const r   = sp.orbitR * (1 - sp.fallProgress);
+            const spx = cx  + Math.cos(sp.angle + sp.fallProgress * 3) * r;
+            const spy = pcy + Math.sin(sp.angle + sp.fallProgress * 3) * r * 0.55;
+            ctx.beginPath();
+            ctx.arc(spx, spy, sp.size * (1 - sp.fallProgress), 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255,200,60,${sp.alpha * (1 - sp.fallProgress)})`;
+            ctx.fill();
+          }
+        }
       });
 
       // Layer 5 — flow lines (fade in after scrolling past hero)
