@@ -396,14 +396,14 @@ function Dashboard({ setPage, user }) {
 
     import('./supabaseClient').then(m => m.default.auth.getSession()).then(({data:{session}}) => {
       const authToken = session?.access_token;
-      return fetch(`${API_URL}/designs/list`, {
+      return fetch(`${API_URL}/designs`, {
         signal: controller.signal,
         headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
       });
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((payload) => {
-        const list = Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
+        const list = Array.isArray(payload) ? payload : (Array.isArray(payload?.designs) ? payload.designs : (Array.isArray(payload?.data) ? payload.data : []));
         setDesigns(list);
         setLoading(false);
       })

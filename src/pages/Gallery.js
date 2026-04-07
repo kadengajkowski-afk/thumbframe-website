@@ -220,8 +220,21 @@ export default function Gallery({ setPage }) {
   useEffect(() => {
     if (!user) return;
     setProjLoading(true);
-    db.projects.where('userId').equals(user.id).reverse().sortBy('updatedAt')
-      .then((rows) => { setProjects(rows); setProjLoading(false); })
+    db.projects.orderBy('updatedAt').reverse().toArray()
+      .then(async (all) => {
+        // Include projects owned by this user OR projects with no userId (pre-fix,
+        // local to this browser so they belong to whoever is logged in).
+        const mine = all.filter(p => !p.userId || p.userId === user.id);
+
+        // Backfill missing userId so future queries work correctly.
+        const untagged = mine.filter(p => !p.userId);
+        if (untagged.length > 0) {
+          await Promise.all(untagged.map(p => db.projects.update(p.id, { userId: user.id })));
+        }
+
+        setProjects(mine);
+        setProjLoading(false);
+      })
       .catch(() => setProjLoading(false));
   }, [user]);
 
