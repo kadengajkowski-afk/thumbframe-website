@@ -20,6 +20,7 @@ import { analyzeImage as runThumbnailAnalysis } from './ai/ThumbnailAnalyzer';
 import { autoBrighten, autoContrast, autoSaturate, autoDesaturate, autoVignette, autoWhiteBalance, gamingEnhance, autoFixAll } from './ai/ThumbnailEnhancer';
 import DevicePreview from './ai/DevicePreview';
 import ColorBlindSimulator from './ai/ColorBlindSimulator';
+import PromptToThumbnail from './ai/PromptToThumbnail';
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
 const BrandKitSetupModal = lazy(() => import('./BrandKit'));
@@ -1671,6 +1672,7 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
   const [autoFixRunning,setAutoFixRunning]             = useState(false);
   const [autoShowDevicePreview,setAutoShowDevicePreview] = useState(false);
   const [autoShowColorBlind,setAutoShowColorBlind]       = useState(false);
+  const [showPromptEngine,setShowPromptEngine]           = useState(false);
   const [autoPreviewUrl,setAutoPreviewUrl]               = useState(null);
   const autoAnalysisDebounceRef                          = useRef(null);
 
@@ -5898,6 +5900,91 @@ PHASE 4 — Toolbar button:
     }
   }
 
+  // ── Prompt-to-Thumbnail Assembly ──────────────────────────────────────────
+  function handlePromptAssemble(components, composition){
+    const W = p.preview.w;  // 1280
+    const H = p.preview.h;  // 720
+    const layout = composition?.layout || 'subject_left_text_right';
+
+    // Determine text x position based on layout
+    const textX = layout==='subject_right_text_left' ? 40
+                : layout==='centered'                ? Math.round(W/2)-180
+                : Math.round(W*0.54); // subject_left_text_right default
+
+    for(const comp of components){
+      if(comp.requiresUpload) continue; // skip photo placeholder — user uploads manually
+
+      if(comp.type==='text_layer'||(comp.content&&!comp.imageBase64)){
+        const style = comp.style||{};
+        const strokes = (style.strokes||[]).map(s=>({color:s.color||'#000000',width:s.width||8,opacity:100}));
+        addLayer({
+          type:'text',
+          text: comp.content||comp.textContent||'',
+          x: textX, y: Math.round(H*0.28),
+          fontSize: 80,
+          fontFamily: style.font||'Impact',
+          fontWeight: 900,
+          fontItalic: false,
+          textColor: style.fill||'#FFFFFF',
+          strokeColor: strokes[0]?.color||'#000000',
+          strokeWidth: strokes[0]?.width||6,
+          shadowEnabled: true,
+          shadowColor: '#000000',
+          shadowBlur: 18,
+          shadowX: 2,
+          shadowY: 2,
+          glowEnabled: false,
+          glowColor: '#f97316',
+          arcEnabled: false,
+          arcRadius: 120,
+          letterSpacing: -2,
+          lineHeight: 1.1,
+          textAlign: 'left',
+          textTransform: 'uppercase',
+          fillType: 'solid',
+          gradientColors: null,
+          gradientAngle: 0,
+          textStrokes: strokes,
+          warpType: 'none',
+          warpAmount: 30,
+        });
+        continue;
+      }
+
+      if(comp.imageBase64){
+        const dataUrl = `data:image/jpeg;base64,${comp.imageBase64}`;
+        const isBackground = comp.id==='background'||comp.type==='generate';
+
+        if(isBackground){
+          // Background layer fills canvas
+          addLayer({
+            type:'image', src:dataUrl,
+            x:0, y:0, width:W, height:H,
+            cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+            imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+            name:'Background',
+          });
+        } else {
+          // Prop/asset — positioned based on layout, screen blend to remove black bg
+          const propW = Math.round(W*0.3);
+          const propH = Math.round(H*0.6);
+          const propX = layout==='subject_right_text_left' ? Math.round(W*0.6) : Math.round(W*0.05);
+          addLayer({
+            type:'image', src:dataUrl,
+            x:propX, y:Math.round((H-propH)/2), width:propW, height:propH,
+            cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+            imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+            blendMode: comp.aiGenerated ? 'screen' : 'normal', // black-bg props use screen
+            name: comp.id||'Prop',
+          });
+        }
+      }
+    }
+
+    setShowPromptEngine(false);
+    showToastMsg(`Assembled ${components.filter(c=>c.imageBase64||c.content||c.textContent).length} layers from AI generation`,'success');
+  }
+
   // ── Composition AI ────────────────────────────────────────────────────────
   async function analyzeComposition(){
     setCompLoading(true);
@@ -8879,6 +8966,21 @@ PHASE 4 — Toolbar button:
                 ?<><span style={{display:'inline-block',animation:'editor-spin 0.8s linear infinite'}}>◌</span> Exporting…</>
                 :<>⚡ A/B Export</>
               }
+            </button>
+          )}
+          {!isMobile&&(
+            <button
+              onClick={()=>isProUser?setShowPromptEngine(true):handleUpgrade()}
+              title="AI Prompt-to-Thumbnail Engine"
+              style={{
+                padding:'6px 13px',borderRadius:7,
+                border:'1px solid rgba(249,115,22,0.3)',
+                background:showPromptEngine?'rgba(249,115,22,0.2)':'rgba(249,115,22,0.08)',
+                color:T.accent,cursor:'pointer',fontSize:11,fontWeight:'700',
+                display:'flex',alignItems:'center',gap:5,flexShrink:0,
+                letterSpacing:'0.1px',
+              }}>
+              ✦ AI Generate
             </button>
           )}
           <button onClick={()=>{
@@ -15191,6 +15293,17 @@ PHASE 4 — Toolbar button:
         </div>
         );
       })()}
+
+      {/* ── Prompt-to-Thumbnail Engine Panel ──────────────────────────────── */}
+      {showPromptEngine && (
+        <PromptToThumbnail
+          token={token}
+          apiUrl={resolvedApiUrl}
+          niche={userNiche}
+          onAssemble={handlePromptAssemble}
+          onClose={()=>setShowPromptEngine(false)}
+        />
+      )}
 
       {/* Toast Notification */}
       {showToast && (
