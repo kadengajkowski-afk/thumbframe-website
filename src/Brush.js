@@ -158,21 +158,25 @@ export const BrushOverlay = forwardRef(function BrushOverlay(
     if (radius < 0.5) return;
     const { r, g, b } = rgbObj;
     ctx.save();
-    if (isEraser) ctx.globalCompositeOperation = 'destination-out';
+    // Eraser: draw OPAQUE dabs onto the stroke buffer so destination-out
+    // compositing in commitStroke/preview correctly removes those areas from the layer.
+    // Do NOT apply destination-out here — the stroke buffer starts transparent
+    // so dest-out inside renderDab would be a no-op and erase nothing.
+    const col = isEraser ? `0,0,0` : `${r},${g},${b}`;
+    const drawAlpha = isEraser ? alpha : alpha; // eraser dabs use full channel alpha
 
     if (hardness >= 0.99) {
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = isEraser ? `rgba(0,0,0,1)` : `rgb(${r},${g},${b})`;
+      ctx.globalAlpha = drawAlpha;
+      ctx.fillStyle = `rgb(${col})`;
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
     } else {
       const solidStop = Math.max(0, Math.min(0.98, hardness));
-      const col       = isEraser ? `0,0,0` : `${r},${g},${b}`;
       const grd = ctx.createRadialGradient(x, y, 0, x, y, radius);
-      grd.addColorStop(0,           `rgba(${col},${alpha})`);
-      grd.addColorStop(solidStop,   `rgba(${col},${alpha})`);
-      grd.addColorStop(1,           `rgba(${col},0)`);
+      grd.addColorStop(0,         `rgba(${col},${drawAlpha})`);
+      grd.addColorStop(solidStop, `rgba(${col},${drawAlpha})`);
+      grd.addColorStop(1,         `rgba(${col},0)`);
       ctx.fillStyle = grd;
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, Math.PI * 2);
