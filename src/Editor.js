@@ -1324,6 +1324,18 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
     };
   }, []);
 
+  // Non-passive touchmove listener so preventDefault() works on iOS Safari.
+  // React registers synthetic event listeners as passive by default, which
+  // prevents calling e.preventDefault() and allows the browser to hijack
+  // touch gestures for scrolling mid-stroke.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const prevent = (e) => e.preventDefault();
+    el.addEventListener('touchmove', prevent, { passive: false });
+    return () => el.removeEventListener('touchmove', prevent);
+  }, []);
+
   // ── Save Engine: init on mount, destroy on unmount ─────────────────────────
   useEffect(() => {
     const engine = createSaveEngine({
@@ -9717,7 +9729,7 @@ PHASE 4 — Toolbar button:
                   }
                   setSelectedId(null);
                 }}
-                style={{width:p.preview.w,height:p.preview.h,position:'relative',overflow:'hidden',borderRadius:4,boxShadow:'0 8px 40px rgba(0,0,0,0.8)',flexShrink:0,cursor:activeTool==='brush'?'crosshair':
+                style={{width:p.preview.w,height:p.preview.h,position:'relative',overflow:'hidden',borderRadius:4,boxShadow:'0 8px 40px rgba(0,0,0,0.8)',flexShrink:0,touchAction:'none',WebkitUserSelect:'none',userSelect:'none',WebkitTouchCallout:'none',cursor:activeTool==='brush'?'crosshair':
                        activeTool==='rimlight'?(rimPickingColor?'crosshair':'crosshair'):
                        activeTool==='zoom'?'zoom-in':
                        (activeTool==='lasso'&&isLassoMode)?'crosshair':
