@@ -752,6 +752,7 @@ export default function App() {
   const marketingPages = {
     home:        <Home setPage={setPage} />,
     features:    <Features setPage={setPage} />,
+    pricing:     <PricingPage setPage={setPage} />,
     about:       <About setPage={setPage} />,
     gallery:     <Gallery setPage={setPage} />,
     login:       <Login setPage={setPage} />,
@@ -770,7 +771,7 @@ export default function App() {
   if (marketingPages[page]) {
     return (
       <div className="tf-marketing-shell">
-        <Suspense key={page} fallback={<PageLoader />}>{marketingPages[page]}</Suspense>
+        <Suspense fallback={<PageLoader />}>{marketingPages[page]}</Suspense>
         <CookieBanner />
       </div>
     );
