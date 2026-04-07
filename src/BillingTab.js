@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { handleUpgrade } from './utils/checkout';
 
 const C = {
   bg:       '#0a0a0a',

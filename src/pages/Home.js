@@ -5,7 +5,6 @@ import {
 } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { handleUpgrade } from '../utils/checkout';
 import { useSEO } from '../hooks/useSEO';
 
 // ─── Animation variants ────────────────────────────────────────────────────────

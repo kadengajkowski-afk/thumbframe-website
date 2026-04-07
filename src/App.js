@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import supabase from './supabaseClient';
 import Editor from './Editor';
 import FabricCanvas from './FabricCanvas';
 import ForgotPassword from './ForgotPassword';
