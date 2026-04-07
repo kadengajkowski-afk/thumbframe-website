@@ -1658,6 +1658,13 @@ export default function Editor({onExit, user, token, apiUrl, brandKit: initialBr
 
   const [remainingQuota,setRemainingQuota]             = useState(null); // M6: quota display
   const [showPaywall,setShowPaywall]                   = useState(false); // eslint-disable-line no-unused-vars
+  // Automation pipeline
+  const [autoPanel,setAutoPanel]                       = useState(false);
+  const [autoLoading,setAutoLoading]                   = useState(false);
+  const [autoRecs,setAutoRecs]                         = useState([]);
+  const [autoMetrics,setAutoMetrics]                   = useState(null);
+  const [autoDismissed,setAutoDismissed]               = useState(new Set());
+  const [autoFixRunning,setAutoFixRunning]             = useState(false);
 
   // ── Tier 3 Item 3: Competitor Comparison ─────────────────────────────────
   const [showCompetitor,setShowCompetitor]       = useState(false);
@@ -5791,6 +5798,70 @@ PHASE 4 — Toolbar button:
     }
   }
 
+  // ── Automation Pipeline ───────────────────────────────────────────────────
+  async function runAutoAnalysis(imageDataUrl){
+    setAutoPanel(true);
+    setAutoLoading(true);
+    setAutoRecs([]);
+    setAutoMetrics(null);
+    setAutoDismissed(new Set());
+    try{
+      const { data: { session } } = await supabase.auth.getSession();
+      const tok = session?.access_token || token;
+      const res = await fetch(`${resolvedApiUrl}/api/analyze-thumbnail`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},
+        body:JSON.stringify({image:imageDataUrl,niche:userNiche||undefined,videoTitle:ctrTitle.trim()||undefined}),
+      });
+      const data = await res.json();
+      if(!res.ok){
+        if(res.status===403){
+          // Pro gate — show panel with upgrade prompt
+          setAutoRecs([{id:'upgrade',priority:0,icon:'✨',title:'Pro Feature',description:data.error||'Upgrade to Pro to unlock the automation pipeline.',action:'upgrade',actionLabel:'Upgrade to Pro'}]);
+          return;
+        }
+        if(res.status===429){ setCmdLog(data.error||'Quota exceeded.'); setAutoPanel(false); return; }
+        throw new Error(data.error||'Analysis failed');
+      }
+      if(!data.success) throw new Error(data.error||'Invalid response');
+      setAutoRecs(data.recommendations||[]);
+      setAutoMetrics(data.metrics||null);
+      if(data.remaining!=null) setRemainingQuota(data.remaining);
+    }catch(err){
+      console.error('[AUTO-ANALYZE]',err);
+      setAutoPanel(false);
+      setCmdLog('Auto-analysis failed. Try again.');
+    }finally{
+      setAutoLoading(false);
+    }
+  }
+
+  async function runAutoFix(){
+    setAutoFixRunning(true);
+    try{
+      const visibleRecs = autoRecs.filter(r=>!autoDismissed.has(r.id)&&r.action!=='upgrade'&&r.action!=='ctr-check');
+      for(const rec of visibleRecs){
+        if(rec.action==='color-grade'&&rec.actionParams){
+          const cg=rec.actionParams;
+          setCgPreset(cg.preset||'default');
+          setCgIntensity(cg.intensity||70);
+          // trigger CG on the first image layer
+          const imgLayer=layers.find(l=>l.type==='image'&&!l.hidden);
+          if(imgLayer) setCgLayerId(imgLayer.id);
+          await new Promise(r=>setTimeout(r,300));
+        }
+      }
+      // Re-score after fixes
+      await analyzeCTR();
+      setCmdLog('Auto-fix complete. CTR re-scored.');
+      setAutoPanel(false);
+    }catch(err){
+      console.error('[AUTO-FIX]',err);
+    }finally{
+      setAutoFixRunning(false);
+    }
+  }
+
   // ── Composition AI ────────────────────────────────────────────────────────
   async function analyzeComposition(){
     setCompLoading(true);
@@ -6616,6 +6687,8 @@ PHASE 4 — Toolbar button:
             saveEngineRef.current?.saveImmediate();
             // Fire-and-forget: run MediaPipe face detection on new image
             setTimeout(()=>runFaceDetectionOnComposite(),400);
+            // Auto-analyze thumbnail after first image import
+            setTimeout(()=>runAutoAnalysis(base64Src),800);
           }catch(err){
             console.error('[ADD IMAGE] Image processing failed:', err);
             alert('Failed to add image. Please try a different file.');
@@ -14891,6 +14964,123 @@ PHASE 4 — Toolbar button:
               You can change this any time in settings
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Automation Recommendation Panel ─────────────────────────────── */}
+      {autoPanel && (
+        <div style={{
+          position:'fixed', top:0, right:0, bottom:0, width:340,
+          background:'#1a1a2e', borderLeft:'1px solid rgba(255,255,255,0.08)',
+          zIndex:1200, display:'flex', flexDirection:'column',
+          boxShadow:'-8px 0 40px rgba(0,0,0,0.5)',
+          animation:'tf-auto-slide 0.28s ease-out',
+          fontFamily:'inherit',
+        }}>
+          <style>{`@keyframes tf-auto-slide{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}`}</style>
+          {/* Header */}
+          <div style={{padding:'16px 20px', borderBottom:'1px solid rgba(255,255,255,0.08)', display:'flex', alignItems:'center', gap:10, flexShrink:0}}>
+            <div style={{fontSize:20}}>✨</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14, fontWeight:700, color:'#fff'}}>AI Recommendations</div>
+              {autoMetrics?.ctr && <div style={{fontSize:11, color:'rgba(255,255,255,0.4)', marginTop:2}}>CTR potential: {autoMetrics.ctr.overall}/100</div>}
+            </div>
+            <button
+              onClick={()=>setAutoPanel(false)}
+              style={{background:'transparent',border:'none',color:'rgba(255,255,255,0.4)',cursor:'pointer',fontSize:18,padding:'4px 6px',borderRadius:6,lineHeight:1}}
+              title="Close"
+            >×</button>
+          </div>
+
+          {/* Body */}
+          <div style={{flex:1, overflowY:'auto', padding:'12px 16px', display:'flex', flexDirection:'column', gap:10}}>
+            {autoLoading ? (
+              <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:16, color:'rgba(255,255,255,0.5)'}}>
+                <div style={{width:40, height:40, borderRadius:'50%', border:'3px solid rgba(249,115,22,0.3)', borderTopColor:'#f97316', animation:'editor-spin 0.8s linear infinite'}} />
+                <div style={{fontSize:13, textAlign:'center', lineHeight:1.5}}>Analyzing your thumbnail…<br/><span style={{fontSize:11}}>Checking composition, colors & CTR</span></div>
+              </div>
+            ) : autoRecs.length===0 ? (
+              <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, gap:12, color:'rgba(255,255,255,0.4)'}}>
+                <div style={{fontSize:32}}>🎉</div>
+                <div style={{fontSize:13, textAlign:'center'}}>No issues found — your thumbnail looks great!</div>
+              </div>
+            ) : (
+              <>
+                {autoRecs.filter(r=>!autoDismissed.has(r.id)).map(rec=>(
+                  <div key={rec.id} style={{
+                    background:'rgba(255,255,255,0.04)', borderRadius:10,
+                    border:'1px solid rgba(255,255,255,0.08)', padding:'12px 14px',
+                    display:'flex', flexDirection:'column', gap:8,
+                  }}>
+                    <div style={{display:'flex', alignItems:'flex-start', gap:10}}>
+                      <div style={{fontSize:20, flexShrink:0, lineHeight:1, marginTop:1}}>{rec.icon}</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13, fontWeight:700, color:'#fff', lineHeight:1.3}}>{rec.title}</div>
+                        <div style={{fontSize:11, color:'rgba(255,255,255,0.5)', marginTop:4, lineHeight:1.5}}>{rec.description}</div>
+                      </div>
+                    </div>
+                    <div style={{display:'flex', gap:8, marginTop:2}}>
+                      {rec.action!=='upgrade' && rec.action!=='ctr-check' && (
+                        <button
+                          onClick={()=>{
+                            if(rec.action==='color-grade'&&rec.actionParams){
+                              setCgPreset(rec.actionParams.preset||'default');
+                              setCgIntensity(rec.actionParams.intensity||70);
+                              const il=layers.find(l=>l.type==='image'&&!l.hidden);
+                              if(il) setCgLayerId(il.id);
+                              setRightPanelTab('ai');
+                            } else if(rec.action==='remove-bg'||rec.action==='segment'){
+                              setActiveTool('smart-cutout');
+                            } else if(rec.action==='ctr-check'){
+                              analyzeCTR();
+                            } else if(rec.action==='enhance-expression'){
+                              setActiveTool('brush');
+                            }
+                            setAutoDismissed(prev=>new Set([...prev,rec.id]));
+                          }}
+                          style={{flex:1, padding:'7px 10px', borderRadius:7, border:'none', background:'#f97316', color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer'}}
+                        >{rec.actionLabel}</button>
+                      )}
+                      {rec.action==='upgrade' && (
+                        <button
+                          onClick={handleUpgrade}
+                          style={{flex:1, padding:'7px 10px', borderRadius:7, border:'none', background:'linear-gradient(135deg,#f97316,#ec4899)', color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer'}}
+                        >Upgrade to Pro</button>
+                      )}
+                      <button
+                        onClick={()=>setAutoDismissed(prev=>new Set([...prev,rec.id]))}
+                        style={{padding:'7px 10px', borderRadius:7, border:'1px solid rgba(255,255,255,0.12)', background:'transparent', color:'rgba(255,255,255,0.4)', fontSize:11, cursor:'pointer'}}
+                      >Dismiss</button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          {/* Footer — Auto-Fix Everything */}
+          {!autoLoading && autoRecs.filter(r=>!autoDismissed.has(r.id)&&r.action!=='upgrade').length>0 && (
+            <div style={{padding:'12px 16px', borderTop:'1px solid rgba(255,255,255,0.08)', flexShrink:0}}>
+              <button
+                onClick={runAutoFix}
+                disabled={autoFixRunning}
+                style={{
+                  width:'100%', padding:'11px 16px', borderRadius:9, border:'none',
+                  background: autoFixRunning ? 'rgba(249,115,22,0.3)' : 'linear-gradient(135deg,#f97316,#fb923c)',
+                  color:'#fff', fontSize:13, fontWeight:700, cursor: autoFixRunning ? 'not-allowed' : 'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                }}
+              >
+                {autoFixRunning
+                  ? <><div style={{width:14,height:14,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'#fff',animation:'editor-spin 0.8s linear infinite'}} />Applying fixes…</>
+                  : '✨ Auto-Fix Everything'
+                }
+              </button>
+              <div style={{fontSize:10,color:'rgba(255,255,255,0.25)',textAlign:'center',marginTop:6}}>
+                Applies color grade, re-scores CTR
+              </div>
+            </div>
+          )}
         </div>
       )}
 
