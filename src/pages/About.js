@@ -114,7 +114,7 @@ export default function About({ setPage }) {
         {/* Right — "About Kaden" card */}
         <motion.div
           initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.3, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ delay: 0.05, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         >
           <div style={{
             background: '#0c0c0f',
@@ -161,7 +161,7 @@ export default function About({ setPage }) {
       {/* Mission */}
       <motion.section
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-60px' }}
+        viewport={{ once: false, margin: '-60px' }}
         style={{
           borderTop: '1px solid rgba(255,255,255,0.05)',
           padding: '80px 24px',
@@ -188,7 +188,7 @@ export default function About({ setPage }) {
       {/* Roadmap */}
       <motion.section
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-60px' }}
+        viewport={{ once: false, margin: '-60px' }}
         style={{
           borderTop: '1px solid rgba(255,255,255,0.05)',
           padding: '80px 24px',

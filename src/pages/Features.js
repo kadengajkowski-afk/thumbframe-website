@@ -150,7 +150,7 @@ export default function Features({ setPage }) {
       {/* Feature grid */}
       <motion.div
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-60px' }}
+        viewport={{ once: false, margin: '-60px' }}
         style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 120px' }}
       >
         {/* Free vs Pro legend */}

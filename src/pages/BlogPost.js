@@ -424,7 +424,7 @@ export default function BlogPost({ slug, onBack, setPage }) {
       {/* Hero */}
       <header className="tf-post-hero">
         <div className="tf-post-hero-bg" />
-        {post.heroImage && <img className="tf-post-hero-img" src={post.heroImage} alt={post.title} />}
+        {post.heroImage && <img className="tf-post-hero-img" src={post.heroImage} alt={post.title} loading="lazy" />}
         <div className="tf-post-hero-overlay" />
         <div className="tf-post-hero-content">
           <button

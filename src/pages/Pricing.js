@@ -149,7 +149,7 @@ export default function Pricing({ setPage }) {
       {/* Pricing Cards */}
       <motion.div
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-60px' }}
+        viewport={{ once: false, margin: '-60px' }}
         className="tf-pricing-grid"
         style={{
           display: 'grid', gridTemplateColumns: '1fr 1fr',
@@ -256,7 +256,7 @@ export default function Pricing({ setPage }) {
       {/* FAQ */}
       <motion.section
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-60px' }}
+        viewport={{ once: false, margin: '-60px' }}
         style={{ borderTop: '1px solid rgba(255,255,255,0.05)', padding: '80px 24px' }}
       >
         <div style={{ maxWidth: 680, margin: '0 auto' }}>
@@ -276,7 +276,7 @@ export default function Pricing({ setPage }) {
       {/* Bottom CTA */}
       <motion.section
         initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        viewport={{ once: false }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         style={{ textAlign: 'center', padding: '0 24px 100px' }}
       >
         <div style={{

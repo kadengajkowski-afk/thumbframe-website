@@ -175,7 +175,7 @@ function ProjectCard({ project, onOpen, onDelete }) {
     <div className="tf-project-card" onClick={() => onOpen(project.id)}>
       <div style={{ aspectRatio: '16/9', overflow: 'hidden', background: bgColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {thumbSrc
-          ? <img src={thumbSrc} alt={project.name || 'Project'} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          ? <img src={thumbSrc} alt={project.name || 'Project'} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           : <div style={{ opacity: 0.3, fontSize: 24 }}>🖼</div>
         }
       </div>

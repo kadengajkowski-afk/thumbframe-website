@@ -770,7 +770,7 @@ export default function App() {
   if (marketingPages[page]) {
     return (
       <div className="tf-marketing-shell">
-        <Suspense fallback={<PageLoader />}>{marketingPages[page]}</Suspense>
+        <Suspense key={page} fallback={<PageLoader />}>{marketingPages[page]}</Suspense>
         <CookieBanner />
       </div>
     );

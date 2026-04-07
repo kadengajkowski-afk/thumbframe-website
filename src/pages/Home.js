@@ -459,26 +459,6 @@ function FeatureCard({ icon, tag, title, desc, wide, glow }) {
   );
 }
 
-// ─── Testimonials ─────────────────────────────────────────────────────────────
-const TESTIMONIALS = [
-  {
-    quote: 'lol i used to spend like 2 hours per thumbnail in photoshop. made one in thumbframe in 20 min last night and it lowkey looks better??',
-    handle: '@creativewithcass', sub: '8K subs',
-    highlight: true,
-  },
-  {
-    quote: "the background remover is actually insane. tried it on a super messy background and it just... worked. no cleanup needed.",
-    handle: 'u/editjunkie42', sub: 'r/NewTubers',
-  },
-  {
-    quote: "ok real talk i was skeptical bc $15/mo but my CTR went from like 4% to 8% in two weeks. the A/B testing feature is the reason.",
-    handle: '@jakeplaysgames', sub: '34K subs',
-  },
-  {
-    quote: "i literally cancelled my photoshop subscription. this does everything i was using it for and the interface doesn't make me want to cry",
-    handle: '@daniielcreates', sub: '5K subs',
-  },
-];
 
 // ─── Home page ─────────────────────────────────────────────────────────────────
 export default function Home({ setPage }) {
@@ -600,7 +580,7 @@ export default function Home({ setPage }) {
       {/* ─── FEATURES BENTO ───────────────────────────────────────────────── */}
       <motion.section
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-80px' }}
+        viewport={{ once: false, margin: '-80px' }}
         style={{ maxWidth: 1100, margin: '0 auto', padding: '100px 24px', position: 'relative', zIndex: 1 }}
       >
         <motion.div variants={fadeUp} style={{ marginBottom: 56 }}>
@@ -624,7 +604,7 @@ export default function Home({ setPage }) {
       {/* ─── STATS ────────────────────────────────────────────────────────── */}
       <motion.section
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-60px' }}
+        viewport={{ once: false, margin: '-60px' }}
         style={{
           textAlign: 'center', padding: '80px 24px',
           borderTop: '1px solid rgba(255,255,255,0.04)',
@@ -662,7 +642,7 @@ export default function Home({ setPage }) {
       {/* ─── HOW IT WORKS ─────────────────────────────────────────────────── */}
       <motion.section
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-80px' }}
+        viewport={{ once: false, margin: '-80px' }}
         style={{ padding: '80px 24px', position: 'relative', zIndex: 1 }}
       >
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -710,7 +690,7 @@ export default function Home({ setPage }) {
       {/* ─── AI FEATURES 2×3 ──────────────────────────────────────────────── */}
       <motion.section
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-80px' }}
+        viewport={{ once: false, margin: '-80px' }}
         style={{ padding: '80px 24px', position: 'relative', zIndex: 1, borderTop: '1px solid rgba(255,255,255,0.04)' }}
       >
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -753,7 +733,7 @@ export default function Home({ setPage }) {
       {/* ─── TESTIMONIALS ─────────────────────────────────────────────────── */}
       <motion.section
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-60px' }}
+        viewport={{ once: false, margin: '-60px' }}
         style={{ maxWidth: 1000, margin: '0 auto', padding: '80px 24px', position: 'relative', zIndex: 1 }}
       >
         <motion.div variants={fadeUp} style={{ textAlign: 'center', marginBottom: 52 }}>
@@ -797,7 +777,7 @@ export default function Home({ setPage }) {
       {/* ─── FINAL CTA ────────────────────────────────────────────────────── */}
       <motion.section
         variants={stagger} initial="hidden" whileInView="visible"
-        viewport={{ once: true, margin: '-60px' }}
+        viewport={{ once: false, margin: '-60px' }}
         style={{
           textAlign: 'center', padding: '80px 24px 100px',
           position: 'relative', zIndex: 1, overflow: 'hidden',
