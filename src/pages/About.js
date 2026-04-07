@@ -36,7 +36,7 @@ export default function About({ setPage }) {
       <Navbar setPage={setPage} currentPage="about" />
 
       {/* Hero — asymmetric, text-heavy */}
-      <div style={{
+      <div className="tf-about-hero" style={{
         maxWidth: 1100, margin: '0 auto',
         padding: '140px 24px 80px',
         display: 'grid',
@@ -242,6 +242,16 @@ export default function About({ setPage }) {
       </motion.section>
 
       <Footer setPage={setPage} />
+
+      <style>{`
+        @media (max-width: 768px) {
+          .tf-about-hero {
+            grid-template-columns: 1fr !important;
+            padding-top: 100px !important;
+            gap: 40px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

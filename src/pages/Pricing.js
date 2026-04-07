@@ -311,7 +311,12 @@ export default function Pricing({ setPage }) {
 
       <style>{`
         @media (max-width: 640px) {
-          .tf-pricing-grid { grid-template-columns: 1fr !important; max-width: 420px !important; }
+          .tf-pricing-grid {
+            grid-template-columns: 1fr !important;
+            max-width: 480px !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+          }
         }
       `}</style>
 

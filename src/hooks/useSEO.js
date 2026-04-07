@@ -5,6 +5,7 @@ import { useEffect } from 'react';
  * Works via direct DOM manipulation (no react-helmet dependency needed).
  */
 export function useSEO({ title, description, image, url, type = 'website', jsonLd } = {}) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const BASE_URL = 'https://thumbframe.com';
     const DEFAULT_IMAGE = `${BASE_URL}/og-default.png`;
@@ -63,5 +64,5 @@ export function useSEO({ title, description, image, url, type = 'website', jsonL
       const s = document.getElementById(SCRIPT_ID);
       if (s) s.remove();
     };
-  });
+  }, [title, description, image, url, type, jsonLd]);
 }

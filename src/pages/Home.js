@@ -230,8 +230,8 @@ function FeatureCard({ icon, tag, title, desc, wide, glow }) {
   return (
     <motion.div
       variants={fadeUp}
+      className={wide ? 'tf-bento-wide' : undefined}
       style={{
-        gridColumn: wide ? 'span 2' : 'span 1',
         background: '#0c0c0f',
         border: '1px solid rgba(255,255,255,0.06)',
         borderRadius: 14,
@@ -486,11 +486,11 @@ export default function Home({ setPage }) {
       <Navbar setPage={setPage} currentPage="home" />
 
       {/* ─── HERO ──────────────────────────────────────────────────────────── */}
-      <section style={{
+      <section className="tf-hero-section" style={{
         minHeight: '100vh', display: 'flex', alignItems: 'center',
         padding: '100px 24px 60px', maxWidth: 1200, margin: '0 auto',
         position: 'relative', zIndex: 1,
-        gap: 60,
+        gap: 60, flexWrap: 'wrap',
       }}>
         {/* Left */}
         <motion.div
@@ -582,7 +582,7 @@ export default function Home({ setPage }) {
         </motion.div>
 
         {/* Right — editor mockup */}
-        <div style={{ flex: '1 1 440px', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+        <div className="tf-hero-mockup" style={{ flex: '1 1 400px', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
           <EditorMockup />
         </div>
       </section>
@@ -607,7 +607,7 @@ export default function Home({ setPage }) {
           </h2>
         </motion.div>
 
-        <div style={{
+        <div className="tf-bento-grid" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
           gap: 16,
@@ -666,7 +666,7 @@ export default function Home({ setPage }) {
           </p>
         </motion.div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 16 }}>
+        <div className="tf-testimonials-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
           {TESTIMONIALS.map((t, i) => (
             <motion.div key={i} variants={fadeUp} style={{
               background: '#0c0c0f',
@@ -751,8 +751,39 @@ export default function Home({ setPage }) {
           0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(255,107,0,0.8); }
           50% { opacity: 0.6; box-shadow: 0 0 4px rgba(255,107,0,0.4); }
         }
+
+        /* ── Mobile responsive ── */
+        .tf-bento-wide { grid-column: span 2; }
+
         @media (max-width: 900px) {
-          .tf-hero-grid { flex-direction: column !important; }
+          .tf-hero-section {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            min-height: auto !important;
+            padding-top: 120px !important;
+            gap: 48px !important;
+          }
+          .tf-hero-mockup {
+            width: 100% !important;
+            flex: none !important;
+          }
+          .tf-bento-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .tf-bento-wide {
+            grid-column: span 2 !important;
+          }
+        }
+        @media (max-width: 600px) {
+          .tf-bento-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .tf-bento-wide {
+            grid-column: span 1 !important;
+          }
+          .tf-testimonials-grid {
+            grid-template-columns: 1fr !important;
+          }
         }
       `}</style>
     </div>

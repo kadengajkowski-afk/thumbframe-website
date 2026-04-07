@@ -36,7 +36,6 @@ function PageLoader() {
   );
 }
 
-console.log("--- SYSTEM BOOT V2.1 ---");
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 const C = {
