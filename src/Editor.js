@@ -8963,6 +8963,21 @@ PHASE 4 — Toolbar button:
               ✦ AI
             </button>
           )}
+          {!isMobile&&(
+            <button
+              onClick={()=>setShowPromptEngine(true)}
+              title="Generate thumbnail from a text prompt"
+              style={{
+                padding:'6px 13px',borderRadius:7,
+                border:'1px solid rgba(249,115,22,0.3)',
+                background:showPromptEngine?'rgba(249,115,22,0.2)':'rgba(249,115,22,0.08)',
+                color:T.accent,cursor:'pointer',fontSize:11,fontWeight:'700',
+                display:'flex',alignItems:'center',gap:5,flexShrink:0,
+                letterSpacing:'0.1px',
+              }}>
+              ✦ AI Generate
+            </button>
+          )}
           <button onClick={()=>{
             const isPro = isProUser;
             const isAdmin = user?.is_admin || user?.is_admin;
