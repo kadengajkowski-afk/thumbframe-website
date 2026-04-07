@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import supabase from '../supabaseClient';
+import { trackEvent } from '../utils/analytics';
 
 export default function Signup({ setPage }) {
   const [name,            setName]            = useState('');
@@ -67,9 +68,11 @@ export default function Signup({ setPage }) {
         plan:  'free',
         is_pro: false,
       }));
+      trackEvent('sign_up', { method: 'email' });
       setPage(redirectTo);
     } else {
       // Email confirmation on — ask user to check inbox
+      trackEvent('sign_up', { method: 'email' });
       setCheckEmail(true);
     }
     setLoading(false);

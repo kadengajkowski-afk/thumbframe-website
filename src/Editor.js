@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState, memo, lazy, Suspense } from 'react';
 import { handleUpgrade } from './utils/checkout';
+import { trackEvent } from './utils/analytics';
 import BrushTool, { BrushOverlay } from './Brush';
 import supabase from './supabaseClient';
 import { createSaveEngine } from './saveEngine';
@@ -6870,6 +6871,7 @@ PHASE 4 — Toolbar button:
       URL.revokeObjectURL(url);
     }
 
+    trackEvent('export_thumbnail', { format, platform });
     setShowDownload(false);
   }
 

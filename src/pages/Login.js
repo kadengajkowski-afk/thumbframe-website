@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import supabase from '../supabaseClient';
+import { trackEvent } from '../utils/analytics';
 
 export default function Login({ setPage }) {
   const [email,    setEmail]    = useState('');
@@ -33,6 +34,7 @@ export default function Login({ setPage }) {
         plan:  'free',
         is_pro: false,
       }));
+      trackEvent('login', { method: 'email' });
       setPage(redirectTo);
     }
     setLoading(false);

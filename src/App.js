@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { trackPageView } from './utils/analytics';
 import Editor from './Editor';
 import FabricCanvas from './FabricCanvas';
 import ForgotPassword from './ForgotPassword';
@@ -718,6 +719,7 @@ export default function App() {
 
   useEffect(() => {
     syncPath(page);
+    trackPageView(window.location.pathname + window.location.search);
   }, [page]);
 
   // Redirect away from protected pages when logged out.

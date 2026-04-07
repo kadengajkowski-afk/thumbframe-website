@@ -1,3 +1,5 @@
+import { trackEvent } from './analytics';
+
 const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
 
 /**
@@ -11,6 +13,8 @@ export async function handleUpgrade() {
     window.location.href = '/signup?redirect=pricing';
     return;
   }
+
+  trackEvent('begin_checkout');
 
   try {
     const res = await fetch(`${API_URL}/api/create-checkout-session`, {
