@@ -2339,8 +2339,9 @@ PHASE 4 — Toolbar button:
         // fetchSavedDesigns is non-critical — fire in background, don't block canvas render
         fetchSavedDesigns().catch(()=>{});
         const [remoteDesignResult, brandKitResult, profileResult] = await Promise.allSettled([
-          // 1. Remote design from Supabase (if URL has project ID)
-          urlDesignId
+          // 1. Remote design from Supabase (if URL has a valid UUID project ID)
+          // Timestamp-based IDs (e.g. "1775596436228") are local-only — skip Supabase query
+          (urlDesignId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(urlDesignId))
             ? supabase.from('thumbnails').select('*').eq('id', urlDesignId).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
           // 2. Brand kit
@@ -5151,53 +5152,49 @@ PHASE 4 — Toolbar button:
   // ── Feature I: AI Variant Generator ──────────────────────────────────────
   const AI_VARIANT_NICHES=['gaming','tech','fitness','cooking','finance','education'];
 
+  // AI Variants — client-side colour grade per slot (no API needed)
   async function generateAiVariants(){
     if(aiVarBusy) return;
     setAiVarBusy(true);
     setAiVarSelected(null);
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
+    try{
+      // Render current canvas once
+      const flat=document.createElement('canvas');
+      flat.width=p.preview.w; flat.height=p.preview.h;
+      await renderLayersToCanvas(flat,layers);
+      const currentDataUrl=flat.toDataURL('image/jpeg',0.88);
 
-    // Render current canvas to flat JPEG
-    const flat=document.createElement('canvas');
-    flat.width=p.preview.w; flat.height=p.preview.h;
-    await renderLayersToCanvas(flat,layers);
-    const currentDataUrl=flat.toDataURL('image/jpeg',0.88);
+      // Seed grid: original in slot 0, placeholders for 5 variants
+      setAiVariants([
+        {base64:currentDataUrl, label:'Original', description:'Your current design — the baseline'},
+        null, null, null, null, null,
+      ]);
 
-    // Seed grid: original in slot 0, 5 null placeholders for variants
-    setAiVariants([
-      {base64:currentDataUrl, label:'Original', description:'Your current design — the baseline'},
-      null, null, null, null, null,
-    ]);
+      const VARIANTS=[
+        {slot:1, preset:'default',    label:'Punchy',    description:'Auto-levels + contrast boost'},
+        {slot:2, preset:'warm',       label:'Warm',      description:'Warm tones — great for travel & lifestyle'},
+        {slot:3, preset:'cool',       label:'Cool',      description:'Cool blue tones — great for tech & gaming'},
+        {slot:4, preset:'cinematic',  label:'Cinematic', description:'Dark & moody — high production value feel'},
+        {slot:5, preset:'neon',       label:'Neon',      description:'High-energy neon — gaming & entertainment'},
+      ];
 
-    const makeVariant=async(slotIdx, variantType)=>{
-      try{
-        const res=await fetch(`${resolvedApiUrl}/api/generate-variants`,{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
-          body:JSON.stringify({image:currentDataUrl, title:aiVarTitle, niche:aiVarNiche, variantType}),
-        });
-        const data=await res.json();
-        if(!data.success) throw new Error(data.error||'Generation failed');
-        setAiVariants(prev=>{const n=[...prev];n[slotIdx]=data.variant;return n;});
-      }catch(err){
-        console.error(`[AI_VARIANTS] type=${variantType}`,err.message);
-        setAiVariants(prev=>{
-          const n=[...prev];
-          n[slotIdx]={base64:null,label:`Variant ${variantType}`,description:'Generation failed — try again',error:true};
-          return n;
-        });
-      }
-    };
+      // Generate all 5 in parallel — slots populate as each resolves
+      await Promise.all(VARIANTS.map(async({slot, preset, label, description})=>{
+        try{
+          const graded=await colorGradeClientSide(currentDataUrl, preset, 0.85);
+          setAiVariants(prev=>{const n=[...prev];n[slot]={base64:graded,label,description};return n;});
+        }catch{
+          setAiVariants(prev=>{const n=[...prev];n[slot]={base64:null,label,description:'Failed — try again',error:true};return n;});
+        }
+      }));
 
-    // All 5 in parallel → cards populate as each resolves
-    await Promise.all([
-      makeVariant(1,1), makeVariant(2,2), makeVariant(3,3),
-      makeVariant(4,4), makeVariant(5,5),
-    ]);
-    setAiVarBusy(false);
-    setCmdLog('Variants ready — pick your winner');
+      setCmdLog('Variants ready — pick your winner');
+    }catch(err){
+      setCmdLog('Variant generation failed. Try again.');
+    }finally{
+      setAiVarBusy(false);
+    }
   }
 
   function selectAiVariant(idx){

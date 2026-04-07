@@ -335,17 +335,21 @@ export default function MobileEditor({ user, token, apiUrl, onSwitchToDesktop })
         }
 
         case 'variants': {
-          // Run all 5 variant types in parallel — same pattern as desktop Feature I
+          // Client-side colour grade variants — no API needed
           setProgress(5);
-          const makeVariant = async (vt)=>{
-            const d = await apiPost('/api/generate-variants', {
-              image,
-              niche: localStorage.getItem('tf_niche')||'gaming',
-              variantType: vt,
-            });
-            return d.success ? d.variant : null;
-          };
-          const results = await Promise.allSettled([1,2,3,4,5].map(makeVariant));
+          const PRESETS=[
+            {preset:'default',   label:'Punchy',    description:'Auto-levels + contrast boost'},
+            {preset:'warm',      label:'Warm',      description:'Warmer tones — travel & lifestyle'},
+            {preset:'cool',      label:'Cool',      description:'Cool blue tones — tech & gaming'},
+            {preset:'cinematic', label:'Cinematic', description:'Dark & moody — high production feel'},
+            {preset:'neon',      label:'Neon',      description:'High-energy neon — gaming & entertainment'},
+          ];
+          const results = await Promise.allSettled(
+            PRESETS.map(async({preset,label,description})=>{
+              const graded=await colorGradeClientSide(image,preset,0.85);
+              return{base64:graded,label,description};
+            })
+          );
           setProgress(100);
           const variants = results.map(r=>r.status==='fulfilled'?r.value:null).filter(Boolean);
           if(variants.length){
