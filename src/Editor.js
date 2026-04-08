@@ -12,17 +12,17 @@ import { SHORTCUT_GROUPS, TOOL_SHORTCUT_MAP } from './shortcuts';
 import CurvesPanel, { CurveThumbnail } from './CurvesPanel';
 import { DEFAULT_CURVES, applyLUTSync } from './curvesUtils';
 import CommandPalette from './CommandPalette';
-import LiquifyModal from './LiquifyModal';
-import FiltersModal from './FiltersModal';
+const LiquifyModal = lazy(() => import('./LiquifyModal'));
+const FiltersModal = lazy(() => import('./FiltersModal'));
 import SelectionOverlay from './SelectionOverlay';
 import { rectMask, ellipseMask, pathMask, magicWandMask, combineMasks, invertMask, selectAllMask, maskBounds, featherMask } from './selectionUtils'; // eslint-disable-line no-unused-vars
 import db from './db';
 import { renderLayersWithPixi } from './pixiCompositor';
-import { analyzeImage as runThumbnailAnalysis } from './ai/ThumbnailAnalyzer';
+async function runThumbnailAnalysis(...args) { const {analyzeImage}=await import('./ai/ThumbnailAnalyzer'); return analyzeImage(...args); }
 import { autoBrighten, autoContrast, autoSaturate, autoDesaturate, autoVignette, autoWhiteBalance, gamingEnhance, enhanceWithWorker } from './ai/ThumbnailEnhancer';
-import DevicePreview from './ai/DevicePreview';
-import ColorBlindSimulator from './ai/ColorBlindSimulator';
-import PromptToThumbnail from './ai/PromptToThumbnail';
+const DevicePreview = lazy(() => import('./ai/DevicePreview'));
+const ColorBlindSimulator = lazy(() => import('./ai/ColorBlindSimulator'));
+const PromptToThumbnail = lazy(() => import('./ai/PromptToThumbnail'));
 const MobileEditor = lazy(() => import('./MobileEditor'));
 const MemesPanel = lazy(() => import('./Memes'));
 
@@ -8455,50 +8455,54 @@ PHASE 4 — Toolbar button:
       />
 
       {showLiquify&&liquifySource&&(
-        <LiquifyModal
-          sourceImageData={liquifySource.imageData}
-          W={liquifySource.w}
-          H={liquifySource.h}
-          onApply={(dataUrl)=>{
-            addLayer({
-              type:'image',src:dataUrl,
-              width:p.preview.w,height:p.preview.h,
-              x:0,y:0,
-              cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
-              imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
-            });
-            saveEngineRef.current?.markDirty('layerContent','liquify');
-            setShowLiquify(false);
-            setLiquifySource(null);
-          }}
-          onCancel={()=>{setShowLiquify(false);setLiquifySource(null);}}
-        />
+        <Suspense fallback={null}>
+          <LiquifyModal
+            sourceImageData={liquifySource.imageData}
+            W={liquifySource.w}
+            H={liquifySource.h}
+            onApply={(dataUrl)=>{
+              addLayer({
+                type:'image',src:dataUrl,
+                width:p.preview.w,height:p.preview.h,
+                x:0,y:0,
+                cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+                imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+              });
+              saveEngineRef.current?.markDirty('layerContent','liquify');
+              setShowLiquify(false);
+              setLiquifySource(null);
+            }}
+            onCancel={()=>{setShowLiquify(false);setLiquifySource(null);}}
+          />
+        </Suspense>
       )}
 
       {showFilters&&filtersSource&&(
-        <FiltersModal
-          sourceImageData={filtersSource.imageData}
-          W={filtersSource.w}
-          H={filtersSource.h}
-          selectionMask={selectionActive?selectionMaskRef.current:null}
-          lastFilter={lastFilterRef.current}
-          autoApply={filtersAutoApply}
-          onApply={({dataUrl,filterId,params,blendMode})=>{
-            addLayer({
-              type:'image',src:dataUrl,
-              width:p.preview.w,height:p.preview.h,
-              x:0,y:0,
-              cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
-              imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
-              blendMode:blendMode||'normal',
-            });
-            lastFilterRef.current={id:filterId,params};
-            saveEngineRef.current?.markDirty('layerContent','filter-'+filterId);
-            setShowFilters(false);
-            setFiltersSource(null);
-          }}
-          onCancel={()=>{setShowFilters(false);setFiltersSource(null);}}
-        />
+        <Suspense fallback={null}>
+          <FiltersModal
+            sourceImageData={filtersSource.imageData}
+            W={filtersSource.w}
+            H={filtersSource.h}
+            selectionMask={selectionActive?selectionMaskRef.current:null}
+            lastFilter={lastFilterRef.current}
+            autoApply={filtersAutoApply}
+            onApply={({dataUrl,filterId,params,blendMode})=>{
+              addLayer({
+                type:'image',src:dataUrl,
+                width:p.preview.w,height:p.preview.h,
+                x:0,y:0,
+                cropTop:0,cropBottom:0,cropLeft:0,cropRight:0,
+                imgBrightness:100,imgContrast:100,imgSaturate:100,imgBlur:0,
+                blendMode:blendMode||'normal',
+              });
+              lastFilterRef.current={id:filterId,params};
+              saveEngineRef.current?.markDirty('layerContent','filter-'+filterId);
+              setShowFilters(false);
+              setFiltersSource(null);
+            }}
+            onCancel={()=>{setShowFilters(false);setFiltersSource(null);}}
+          />
+        </Suspense>
       )}
 
       {/* Hidden canvas for history thumbnail generation — never visible */}
@@ -15441,7 +15445,7 @@ PHASE 4 — Toolbar button:
                   </button>
                   {autoShowDevicePreview && (
                     <div style={{padding:'0 8px 8px'}}>
-                      <DevicePreview canvasDataUrl={autoPreviewUrl} visible={true}/>
+                      <Suspense fallback={null}><DevicePreview canvasDataUrl={autoPreviewUrl} visible={true}/></Suspense>
                     </div>
                   )}
                 </div>
@@ -15457,7 +15461,7 @@ PHASE 4 — Toolbar button:
                   </button>
                   {autoShowColorBlind && (
                     <div style={{padding:'0 8px 8px'}}>
-                      <ColorBlindSimulator canvasDataUrl={autoPreviewUrl} visible={true}/>
+                      <Suspense fallback={null}><ColorBlindSimulator canvasDataUrl={autoPreviewUrl} visible={true}/></Suspense>
                     </div>
                   )}
                 </div>
@@ -15487,13 +15491,15 @@ PHASE 4 — Toolbar button:
 
       {/* ── Prompt-to-Thumbnail Engine Panel ──────────────────────────────── */}
       {showPromptEngine && (
-        <PromptToThumbnail
-          token={token}
-          apiUrl={resolvedApiUrl}
-          niche={userNiche}
-          onAssemble={handlePromptAssemble}
-          onClose={()=>setShowPromptEngine(false)}
-        />
+        <Suspense fallback={null}>
+          <PromptToThumbnail
+            token={token}
+            apiUrl={resolvedApiUrl}
+            niche={userNiche}
+            onAssemble={handlePromptAssemble}
+            onClose={()=>setShowPromptEngine(false)}
+          />
+        </Suspense>
       )}
 
       {/* Toast Notification */}
