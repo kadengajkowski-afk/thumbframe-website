@@ -22,15 +22,6 @@ const T = {
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
 
-const ACTIONS = [
-  { key:'grade',      icon:'🎨', label:'Make It Pop',       color:'#f97316' },
-  { key:'text',       icon:'✏️',  label:'Add Text',          color:'#a78bfa' },
-  { key:'background', icon:'🖼️',  label:'Swap BG',           color:'#38bdf8' },
-  { key:'cutout',     icon:'✂️',  label:'Cut Out',           color:'#34d399' },
-  { key:'ctr',        icon:'📊', label:'CTR Score',         color:'#fb923c' },
-  { key:'variants',   icon:'🔀', label:'Variants',          color:'#f472b6' },
-]; // eslint-disable-line no-unused-vars
-
 // Resolve pixel size for display canvas from device dimensions
 function getCanvasDisplaySize() {
   const vw = window.innerWidth;
