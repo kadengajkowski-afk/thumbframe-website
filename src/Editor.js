@@ -12,14 +12,15 @@ import { SHORTCUT_GROUPS, TOOL_SHORTCUT_MAP } from './shortcuts';
 import CurvesPanel, { CurveThumbnail } from './CurvesPanel';
 import { DEFAULT_CURVES, applyLUTSync } from './curvesUtils';
 import CommandPalette from './CommandPalette';
-const LiquifyModal = lazy(() => import('./LiquifyModal'));
-const FiltersModal = lazy(() => import('./FiltersModal'));
 import SelectionOverlay from './SelectionOverlay';
 import { rectMask, ellipseMask, pathMask, magicWandMask, combineMasks, invertMask, selectAllMask, maskBounds, featherMask } from './selectionUtils'; // eslint-disable-line no-unused-vars
 import db from './db';
 import { renderLayersWithPixi } from './pixiCompositor';
-async function runThumbnailAnalysis(...args) { const {analyzeImage}=await import('./ai/ThumbnailAnalyzer'); return analyzeImage(...args); }
 import { autoBrighten, autoContrast, autoSaturate, autoDesaturate, autoVignette, autoWhiteBalance, gamingEnhance, enhanceWithWorker } from './ai/ThumbnailEnhancer';
+// Lazy-loaded components — must follow all static imports (import/first rule)
+const LiquifyModal = lazy(() => import('./LiquifyModal'));
+const FiltersModal = lazy(() => import('./FiltersModal'));
+async function runThumbnailAnalysis(...args) { const {analyzeImage}=await import('./ai/ThumbnailAnalyzer'); return analyzeImage(...args); }
 const DevicePreview = lazy(() => import('./ai/DevicePreview'));
 const ColorBlindSimulator = lazy(() => import('./ai/ColorBlindSimulator'));
 const PromptToThumbnail = lazy(() => import('./ai/PromptToThumbnail'));
