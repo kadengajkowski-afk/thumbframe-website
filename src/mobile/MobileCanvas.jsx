@@ -18,10 +18,13 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
     setZoom,
     offset = { x: 0, y: 0 },
     setOffset,
+    moveMode = false,
+    onDoubleTapText,
   } = props;
 
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
+  const lastTapRef = useRef({ id: null, t: 0 });
   const g = useRef({
     type: GESTURE.NONE,
     sx: 0, sy: 0, t0: 0,
@@ -54,6 +57,7 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
     for (let i = layers.length - 1; i >= 0; i--) {
       const l = layers[i];
       if (!l.visible) continue;
+      if ((l.width || 0) < 1 || (l.height || 0) < 1) continue;
       if (px >= l.x && px <= l.x + (l.width || 0) &&
           py >= l.y && py <= l.y + (l.height || 0)) {
         return l.id;
@@ -296,8 +300,8 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
 
       const pt = toCanvas(t.clientX, t.clientY);
 
-      // Check resize handle first
-      const handle = handleHitTest(pt.x, pt.y);
+      // Check resize handle first (only in moveMode)
+      const handle = moveMode ? handleHitTest(pt.x, pt.y) : null;
       if (handle) {
         G.handle = handle;
         const sel = layers.find(l => l.id === selectedLayerId);
@@ -310,7 +314,7 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
       // Check layer hit
       const hitId = hitTest(pt.x, pt.y);
       G.hit = hitId;
-      if (hitId && hitId === selectedLayerId) {
+      if (moveMode && hitId && hitId === selectedLayerId) {
         const sel = layers.find(l => l.id === hitId);
         if (sel) { G.lx = sel.x; G.ly = sel.y; }
       }
@@ -349,8 +353,8 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
       const cdx = pt.x - startPt.x;
       const cdy = pt.y - startPt.y;
 
-      // Resize handle drag
-      if (G.handle && selectedLayerId && onLayerResize) {
+      // Resize handle drag (only in moveMode)
+      if (moveMode && G.handle && selectedLayerId && onLayerResize) {
         let newW = G.lw0, newH = G.lh0, newX = G.lx, newY = G.ly;
         if (G.handle.includes('r')) newW = Math.max(20, G.lw0 + cdx);
         if (G.handle.includes('l')) { newW = Math.max(20, G.lw0 - cdx); newX = G.lx + cdx; }
@@ -360,8 +364,8 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
         return;
       }
 
-      // Layer drag
-      if (G.hit && G.hit === selectedLayerId && onLayerMove) {
+      // Layer drag (only in moveMode)
+      if (moveMode && G.hit && G.hit === selectedLayerId && onLayerMove) {
         onLayerMove(selectedLayerId, { x: G.lx + cdx, y: G.ly + cdy });
         return;
       }
@@ -378,10 +382,22 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
         const t = e.changedTouches[0];
         const dist = Math.sqrt((t.clientX - G.sx) ** 2 + (t.clientY - G.sy) ** 2);
 
-        // TAP
+        // TAP / DOUBLE-TAP
         if (dist < 10 && dur < 300) {
           const pt = toCanvas(t.clientX, t.clientY);
           const hitId = hitTest(pt.x, pt.y);
+          const now = Date.now();
+          const last = lastTapRef.current;
+          if (hitId && hitId === last.id && now - last.t < 400) {
+            // Double-tap on same layer
+            const layer = layers.find(l => l.id === hitId);
+            if (layer?.type === 'text' && onDoubleTapText) {
+              onDoubleTapText(hitId);
+            }
+            lastTapRef.current = { id: null, t: 0 };
+          } else {
+            lastTapRef.current = { id: hitId, t: now };
+          }
           onSelectLayer(hitId || null);
         }
       }
@@ -404,7 +420,8 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
       canvas.removeEventListener('touchend', onEnd);
     };
   }, [layers, selectedLayerId, offset, zoom, toCanvas, hitTest, handleHitTest,
-      setZoom, setOffset, onSelectLayer, onLayerMove, onLayerResize]);
+      setZoom, setOffset, onSelectLayer, onLayerMove, onLayerResize,
+      moveMode, onDoubleTapText]);
 
   // ── Render ──
   return (

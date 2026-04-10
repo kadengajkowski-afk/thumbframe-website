@@ -51,6 +51,7 @@ export default function MobileEditor({ user, setPage }) {
   // History (simple undo stack)
   const [history, setHistory]   = useState([]);
   const [histIdx, setHistIdx]   = useState(-1);
+  const [moveMode, setMoveMode] = useState(false);
 
   const canvasRef  = useRef(null);
   const fileRef    = useRef(null);
@@ -156,9 +157,14 @@ export default function MobileEditor({ user, setPage }) {
     setSelected(nl.id);
   }, [pushH]);
 
-  // ── Move layer ──
+  // ── Move layer (snap-to-bounds so layers can't be dragged off canvas) ──
   const moveLayer = useCallback((id, pos) => {
-    setLayers(prev => prev.map(l => l.id === id ? { ...l, x: pos.x, y: pos.y } : l));
+    setLayers(prev => prev.map(l => {
+      if (l.id !== id) return l;
+      const x = Math.max(0, Math.min(1280 - (l.width || 0), pos.x));
+      const y = Math.max(0, Math.min(720 - (l.height || 0), pos.y));
+      return { ...l, x, y };
+    }));
   }, []);
 
   // ── Resize layer ──
@@ -276,7 +282,15 @@ export default function MobileEditor({ user, setPage }) {
       img.onerror = () => flash('Failed to load result image', 'error');
       img.src = result;
     } catch (err) {
-      flash(`BG removal failed: ${err.message}`, 'error');
+      const msg = err.message || '';
+      let friendly = 'Background removal failed — please try again';
+      if (msg.includes('401') || msg.includes('403')) friendly = 'Please sign in again to use this feature';
+      else if (msg.includes('413')) friendly = 'Image too large — try a smaller image';
+      else if (msg.includes('429')) friendly = 'Too many requests — wait a moment and try again';
+      else if (msg.includes('500') || msg.includes('502') || msg.includes('503')) friendly = 'Server error — please try again in a moment';
+      else if (msg.toLowerCase().includes('fetch') || msg.includes('NetworkError')) friendly = 'No internet connection';
+      else if (msg.includes('No result')) friendly = 'Server returned no image — try again';
+      flash(friendly, 'error');
     } finally { setBusy(false); }
   }, [sel, selectedLayerId, flash]);
 
@@ -415,6 +429,12 @@ export default function MobileEditor({ user, setPage }) {
   // ── Reset zoom ──
   const resetView = useCallback(() => { setZoom(1); setOffset({ x: 0, y: 0 }); }, []);
 
+  // ── Double-tap text: open text sheet ──
+  const handleDoubleTapText = useCallback((id) => {
+    setSelected(id);
+    setActiveTab('text');
+  }, []);
+
   // ════════════════════════════════════════════════════════════════════════════
   // RENDER — Project picker
   // ════════════════════════════════════════════════════════════════════════════
@@ -498,7 +518,7 @@ export default function MobileEditor({ user, setPage }) {
         borderBottom: `1px solid ${C.border}`,
         zIndex: 20,
       }}>
-        <TapBtn onClick={() => setScreen('picker')} style={{ fontSize: 22 }}>‹</TapBtn>
+        <TapBtn onClick={() => { setScreen('picker'); setSelected(null); setActiveTab(null); setMoveMode(false); setZoom(1); setOffset({ x: 0, y: 0 }); }} style={{ fontSize: 22 }}>‹</TapBtn>
 
         <div style={{
           flex: 1, textAlign: 'center', fontSize: 14, fontWeight: 700,
@@ -536,7 +556,7 @@ export default function MobileEditor({ user, setPage }) {
       {/* ═══ CONTEXT BAR (shows when layer selected) ═══ */}
       {sel && (
         <div className="m-panel-scroll" data-scrollable="true" style={{
-          height: 42, flexShrink: 0,
+          height: 52, flexShrink: 0,
           display: 'flex', alignItems: 'center', gap: 2,
           padding: '0 6px', background: C.raised,
           borderBottom: `1px solid ${C.border}`,
@@ -544,13 +564,27 @@ export default function MobileEditor({ user, setPage }) {
           touchAction: 'pan-x',
           zIndex: 19,
         }}>
+          {/* Move mode toggle */}
+          <CtxBtn icon={moveMode ? '✋' : '↔'} label={moveMode ? 'Moving' : 'Move'}
+            onClick={() => setMoveMode(m => !m)} active={moveMode} />
+          <div style={{ width: 1, height: 28, background: C.border, margin: '0 2px', flexShrink: 0 }} />
           <CtxBtn icon="📋" label="Dupe" onClick={duplicateSelected} />
           <CtxBtn icon="🗑" label="Delete" onClick={deleteSelected} />
           <CtxBtn icon="↑" label="Up" onClick={() => moveLayerOrder(selectedLayerId, 1)} />
           <CtxBtn icon="↓" label="Down" onClick={() => moveLayerOrder(selectedLayerId, -1)} />
+          {/* Opacity slider */}
+          <div style={{ width: 1, height: 28, background: C.border, margin: '0 2px', flexShrink: 0 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 6px', flexShrink: 0, gap: 2 }}>
+            <span style={{ fontSize: 9, color: C.muted, fontWeight: 700, whiteSpace: 'nowrap' }}>
+              {Math.round((sel.opacity ?? 1) * 100)}%
+            </span>
+            <input type="range" min={0} max={100} value={Math.round((sel.opacity ?? 1) * 100)}
+              onChange={e => setLayers(prev => prev.map(l => l.id === selectedLayerId ? { ...l, opacity: Number(e.target.value) / 100 } : l))}
+              style={{ width: 72, accentColor: C.accent }} />
+          </div>
           {sel.type === 'image' && (
             <>
-              <div style={{ width: 1, height: 24, background: C.border, margin: '0 4px', flexShrink: 0 }} />
+              <div style={{ width: 1, height: 28, background: C.border, margin: '0 2px', flexShrink: 0 }} />
               <CtxBtn icon="☀️" label="Bright" onClick={() => applyAdjust('brighten')} />
               <CtxBtn icon="⚡" label="Contrast" onClick={() => applyAdjust('contrast')} />
               <CtxBtn icon="🎨" label="Color" onClick={() => applyAdjust('saturate')} />
@@ -572,6 +606,8 @@ export default function MobileEditor({ user, setPage }) {
         setZoom={setZoom}
         offset={offset}
         setOffset={setOffset}
+        moveMode={moveMode}
+        onDoubleTapText={handleDoubleTapText}
       />
 
       {/* ═══ TOOL SHEET ═══ */}
@@ -672,15 +708,18 @@ function TapBtn({ children, onClick, disabled, accent, style = {} }) {
   );
 }
 
-function CtxBtn({ icon, label, onClick }) {
+function CtxBtn({ icon, label, onClick, active }) {
   return (
     <button onClick={onClick} style={{
-      background: 'none', border: 'none', borderRadius: 8,
-      color: C.sub, fontSize: 10, fontWeight: 600,
+      background: active ? C.accentDim : 'none',
+      border: active ? `1px solid rgba(249,115,22,0.3)` : '1px solid transparent',
+      borderRadius: 8,
+      color: active ? C.accent : C.sub, fontSize: 10, fontWeight: 600,
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       gap: 1, padding: '4px 10px', cursor: 'pointer',
       touchAction: 'manipulation', flexShrink: 0,
       minHeight: 36, minWidth: 44, justifyContent: 'center',
+      transition: 'background 0.15s, color 0.15s',
     }}>
       <span style={{ fontSize: 16 }}>{icon}</span>
       {label}
@@ -689,8 +728,37 @@ function CtxBtn({ icon, label, onClick }) {
 }
 
 function Sheet({ children, onClose }) {
+  const sheetRef = useRef(null);
+  const startYRef = useRef(0);
+  const dragYRef = useRef(0);
+
+  const onDragStart = (e) => {
+    startYRef.current = e.touches[0].clientY;
+    dragYRef.current = 0;
+    if (sheetRef.current) sheetRef.current.style.transition = 'none';
+  };
+
+  const onDragMove = (e) => {
+    const dy = e.touches[0].clientY - startYRef.current;
+    if (dy <= 0) return;
+    dragYRef.current = dy;
+    if (sheetRef.current) sheetRef.current.style.transform = `translateY(${dy}px)`;
+  };
+
+  const onDragEnd = () => {
+    if (dragYRef.current > 80) {
+      onClose();
+    } else {
+      if (sheetRef.current) {
+        sheetRef.current.style.transition = 'transform 0.25s ease';
+        sheetRef.current.style.transform = 'translateY(0)';
+      }
+    }
+    dragYRef.current = 0;
+  };
+
   return (
-    <div style={{
+    <div ref={sheetRef} style={{
       position: 'absolute', bottom: 58, left: 0, right: 0,
       maxHeight: '50vh', background: C.surface,
       borderTop: `1px solid ${C.border}`,
@@ -699,14 +767,23 @@ function Sheet({ children, onClose }) {
       animation: 'slideUp 0.25s ease',
       boxShadow: '0 -8px 40px rgba(0,0,0,0.5)',
     }}>
-      {/* Drag handle */}
+      {/* Drag handle row */}
       <div style={{
-        height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0, cursor: 'grab',
+        height: 40, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexShrink: 0, padding: '0 12px', touchAction: 'none',
       }}
-        onClick={onClose}
+        onTouchStart={onDragStart}
+        onTouchMove={onDragMove}
+        onTouchEnd={onDragEnd}
       >
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border }} />
+        <div style={{ width: 32 }} />
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border, cursor: 'grab' }} />
+        <button onClick={onClose} style={{
+          background: 'none', border: 'none', color: C.muted, fontSize: 18,
+          cursor: 'pointer', padding: '4px 8px', touchAction: 'manipulation',
+          lineHeight: 1, minWidth: 32, minHeight: 32,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>✕</button>
       </div>
       <div className="m-panel-scroll" data-scrollable="true" style={{
         flex: 1, overflowY: 'auto', padding: '0 16px 20px',
