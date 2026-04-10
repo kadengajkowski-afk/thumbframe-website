@@ -261,13 +261,20 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
     if (!canvas) return;
 
     function getHit(px, py) {
+      // Only test within the visible canvas bounds
+      if (px < 0 || px > CW || py < 0 || py > CH) return null;
       const ls = layersRef.current;
       for (let i = ls.length - 1; i >= 0; i--) {
         const l = ls[i];
         if (!l.visible) continue;
         if ((l.width || 0) < 1 || (l.height || 0) < 1) continue;
-        if (px >= l.x && px <= l.x + (l.width || 0) &&
-            py >= l.y && py <= l.y + (l.height || 0)) return l.id;
+        // Clamp the layer bounds to the canvas — only test the visible portion
+        const left = Math.max(0, l.x);
+        const top = Math.max(0, l.y);
+        const right = Math.min(CW, l.x + (l.width || 0));
+        const bottom = Math.min(CH, l.y + (l.height || 0));
+        if (right - left < 1 || bottom - top < 1) continue;
+        if (px >= left && px <= right && py >= top && py <= bottom) return l.id;
       }
       return null;
     }
@@ -428,8 +435,12 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
           } else {
             lastTapRef.current = { id: hitId, t: now };
           }
-          // Single tap — select layer or deselect if empty space
-          onSelectLayer(hitId || null);
+          // Single tap — select, or tap again to deselect (Canva-style toggle)
+          if (hitId === selectedRef.current) {
+            onSelectLayer(null);
+          } else {
+            onSelectLayer(hitId || null);
+          }
         }
       }
 

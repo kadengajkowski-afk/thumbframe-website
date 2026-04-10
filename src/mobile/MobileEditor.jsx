@@ -162,12 +162,23 @@ export default function MobileEditor({ user, setPage }) {
     setSelected(nl.id);
   }, [pushH]);
 
-  // ── Move layer (snap-to-bounds so layers can't be dragged off canvas) ──
+  // ── Move layer ──
   const moveLayer = useCallback((id, pos) => {
     setLayers(prev => prev.map(l => {
       if (l.id !== id) return l;
-      const x = Math.max(0, Math.min(1280 - (l.width || 0), pos.x));
-      const y = Math.max(0, Math.min(720 - (l.height || 0), pos.y));
+      const lw = l.width || 0;
+      const lh = l.height || 0;
+      let x, y;
+      if (lw <= 1280 && lh <= 720) {
+        // Layer fits inside canvas — keep it within bounds
+        x = Math.max(0, Math.min(1280 - lw, pos.x));
+        y = Math.max(0, Math.min(720 - lh, pos.y));
+      } else {
+        // Layer is larger than canvas (cover mode) — allow free movement but
+        // keep at least 200px of the layer visible on each axis
+        x = Math.max(-(lw - 200), Math.min(1280 - 200, pos.x));
+        y = Math.max(-(lh - 200), Math.min(720 - 200, pos.y));
+      }
       return { ...l, x, y };
     }));
   }, []);
