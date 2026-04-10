@@ -55,8 +55,8 @@ export default function MobileEditor({ user }) {
     if (historyIdx <= 0) return;
     const prev = historyIdx - 1;
     setHistoryIdx(prev);
-    setHistory(h => { setLayers(h[prev]); return h; });
-  }, [historyIdx]);
+    setLayers(history[prev]);
+  }, [historyIdx, history]);
 
   // ── Toast helper ──
   const showToast = useCallback((msg, type = 'info', ms = 3000) => {
@@ -95,7 +95,7 @@ export default function MobileEditor({ user }) {
       img.src = ev.target.result;
     };
     reader.readAsDataURL(file);
-  }, [showToast]);
+  }, [showToast, layers, pushHistory]);
 
   // ── Add text layer ──
   const addTextLayer = useCallback((text = 'YOUR TEXT') => {
