@@ -181,7 +181,7 @@ const btnDanger  = { ...btnBase, background: 'rgba(239,68,68,0.15)', color: T.da
 export default function MobileEditor({ user: userProp, onSwitchToDesktop }) {
   const { user: authUser } = useAuth();
   const user  = authUser || userProp;
-  const isPro = user?.is_pro === true;
+  const isPro = user?.is_pro === true || user?.plan === 'pro';
 
   const fabricRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -212,6 +212,23 @@ export default function MobileEditor({ user: userProp, onSwitchToDesktop }) {
     `;
     document.head.appendChild(style);
     return () => style.remove();
+  }, []);
+
+  // ── Hide FabricCanvas sidebars on mobile ─────────────────────────────────────
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const clip = document.getElementById('mobile-canvas-clip');
+      if (!clip) return;
+      const allDivs = clip.querySelectorAll('div');
+      allDivs.forEach(div => {
+        const style = window.getComputedStyle(div);
+        const w = parseInt(style.width);
+        if (w === 180 || w === 240) {
+          div.style.display = 'none';
+        }
+      });
+    }, 500);
+    return () => clearTimeout(timer);
   }, []);
 
   // ── Toggle tab panel ─────────────────────────────────────────────────────────
@@ -269,10 +286,16 @@ export default function MobileEditor({ user: userProp, onSwitchToDesktop }) {
     if (!canvas) { showToast('Canvas not ready', 'error'); return; }
     setGradeBusy(true);
     try {
-      const srcDataUrl = canvas.toDataURL({ format: 'jpeg', quality: 0.92 });
+      const activeObj = canvas.getActiveObject();
+      const srcDataUrl = (activeObj && activeObj.type === 'image')
+        ? activeObj.toDataURL({ format: 'jpeg', quality: 0.92 })
+        : canvas.toDataURL({ format: 'jpeg', quality: 0.92 });
       const graded = await colorGradeClientSide(srcDataUrl, presetKey);
-      // Set graded image as canvas background
-      fabricRef.current?.setBg(graded);
+      if (activeObj && activeObj.type === 'image') {
+        activeObj.setSrc(graded, () => { canvas.renderAll(); }, { crossOrigin: 'anonymous' });
+      } else {
+        fabricRef.current?.setBg(graded);
+      }
       showToast(`${presetKey} applied`, 'success');
     } catch {
       showToast('Color grade failed', 'error');
@@ -312,20 +335,19 @@ export default function MobileEditor({ user: userProp, onSwitchToDesktop }) {
       {/* ── 1. Canvas area ──────────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
 
-        {/* Clip sidebars: shift inner wrapper left 180px (hides left sidebar)
-            and extend right 240px past container edge (hides right sidebar).
-            Overflow hidden on parent clips both. */}
         <div
           id="mobile-canvas-clip"
           style={{
-            position: 'absolute',
-            top: 0,
-            left: -180,
-            right: -240,
-            bottom: 0,
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            overflow: 'hidden',
           }}
         >
-          <FabricCanvas ref={fabricRef} user={user} darkMode={true} />
+          <div style={{
+            position: 'absolute',
+            top: 0, bottom: 0, left: 0, right: 0,
+          }}>
+            <FabricCanvas ref={fabricRef} user={user} darkMode={true} />
+          </div>
         </div>
 
         {/* ── Mobile top bar — overlays FabricCanvas's desktop toolbar ──────── */}
@@ -521,6 +543,23 @@ function EditPanel({ fabricRef, fileInputRef, showToast }) {
 
   return (
     <div>
+      <PanelSection>
+        <button
+          style={{
+            ...btnGhost,
+            width: '100%',
+            minHeight: 56,
+            border: `2px dashed ${T.accent}`,
+            borderRadius: 10,
+            fontSize: 15,
+            color: T.accent,
+            fontWeight: 700,
+          }}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          📁 Add Image
+        </button>
+      </PanelSection>
       <PanelSection title="Canvas">
         <Row>
           <button style={btnPrimary} onClick={handleAddText}>＋ Text</button>
@@ -585,18 +624,46 @@ function ToolsPanel({ fabricRef, showToast }) {
 }
 
 // ── AI Panel ──────────────────────────────────────────────────────────────────
-function AiPanel({ isPro, ctrData, gradeBusy, onCtrScore, onColorGrade, showToast }) {
+function AiPanel({ fabricRef, isPro, ctrData, gradeBusy, onCtrScore, onColorGrade, showToast }) {
+  const [removeBgBusy, setRemoveBgBusy] = React.useState(false);
+
+  const handleRemoveBg = async () => {
+    const canvas = fabricRef.current?.fabricCanvas;
+    if (!canvas) { showToast('Canvas not ready', 'error'); return; }
+    const activeObj = canvas.getActiveObject();
+    if (!activeObj || activeObj.type !== 'image') {
+      showToast('Tap an image on the canvas first', 'info');
+      return;
+    }
+    setRemoveBgBusy(true);
+    try {
+      const srcDataUrl = activeObj.toDataURL({ format: 'jpeg', quality: 0.92 });
+      const API_URL = process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app';
+      const res = await fetch(`${API_URL}/remove-bg`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: srcDataUrl }),
+      });
+      if (!res.ok) throw new Error('Remove BG failed');
+      const { result } = await res.json();
+      activeObj.setSrc(result, () => { canvas.renderAll(); }, { crossOrigin: 'anonymous' });
+      showToast('Background removed', 'success');
+    } catch {
+      showToast('Background removal failed', 'error');
+    } finally {
+      setRemoveBgBusy(false);
+    }
+  };
+
   return (
     <div>
       <PanelSection title="Background Remover">
-        <div style={{ color: T.muted, fontSize: 12, marginBottom: 8 }}>
-          Select an image layer on the canvas, then tap the toolbar's BG Remover button.
-        </div>
         <button
-          style={{ ...btnGhost, opacity: 0.5, cursor: 'default', width: '100%' }}
-          onClick={() => showToast('Select an image layer first, then use the Remove BG button in the toolbar', 'info')}
+          style={{ ...btnGhost, width: '100%', opacity: removeBgBusy ? 0.5 : 1 }}
+          disabled={removeBgBusy}
+          onClick={handleRemoveBg}
         >
-          Remove Background
+          {removeBgBusy ? 'Removing…' : 'Remove Background'}
         </button>
       </PanelSection>
 
