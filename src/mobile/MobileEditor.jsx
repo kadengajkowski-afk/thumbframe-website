@@ -34,8 +34,6 @@ export default function MobileEditor({ user }) {
   const [toast, setToast] = useState(null);
   const [tfOpen, setTfOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [history, setHistory] = useState([]);
-  const [historyIdx, setHistoryIdx] = useState(-1);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
   const isPro = user?.is_pro === true || user?.plan === 'pro';
@@ -45,13 +43,6 @@ export default function MobileEditor({ user }) {
     setToast({ msg, type });
     setTimeout(() => setToast(null), ms);
   }, []);
-
-  // ── History / undo ──
-  const handleUndo = useCallback(() => {
-    if (historyIdx <= 0) return;
-    setHistoryIdx(prev => prev - 1);
-    setLayers(history[historyIdx - 1]);
-  }, [history, historyIdx]);
 
   // ── Add image layer from file ──
   const handleAddImage = useCallback((file) => {
@@ -225,7 +216,7 @@ export default function MobileEditor({ user }) {
         <div style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 600, color: T.muted }}>
           {project?.name || 'Untitled'}
         </div>
-        <TopBtn onClick={handleUndo} label="↩" />
+        <TopBtn onClick={() => {}} label="↩" />
         <TopBtn onClick={handleExportPNG} label="Export" accent />
       </div>
 
