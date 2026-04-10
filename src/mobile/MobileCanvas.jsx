@@ -226,28 +226,34 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
     function measure() {
       const rect = wrap.getBoundingClientRect();
 
-      // iOS Safari sometimes reports 0 on initial flex layout — retry up to 30 frames (~500ms)
-      if ((rect.width < 20 || rect.height < 20) && attempts < 30) {
-        attempts++;
-        raf = requestAnimationFrame(measure);
+      // Retry if container hasn't laid out yet (iOS Safari)
+      if (rect.width < 20 || rect.height < 20) {
+        if (attempts < 30) { attempts++; raf = requestAnimationFrame(measure); }
         return;
       }
 
-      const pad = 12;
-      const availW = Math.max(100, rect.width - pad * 2);
-      const availH = Math.max(56, rect.height - pad * 2);
+      // Available space with padding on all sides
+      const pad = 24;
+      const availW = rect.width - pad * 2;
+      const availH = rect.height - pad * 2;
 
+      if (availW <= 0 || availH <= 0) return;
+
+      // Fit 16:9 canvas INSIDE available space (contain, not cover)
       let cssW, cssH;
       if (availW / availH > ASPECT) {
+        // Container is wider than 16:9 — fit to height
         cssH = availH;
-        cssW = cssH * ASPECT;
+        cssW = Math.round(cssH * ASPECT);
       } else {
+        // Container is taller than 16:9 — fit to width
         cssW = availW;
-        cssH = cssW / ASPECT;
+        cssH = Math.round(cssW / ASPECT);
       }
 
-      cssW = Math.round(cssW);
-      cssH = Math.round(cssH);
+      // Safety clamp — never exceed available space
+      cssW = Math.max(100, Math.min(cssW, availW));
+      cssH = Math.max(56, Math.min(cssH, availH));
 
       const dpr = getSafeDPR();
       canvas.width = CW * dpr;
