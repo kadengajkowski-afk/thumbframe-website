@@ -161,7 +161,7 @@ export default function Signup({ setPage }) {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#8a8a93', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              Your name
+              Username
             </label>
             <input
               type="text" value={name} onChange={e => setName(e.target.value)}

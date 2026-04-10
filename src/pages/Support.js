@@ -657,7 +657,7 @@ function ContactForm() {
       <div className="tf-form-row">
         <div className="tf-form-group">
           <label className="tf-form-label">Name</label>
-          <input className="tf-form-input" type="text" placeholder="Your name" value={form.name} onChange={(e) => setField('name', e.target.value)} />
+          <input className="tf-form-input" type="text" placeholder="Username" value={form.name} onChange={(e) => setField('name', e.target.value)} />
           {errors.name && <span className="tf-form-error">{errors.name}</span>}
         </div>
         <div className="tf-form-group">
@@ -802,7 +802,7 @@ function ReviewForm() {
 
       <div className="tf-form-row">
         <div className="tf-form-group">
-          <label className="tf-form-label">Your name</label>
+          <label className="tf-form-label">Username</label>
           <input className="tf-form-input" type="text" placeholder="e.g. Alex R." value={form.name} onChange={(e) => setField('name', e.target.value)} />
           {errors.name && <span className="tf-form-error">{errors.name}</span>}
         </div>
