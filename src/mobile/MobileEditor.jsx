@@ -118,13 +118,15 @@ export default function MobileEditor({ user, setPage }) {
     reader.onload = (ev) => {
       const img = new Image();
       img.onload = () => {
-        const s = Math.min(1280 / img.width, 720 / img.height, 1);
-        const w = Math.round(img.width * s);
-        const h = Math.round(img.height * s);
+        // Cover mode — fill the entire 1280×720 canvas (crop overflow)
+        const scale = Math.max(1280 / img.width, 720 / img.height);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
         const nl = {
           id: uuid(), type: 'image', name: file.name.replace(/\.[^.]+$/, ''),
           imgElement: img, src: ev.target.result,
-          x: Math.round((1280 - w) / 2), y: Math.round((720 - h) / 2),
+          x: Math.round((1280 - w) / 2),  // centers horizontally (negative if wider than canvas)
+          y: Math.round((720 - h) / 2),   // centers vertically (negative if taller than canvas)
           width: w, height: h, opacity: 1, visible: true,
         };
         setLayers(prev => {
