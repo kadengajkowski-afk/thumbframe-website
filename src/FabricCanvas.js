@@ -26,7 +26,7 @@ const FONTS = [
   'Impact','Georgia','Verdana','Courier New',
 ];
 
-const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true, mobileMode = false }, ref) {
+const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true }, ref) {
   const canvasElRef = useRef(null);
   const fabricRef = useRef(null);
   const historyRef = useRef([]);
@@ -136,16 +136,6 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true, m
     });
     fabricRef.current = canvas;
     setReady(true);
-    if (mobileMode) {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight * 0.55;
-      const scale = Math.min(vw / CANVAS_W, vh / CANVAS_H);
-      canvas.setDimensions({
-        width: Math.round(CANVAS_W * scale),
-        height: Math.round(CANVAS_H * scale)
-      });
-      canvas.setZoom(scale);
-    }
 
     canvas.on('object:modified', () => { pushHistory(); syncObjects(); syncActiveProps(); triggerAutoSave(); });
     canvas.on('object:added', () => { pushHistory(); syncObjects(); });
@@ -452,10 +442,10 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true, m
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: mobileMode ? '100%' : 'calc(100vh - 60px)', background: T.bg, fontFamily: '"Plus Jakarta Sans", -apple-system, sans-serif', color: T.text, fontSize: 12, overflow: mobileMode ? 'hidden' : undefined }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)', background: T.bg, fontFamily: '"Plus Jakarta Sans", -apple-system, sans-serif', color: T.text, fontSize: 12 }}>
 
       {/* ── Pro Toolbar ── */}
-      <div style={{ display: mobileMode ? 'none' : 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: T.sidebar, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: T.sidebar, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: 1, textTransform: 'uppercase', marginRight: 4 }}>SnapFrame V2</span>
         <button onClick={() => addText('YOUR TEXT')} style={toolbarBtn(false, false)}>T Add Text</button>
         <button onClick={() => {
@@ -491,7 +481,7 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true, m
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
       {/* ── Left Sidebar: Tools ── */}
-      <div style={{ width: mobileMode ? 0 : 180, background: T.sidebar, borderRight: `1px solid ${T.border}`, padding: mobileMode ? 0 : '12px 8px', overflowY: 'auto', flexShrink: 0, overflow: 'hidden' }}>
+      <div style={{ width: 180, background: T.sidebar, borderRight: `1px solid ${T.border}`, padding: '12px 8px', overflowY: 'auto', flexShrink: 0 }}>
         <div style={{ fontSize: 10, color: T.muted, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Tools</div>
         {[
           { key: 'select', icon: '↖', label: 'Select' },
@@ -533,21 +523,13 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true, m
 
       {/* ── Center: Canvas ── */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: T.bg }}>
-        <div style={{
-          transform: mobileMode ? 'none' : `scale(${SCALE})`,
-          transformOrigin: 'center center',
-          border: mobileMode ? 'none' : `2px solid ${T.border}`,
-          borderRadius: mobileMode ? 0 : 4,
-          boxShadow: mobileMode ? 'none' : '0 8px 40px rgba(0,0,0,0.5)',
-          width: mobileMode ? '100%' : undefined,
-          height: mobileMode ? '100%' : undefined,
-        }}>
+        <div style={{ transform: `scale(${SCALE})`, transformOrigin: 'center center', border: `2px solid ${T.border}`, borderRadius: 4, boxShadow: '0 8px 40px rgba(0,0,0,0.5)' }}>
           <canvas ref={canvasElRef} />
         </div>
       </div>
 
       {/* ── Right Sidebar: Properties / Tool Panel ── */}
-      <div style={{ width: mobileMode ? 0 : 240, background: T.sidebar, borderLeft: `1px solid ${T.border}`, padding: mobileMode ? 0 : '12px 10px', overflowY: 'auto', flexShrink: 0, overflow: 'hidden' }}>
+      <div style={{ width: 240, background: T.sidebar, borderLeft: `1px solid ${T.border}`, padding: '12px 10px', overflowY: 'auto', flexShrink: 0 }}>
 
         {/* Status */}
         <div style={{ fontSize: 10, color: T.muted, marginBottom: 12 }}>
