@@ -136,6 +136,16 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true, m
     });
     fabricRef.current = canvas;
     setReady(true);
+    if (mobileMode) {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight * 0.55;
+      const scale = Math.min(vw / CANVAS_W, vh / CANVAS_H);
+      canvas.setDimensions({
+        width: Math.round(CANVAS_W * scale),
+        height: Math.round(CANVAS_H * scale)
+      });
+      canvas.setZoom(scale);
+    }
 
     canvas.on('object:modified', () => { pushHistory(); syncObjects(); syncActiveProps(); triggerAutoSave(); });
     canvas.on('object:added', () => { pushHistory(); syncObjects(); });
@@ -524,11 +534,13 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true, m
       {/* ── Center: Canvas ── */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: T.bg }}>
         <div style={{
-          transform: mobileMode ? `scale(${Math.min(window.innerWidth / 1280, (window.innerHeight * 0.55) / 720)})` : `scale(${SCALE})`,
-          transformOrigin: 'top left',
+          transform: mobileMode ? 'none' : `scale(${SCALE})`,
+          transformOrigin: 'center center',
           border: mobileMode ? 'none' : `2px solid ${T.border}`,
           borderRadius: mobileMode ? 0 : 4,
-          boxShadow: mobileMode ? 'none' : '0 8px 40px rgba(0,0,0,0.5)'
+          boxShadow: mobileMode ? 'none' : '0 8px 40px rgba(0,0,0,0.5)',
+          width: mobileMode ? '100%' : undefined,
+          height: mobileMode ? '100%' : undefined,
         }}>
           <canvas ref={canvasElRef} />
         </div>
