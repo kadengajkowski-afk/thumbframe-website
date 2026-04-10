@@ -214,23 +214,6 @@ export default function MobileEditor({ user: userProp, onSwitchToDesktop }) {
     return () => style.remove();
   }, []);
 
-  // ── Hide FabricCanvas sidebars on mobile ─────────────────────────────────────
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const clip = document.getElementById('mobile-canvas-clip');
-      if (!clip) return;
-      const allDivs = clip.querySelectorAll('div');
-      allDivs.forEach(div => {
-        const style = window.getComputedStyle(div);
-        const w = parseInt(style.width);
-        if (w === 180 || w === 240) {
-          div.style.display = 'none';
-        }
-      });
-    }, 500);
-    return () => clearTimeout(timer);
-  }, []);
-
   // ── Toggle tab panel ─────────────────────────────────────────────────────────
   function toggleTab(id) {
     setActiveTab(prev => (prev === id ? null : id));
@@ -346,7 +329,7 @@ export default function MobileEditor({ user: userProp, onSwitchToDesktop }) {
             position: 'absolute',
             top: 0, bottom: 0, left: 0, right: 0,
           }}>
-            <FabricCanvas ref={fabricRef} user={user} darkMode={true} />
+            <FabricCanvas ref={fabricRef} user={user} darkMode={true} mobileMode={true} />
           </div>
         </div>
 
@@ -637,19 +620,26 @@ function AiPanel({ fabricRef, isPro, ctrData, gradeBusy, onCtrScore, onColorGrad
     }
     setRemoveBgBusy(true);
     try {
-      const srcDataUrl = activeObj.toDataURL({ format: 'jpeg', quality: 0.92 });
-      const API_URL = process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app';
+      // Extract image to a clean temporary canvas — avoids mobile Safari toDataURL bug
+      const el = activeObj.getElement();
+      const tmp = document.createElement('canvas');
+      tmp.width = el.naturalWidth || el.width;
+      tmp.height = el.naturalHeight || el.height;
+      tmp.getContext('2d').drawImage(el, 0, 0);
+      const srcDataUrl = tmp.toDataURL('image/png');
+
+      const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
       const res = await fetch(`${API_URL}/remove-bg`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl: srcDataUrl }),
       });
-      if (!res.ok) throw new Error('Remove BG failed');
+      if (!res.ok) throw new Error(`Remove BG failed: ${res.status}`);
       const { result } = await res.json();
       activeObj.setSrc(result, () => { canvas.renderAll(); }, { crossOrigin: 'anonymous' });
       showToast('Background removed', 'success');
-    } catch {
-      showToast('Background removal failed', 'error');
+    } catch (err) {
+      showToast(`Background removal failed: ${err.message}`, 'error');
     } finally {
       setRemoveBgBusy(false);
     }
