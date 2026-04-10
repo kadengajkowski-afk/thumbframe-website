@@ -124,13 +124,31 @@ const MobileCanvas = forwardRef(function MobileCanvas({
   // ── Canvas setup ──
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const { w, h } = getCanvasDisplaySize();
-    canvas.width = CANVAS_W * getSafeDPR();
-    canvas.height = CANVAS_H * getSafeDPR();
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
-    drawLayers();
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
+    function resize() {
+      const rect = container.getBoundingClientRect();
+      const aspect = 1280 / 720;
+      let w = rect.width - 8;
+      let h = w / aspect;
+      if (h > rect.height - 8) {
+        h = rect.height - 8;
+        w = h * aspect;
+      }
+      w = Math.round(w);
+      h = Math.round(h);
+      canvas.width = 1280 * getSafeDPR();
+      canvas.height = 720 * getSafeDPR();
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      drawLayers();
+    }
+
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(container);
+    return () => observer.disconnect();
   }, [drawLayers]);
 
   // ── Convert screen point to canvas coordinates ──
