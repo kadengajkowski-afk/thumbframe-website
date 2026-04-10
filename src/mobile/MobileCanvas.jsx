@@ -66,38 +66,6 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
     };
   }, []);
 
-  // ── Hit testing ──
-  const hitTest = useCallback((px, py) => {
-    for (let i = layers.length - 1; i >= 0; i--) {
-      const l = layers[i];
-      if (!l.visible) continue;
-      if ((l.width || 0) < 1 || (l.height || 0) < 1) continue;
-      if (px >= l.x && px <= l.x + (l.width || 0) &&
-          py >= l.y && py <= l.y + (l.height || 0)) {
-        return l.id;
-      }
-    }
-    return null;
-  }, [layers]);
-
-  // ── Handle hit test (corner resize) ──
-  const handleHitTest = useCallback((px, py) => {
-    if (!selectedLayerId) return null;
-    const s = layers.find(l => l.id === selectedLayerId);
-    if (!s) return null;
-    const R = 28; // generous touch radius in canvas coords
-    const corners = [
-      { id: 'tl', x: s.x, y: s.y },
-      { id: 'tr', x: s.x + s.width, y: s.y },
-      { id: 'bl', x: s.x, y: s.y + s.height },
-      { id: 'br', x: s.x + s.width, y: s.y + s.height },
-    ];
-    for (const c of corners) {
-      if (Math.abs(px - c.x) < R && Math.abs(py - c.y) < R) return c.id;
-    }
-    return null;
-  }, [layers, selectedLayerId]);
-
   // ── Paint everything ──
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
