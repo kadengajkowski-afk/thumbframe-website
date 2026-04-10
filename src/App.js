@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { trackPageView } from './utils/analytics';
 import Editor from './Editor';
 import FabricCanvas from './FabricCanvas';
+import MobileEditor from './mobile/MobileEditor';
 import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
 import BillingTab from './BillingTab';
@@ -36,6 +37,23 @@ function PageLoader() {
   );
 }
 
+
+// ── Mobile detection ──────────────────────────────────────────────────────────
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    window.innerWidth < 768 ||
+    (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+  );
+  useEffect(() => {
+    const check = () => setIsMobile(
+      window.innerWidth < 768 ||
+      (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+    );
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return isMobile;
+}
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 const C = {
@@ -704,6 +722,7 @@ const PROTECTED_PAGES = new Set(['editor', 'dashboard', 'settings', 'account']);
 
 
 export default function App() {
+  const isMobile = useIsMobile();
   const [page, setPage] = useState(getInitialPage);
   const [blogSlug, setBlogSlug] = useState(() => {
     const p = window.location.pathname;
@@ -726,6 +745,7 @@ export default function App() {
   }, [page, user]);
 
   if (page === 'editor') {
+    if (isMobile) return <MobileEditor user={user} />;
     // Feature flag: ?engine=fabric switches to the new fabric.js V2 canvas
     const useFabric = new URLSearchParams(window.location.search).get('engine') === 'fabric';
     if (useFabric) {
