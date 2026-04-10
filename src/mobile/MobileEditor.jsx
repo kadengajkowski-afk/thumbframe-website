@@ -2,7 +2,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import MobileCanvas from './MobileCanvas';
 import MobileProjectPicker from './MobileProjectPicker';
-import { releaseCanvas, getSafeDPR } from './canvasHelpers';
+import { releaseCanvas } from './canvasHelpers';
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const C = {
