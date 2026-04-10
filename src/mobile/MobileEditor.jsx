@@ -34,8 +34,11 @@ export default function MobileEditor({ user }) {
   const [toast, setToast] = useState(null);
   const [tfOpen, setTfOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [historyIdx, setHistoryIdx] = useState(-1);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const panelRef = useRef(null);
   const isPro = user?.is_pro === true || user?.plan === 'pro';
 
   // ── Toast helper ──
@@ -43,6 +46,19 @@ export default function MobileEditor({ user }) {
     setToast({ msg, type });
     setTimeout(() => setToast(null), ms);
   }, []);
+
+  // ── History / undo ──
+  const pushHistory = useCallback((newLayers) => {
+    setHistory(prev => [...prev.slice(0, historyIdx + 1), newLayers]);
+    setHistoryIdx(prev => prev + 1);
+    setLayers(newLayers);
+  }, [historyIdx]);
+
+  const handleUndo = useCallback(() => {
+    if (historyIdx <= 0) return;
+    setHistoryIdx(prev => prev - 1);
+    setLayers(history[historyIdx - 1]);
+  }, [history, historyIdx]);
 
   // ── Add image layer from file ──
   const handleAddImage = useCallback((file) => {
@@ -216,7 +232,7 @@ export default function MobileEditor({ user }) {
         <div style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 600, color: T.muted }}>
           {project?.name || 'Untitled'}
         </div>
-        <TopBtn onClick={() => setLayers(prev => { const i = prev.findIndex(l => l.id === selectedLayerId); return i > 0 ? [...prev.slice(0, i-1), prev[i], prev[i-1], ...prev.slice(i+1)] : prev; })} label="↩" />
+        <TopBtn onClick={handleUndo} label="↩" />
         <TopBtn onClick={handleExportPNG} label="Export" accent />
       </div>
 
@@ -245,7 +261,14 @@ export default function MobileEditor({ user }) {
           transition: 'transform 300ms ease',
         }}>
           {/* Drag handle */}
-          <div style={{ height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div
+            style={{ height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            onTouchStart={(e) => { e._startY = e.touches[0].clientY; }}
+            onTouchMove={(e) => {
+              const dy = e.touches[0].clientY - e._startY;
+              if (dy > 60) setActiveTab(null);
+            }}
+          >
             <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }} />
           </div>
           <div className="panel-scroll" style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>

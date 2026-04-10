@@ -472,7 +472,7 @@ const PLANS = [
   },
 ];
 
-function PricingSection({ setPage, onCheckout }) {
+function PricingSection({ setPage, onCheckout, user }) {
   return (
     <section id="pricing-section" style={{ background: C.bg, padding: '100px 32px' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
@@ -502,7 +502,7 @@ function PricingSection({ setPage, onCheckout }) {
                 </div>
                 <div style={{ fontFamily: FB, fontSize: 13, color: C.muted }}>{desc}</div>
               </div>
-              <button className="tf-btn" onClick={primary ? onCheckout : () => setPage('editor')} style={{
+              <button className="tf-btn" onClick={primary ? onCheckout : () => setPage(user ? 'editor' : 'signup')} style={{
                 width: '100%', padding: '12px 0', borderRadius: 9,
                 background: primary ? OG : 'transparent',
                 border: primary ? 'none' : `1px solid ${C.bdr2}`,
@@ -634,7 +634,7 @@ export default function LandingPage({ setPage, onCheckout }) {
       <FeatureBanner />
       <FeaturesSection />
       <TemplatesSection setPage={setPage} />
-      <PricingSection setPage={setPage} onCheckout={onCheckout} />
+      <PricingSection setPage={setPage} onCheckout={onCheckout} user={user} />
       <FAQSection />
       <FooterSection setPage={setPage} />
     </div>
