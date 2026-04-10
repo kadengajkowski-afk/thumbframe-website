@@ -366,8 +366,7 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
         return;
       }
 
-      // Canvas pan (no layer selected, or dragging empty space)
-      setOffset({ x: G.ox + dx, y: G.oy + dy });
+      // Single-finger never pans — two-finger pinch handles pan
     }
 
     function onEnd(e) {
