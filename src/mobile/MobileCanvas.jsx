@@ -127,28 +127,48 @@ const MobileCanvas = forwardRef(function MobileCanvas({
     const container = containerRef.current;
     if (!canvas || !container) return;
 
+    let rafId = null;
+
     function resize() {
       const rect = container.getBoundingClientRect();
-      const aspect = 1280 / 720;
+
+      // Guard: if container hasn't laid out yet, retry next frame
+      if (rect.width < 10 || rect.height < 10) {
+        rafId = requestAnimationFrame(resize);
+        return;
+      }
+
+      const aspect = CANVAS_W / CANVAS_H;
       let w = rect.width - 8;
       let h = w / aspect;
       if (h > rect.height - 8) {
         h = rect.height - 8;
         w = h * aspect;
       }
-      w = Math.round(w);
-      h = Math.round(h);
-      canvas.width = 1280 * getSafeDPR();
-      canvas.height = 720 * getSafeDPR();
+      w = Math.max(100, Math.round(w));
+      h = Math.max(56, Math.round(h));
+
+      const dpr = getSafeDPR();
+      canvas.width = CANVAS_W * dpr;
+      canvas.height = CANVAS_H * dpr;
       canvas.style.width = w + 'px';
       canvas.style.height = h + 'px';
       drawLayers();
     }
 
-    resize();
-    const observer = new ResizeObserver(resize);
+    // iOS Safari needs a frame to resolve flex layout before measuring
+    rafId = requestAnimationFrame(resize);
+
+    const observer = new ResizeObserver(() => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(resize);
+    });
     observer.observe(container);
-    return () => observer.disconnect();
+
+    return () => {
+      observer.disconnect();
+      if (rafId) cancelAnimationFrame(rafId);
+    };
   }, [drawLayers]);
 
   // ── Convert screen point to canvas coordinates ──
@@ -291,12 +311,14 @@ const MobileCanvas = forwardRef(function MobileCanvas({
       ref={containerRef}
       style={{
         flex: 1,
+        minHeight: 0,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
         background: '#06070a',
         touchAction: 'none',
+        width: '100%',
       }}
     >
       <div style={{
@@ -310,6 +332,8 @@ const MobileCanvas = forwardRef(function MobileCanvas({
           ref={canvasRef}
           style={{
             display: 'block',
+            minWidth: '100px',
+            minHeight: '56px',
             touchAction: 'none',
             WebkitUserSelect: 'none',
             userSelect: 'none',

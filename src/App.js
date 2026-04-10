@@ -756,7 +756,7 @@ export default function App() {
 
   // Marketing pages — self-contained with own Navbar/Footer (code-split with Suspense)
   const marketingPages = {
-    home:        <Home setPage={setPage} />,
+    home:        <Home setPage={setPage} user={user} />,
     features:    <Features setPage={setPage} />,
     pricing:     <PricingPage setPage={setPage} />,
     about:       <About setPage={setPage} />,

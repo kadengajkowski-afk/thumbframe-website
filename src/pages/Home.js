@@ -461,14 +461,21 @@ function FeatureCard({ icon, tag, title, desc, wide, glow }) {
 
 
 // ─── Home page ─────────────────────────────────────────────────────────────────
-export default function Home({ setPage }) {
+export default function Home({ setPage, user }) {
   useSEO({
     title: 'ThumbFrame — YouTube Thumbnail Editor for Creators',
     description: 'Stop wasting hours on thumbnails. ThumbFrame is the AI-powered editor built by a creator, for creators. Free to start.',
     url: 'https://thumbframe.com',
   });
 
-  const go = (page) => { setPage(page); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const go = (page) => {
+    if (page === 'editor' && !user) {
+      setPage('signup');
+    } else {
+      setPage(page);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <div style={{ background: '#050507', minHeight: '100vh', overflowX: 'hidden', fontFamily: "'Satoshi', sans-serif", color: '#f0f0f3', position: 'relative' }}>
