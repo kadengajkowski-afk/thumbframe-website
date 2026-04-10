@@ -55,17 +55,6 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
     redraw: () => paint(),
   }));
 
-  // ── Coordinate conversion ──
-  const toCanvas = useCallback((cx, cy) => {
-    const c = canvasRef.current;
-    if (!c) return { x: 0, y: 0 };
-    const r = c.getBoundingClientRect();
-    return {
-      x: ((cx - r.left) / r.width) * CW,
-      y: ((cy - r.top) / r.height) * CH,
-    };
-  }, []);
-
   // ── Paint everything ──
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
