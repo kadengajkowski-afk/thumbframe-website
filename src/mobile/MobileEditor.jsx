@@ -51,7 +51,10 @@ export default function MobileEditor({ user, setPage }) {
   // History (simple undo stack)
   const [history, setHistory]   = useState([]);
   const [histIdx, setHistIdx]   = useState(-1);
-  const [moveMode, setMoveMode] = useState(false);
+  const [moveMode, setMoveMode]     = useState(false);
+  const [renaming, setRenaming]     = useState(false);
+  const [nameInput, setNameInput]   = useState('');
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'idle'
 
   const canvasRef  = useRef(null);
   const fileRef    = useRef(null);
@@ -397,39 +400,36 @@ export default function MobileEditor({ user, setPage }) {
   // ── Auto-save project to Supabase ──
   useEffect(() => {
     if (!user || !project?.id || layers.length === 0) return;
+    setSaveStatus('idle');
     const timer = setTimeout(async () => {
+      setSaveStatus('saving');
       try {
-        let thumbnailUrl = null;
-        const canvas = canvasRef.current?.getCanvas();
-        if (canvas) {
-          const preview = document.createElement('canvas');
-          preview.width = 320;
-          preview.height = 180;
-          preview.getContext('2d').drawImage(canvas, 0, 0, 320, 180);
-          thumbnailUrl = preview.toDataURL('image/jpeg', 0.6);
-          releaseCanvas(preview);
+        let thumbnail_url = null;
+        const c = canvasRef.current?.getCanvas();
+        if (c) {
+          const p = document.createElement('canvas');
+          p.width = 320; p.height = 180;
+          p.getContext('2d').drawImage(c, 0, 0, 320, 180);
+          thumbnail_url = p.toDataURL('image/jpeg', 0.6);
+          releaseCanvas(p);
         }
-        const layerData = layers.map(l => ({ ...l, imgElement: undefined }));
-        const { error } = await supabase
-          .from('projects')
-          .upsert({
-            id: project.id,
-            user_id: user.id,
-            name: project.name || 'Untitled',
-            layers_json: JSON.stringify(layerData),
-            thumbnail_url: thumbnailUrl,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
-        if (error) console.warn('[AutoSave] Failed:', error.message);
-      } catch (err) {
-        console.warn('[AutoSave] Error:', err);
+        const layerData = layers.map(({ imgElement, ...rest }) => rest);
+        await supabase.from('projects').upsert({
+          id: project.id,
+          user_id: user.id,
+          name: project.name || 'Untitled',
+          layers_json: JSON.stringify(layerData),
+          thumbnail_url,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+        setSaveStatus('saved');
+      } catch (e) {
+        console.warn('[AutoSave]', e.message);
+        setSaveStatus('idle');
       }
-    }, 3000);
+    }, 2000);
     return () => clearTimeout(timer);
   }, [layers, user, project]);
-
-  // ── Reset zoom ──
-  const resetView = useCallback(() => { setZoom(1); setOffset({ x: 0, y: 0 }); }, []);
 
   // ── Double-tap text: open text sheet ──
   const handleDoubleTapText = useCallback((id) => {
@@ -513,24 +513,110 @@ export default function MobileEditor({ user, setPage }) {
       {/* ═══ TOP BAR ═══ */}
       <div style={{
         height: 52, flexShrink: 0,
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '0 10px',
+        display: 'flex', alignItems: 'center', gap: 4,
+        padding: '0 8px',
         paddingTop: 'env(safe-area-inset-top, 0px)',
         background: C.surface,
         borderBottom: `1px solid ${C.border}`,
         zIndex: 20,
       }}>
+        {/* Back */}
         <TapBtn onClick={() => { setScreen('picker'); setSelected(null); setActiveTab(null); setMoveMode(false); setZoom(1); setOffset({ x: 0, y: 0 }); }} style={{ fontSize: 22 }}>‹</TapBtn>
 
+        {/* Project name — tap to rename */}
+        {renaming ? (
+          <input
+            autoFocus
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            onBlur={() => {
+              if (nameInput.trim()) setProject(prev => ({ ...prev, name: nameInput.trim() }));
+              setRenaming(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (nameInput.trim()) setProject(prev => ({ ...prev, name: nameInput.trim() }));
+                setRenaming(false);
+              }
+            }}
+            style={{
+              flex: 1, textAlign: 'center', fontWeight: 700,
+              color: C.text, background: C.raised,
+              border: `1px solid ${C.accent}`, borderRadius: 6,
+              padding: '4px 8px', outline: 'none', fontFamily: 'inherit',
+              fontSize: 16, /* 16px prevents iOS auto-zoom */
+            }}
+          />
+        ) : (
+          <button
+            onClick={() => { setNameInput(project?.name || 'Untitled'); setRenaming(true); }}
+            style={{
+              flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 700,
+              color: C.sub, background: 'none', border: 'none',
+              cursor: 'pointer', touchAction: 'manipulation',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              padding: '4px 0',
+            }}
+          >
+            {project?.name || 'Untitled'}
+            <span style={{ fontSize: 10, opacity: 0.35 }}>✎</span>
+          </button>
+        )}
+
+        {/* Auto-save status indicator */}
         <div style={{
-          flex: 1, textAlign: 'center', fontSize: 14, fontWeight: 700,
-          color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontSize: 10, fontWeight: 700, padding: '3px 4px',
+          borderRadius: 6, flexShrink: 0, textAlign: 'center',
+          display: 'flex', alignItems: 'center', gap: 3,
+          color: saveStatus === 'saved' ? C.success : saveStatus === 'saving' ? C.accent : C.muted,
         }}>
-          {project?.name || 'Untitled'}
+          {saveStatus === 'saving' && (
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: C.accent, display: 'inline-block',
+              animation: 'pulse 1s ease infinite',
+            }} />
+          )}
+          {saveStatus === 'saved' && '✓'}
+          {saveStatus === 'idle' && '○'}
         </div>
 
+        {/* Undo */}
         <TapBtn onClick={undo} disabled={histIdx <= 0}>↩</TapBtn>
-        <TapBtn onClick={resetView} style={{ fontSize: 11 }}>1:1</TapBtn>
+
+        {/* Manual save */}
+        <TapBtn onClick={async () => {
+          if (!user || !project?.id) { flash('Log in to save'); return; }
+          setSaveStatus('saving');
+          try {
+            let thumbnail_url = null;
+            const c = canvasRef.current?.getCanvas();
+            if (c) {
+              const p = document.createElement('canvas');
+              p.width = 320; p.height = 180;
+              p.getContext('2d').drawImage(c, 0, 0, 320, 180);
+              thumbnail_url = p.toDataURL('image/jpeg', 0.6);
+              releaseCanvas(p);
+            }
+            const layerData = layers.map(({ imgElement, ...rest }) => rest);
+            await supabase.from('projects').upsert({
+              id: project.id,
+              user_id: user.id,
+              name: project.name || 'Untitled',
+              layers_json: JSON.stringify(layerData),
+              thumbnail_url,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'id' });
+            setSaveStatus('saved');
+            flash('Saved!', 'success');
+          } catch (e) {
+            flash('Save failed', 'error');
+            setSaveStatus('idle');
+          }
+        }}>💾</TapBtn>
+
+        {/* Export */}
         <TapBtn onClick={() => doExport('png')} accent>Export</TapBtn>
       </div>
 
@@ -687,6 +773,7 @@ export default function MobileEditor({ user, setPage }) {
       <style>{`
         @keyframes fadeInDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
       `}</style>
     </div>
   );

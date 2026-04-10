@@ -342,7 +342,7 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
       const dy = t.clientY - G.sy;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (G.type === GESTURE.NONE && dist > 8) {
+      if (G.type === GESTURE.NONE && dist > 12) {
         G.type = GESTURE.DRAG;
       }
 
@@ -382,8 +382,8 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
         const t = e.changedTouches[0];
         const dist = Math.sqrt((t.clientX - G.sx) ** 2 + (t.clientY - G.sy) ** 2);
 
-        // TAP / DOUBLE-TAP
-        if (dist < 10 && dur < 300) {
+        // TAP / DOUBLE-TAP — generous thresholds for mobile fingers
+        if (dist < 15 && dur < 500) {
           const pt = toCanvas(t.clientX, t.clientY);
           const hitId = hitTest(pt.x, pt.y);
           const now = Date.now();
