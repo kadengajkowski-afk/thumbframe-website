@@ -1,544 +1,788 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+// src/mobile/MobileEditor.jsx
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import MobileCanvas from './MobileCanvas';
 import MobileProjectPicker from './MobileProjectPicker';
-import { releaseCanvas } from './canvasHelpers';
-import { saveAs } from 'file-saver';
+import { releaseCanvas, getSafeDPR } from './canvasHelpers';
 
-const T = {
-  bg: '#06070a', bg2: '#0d0f14', panel: '#111318',
-  border: 'rgba(255,255,255,0.07)', text: '#f0f2f5',
-  muted: 'rgba(255,255,255,0.38)', accent: '#f97316',
-  accentDim: 'rgba(249,115,22,0.12)', success: '#22c55e',
-  danger: '#ef4444',
+// ── Design tokens ──────────────────────────────────────────────────────────────
+const C = {
+  bg:      '#09090b',
+  surface: '#111113',
+  raised:  '#18181b',
+  border:  'rgba(255,255,255,0.07)',
+  text:    '#fafafa',
+  sub:     'rgba(255,255,255,0.55)',
+  muted:   'rgba(255,255,255,0.3)',
+  accent:  '#f97316',
+  accentDim: 'rgba(249,115,22,0.12)',
+  success: '#22c55e',
+  danger:  '#ef4444',
+  glass:   'rgba(17,17,19,0.85)',
 };
 
+function uuid() { return crypto.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+// ── Tab definitions ────────────────────────────────────────────────────────────
 const TABS = [
-  { id: 'edit',   icon: '✏️',  label: 'Edit'   },
-  { id: 'tools',  icon: '🖌️',  label: 'Tools'  },
-  { id: 'ai',     icon: '🤖',  label: 'AI'     },
-  { id: 'export', icon: '💾',  label: 'Export' },
+  { id: 'layers', label: 'Layers',  icon: '◫' },
+  { id: 'adjust', label: 'Adjust',  icon: '◑' },
+  { id: 'text',   label: 'Text',    icon: 'T' },
+  { id: 'fx',     label: 'Effects', icon: '✦' },
+  { id: 'ai',     label: 'AI',      icon: '⚡' },
 ];
 
-function uuid() {
-  return crypto.randomUUID?.() || Math.random().toString(36).slice(2);
-}
+// ════════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ════════════════════════════════════════════════════════════════════════════════
+export default function MobileEditor({ user, setPage }) {
+  // ── App-level state ──
+  const [screen, setScreen]             = useState('picker');
+  const [project, setProject]           = useState(null);
+  const [layers, setLayers]             = useState([]);
+  const [selectedLayerId, setSelected]  = useState(null);
+  const [activeTab, setActiveTab]       = useState(null);
+  const [zoom, setZoom]                 = useState(1);
+  const [offset, setOffset]             = useState({ x: 0, y: 0 });
+  const [toast, setToast]               = useState(null);
+  const [busy, setBusy]                 = useState(false);
 
-export default function MobileEditor({ user }) {
-  const [screen, setScreen] = useState('picker'); // 'picker' | 'editor'
-  const [project, setProject] = useState(null);
-  const [layers, setLayers] = useState([]);
-  const [selectedLayerId, setSelectedLayerId] = useState(null);
-  const [activeTab, setActiveTab] = useState(null);
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [toast, setToast] = useState(null);
-  const [tfOpen, setTfOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [history, setHistory] = useState([[]]);
-  const [historyIdx, setHistoryIdx] = useState(0);
-  const canvasRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const dragStartY = useRef(null);
+  // History (simple undo stack)
+  const [history, setHistory]   = useState([]);
+  const [histIdx, setHistIdx]   = useState(-1);
+
+  const canvasRef  = useRef(null);
+  const fileRef    = useRef(null);
+
   const isPro = user?.is_pro === true || user?.plan === 'pro';
+  const sel = useMemo(() => layers.find(l => l.id === selectedLayerId), [layers, selectedLayerId]);
 
-  // ── History helpers ──
-  const pushHistory = useCallback((newLayers) => {
-    setHistory(prev => {
-      const next = prev.slice(0, historyIdx + 1);
-      next.push(newLayers);
-      return next;
-    });
-    setHistoryIdx(prev => prev + 1);
-  }, [historyIdx]);
-
-  const handleUndo = useCallback(() => {
-    if (historyIdx <= 0) return;
-    const prev = historyIdx - 1;
-    setHistoryIdx(prev);
-    setLayers(history[prev]);
-  }, [historyIdx, history]);
-
-  // ── Toast helper ──
-  const showToast = useCallback((msg, type = 'info', ms = 3000) => {
+  // ── Toast ──
+  const flash = useCallback((msg, type = 'info', ms = 2500) => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), ms);
   }, []);
 
-  // ── Add image layer from file ──
-  const handleAddImage = useCallback((file) => {
+  // ── History ──
+  const pushH = useCallback((next) => {
+    setHistory(h => [...h.slice(0, histIdx + 1), JSON.parse(JSON.stringify(
+      next.map(l => ({ ...l, imgElement: undefined }))
+    ))]);
+    setHistIdx(i => i + 1);
+  }, [histIdx]);
+
+  const undo = useCallback(() => {
+    if (histIdx <= 0) return;
+    const prev = histIdx - 1;
+    setHistIdx(prev);
+    // Rebuild imgElements from src
+    const restored = history[prev].map(l => {
+      if (l.type === 'image' && l.src) {
+        const img = new Image();
+        img.src = l.src;
+        return { ...l, imgElement: img };
+      }
+      return l;
+    });
+    setLayers(restored);
+  }, [histIdx, history]);
+
+  // ── Lock body scroll ──
+  useEffect(() => {
+    const orig = document.body.style.cssText;
+    document.body.style.cssText = 'position:fixed;inset:0;overflow:hidden;overscroll-behavior:none;';
+    const stop = (e) => { if (!e.target.closest('.m-panel-scroll')) e.preventDefault(); };
+    document.addEventListener('touchmove', stop, { passive: false });
+    return () => {
+      document.body.style.cssText = orig;
+      document.removeEventListener('touchmove', stop);
+    };
+  }, []);
+
+  // ── Add image ──
+  const addImage = useCallback((file) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       const img = new Image();
       img.onload = () => {
-        const scale = Math.min(1280 / img.width, 720 / img.height, 1);
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
-        const newLayer = {
-          id: uuid(),
-          type: 'image',
-          name: file.name.replace(/\.[^.]+$/, ''),
-          imgElement: img,
-          src: ev.target.result,
-          x: Math.round((1280 - w) / 2),
-          y: Math.round((720 - h) / 2),
-          width: w,
-          height: h,
-          opacity: 1,
-          visible: true,
+        const s = Math.min(1280 / img.width, 720 / img.height, 1);
+        const w = Math.round(img.width * s);
+        const h = Math.round(img.height * s);
+        const nl = {
+          id: uuid(), type: 'image', name: file.name.replace(/\.[^.]+$/, ''),
+          imgElement: img, src: ev.target.result,
+          x: Math.round((1280 - w) / 2), y: Math.round((720 - h) / 2),
+          width: w, height: h, opacity: 1, visible: true,
         };
-        setLayers(prev => [...prev, newLayer]);
-        setSelectedLayerId(newLayer.id);
-        pushHistory([...layers, newLayer]);
-        showToast('Image added', 'success');
+        setLayers(prev => {
+          const next = [...prev, nl];
+          pushH(next);
+          return next;
+        });
+        setSelected(nl.id);
+        flash('Image added', 'success');
       };
       img.src = ev.target.result;
     };
     reader.readAsDataURL(file);
-  }, [showToast, layers, pushHistory]);
+  }, [flash, pushH]);
 
-  // ── Add text layer ──
-  const addTextLayer = useCallback((text = 'YOUR TEXT') => {
-    const newLayer = {
-      id: uuid(),
-      type: 'text',
-      name: 'Text',
-      text,
-      x: 400, y: 300,
-      width: 480, height: 80,
-      fontSize: 72,
-      fontFamily: 'Impact',
-      fontWeight: 'bold',
-      color: '#ffffff',
-      stroke: true,
-      strokeColor: '#000000',
-      strokeWidth: 3,
-      opacity: 1,
-      visible: true,
+  // ── Add text ──
+  const addText = useCallback((text = 'YOUR TEXT') => {
+    const nl = {
+      id: uuid(), type: 'text', name: 'Text',
+      text, x: 400, y: 300, width: 480, height: 80,
+      fontSize: 72, fontFamily: 'Impact', fontWeight: 'bold',
+      color: '#ffffff', stroke: true, strokeColor: '#000000', strokeWidth: 3,
+      opacity: 1, visible: true,
     };
-    setLayers(prev => [...prev, newLayer]);
-    setSelectedLayerId(newLayer.id);
-  }, []);
+    setLayers(prev => {
+      const next = [...prev, nl];
+      pushH(next);
+      return next;
+    });
+    setSelected(nl.id);
+  }, [pushH]);
 
   // ── Move layer ──
-  const handleLayerMove = useCallback((id, pos) => {
+  const moveLayer = useCallback((id, pos) => {
     setLayers(prev => prev.map(l => l.id === id ? { ...l, x: pos.x, y: pos.y } : l));
   }, []);
 
-  // ── Export PNG ──
-  const handleExportPNG = useCallback(() => {
-    const canvas = canvasRef.current?.getCanvas();
-    if (!canvas) return;
-    canvas.toBlob((blob) => {
-      if (blob) saveAs(blob, `${project?.name || 'thumbnail'}.png`);
-    }, 'image/png');
-  }, [project]);
+  // ── Resize layer ──
+  const resizeLayer = useCallback((id, rect) => {
+    setLayers(prev => prev.map(l => l.id === id ? { ...l, ...rect } : l));
+  }, []);
 
-  // ── Export JPG ──
-  const handleExportJPG = useCallback(() => {
-    const canvas = canvasRef.current?.getCanvas();
-    if (!canvas) return;
-    canvas.toBlob((blob) => {
-      if (blob) saveAs(blob, `${project?.name || 'thumbnail'}.jpg`);
-    }, 'image/jpeg', 0.9);
-  }, [project]);
+  // ── Delete selected ──
+  const deleteSelected = useCallback(() => {
+    if (!selectedLayerId) return;
+    setLayers(prev => {
+      const next = prev.filter(l => l.id !== selectedLayerId);
+      pushH(next);
+      return next;
+    });
+    setSelected(null);
+    flash('Layer deleted');
+  }, [selectedLayerId, pushH, flash]);
 
-  // ── Background removal ──
-  const handleRemoveBg = useCallback(async () => {
-    const sel = layers.find(l => l.id === selectedLayerId);
-    if (!sel || sel.type !== 'image') {
-      showToast('Select an image layer first', 'info');
-      return;
+  // ── Duplicate selected ──
+  const duplicateSelected = useCallback(() => {
+    if (!sel) return;
+    const dupe = { ...sel, id: uuid(), name: sel.name + ' copy', x: sel.x + 20, y: sel.y + 20 };
+    if (sel.type === 'image' && sel.src) {
+      const img = new Image();
+      img.src = sel.src;
+      dupe.imgElement = img;
     }
+    setLayers(prev => {
+      const next = [...prev, dupe];
+      pushH(next);
+      return next;
+    });
+    setSelected(dupe.id);
+    flash('Duplicated', 'success');
+  }, [sel, pushH, flash]);
+
+  // ── Move layer order ──
+  const moveLayerOrder = useCallback((id, dir) => {
+    setLayers(prev => {
+      const idx = prev.findIndex(l => l.id === id);
+      if (idx < 0) return prev;
+      const ni = idx + dir;
+      if (ni < 0 || ni >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[ni]] = [next[ni], next[idx]];
+      return next;
+    });
+  }, []);
+
+  // ── Export ──
+  const doExport = useCallback((format = 'png') => {
+    const c = canvasRef.current?.getCanvas();
+    if (!c) return;
+    const type = format === 'jpg' ? 'image/jpeg' : 'image/png';
+    const qual = format === 'jpg' ? 0.92 : undefined;
+    c.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${project?.name || 'thumbnail'}.${format}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      flash('Exported!', 'success');
+    }, type, qual);
+  }, [project, flash]);
+
+  // ── Remove BG ──
+  const removeBg = useCallback(async () => {
+    if (!sel || sel.type !== 'image') { flash('Select an image layer first'); return; }
     setBusy(true);
     try {
       const tmp = document.createElement('canvas');
       tmp.width = sel.imgElement.naturalWidth || sel.width;
       tmp.height = sel.imgElement.naturalHeight || sel.height;
       tmp.getContext('2d').drawImage(sel.imgElement, 0, 0);
-      const srcDataUrl = tmp.toDataURL('image/png');
+      const src = tmp.toDataURL('image/png');
       releaseCanvas(tmp);
 
-      const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
-      const res = await fetch(`${API_URL}/remove-bg`, {
+      const API = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
+      const res = await fetch(`${API}/remove-bg`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: srcDataUrl }),
+        body: JSON.stringify({ image: src }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
+      if (!res.ok) throw new Error(res.status);
       const { result } = await res.json();
-
       const img = new Image();
       img.onload = () => {
-        setLayers(prev => prev.map(l =>
-          l.id === selectedLayerId
-            ? { ...l, imgElement: img, src: result }
-            : l
-        ));
-        showToast('Background removed', 'success');
+        setLayers(prev => prev.map(l => l.id === selectedLayerId ? { ...l, imgElement: img, src: result } : l));
+        flash('Background removed!', 'success');
       };
       img.src = result;
     } catch (err) {
-      showToast(`BG removal failed: ${err.message}`, 'error');
-    } finally {
-      setBusy(false);
+      flash(`Failed: ${err.message}`, 'error');
+    } finally { setBusy(false); }
+  }, [sel, selectedLayerId, flash]);
+
+  // ── Apply pixel adjustment to selected image layer ──
+  const applyAdjust = useCallback((type) => {
+    if (!sel || sel.type !== 'image' || !sel.imgElement) { flash('Select an image first'); return; }
+    try {
+      const tmp = document.createElement('canvas');
+      tmp.width = sel.imgElement.naturalWidth || sel.width;
+      tmp.height = sel.imgElement.naturalHeight || sel.height;
+      const ctx = tmp.getContext('2d');
+      ctx.drawImage(sel.imgElement, 0, 0);
+      const id = ctx.getImageData(0, 0, tmp.width, tmp.height);
+      const d = id.data;
+      const total = tmp.width * tmp.height;
+
+      if (type === 'brighten') {
+        for (let i = 0; i < d.length; i += 4) { d[i] = Math.min(255, d[i] + 25); d[i+1] = Math.min(255, d[i+1] + 25); d[i+2] = Math.min(255, d[i+2] + 25); }
+      } else if (type === 'contrast') {
+        let mean = 0;
+        for (let i = 0; i < d.length; i += 4) mean += d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
+        mean /= total;
+        for (let i = 0; i < d.length; i += 4) {
+          d[i]   = Math.min(255, Math.max(0, Math.round(mean + (d[i]   - mean) * 1.3)));
+          d[i+1] = Math.min(255, Math.max(0, Math.round(mean + (d[i+1] - mean) * 1.3)));
+          d[i+2] = Math.min(255, Math.max(0, Math.round(mean + (d[i+2] - mean) * 1.3)));
+        }
+      } else if (type === 'saturate') {
+        for (let i = 0; i < d.length; i += 4) {
+          const avg = (d[i] + d[i+1] + d[i+2]) / 3;
+          d[i]   = Math.min(255, Math.max(0, Math.round(avg + (d[i]   - avg) * 1.4)));
+          d[i+1] = Math.min(255, Math.max(0, Math.round(avg + (d[i+1] - avg) * 1.4)));
+          d[i+2] = Math.min(255, Math.max(0, Math.round(avg + (d[i+2] - avg) * 1.4)));
+        }
+      } else if (type === 'vignette') {
+        const cx = tmp.width / 2, cy = tmp.height / 2;
+        const maxD = Math.sqrt(cx * cx + cy * cy);
+        for (let y = 0; y < tmp.height; y++) {
+          for (let x = 0; x < tmp.width; x++) {
+            const i = (y * tmp.width + x) * 4;
+            const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / maxD;
+            const f = 1 - Math.pow(dist, 1.5) * 0.6;
+            d[i] *= f; d[i+1] *= f; d[i+2] *= f;
+          }
+        }
+      } else if (type === 'sharpen') {
+        const srcData = new Uint8ClampedArray(d);
+        const w = tmp.width;
+        for (let y = 1; y < tmp.height - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const idx = (y * w + x) * 4;
+            for (let c = 0; c < 3; c++) {
+              const bl = (srcData[((y-1)*w+x-1)*4+c]+srcData[((y-1)*w+x)*4+c]+srcData[((y-1)*w+x+1)*4+c]+srcData[(y*w+x-1)*4+c]+srcData[idx+c]+srcData[(y*w+x+1)*4+c]+srcData[((y+1)*w+x-1)*4+c]+srcData[((y+1)*w+x)*4+c]+srcData[((y+1)*w+x+1)*4+c])/9;
+              const diff = srcData[idx+c] - bl;
+              if (Math.abs(diff) > 3) d[idx+c] = Math.min(255, Math.max(0, Math.round(srcData[idx+c] + diff * 0.7)));
+            }
+          }
+        }
+      } else if (type === 'colorgrade') {
+        // Auto levels + S-curve + vibrance
+        const hist = new Array(256).fill(0);
+        for (let i = 0; i < d.length; i += 4) hist[Math.round(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)]++;
+        let lo = 0, hi = 255, cum = 0;
+        for (let i = 0; i <= 255; i++) { cum += hist[i]; if (cum > total * 0.005) { lo = i; break; } }
+        cum = 0;
+        for (let i = 255; i >= 0; i--) { cum += hist[i]; if (cum > total * 0.005) { hi = i; break; } }
+        const range = Math.max(1, hi - lo);
+        for (let i = 0; i < d.length; i += 4) {
+          const lum = d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114;
+          const target = Math.min(255, Math.max(0, (lum - lo) * 255 / range));
+          const ratio = lum > 0 ? target / lum : 1;
+          d[i]=Math.min(255,Math.max(0,Math.round(d[i]*ratio)));
+          d[i+1]=Math.min(255,Math.max(0,Math.round(d[i+1]*ratio)));
+          d[i+2]=Math.min(255,Math.max(0,Math.round(d[i+2]*ratio)));
+        }
+        for (let i = 0; i < d.length; i += 4) {
+          for (let c = 0; c < 3; c++) {
+            const x = d[i+c] / 255;
+            d[i+c] = Math.round(255 / (1 + Math.exp(-5 * (x - 0.5))));
+          }
+        }
+      }
+
+      ctx.putImageData(id, 0, 0);
+      const dataUrl = tmp.toDataURL('image/png');
+      const img = new Image();
+      img.onload = () => {
+        setLayers(prev => {
+          const next = prev.map(l => l.id === selectedLayerId ? { ...l, imgElement: img, src: dataUrl } : l);
+          pushH(next);
+          return next;
+        });
+        flash(`${type} applied`, 'success');
+      };
+      img.src = dataUrl;
+      releaseCanvas(tmp);
+    } catch (err) {
+      flash(`Failed: ${err.message}`, 'error');
     }
-  }, [layers, selectedLayerId, showToast]);
+  }, [sel, selectedLayerId, flash, pushH]);
 
-  // ── Lock body scroll on mount ──
-  useEffect(() => {
-    const orig = document.body.style.cssText;
-    document.body.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;overflow:hidden;';
-    const prevent = (e) => { if (!e.target.closest('.panel-scroll')) e.preventDefault(); };
-    document.addEventListener('touchmove', prevent, { passive: false });
-    return () => {
-      document.body.style.cssText = orig;
-      document.removeEventListener('touchmove', prevent);
-    };
-  }, []);
+  // ── Reset zoom ──
+  const resetView = useCallback(() => { setZoom(1); setOffset({ x: 0, y: 0 }); }, []);
 
-  // ── Project picker screen ──
+  // ════════════════════════════════════════════════════════════════════════════
+  // RENDER — Project picker
+  // ════════════════════════════════════════════════════════════════════════════
   if (screen === 'picker') {
     return (
       <MobileProjectPicker
         user={user}
         onSelectProject={(p) => { setProject(p); setScreen('editor'); }}
-        onNewProject={() => {
-          setProject({ id: uuid(), name: 'Untitled' });
-          setLayers([]);
-          setScreen('editor');
-        }}
+        onNewProject={() => { setProject({ id: uuid(), name: 'Untitled' }); setLayers([]); setHistory([]); setHistIdx(-1); setScreen('editor'); }}
       />
     );
   }
 
-  const selectedLayer = layers.find(l => l.id === selectedLayerId);
-
-  // ── EDITOR SCREEN ──
+  // ════════════════════════════════════════════════════════════════════════════
+  // RENDER — Editor
+  // ════════════════════════════════════════════════════════════════════════════
   return (
     <div style={{
       position: 'fixed', inset: 0,
       display: 'flex', flexDirection: 'column',
-      background: T.bg, overflow: 'hidden',
-      fontFamily: '"Plus Jakarta Sans", -apple-system, sans-serif',
-      color: T.text,
-      paddingTop: 'env(safe-area-inset-top, 0)',
-      paddingBottom: 'env(safe-area-inset-bottom, 0)',
+      background: C.bg, color: C.text, overflow: 'hidden',
+      fontFamily: '-apple-system, "SF Pro Text", "Segoe UI", sans-serif',
+      WebkitFontSmoothing: 'antialiased',
     }}>
 
-      {/* ── TOP BAR ── */}
+      {/* ═══ TOP BAR ═══ */}
       <div style={{
-        height: 48, flexShrink: 0,
-        display: 'flex', alignItems: 'center',
-        padding: '0 8px', gap: 4,
-        background: T.bg2, borderBottom: `1px solid ${T.border}`,
+        height: 52, flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '0 10px',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        background: C.surface,
+        borderBottom: `1px solid ${C.border}`,
+        zIndex: 20,
       }}>
-        <TopBtn onClick={() => setScreen('picker')} label="‹ Back" />
-        <div style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 600, color: T.muted }}>
+        <TapBtn onClick={() => setScreen('picker')} style={{ fontSize: 22 }}>‹</TapBtn>
+
+        <div style={{
+          flex: 1, textAlign: 'center', fontSize: 14, fontWeight: 700,
+          color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
           {project?.name || 'Untitled'}
         </div>
-        <TopBtn onClick={handleUndo} label="↩" />
-        <TopBtn onClick={handleExportPNG} label="Export" accent />
+
+        <TapBtn onClick={undo} disabled={histIdx <= 0}>↩</TapBtn>
+        <TapBtn onClick={resetView} style={{ fontSize: 11 }}>1:1</TapBtn>
+        <TapBtn onClick={() => doExport('png')} accent>Export</TapBtn>
       </div>
 
-      {/* ── CANVAS ── */}
+      {/* ═══ CONTEXT BAR (shows when layer selected) ═══ */}
+      {sel && (
+        <div style={{
+          height: 42, flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: 2,
+          padding: '0 6px', background: C.raised,
+          borderBottom: `1px solid ${C.border}`,
+          overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+          zIndex: 19,
+        }}>
+          <CtxBtn icon="📋" label="Dupe" onClick={duplicateSelected} />
+          <CtxBtn icon="🗑" label="Delete" onClick={deleteSelected} />
+          <CtxBtn icon="↑" label="Up" onClick={() => moveLayerOrder(selectedLayerId, 1)} />
+          <CtxBtn icon="↓" label="Down" onClick={() => moveLayerOrder(selectedLayerId, -1)} />
+          {sel.type === 'image' && (
+            <>
+              <div style={{ width: 1, height: 24, background: C.border, margin: '0 4px', flexShrink: 0 }} />
+              <CtxBtn icon="☀️" label="Bright" onClick={() => applyAdjust('brighten')} />
+              <CtxBtn icon="⚡" label="Contrast" onClick={() => applyAdjust('contrast')} />
+              <CtxBtn icon="🎨" label="Color" onClick={() => applyAdjust('saturate')} />
+              <CtxBtn icon="🎬" label="Grade" onClick={() => applyAdjust('colorgrade')} />
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ═══ CANVAS ═══ */}
       <MobileCanvas
         ref={canvasRef}
         layers={layers}
         selectedLayerId={selectedLayerId}
-        onSelectLayer={setSelectedLayerId}
-        onLayerMove={handleLayerMove}
+        onSelectLayer={setSelected}
+        onLayerMove={moveLayer}
+        onLayerResize={resizeLayer}
         zoom={zoom}
         setZoom={setZoom}
         offset={offset}
         setOffset={setOffset}
-        activeTool={activeTab}
       />
 
-      {/* ── TAB PANEL ── */}
+      {/* ═══ TOOL SHEET ═══ */}
       {activeTab && (
-        <div style={{
-          position: 'absolute', bottom: 60, left: 0, right: 0,
-          height: 280, background: T.panel,
-          borderTop: `1px solid ${T.border}`,
-          borderRadius: '12px 12px 0 0',
-          zIndex: 50, display: 'flex', flexDirection: 'column',
-          transition: 'transform 300ms ease',
-        }}>
-          {/* Drag handle */}
-          <div
-            style={{ height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'grab' }}
-            onTouchStart={(e) => { dragStartY.current = e.touches[0].clientY; }}
-            onTouchMove={(e) => {
-              if (dragStartY.current === null) return;
-              const dy = e.touches[0].clientY - dragStartY.current;
-              if (dy > 50) { setActiveTab(null); dragStartY.current = null; }
-            }}
-            onTouchEnd={() => { dragStartY.current = null; }}
-          >
-            <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }} />
-          </div>
-          <div className="panel-scroll" style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
-            {activeTab === 'edit' && (
-              <EditPanel
-                layers={layers} setLayers={setLayers}
-                selectedLayerId={selectedLayerId} setSelectedLayerId={setSelectedLayerId}
-                onAddImage={() => { fileInputRef.current.value=''; fileInputRef.current.click(); }}
-                onAddText={() => addTextLayer()}
-              />
-            )}
-            {activeTab === 'tools' && (
-              <ToolsPanel
-                layers={layers} setLayers={setLayers}
-                selectedLayerId={selectedLayerId}
-              />
-            )}
-            {activeTab === 'ai' && (
-              <AIPanel
-                isPro={isPro}
-                busy={busy}
-                selectedLayer={selectedLayer}
-                onRemoveBg={handleRemoveBg}
-                showToast={showToast}
-              />
-            )}
-            {activeTab === 'export' && (
-              <ExportPanel
-                onPNG={handleExportPNG}
-                onJPG={handleExportJPG}
-              />
-            )}
-          </div>
-        </div>
+        <Sheet onClose={() => setActiveTab(null)}>
+          {activeTab === 'layers' && (
+            <LayersSheet layers={layers} setLayers={setLayers} selected={selectedLayerId}
+              onSelect={setSelected} onAddImage={() => { fileRef.current.value=''; fileRef.current.click(); }}
+              onAddText={() => addText()} onMoveOrder={moveLayerOrder} />
+          )}
+          {activeTab === 'adjust' && (
+            <AdjustSheet sel={sel} onApply={applyAdjust} />
+          )}
+          {activeTab === 'text' && (
+            <TextSheet sel={sel} setLayers={setLayers} selectedLayerId={selectedLayerId} addText={addText} />
+          )}
+          {activeTab === 'fx' && (
+            <FXSheet sel={sel} onApply={applyAdjust} />
+          )}
+          {activeTab === 'ai' && (
+            <AISheet isPro={isPro} busy={busy} sel={sel} onRemoveBg={removeBg} flash={flash} />
+          )}
+        </Sheet>
       )}
 
-      {/* ── TAB BAR ── */}
+      {/* ═══ BOTTOM TAB BAR ═══ */}
       <div style={{
-        height: 60, flexShrink: 0,
+        height: 58, flexShrink: 0,
         display: 'flex', alignItems: 'stretch',
-        background: T.panel, borderTop: `1px solid ${T.border}`,
-        zIndex: 60,
+        background: C.surface,
+        borderTop: `1px solid ${C.border}`,
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        zIndex: 30,
       }}>
         {TABS.map(tab => (
-          <button
-            key={tab.id}
+          <button key={tab.id}
             onClick={() => setActiveTab(prev => prev === tab.id ? null : tab.id)}
             style={{
               flex: 1, display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
-              gap: 2, border: 'none', background: 'none',
-              color: activeTab === tab.id ? T.accent : T.muted,
-              fontSize: 10, fontWeight: 600, cursor: 'pointer',
-              touchAction: 'manipulation', padding: 0,
-              borderTop: activeTab === tab.id ? `2px solid ${T.accent}` : '2px solid transparent',
+              gap: 2, border: 'none', background: 'none', padding: 0,
+              color: activeTab === tab.id ? C.accent : C.muted,
+              fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              touchAction: 'manipulation',
+              borderTop: `2px solid ${activeTab === tab.id ? C.accent : 'transparent'}`,
+              transition: 'color 0.15s',
             }}
           >
-            <span style={{ fontSize: 20 }}>{tab.icon}</span>
-            <span>{tab.label}</span>
+            <span style={{ fontSize: 20, lineHeight: 1 }}>{tab.icon}</span>
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {/* ── THUMBFRIEND BUBBLE ── */}
-      <div style={{ position: 'fixed', bottom: 76, right: 16, zIndex: 9999 }}>
-        {tfOpen && (
-          <div style={{
-            position: 'absolute', bottom: 60, right: 0,
-            width: 220, background: T.panel,
-            border: `1px solid ${T.border}`, borderRadius: 12,
-            padding: 12, fontSize: 13,
-          }}>
-            {isPro
-              ? <span style={{ color: T.text }}>ThumbFriend coming in Phase 5! 🚀</span>
-              : <div>
-                  <div style={{ color: T.muted, marginBottom: 8 }}>ThumbFriend is Pro only.</div>
-                  <button style={{ background: T.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, width: '100%', cursor: 'pointer' }}>
-                    Upgrade to Pro
-                  </button>
-                </div>
-            }
-          </div>
-        )}
-        <button
-          onClick={() => setTfOpen(o => !o)}
-          style={{
-            width: 52, height: 52, borderRadius: '50%',
-            background: T.accent, border: 'none',
-            fontSize: 24, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(249,115,22,0.4)',
-            touchAction: 'manipulation',
-          }}
-        >😊</button>
-      </div>
-
-      {/* ── TOAST ── */}
+      {/* ═══ TOAST ═══ */}
       {toast && (
         <div style={{
-          position: 'fixed', top: 60, left: 16, right: 16,
-          background: toast.type === 'error' ? T.danger : toast.type === 'success' ? T.success : T.panel,
-          color: '#fff', borderRadius: 10, padding: '12px 16px',
-          fontSize: 14, fontWeight: 600, zIndex: 9999,
-          textAlign: 'center',
+          position: 'fixed', top: 64, left: 16, right: 16,
+          background: toast.type === 'error' ? C.danger : toast.type === 'success' ? C.success : C.raised,
+          color: '#fff', borderRadius: 12, padding: '10px 16px',
+          fontSize: 14, fontWeight: 600, textAlign: 'center',
+          zIndex: 999, boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          animation: 'fadeInDown 0.2s ease',
         }}>
           {toast.msg}
         </div>
       )}
 
       {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
+      <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp"
         style={{ display: 'none' }}
-        onChange={(e) => handleAddImage(e.target.files?.[0])}
-      />
+        onChange={e => addImage(e.target.files?.[0])} />
+
+      <style>{`
+        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }
 
-// ── Sub-components ──
+// ════════════════════════════════════════════════════════════════════════════════
+// SUB-COMPONENTS
+// ════════════════════════════════════════════════════════════════════════════════
 
-function TopBtn({ onClick, label, accent }) {
-  const T_accent = '#f97316';
-  return (
-    <button onClick={onClick} style={{
-      background: accent ? T_accent : 'none',
-      border: 'none', borderRadius: 8,
-      color: accent ? '#fff' : 'rgba(255,255,255,0.6)',
-      fontSize: 13, fontWeight: 600,
-      padding: '6px 12px', cursor: 'pointer',
-      minHeight: 44, touchAction: 'manipulation',
-      display: 'flex', alignItems: 'center',
-    }}>{label}</button>
-  );
-}
-
-function EditPanel({ layers, setLayers, selectedLayerId, setSelectedLayerId, onAddImage, onAddText }) {
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <PanelBtn label="📁 Add Image" onClick={onAddImage} accent />
-        <PanelBtn label="T Add Text" onClick={onAddText} />
-      </div>
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Layers</div>
-      {layers.length === 0 && (
-        <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>
-          No layers yet. Add an image to start.
-        </div>
-      )}
-      {[...layers].reverse().map((layer, i) => (
-        <div
-          key={layer.id}
-          onClick={() => setSelectedLayerId(layer.id)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: 8, borderRadius: 8, marginBottom: 4,
-            background: selectedLayerId === layer.id ? 'rgba(249,115,22,0.12)' : 'rgba(255,255,255,0.04)',
-            border: `1px solid ${selectedLayerId === layer.id ? 'rgba(249,115,22,0.4)' : 'rgba(255,255,255,0.07)'}`,
-            cursor: 'pointer', touchAction: 'manipulation',
-          }}
-        >
-          <div style={{ width: 36, height: 20, borderRadius: 3, background: '#1a1a1a', overflow: 'hidden', flexShrink: 0 }}>
-            {layer.type === 'image' && layer.src && <img src={layer.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
-            {layer.type === 'text' && <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: '#fff' }}>T</div>}
-          </div>
-          <span style={{ flex: 1, fontSize: 12, color: '#f0f2f5' }}>{layer.name || `Layer ${i+1}`}</span>
-          <button
-            onClick={(e) => { e.stopPropagation(); setLayers(prev => prev.filter(l => l.id !== layer.id)); }}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.38)', fontSize: 16, cursor: 'pointer', padding: 4, touchAction: 'manipulation' }}
-          >×</button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ToolsPanel({ layers, setLayers, selectedLayerId }) {
-  const [brightness, setBrightness] = useState(0);
-  const [contrast, setContrast] = useState(0);
-  const [saturation, setSaturation] = useState(0);
-
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>Adjustments</div>
-      <Slider label="Brightness" value={brightness} onChange={setBrightness} />
-      <Slider label="Contrast" value={contrast} onChange={setContrast} />
-      <Slider label="Saturation" value={saturation} onChange={setSaturation} />
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, marginTop: 16 }}>Shapes</div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {['□ Rect', '○ Circle', '△ Triangle', '→ Arrow'].map(s => (
-          <PanelBtn key={s} label={s} onClick={() => {}} small />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AIPanel({ isPro, busy, selectedLayer, onRemoveBg, showToast }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>AI Assistant</div>
-      <PanelBtn
-        label={busy ? 'Removing...' : '✂ Remove Background'}
-        onClick={onRemoveBg}
-        disabled={busy}
-        fullWidth
-      />
-      <div style={{ height: 12 }} />
-      {!isPro
-        ? <div style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.25)', borderRadius: 8, padding: 12, textAlign: 'center' }}>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>🔒 CTR Score, Color Grade, and more are Pro features</div>
-            <PanelBtn label="Upgrade to Pro" accent fullWidth onClick={() => {}} />
-          </div>
-        : <div>
-            <PanelBtn label="📊 CTR Score" fullWidth onClick={() => showToast('CTR Score coming soon', 'info')} />
-          </div>
-      }
-    </div>
-  );
-}
-
-function ExportPanel({ onPNG, onJPG }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>Export</div>
-      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.38)', marginBottom: 12 }}>YouTube spec: 1280×720 · JPG under 2MB</div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <PanelBtn label="↓ PNG" onClick={onPNG} accent fullWidth />
-        <PanelBtn label="↓ JPG" onClick={onJPG} fullWidth />
-      </div>
-    </div>
-  );
-}
-
-function Slider({ label, value, onChange }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{label}</span>
-        <span style={{ fontSize: 12, color: '#f97316', fontWeight: 600 }}>{value}</span>
-      </div>
-      <input type="range" min={-100} max={100} value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={{ width: '100%', height: 36, accentColor: '#f97316', touchAction: 'none' }}
-      />
-    </div>
-  );
-}
-
-function PanelBtn({ label, onClick, accent, disabled, fullWidth, small }) {
+function TapBtn({ children, onClick, disabled, accent, style = {} }) {
   return (
     <button onClick={onClick} disabled={disabled} style={{
-      background: accent ? '#f97316' : 'rgba(255,255,255,0.06)',
-      border: `1px solid ${accent ? '#f97316' : 'rgba(255,255,255,0.07)'}`,
-      color: disabled ? 'rgba(255,255,255,0.3)' : '#f0f2f5',
-      borderRadius: 8, padding: small ? '6px 12px' : '10px 16px',
-      fontSize: small ? 11 : 13, fontWeight: 600,
+      background: accent ? C.accent : 'none', border: 'none',
+      borderRadius: 8, color: accent ? '#fff' : disabled ? C.muted : C.sub,
+      fontSize: 14, fontWeight: 700, padding: accent ? '7px 14px' : '7px 10px',
+      minHeight: 44, minWidth: 44, cursor: disabled ? 'default' : 'pointer',
+      touchAction: 'manipulation', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', opacity: disabled ? 0.4 : 1,
+      transition: 'opacity 0.15s', ...style,
+    }}>{children}</button>
+  );
+}
+
+function CtxBtn({ icon, label, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      background: 'none', border: 'none', borderRadius: 8,
+      color: C.sub, fontSize: 10, fontWeight: 600,
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      gap: 1, padding: '4px 10px', cursor: 'pointer',
+      touchAction: 'manipulation', flexShrink: 0,
+      minHeight: 36, minWidth: 44, justifyContent: 'center',
+    }}>
+      <span style={{ fontSize: 16 }}>{icon}</span>
+      {label}
+    </button>
+  );
+}
+
+function Sheet({ children, onClose }) {
+  return (
+    <div style={{
+      position: 'absolute', bottom: 58, left: 0, right: 0,
+      maxHeight: '50vh', background: C.surface,
+      borderTop: `1px solid ${C.border}`,
+      borderRadius: '16px 16px 0 0',
+      zIndex: 25, display: 'flex', flexDirection: 'column',
+      animation: 'slideUp 0.25s ease',
+      boxShadow: '0 -8px 40px rgba(0,0,0,0.5)',
+    }}>
+      {/* Drag handle */}
+      <div style={{
+        height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0, cursor: 'grab',
+      }}
+        onClick={onClose}
+      >
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border }} />
+      </div>
+      <div className="m-panel-scroll" style={{
+        flex: 1, overflowY: 'auto', padding: '0 16px 20px',
+        WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── LAYERS SHEET ──
+function LayersSheet({ layers, setLayers, selected, onSelect, onAddImage, onAddText, onMoveOrder }) {
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <SheetBtn icon="📁" label="Add Image" onClick={onAddImage} accent />
+        <SheetBtn icon="T" label="Add Text" onClick={onAddText} />
+      </div>
+      <SectionLabel>Layers ({layers.length})</SectionLabel>
+      {layers.length === 0 && <Empty>No layers yet. Add an image to start.</Empty>}
+      {[...layers].reverse().map((layer, i) => (
+        <div key={layer.id}
+          onClick={() => onSelect(layer.id)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 10px', borderRadius: 10, marginBottom: 4,
+            background: selected === layer.id ? C.accentDim : 'rgba(255,255,255,0.03)',
+            border: `1px solid ${selected === layer.id ? 'rgba(249,115,22,0.3)' : C.border}`,
+            cursor: 'pointer', touchAction: 'manipulation',
+            transition: 'background 0.15s, border-color 0.15s',
+          }}
+        >
+          <div style={{
+            width: 40, height: 22, borderRadius: 4, background: '#1a1a1a',
+            overflow: 'hidden', flexShrink: 0, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            {layer.type === 'image' && layer.src && <img src={layer.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
+            {layer.type === 'text' && <span style={{ fontSize: 9, color: '#fff', fontWeight: 800 }}>T</span>}
+            {layer.type === 'shape' && <span style={{ fontSize: 9, color: C.accent }}>■</span>}
+          </div>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {layer.name || `Layer ${layers.length - i}`}
+          </span>
+          <button onClick={e => { e.stopPropagation(); setLayers(prev => prev.map(l => l.id === layer.id ? { ...l, visible: !l.visible } : l)); }}
+            style={{ background: 'none', border: 'none', fontSize: 14, padding: 4, cursor: 'pointer', color: layer.visible ? C.text : C.muted, touchAction: 'manipulation' }}>
+            {layer.visible !== false ? '👁' : '👁‍🗨'}
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
+// ── ADJUST SHEET ──
+function AdjustSheet({ sel, onApply }) {
+  if (!sel || sel.type !== 'image') return <Empty>Select an image layer to adjust.</Empty>;
+  const btns = [
+    { id: 'brighten', icon: '☀️', label: 'Brighten' },
+    { id: 'contrast', icon: '⚡', label: 'Contrast' },
+    { id: 'saturate', icon: '🎨', label: 'Saturate' },
+    { id: 'vignette', icon: '🔲', label: 'Vignette' },
+    { id: 'sharpen', icon: '🔍', label: 'Sharpen' },
+    { id: 'colorgrade', icon: '🎬', label: 'Color Grade' },
+  ];
+  return (
+    <>
+      <SectionLabel>Quick Adjustments</SectionLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+        {btns.map(b => (
+          <button key={b.id} onClick={() => onApply(b.id)} style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+            padding: '14px 8px', background: 'rgba(255,255,255,0.04)',
+            border: `1px solid ${C.border}`, borderRadius: 12,
+            color: C.text, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            touchAction: 'manipulation', transition: 'background 0.15s',
+          }}>
+            <span style={{ fontSize: 24 }}>{b.icon}</span>
+            {b.label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ── TEXT SHEET ──
+function TextSheet({ sel, setLayers, selectedLayerId, addText }) {
+  const [input, setInput] = useState('');
+  const isTextSel = sel?.type === 'text';
+
+  const updateText = (field, value) => {
+    if (!isTextSel) return;
+    setLayers(prev => prev.map(l => l.id === selectedLayerId ? { ...l, [field]: value } : l));
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <input value={input} onChange={e => setInput(e.target.value)}
+          placeholder="Type text..."
+          style={{
+            flex: 1, padding: '10px 12px', fontSize: 16, fontWeight: 600,
+            background: C.raised, border: `1px solid ${C.border}`,
+            borderRadius: 10, color: C.text, outline: 'none',
+          }} />
+        <SheetBtn label="Add" onClick={() => { addText(input || 'YOUR TEXT'); setInput(''); }} accent />
+      </div>
+      {isTextSel && (
+        <>
+          <SectionLabel>Edit Selected Text</SectionLabel>
+          <input value={sel.text || ''} onChange={e => updateText('text', e.target.value)}
+            style={{
+              width: '100%', padding: '10px 12px', fontSize: 16, fontWeight: 600,
+              background: C.raised, border: `1px solid ${C.border}`,
+              borderRadius: 10, color: C.text, outline: 'none', marginBottom: 12,
+              boxSizing: 'border-box',
+            }} />
+          <SectionLabel>Font Size: {sel.fontSize || 48}px</SectionLabel>
+          <input type="range" min={12} max={200} value={sel.fontSize || 48}
+            onChange={e => updateText('fontSize', Number(e.target.value))}
+            style={{ width: '100%', height: 36, accentColor: C.accent, touchAction: 'none', marginBottom: 12 }} />
+          <SectionLabel>Color</SectionLabel>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            {['#ffffff','#000000','#f97316','#ef4444','#22c55e','#3b82f6','#eab308','#a855f7','#ec4899','#14b8a6'].map(col => (
+              <button key={col} onClick={() => updateText('color', col)} style={{
+                width: 36, height: 36, borderRadius: '50%', background: col,
+                border: sel.color === col ? '3px solid #f97316' : '2px solid rgba(255,255,255,0.15)',
+                cursor: 'pointer', touchAction: 'manipulation', padding: 0,
+              }} />
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// ── FX SHEET ──
+function FXSheet({ sel, onApply }) {
+  if (!sel || sel.type !== 'image') return <Empty>Select an image layer to apply effects.</Empty>;
+  const presets = [
+    { id: 'colorgrade', icon: '🎬', label: 'Cinema' },
+    { id: 'saturate',   icon: '🌈', label: 'Vibrant' },
+    { id: 'contrast',   icon: '🌑', label: 'Dramatic' },
+    { id: 'vignette',   icon: '🔲', label: 'Vignette' },
+    { id: 'sharpen',    icon: '💎', label: 'Crisp' },
+    { id: 'brighten',   icon: '✨', label: 'Glow' },
+  ];
+  return (
+    <>
+      <SectionLabel>Style Presets</SectionLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+        {presets.map(p => (
+          <button key={p.id} onClick={() => onApply(p.id)} style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+            padding: '14px 8px', background: 'rgba(255,255,255,0.04)',
+            border: `1px solid ${C.border}`, borderRadius: 12,
+            color: C.text, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            touchAction: 'manipulation',
+          }}>
+            <span style={{ fontSize: 28 }}>{p.icon}</span>
+            {p.label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ── AI SHEET ──
+function AISheet({ isPro, busy, sel, onRemoveBg, flash }) {
+  return (
+    <>
+      <SectionLabel>AI Tools</SectionLabel>
+      <SheetBtn icon="✂️" label={busy ? 'Removing...' : 'Remove Background'} onClick={onRemoveBg} disabled={busy || !sel || sel.type !== 'image'} fullWidth />
+      <div style={{ height: 12 }} />
+      {!isPro ? (
+        <div style={{
+          background: C.accentDim, border: `1px solid rgba(249,115,22,0.25)`,
+          borderRadius: 12, padding: 16, textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>🔒 CTR Score, Smart Cutout, and more are Pro features</div>
+          <SheetBtn label="Upgrade to Pro" accent fullWidth onClick={() => flash('Pro upgrade coming soon', 'info')} />
+        </div>
+      ) : (
+        <SheetBtn icon="📊" label="CTR Score" fullWidth onClick={() => flash('CTR Score coming soon', 'info')} />
+      )}
+    </>
+  );
+}
+
+// ── Small shared components ──
+function SectionLabel({ children }) {
+  return <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, marginBottom: 10 }}>{children}</div>;
+}
+
+function Empty({ children }) {
+  return <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: '28px 0' }}>{children}</div>;
+}
+
+function SheetBtn({ icon, label, onClick, accent, disabled, fullWidth, small }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      background: accent ? C.accent : 'rgba(255,255,255,0.06)',
+      border: `1px solid ${accent ? C.accent : C.border}`,
+      color: disabled ? C.muted : C.text,
+      borderRadius: 10, padding: small ? '6px 12px' : '11px 16px',
+      fontSize: small ? 11 : 13, fontWeight: 700,
       cursor: disabled ? 'not-allowed' : 'pointer',
-      touchAction: 'manipulation',
+      touchAction: 'manipulation', opacity: disabled ? 0.5 : 1,
       width: fullWidth ? '100%' : undefined,
-      opacity: disabled ? 0.5 : 1,
-    }}>{label}</button>
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+      transition: 'opacity 0.15s, background 0.15s',
+    }}>{icon && <span>{icon}</span>}{label}</button>
   );
 }

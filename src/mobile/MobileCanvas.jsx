@@ -1,53 +1,110 @@
+// src/mobile/MobileCanvas.jsx
 import React, { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { getSafeDPR } from './canvasHelpers';
 import { getTouchDistance, getTouchMidpoint, GESTURE } from './touchGestures';
 
-const CANVAS_W = 1280;
-const CANVAS_H = 720;
+const CW = 1280;
+const CH = 720;
+const ASPECT = CW / CH;
 
-const MobileCanvas = forwardRef(function MobileCanvas({
-  layers,
-  selectedLayerId,
-  onSelectLayer,
-  onLayerMove,
-  zoom,
-  setZoom,
-  offset,
-  setOffset,
-  activeTool,
-}, ref) {
+const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
+  const {
+    layers = [],
+    selectedLayerId,
+    onSelectLayer,
+    onLayerMove,
+    onLayerResize,
+    zoom = 1,
+    setZoom,
+    offset = { x: 0, y: 0 },
+    setOffset,
+  } = props;
+
   const canvasRef = useRef(null);
-  const containerRef = useRef(null);
-  const gestureRef = useRef({
+  const wrapRef = useRef(null);
+  const g = useRef({
     type: GESTURE.NONE,
-    startX: 0, startY: 0,
-    lastDist: null,
-    lastMidX: 0, lastMidY: 0,
-    startTime: 0,
-    layerStartX: 0, layerStartY: 0,
+    sx: 0, sy: 0, t0: 0,
+    dist0: 0, mx: 0, my: 0,
+    lx: 0, ly: 0, ox: 0, oy: 0,
+    hit: null, handle: null,
+    lw0: 0, lh0: 0,
   });
+  const sizeRef = useRef({ w: 300, h: 169 });
 
-  // Expose canvas ref and render method to parent
+  // ── Expose to parent ──
   useImperativeHandle(ref, () => ({
     getCanvas: () => canvasRef.current,
-    redraw: () => drawLayers(),
+    redraw: () => paint(),
   }));
 
-  // ── Render all layers to canvas ──
-  const drawLayers = useCallback(() => {
+  // ── Coordinate conversion ──
+  const toCanvas = useCallback((cx, cy) => {
+    const c = canvasRef.current;
+    if (!c) return { x: 0, y: 0 };
+    const r = c.getBoundingClientRect();
+    return {
+      x: ((cx - r.left) / r.width) * CW,
+      y: ((cy - r.top) / r.height) * CH,
+    };
+  }, []);
+
+  // ── Hit testing ──
+  const hitTest = useCallback((px, py) => {
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const l = layers[i];
+      if (!l.visible) continue;
+      if (px >= l.x && px <= l.x + (l.width || 0) &&
+          py >= l.y && py <= l.y + (l.height || 0)) {
+        return l.id;
+      }
+    }
+    return null;
+  }, [layers]);
+
+  // ── Handle hit test (corner resize) ──
+  const handleHitTest = useCallback((px, py) => {
+    if (!selectedLayerId) return null;
+    const s = layers.find(l => l.id === selectedLayerId);
+    if (!s) return null;
+    const R = 28; // generous touch radius in canvas coords
+    const corners = [
+      { id: 'tl', x: s.x, y: s.y },
+      { id: 'tr', x: s.x + s.width, y: s.y },
+      { id: 'bl', x: s.x, y: s.y + s.height },
+      { id: 'br', x: s.x + s.width, y: s.y + s.height },
+    ];
+    for (const c of corners) {
+      if (Math.abs(px - c.x) < R && Math.abs(py - c.y) < R) return c.id;
+    }
+    return null;
+  }, [layers, selectedLayerId]);
+
+  // ── Paint everything ──
+  const paint = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const dpr = getSafeDPR();
+    const W = canvas.width;
+    const H = canvas.height;
 
-    // Clear
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, W, H);
 
-    // Background
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Background — subtle checkerboard so users see transparency
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(0, 0, W, H);
+    const tileSize = 16 * dpr;
+    ctx.fillStyle = '#1f1f23';
+    for (let y = 0; y < H; y += tileSize * 2) {
+      for (let x = 0; x < W; x += tileSize * 2) {
+        ctx.fillRect(x, y, tileSize, tileSize);
+        ctx.fillRect(x + tileSize, y + tileSize, tileSize, tileSize);
+      }
+    }
 
-    // Draw each visible layer
+    // Layers
     for (const layer of layers) {
       if (!layer.visible) continue;
       ctx.save();
@@ -56,25 +113,24 @@ const MobileCanvas = forwardRef(function MobileCanvas({
       if (layer.type === 'image' && layer.imgElement) {
         ctx.drawImage(
           layer.imgElement,
-          layer.x * dpr,
-          layer.y * dpr,
-          layer.width * dpr,
-          layer.height * dpr
+          layer.x * dpr, layer.y * dpr,
+          layer.width * dpr, layer.height * dpr
         );
       } else if (layer.type === 'text') {
-        ctx.font = `${layer.fontWeight || 'bold'} ${(layer.fontSize || 48) * dpr}px ${layer.fontFamily || 'Impact'}`;
+        const fs = (layer.fontSize || 48) * dpr;
+        ctx.font = `${layer.fontWeight || 'bold'} ${fs}px ${layer.fontFamily || 'Impact'}`;
+        ctx.textBaseline = 'top';
         ctx.fillStyle = layer.color || '#ffffff';
         if (layer.stroke) {
           ctx.strokeStyle = layer.strokeColor || '#000000';
           ctx.lineWidth = (layer.strokeWidth || 3) * dpr;
+          ctx.lineJoin = 'round';
           ctx.strokeText(layer.text || '', layer.x * dpr, layer.y * dpr);
         }
         ctx.fillText(layer.text || '', layer.x * dpr, layer.y * dpr);
       } else if (layer.type === 'shape') {
-        ctx.fillStyle = layer.color || '#ff6a00';
-        if (layer.shape === 'rect') {
-          ctx.fillRect(layer.x * dpr, layer.y * dpr, layer.width * dpr, layer.height * dpr);
-        } else if (layer.shape === 'circle') {
+        ctx.fillStyle = layer.color || '#f97316';
+        if (layer.shape === 'circle') {
           ctx.beginPath();
           ctx.arc(
             (layer.x + layer.width / 2) * dpr,
@@ -83,260 +139,319 @@ const MobileCanvas = forwardRef(function MobileCanvas({
             0, Math.PI * 2
           );
           ctx.fill();
+        } else {
+          ctx.fillRect(layer.x * dpr, layer.y * dpr, layer.width * dpr, layer.height * dpr);
         }
       }
-
       ctx.restore();
     }
 
-    // Draw selection handles
+    // Selection overlay
     if (selectedLayerId) {
       const sel = layers.find(l => l.id === selectedLayerId);
       if (sel) {
         ctx.save();
+        // Semi-transparent fill to show selection area
+        ctx.fillStyle = 'rgba(249,115,22,0.06)';
+        ctx.fillRect(sel.x * dpr, sel.y * dpr, sel.width * dpr, sel.height * dpr);
+
+        // Dashed border
         ctx.strokeStyle = '#f97316';
         ctx.lineWidth = 2 * dpr;
-        ctx.setLineDash([6 * dpr, 3 * dpr]);
+        ctx.setLineDash([6 * dpr, 4 * dpr]);
         ctx.strokeRect(sel.x * dpr, sel.y * dpr, sel.width * dpr, sel.height * dpr);
         ctx.setLineDash([]);
 
-        // Corner handles
+        // Corner resize handles — large for touch
         const handles = [
-          { x: sel.x, y: sel.y },
-          { x: sel.x + sel.width, y: sel.y },
-          { x: sel.x, y: sel.y + sel.height },
-          { x: sel.x + sel.width, y: sel.y + sel.height },
+          [sel.x, sel.y],
+          [sel.x + sel.width, sel.y],
+          [sel.x, sel.y + sel.height],
+          [sel.x + sel.width, sel.y + sel.height],
         ];
-        for (const h of handles) {
+        for (const [hx, hy] of handles) {
+          // Outer circle
           ctx.fillStyle = '#f97316';
           ctx.beginPath();
-          ctx.arc(h.x * dpr, h.y * dpr, 8 * dpr, 0, Math.PI * 2);
+          ctx.arc(hx * dpr, hy * dpr, 9 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+          // White center
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(hx * dpr, hy * dpr, 4 * dpr, 0, Math.PI * 2);
           ctx.fill();
         }
+
+        // Dimension label
+        ctx.fillStyle = 'rgba(249,115,22,0.9)';
+        const labelW = 80 * dpr;
+        const labelH = 20 * dpr;
+        const labelX = (sel.x + sel.width / 2) * dpr - labelW / 2;
+        const labelY = (sel.y + sel.height) * dpr + 8 * dpr;
+        ctx.beginPath();
+        ctx.roundRect(labelX, labelY, labelW, labelH, 4 * dpr);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `${10 * dpr}px -apple-system, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(
+          `${Math.round(sel.width)}×${Math.round(sel.height)}`,
+          (sel.x + sel.width / 2) * dpr,
+          labelY + labelH / 2
+        );
+        ctx.textAlign = 'start';
+
         ctx.restore();
       }
     }
   }, [layers, selectedLayerId]);
 
-  // Redraw when layers or selection changes
-  useEffect(() => { drawLayers(); }, [drawLayers]);
+  // Repaint on changes
+  useEffect(() => { paint(); }, [paint]);
 
-  // ── Canvas setup ──
+  // ── Canvas sizing — bulletproof for iOS Safari ──
   useEffect(() => {
     const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
 
-    let rafId = null;
+    let raf = null;
+    let attempts = 0;
 
-    function resize() {
-      const rect = container.getBoundingClientRect();
+    function measure() {
+      const rect = wrap.getBoundingClientRect();
 
-      // Guard: if container hasn't laid out yet, retry next frame
-      if (rect.width < 10 || rect.height < 10) {
-        rafId = requestAnimationFrame(resize);
+      // iOS Safari sometimes reports 0 on initial flex layout — retry up to 30 frames (~500ms)
+      if ((rect.width < 20 || rect.height < 20) && attempts < 30) {
+        attempts++;
+        raf = requestAnimationFrame(measure);
         return;
       }
 
-      const aspect = CANVAS_W / CANVAS_H;
-      let w = rect.width - 8;
-      let h = w / aspect;
-      if (h > rect.height - 8) {
-        h = rect.height - 8;
-        w = h * aspect;
+      const pad = 12;
+      const availW = Math.max(100, rect.width - pad * 2);
+      const availH = Math.max(56, rect.height - pad * 2);
+
+      let cssW, cssH;
+      if (availW / availH > ASPECT) {
+        cssH = availH;
+        cssW = cssH * ASPECT;
+      } else {
+        cssW = availW;
+        cssH = cssW / ASPECT;
       }
-      w = Math.max(100, Math.round(w));
-      h = Math.max(56, Math.round(h));
+
+      cssW = Math.round(cssW);
+      cssH = Math.round(cssH);
 
       const dpr = getSafeDPR();
-      canvas.width = CANVAS_W * dpr;
-      canvas.height = CANVAS_H * dpr;
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
-      drawLayers();
+      canvas.width = CW * dpr;
+      canvas.height = CH * dpr;
+      canvas.style.width = cssW + 'px';
+      canvas.style.height = cssH + 'px';
+
+      sizeRef.current = { w: cssW, h: cssH };
+      paint();
     }
 
-    // iOS Safari needs a frame to resolve flex layout before measuring
-    rafId = requestAnimationFrame(resize);
+    // Delay first measure by 1 frame for iOS Safari flex resolution
+    raf = requestAnimationFrame(measure);
 
-    const observer = new ResizeObserver(() => {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(resize);
+    const ro = new ResizeObserver(() => {
+      attempts = 0;
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(measure);
     });
-    observer.observe(container);
+    ro.observe(wrap);
 
     return () => {
-      observer.disconnect();
-      if (rafId) cancelAnimationFrame(rafId);
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
     };
-  }, [drawLayers]);
+  }, [paint]);
 
-  // ── Convert screen point to canvas coordinates ──
-  function screenToCanvas(clientX, clientY) {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = CANVAS_W / rect.width;
-    const scaleY = CANVAS_H / rect.height;
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
-    };
-  }
-
-  // ── Hit test: which layer is at this canvas point? ──
-  const hitTest = useCallback((canvasX, canvasY) => {
-    for (let i = layers.length - 1; i >= 0; i--) {
-      const l = layers[i];
-      if (!l.visible) continue;
-      if (canvasX >= l.x && canvasX <= l.x + l.width &&
-          canvasY >= l.y && canvasY <= l.y + l.height) {
-        return l.id;
-      }
-    }
-    return null;
-  }, [layers]);
-
-  // ── Touch handlers ──
+  // ── Touch handling — non-passive, gesture state machine ──
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    function onTouchStart(e) {
+    function onStart(e) {
       e.preventDefault();
-      const g = gestureRef.current;
-      g.startTime = Date.now();
+      const G = g.current;
+      G.t0 = Date.now();
 
-      if (e.touches.length === 2) {
-        g.type = GESTURE.PINCH;
-        g.lastDist = getTouchDistance(e.touches[0], e.touches[1]);
+      if (e.touches.length >= 2) {
+        G.type = GESTURE.PINCH;
+        G.dist0 = getTouchDistance(e.touches[0], e.touches[1]);
         const mid = getTouchMidpoint(e.touches[0], e.touches[1]);
-        g.lastMidX = mid.x;
-        g.lastMidY = mid.y;
-      } else if (e.touches.length === 1) {
-        const t = e.touches[0];
-        g.startX = t.clientX;
-        g.startY = t.clientY;
-        g.type = GESTURE.NONE;
+        G.mx = mid.x; G.my = mid.y;
+        return;
+      }
 
-        // Check if touching selected layer for drag
-        const pt = screenToCanvas(t.clientX, t.clientY);
-        const hitId = hitTest(pt.x, pt.y);
-        if (hitId && hitId === selectedLayerId) {
-          const sel = layers.find(l => l.id === hitId);
-          if (sel) {
-            g.layerStartX = sel.x;
-            g.layerStartY = sel.y;
-          }
-        }
+      const t = e.touches[0];
+      G.sx = t.clientX; G.sy = t.clientY;
+      G.ox = offset.x; G.oy = offset.y;
+      G.type = GESTURE.NONE;
+
+      const pt = toCanvas(t.clientX, t.clientY);
+
+      // Check resize handle first
+      const handle = handleHitTest(pt.x, pt.y);
+      if (handle) {
+        G.handle = handle;
+        const sel = layers.find(l => l.id === selectedLayerId);
+        if (sel) { G.lx = sel.x; G.ly = sel.y; G.lw0 = sel.width; G.lh0 = sel.height; }
+        G.type = GESTURE.DRAG;
+        return;
+      }
+      G.handle = null;
+
+      // Check layer hit
+      const hitId = hitTest(pt.x, pt.y);
+      G.hit = hitId;
+      if (hitId && hitId === selectedLayerId) {
+        const sel = layers.find(l => l.id === hitId);
+        if (sel) { G.lx = sel.x; G.ly = sel.y; }
       }
     }
 
-    function onTouchMove(e) {
+    function onMove(e) {
       e.preventDefault();
-      const g = gestureRef.current;
+      const G = g.current;
 
-      if (e.touches.length === 2) {
-        g.type = GESTURE.PINCH;
+      if (e.touches.length >= 2 && G.type === GESTURE.PINCH) {
         const newDist = getTouchDistance(e.touches[0], e.touches[1]);
-        const scale = newDist / (g.lastDist || newDist);
-        setZoom(prev => Math.min(5, Math.max(0.2, prev * scale)));
-        g.lastDist = newDist;
+        const scale = newDist / (G.dist0 || newDist);
+        setZoom(z => Math.min(5, Math.max(0.25, z * scale)));
+        G.dist0 = newDist;
 
         const mid = getTouchMidpoint(e.touches[0], e.touches[1]);
-        setOffset(prev => ({
-          x: prev.x + mid.x - g.lastMidX,
-          y: prev.y + mid.y - g.lastMidY,
-        }));
-        g.lastMidX = mid.x;
-        g.lastMidY = mid.y;
-
-      } else if (e.touches.length === 1) {
-        const t = e.touches[0];
-        const dx = t.clientX - g.startX;
-        const dy = t.clientY - g.startY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist > 8) g.type = GESTURE.DRAG;
-
-        if (g.type === GESTURE.DRAG) {
-          // If a layer is selected and we started on it, move the layer
-          if (selectedLayerId) {
-            const pt = screenToCanvas(t.clientX, t.clientY);
-            const startPt = screenToCanvas(g.startX, g.startY);
-            onLayerMove(selectedLayerId, {
-              x: g.layerStartX + (pt.x - startPt.x),
-              y: g.layerStartY + (pt.y - startPt.y),
-            });
-          }
-        }
+        setOffset(o => ({ x: o.x + mid.x - G.mx, y: o.y + mid.y - G.my }));
+        G.mx = mid.x; G.my = mid.y;
+        return;
       }
+
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - G.sx;
+      const dy = t.clientY - G.sy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (G.type === GESTURE.NONE && dist > 8) {
+        G.type = GESTURE.DRAG;
+      }
+
+      if (G.type !== GESTURE.DRAG) return;
+
+      const pt = toCanvas(t.clientX, t.clientY);
+      const startPt = toCanvas(G.sx, G.sy);
+      const cdx = pt.x - startPt.x;
+      const cdy = pt.y - startPt.y;
+
+      // Resize handle drag
+      if (G.handle && selectedLayerId && onLayerResize) {
+        let newW = G.lw0, newH = G.lh0, newX = G.lx, newY = G.ly;
+        if (G.handle.includes('r')) newW = Math.max(20, G.lw0 + cdx);
+        if (G.handle.includes('l')) { newW = Math.max(20, G.lw0 - cdx); newX = G.lx + cdx; }
+        if (G.handle.includes('b')) newH = Math.max(20, G.lh0 + cdy);
+        if (G.handle.includes('t')) { newH = Math.max(20, G.lh0 - cdy); newY = G.ly + cdy; }
+        onLayerResize(selectedLayerId, { x: newX, y: newY, width: newW, height: newH });
+        return;
+      }
+
+      // Layer drag
+      if (G.hit && G.hit === selectedLayerId && onLayerMove) {
+        onLayerMove(selectedLayerId, { x: G.lx + cdx, y: G.ly + cdy });
+        return;
+      }
+
+      // Canvas pan (no layer selected, or dragging empty space)
+      setOffset({ x: G.ox + dx, y: G.oy + dy });
     }
 
-    function onTouchEnd(e) {
+    function onEnd(e) {
       e.preventDefault();
-      const g = gestureRef.current;
-      const duration = Date.now() - g.startTime;
+      const G = g.current;
+      const dur = Date.now() - G.t0;
 
       if (e.changedTouches.length === 1) {
         const t = e.changedTouches[0];
-        const dx = t.clientX - g.startX;
-        const dy = t.clientY - g.startY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dist = Math.sqrt((t.clientX - G.sx) ** 2 + (t.clientY - G.sy) ** 2);
 
-        if (g.type === GESTURE.NONE || (dist < 8 && duration < 300)) {
-          // TAP — select layer
-          const pt = screenToCanvas(t.clientX, t.clientY);
+        // TAP
+        if (dist < 10 && dur < 300) {
+          const pt = toCanvas(t.clientX, t.clientY);
           const hitId = hitTest(pt.x, pt.y);
           onSelectLayer(hitId || null);
         }
       }
 
-      g.type = GESTURE.NONE;
-      g.lastDist = null;
+      G.type = GESTURE.NONE;
+      G.handle = null;
+      G.hit = null;
     }
 
-    const opts = { passive: false };
-    canvas.addEventListener('touchstart', onTouchStart, opts);
-    canvas.addEventListener('touchmove', onTouchMove, opts);
-    canvas.addEventListener('touchend', onTouchEnd, opts);
+    const o = { passive: false };
+    canvas.addEventListener('touchstart', onStart, o);
+    canvas.addEventListener('touchmove', onMove, o);
+    canvas.addEventListener('touchend', onEnd, o);
+    // Prevent Safari gestures (back/forward swipe, long-press callout)
+    canvas.addEventListener('gesturestart', e => e.preventDefault(), o);
+    canvas.addEventListener('gesturechange', e => e.preventDefault(), o);
     return () => {
-      canvas.removeEventListener('touchstart', onTouchStart, opts);
-      canvas.removeEventListener('touchmove', onTouchMove, opts);
-      canvas.removeEventListener('touchend', onTouchEnd, opts);
+      canvas.removeEventListener('touchstart', onStart);
+      canvas.removeEventListener('touchmove', onMove);
+      canvas.removeEventListener('touchend', onEnd);
     };
-  }, [layers, selectedLayerId, setZoom, setOffset, onSelectLayer, onLayerMove, hitTest]);
+  }, [layers, selectedLayerId, offset, zoom, toCanvas, hitTest, handleHitTest,
+      setZoom, setOffset, onSelectLayer, onLayerMove, onLayerResize]);
 
+  // ── Render ──
   return (
     <div
-      ref={containerRef}
+      ref={wrapRef}
       style={{
         flex: 1,
-        minHeight: 0,
+        minHeight: 0,          /* critical for iOS Safari flex */
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
-        background: '#06070a',
+        background: '#09090b',
         touchAction: 'none',
-        width: '100%',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        position: 'relative',
       }}
     >
+      {/* Zoom indicator */}
+      {zoom !== 1 && (
+        <div style={{
+          position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.7)', borderRadius: 20,
+          padding: '4px 12px', fontSize: 11, color: '#f97316',
+          fontWeight: 700, zIndex: 10, pointerEvents: 'none',
+          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        }}>
+          {Math.round(zoom * 100)}%
+        </div>
+      )}
+
       <div style={{
-        transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+        transform: `translate(${offset.x}px,${offset.y}px) scale(${zoom})`,
         transformOrigin: 'center center',
-        transition: 'none',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
-        borderRadius: 4,
+        borderRadius: 6,
+        boxShadow: '0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)',
       }}>
         <canvas
           ref={canvasRef}
           style={{
             display: 'block',
-            minWidth: '100px',
-            minHeight: '56px',
             touchAction: 'none',
+            WebkitTouchCallout: 'none',
             WebkitUserSelect: 'none',
-            userSelect: 'none',
+            borderRadius: 4,
           }}
         />
       </div>
