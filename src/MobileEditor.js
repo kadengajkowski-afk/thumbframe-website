@@ -192,6 +192,21 @@ export default function MobileEditor({ user: userProp, onSwitchToDesktop }) {
   const [busyMsg,    setBusyMsg]    = useState('');
   const [toast,      setToast]      = useState(null); // { msg, type }
   const [tfOpen,     setTfOpen]     = useState(false);
+  const tfRef = useRef(null);
+  useEffect(() => {
+    if (!tfOpen) return;
+    function handleOutside(e) {
+      if (tfRef.current && !tfRef.current.contains(e.target)) {
+        setTfOpen(false);
+      }
+    }
+    document.addEventListener('touchstart', handleOutside);
+    document.addEventListener('mousedown', handleOutside);
+    return () => {
+      document.removeEventListener('touchstart', handleOutside);
+      document.removeEventListener('mousedown', handleOutside);
+    };
+  }, [tfOpen]);
   const [ctrData,    setCtrData]    = useState(null);
   const [gradeBusy,  setGradeBusy]  = useState(false);
   const [displaySize] = useState(getCanvasDisplaySize); // eslint-disable-line no-unused-vars
@@ -415,7 +430,7 @@ export default function MobileEditor({ user: userProp, onSwitchToDesktop }) {
       </div>
 
       {/* ── 4. ThumbFriend bubble ────────────────────────────────────────────── */}
-      <div style={{ position: 'fixed', bottom: 80, right: 16, zIndex: 9999 }}>
+      <div ref={tfRef} style={{ position: 'fixed', bottom: 80, right: 16, zIndex: 9999 }}>
         {tfOpen && (
           <div style={{
             position: 'absolute', bottom: 60, right: 0,
@@ -632,7 +647,7 @@ function AiPanel({ fabricRef, isPro, ctrData, gradeBusy, onCtrScore, onColorGrad
       const res = await fetch(`${API_URL}/remove-bg`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: srcDataUrl }),
+        body: JSON.stringify({ image: srcDataUrl }),
       });
       if (!res.ok) throw new Error(`Remove BG failed: ${res.status}`);
       const { result } = await res.json();

@@ -523,7 +523,13 @@ const FabricCanvas = forwardRef(function FabricCanvas({ user, darkMode = true, m
 
       {/* ── Center: Canvas ── */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: T.bg }}>
-        <div style={{ transform: mobileMode ? 'none' : `scale(${SCALE})`, transformOrigin: 'center center', border: `2px solid ${T.border}`, borderRadius: 4, boxShadow: '0 8px 40px rgba(0,0,0,0.5)' }}>
+        <div style={{
+          transform: mobileMode ? `scale(${Math.min(window.innerWidth / 1280, (window.innerHeight * 0.55) / 720)})` : `scale(${SCALE})`,
+          transformOrigin: 'top left',
+          border: mobileMode ? 'none' : `2px solid ${T.border}`,
+          borderRadius: mobileMode ? 0 : 4,
+          boxShadow: mobileMode ? 'none' : '0 8px 40px rgba(0,0,0,0.5)'
+        }}>
           <canvas ref={canvasElRef} />
         </div>
       </div>
