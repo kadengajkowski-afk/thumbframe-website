@@ -35,6 +35,20 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
   });
   const sizeRef = useRef({ w: 300, h: 169 });
 
+  // Refs for frequently-changing values — touch handlers read these at event time
+  // instead of capturing stale closures. This fixes: orange outline stuck after
+  // bg removal, and move tool not responding after layer changes.
+  const layersRef = useRef(layers);
+  const selectedRef = useRef(selectedLayerId);
+  const moveRef = useRef(moveMode);
+  const offsetRef = useRef(offset);
+  const zoomRef = useRef(zoom);
+  useEffect(() => { layersRef.current = layers; }, [layers]);
+  useEffect(() => { selectedRef.current = selectedLayerId; }, [selectedLayerId]);
+  useEffect(() => { moveRef.current = moveMode; }, [moveMode]);
+  useEffect(() => { offsetRef.current = offset; }, [offset]);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
   // ── Expose to parent ──
   useImperativeHandle(ref, () => ({
     getCanvas: () => canvasRef.current,
@@ -282,9 +296,50 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
   }, [paint]);
 
   // ── Touch handling — non-passive, gesture state machine ──
+  // Handlers read from refs (layersRef, selectedRef, moveRef, offsetRef, zoomRef)
+  // instead of closing over props. This means the effect runs ONCE and always sees
+  // fresh data — no stale closures after bg removal or layer changes.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    function getHit(px, py) {
+      const ls = layersRef.current;
+      for (let i = ls.length - 1; i >= 0; i--) {
+        const l = ls[i];
+        if (!l.visible) continue;
+        if ((l.width || 0) < 1 || (l.height || 0) < 1) continue;
+        if (px >= l.x && px <= l.x + (l.width || 0) &&
+            py >= l.y && py <= l.y + (l.height || 0)) return l.id;
+      }
+      return null;
+    }
+
+    function getHandleHit(px, py) {
+      const selId = selectedRef.current;
+      if (!selId) return null;
+      const s = layersRef.current.find(l => l.id === selId);
+      if (!s) return null;
+      const R = 28;
+      const corners = [
+        { id: 'tl', x: s.x, y: s.y },
+        { id: 'tr', x: s.x + s.width, y: s.y },
+        { id: 'bl', x: s.x, y: s.y + s.height },
+        { id: 'br', x: s.x + s.width, y: s.y + s.height },
+      ];
+      for (const c of corners) {
+        if (Math.abs(px - c.x) < R && Math.abs(py - c.y) < R) return c.id;
+      }
+      return null;
+    }
+
+    function canvasPt(cx, cy) {
+      const r = canvas.getBoundingClientRect();
+      return {
+        x: ((cx - r.left) / r.width) * CW,
+        y: ((cy - r.top) / r.height) * CH,
+      };
+    }
 
     function onStart(e) {
       e.preventDefault();
@@ -301,16 +356,18 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
 
       const t = e.touches[0];
       G.sx = t.clientX; G.sy = t.clientY;
-      G.ox = offset.x; G.oy = offset.y;
+      G.ox = offsetRef.current.x; G.oy = offsetRef.current.y;
       G.type = GESTURE.NONE;
 
-      const pt = toCanvas(t.clientX, t.clientY);
+      const pt = canvasPt(t.clientX, t.clientY);
+      const isMove = moveRef.current;
+      const selId = selectedRef.current;
 
       // Check resize handle first (only in moveMode)
-      const handle = moveMode ? handleHitTest(pt.x, pt.y) : null;
+      const handle = isMove ? getHandleHit(pt.x, pt.y) : null;
       if (handle) {
         G.handle = handle;
-        const sel = layers.find(l => l.id === selectedLayerId);
+        const sel = layersRef.current.find(l => l.id === selId);
         if (sel) { G.lx = sel.x; G.ly = sel.y; G.lw0 = sel.width; G.lh0 = sel.height; }
         G.type = GESTURE.DRAG;
         return;
@@ -318,10 +375,10 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
       G.handle = null;
 
       // Check layer hit
-      const hitId = hitTest(pt.x, pt.y);
+      const hitId = getHit(pt.x, pt.y);
       G.hit = hitId;
-      if (moveMode && hitId && hitId === selectedLayerId) {
-        const sel = layers.find(l => l.id === hitId);
+      if (isMove && hitId && hitId === selId) {
+        const sel = layersRef.current.find(l => l.id === hitId);
         if (sel) { G.lx = sel.x; G.ly = sel.y; }
       }
     }
@@ -335,7 +392,6 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
         const scale = newDist / (G.dist0 || newDist);
         setZoom(z => Math.min(5, Math.max(0.25, z * scale)));
         G.dist0 = newDist;
-
         const mid = getTouchMidpoint(e.touches[0], e.touches[1]);
         setOffset(o => ({ x: o.x + mid.x - G.mx, y: o.y + mid.y - G.my }));
         G.mx = mid.x; G.my = mid.y;
@@ -348,31 +404,42 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
       const dy = t.clientY - G.sy;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (G.type === GESTURE.NONE && dist > 12) {
-        G.type = GESTURE.DRAG;
-      }
-
+      if (G.type === GESTURE.NONE && dist > 8) G.type = GESTURE.DRAG;
       if (G.type !== GESTURE.DRAG) return;
 
-      const pt = toCanvas(t.clientX, t.clientY);
-      const startPt = toCanvas(G.sx, G.sy);
+      const pt = canvasPt(t.clientX, t.clientY);
+      const startPt = canvasPt(G.sx, G.sy);
       const cdx = pt.x - startPt.x;
       const cdy = pt.y - startPt.y;
+      const isMove = moveRef.current;
+      const selId = selectedRef.current;
 
       // Resize handle drag (only in moveMode)
-      if (moveMode && G.handle && selectedLayerId && onLayerResize) {
-        let newW = G.lw0, newH = G.lh0, newX = G.lx, newY = G.ly;
-        if (G.handle.includes('r')) newW = Math.max(20, G.lw0 + cdx);
-        if (G.handle.includes('l')) { newW = Math.max(20, G.lw0 - cdx); newX = G.lx + cdx; }
-        if (G.handle.includes('b')) newH = Math.max(20, G.lh0 + cdy);
-        if (G.handle.includes('t')) { newH = Math.max(20, G.lh0 - cdy); newY = G.ly + cdy; }
-        onLayerResize(selectedLayerId, { x: newX, y: newY, width: newW, height: newH });
+      if (isMove && G.handle && selId && onLayerResize) {
+        let nw = G.lw0, nh = G.lh0, nx = G.lx, ny = G.ly;
+        if (G.handle.includes('r')) nw = Math.max(20, G.lw0 + cdx);
+        if (G.handle.includes('l')) { nw = Math.max(20, G.lw0 - cdx); nx = G.lx + cdx; }
+        if (G.handle.includes('b')) nh = Math.max(20, G.lh0 + cdy);
+        if (G.handle.includes('t')) { nh = Math.max(20, G.lh0 - cdy); ny = G.ly + cdy; }
+        onLayerResize(selId, { x: nx, y: ny, width: nw, height: nh });
         return;
       }
 
-      // Layer drag (only in moveMode)
-      if (moveMode && G.hit && G.hit === selectedLayerId && onLayerMove) {
-        onLayerMove(selectedLayerId, { x: G.lx + cdx, y: G.ly + cdy });
+      // Layer drag (only in moveMode) with snap
+      if (isMove && G.hit && G.hit === selId && onLayerMove) {
+        let nx = G.lx + cdx;
+        let ny = G.ly + cdy;
+        const layer = layersRef.current.find(l => l.id === selId);
+        if (layer) {
+          const S = 8, lw = layer.width || 0, lh = layer.height || 0;
+          if (Math.abs(nx) < S) nx = 0;
+          if (Math.abs(ny) < S) ny = 0;
+          if (Math.abs(nx + lw - CW) < S) nx = CW - lw;
+          if (Math.abs(ny + lh - CH) < S) ny = CH - lh;
+          if (Math.abs((nx + lw / 2) - CW / 2) < S) nx = CW / 2 - lw / 2;
+          if (Math.abs((ny + lh / 2) - CH / 2) < S) ny = CH / 2 - lh / 2;
+        }
+        onLayerMove(selId, { x: nx, y: ny });
         return;
       }
 
@@ -389,14 +456,14 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
         const dist = Math.sqrt((t.clientX - G.sx) ** 2 + (t.clientY - G.sy) ** 2);
 
         // TAP / DOUBLE-TAP — generous thresholds for mobile fingers
-        if (dist < 15 && dur < 500) {
-          const pt = toCanvas(t.clientX, t.clientY);
-          const hitId = hitTest(pt.x, pt.y);
+        if (dist < 20 && dur < 500) {
+          const pt = canvasPt(t.clientX, t.clientY);
+          const hitId = getHit(pt.x, pt.y);
           const now = Date.now();
           const last = lastTapRef.current;
           if (hitId && hitId === last.id && now - last.t < 400) {
             // Double-tap on same layer
-            const layer = layers.find(l => l.id === hitId);
+            const layer = layersRef.current.find(l => l.id === hitId);
             if (layer?.type === 'text' && onDoubleTapText) {
               onDoubleTapText(hitId);
             }
@@ -404,6 +471,7 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
           } else {
             lastTapRef.current = { id: hitId, t: now };
           }
+          // Single tap — select layer or deselect if empty space
           onSelectLayer(hitId || null);
         }
       }
@@ -425,9 +493,9 @@ const MobileCanvas = forwardRef(function MobileCanvas(props, ref) {
       canvas.removeEventListener('touchmove', onMove);
       canvas.removeEventListener('touchend', onEnd);
     };
-  }, [layers, selectedLayerId, offset, zoom, toCanvas, hitTest, handleHitTest,
-      setZoom, setOffset, onSelectLayer, onLayerMove, onLayerResize,
-      moveMode, onDoubleTapText]);
+  // Minimal deps — handlers read live values from refs, not closures.
+  // setZoom/setOffset are stable useState setters; the rest are useCallback/stable props.
+  }, [setZoom, setOffset, onSelectLayer, onLayerMove, onLayerResize, onDoubleTapText]);
 
   // ── Render ──
   return (
