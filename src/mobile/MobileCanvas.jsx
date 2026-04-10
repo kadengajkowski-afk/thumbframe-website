@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { getSafeDPR, getSafeCanvasSize, getCanvasDisplaySize } from './canvasHelpers';
-import { getTouchDistance, getTouchMidpoint, GESTURE, resolveGesture } from './touchGestures';
+import { getSafeDPR, getCanvasDisplaySize } from './canvasHelpers';
+import { getTouchDistance, getTouchMidpoint, GESTURE } from './touchGestures';
 
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
@@ -131,7 +131,7 @@ const MobileCanvas = forwardRef(function MobileCanvas({
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
     drawLayers();
-  }, []);
+  }, [drawLayers]);
 
   // ── Convert screen point to canvas coordinates ──
   function screenToCanvas(clientX, clientY) {
@@ -146,7 +146,7 @@ const MobileCanvas = forwardRef(function MobileCanvas({
   }
 
   // ── Hit test: which layer is at this canvas point? ──
-  function hitTest(canvasX, canvasY) {
+  const hitTest = useCallback((canvasX, canvasY) => {
     for (let i = layers.length - 1; i >= 0; i--) {
       const l = layers[i];
       if (!l.visible) continue;
@@ -156,7 +156,7 @@ const MobileCanvas = forwardRef(function MobileCanvas({
       }
     }
     return null;
-  }
+  }, [layers]);
 
   // ── Touch handlers ──
   useEffect(() => {
@@ -266,7 +266,7 @@ const MobileCanvas = forwardRef(function MobileCanvas({
       canvas.removeEventListener('touchmove', onTouchMove, opts);
       canvas.removeEventListener('touchend', onTouchEnd, opts);
     };
-  }, [layers, selectedLayerId, setZoom, setOffset, onSelectLayer, onLayerMove]);
+  }, [layers, selectedLayerId, setZoom, setOffset, onSelectLayer, onLayerMove, hitTest]);
 
   const { w, h } = getCanvasDisplaySize();
 

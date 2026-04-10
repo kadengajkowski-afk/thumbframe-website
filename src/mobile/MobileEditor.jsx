@@ -2,7 +2,6 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import MobileCanvas from './MobileCanvas';
 import MobileProjectPicker from './MobileProjectPicker';
 import { releaseCanvas } from './canvasHelpers';
-import supabase from '../supabaseClient';
 import { saveAs } from 'file-saver';
 
 const T = {
