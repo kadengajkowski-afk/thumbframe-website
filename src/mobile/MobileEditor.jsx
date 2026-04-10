@@ -38,7 +38,6 @@ export default function MobileEditor({ user }) {
   const [historyIdx, setHistoryIdx] = useState(-1);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
-  const panelRef = useRef(null);
   const isPro = user?.is_pro === true || user?.plan === 'pro';
 
   // ── Toast helper ──
@@ -48,12 +47,6 @@ export default function MobileEditor({ user }) {
   }, []);
 
   // ── History / undo ──
-  const pushHistory = useCallback((newLayers) => {
-    setHistory(prev => [...prev.slice(0, historyIdx + 1), newLayers]);
-    setHistoryIdx(prev => prev + 1);
-    setLayers(newLayers);
-  }, [historyIdx]);
-
   const handleUndo = useCallback(() => {
     if (historyIdx <= 0) return;
     setHistoryIdx(prev => prev - 1);
