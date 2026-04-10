@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { getSafeDPR, getCanvasDisplaySize } from './canvasHelpers';
+import { getSafeDPR } from './canvasHelpers';
 import { getTouchDistance, getTouchMidpoint, GESTURE } from './touchGestures';
 
 const CANVAS_W = 1280;
@@ -286,8 +286,6 @@ const MobileCanvas = forwardRef(function MobileCanvas({
     };
   }, [layers, selectedLayerId, setZoom, setOffset, onSelectLayer, onLayerMove, hitTest]);
 
-  const { w, h } = getCanvasDisplaySize();
-
   return (
     <div
       ref={containerRef}
@@ -312,8 +310,6 @@ const MobileCanvas = forwardRef(function MobileCanvas({
           ref={canvasRef}
           style={{
             display: 'block',
-            width: w,
-            height: h,
             touchAction: 'none',
             WebkitUserSelect: 'none',
             userSelect: 'none',

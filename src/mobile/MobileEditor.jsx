@@ -34,9 +34,29 @@ export default function MobileEditor({ user }) {
   const [toast, setToast] = useState(null);
   const [tfOpen, setTfOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [history, setHistory] = useState([[]]);
+  const [historyIdx, setHistoryIdx] = useState(0);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const dragStartY = useRef(null);
   const isPro = user?.is_pro === true || user?.plan === 'pro';
+
+  // ── History helpers ──
+  const pushHistory = useCallback((newLayers) => {
+    setHistory(prev => {
+      const next = prev.slice(0, historyIdx + 1);
+      next.push(newLayers);
+      return next;
+    });
+    setHistoryIdx(prev => prev + 1);
+  }, [historyIdx]);
+
+  const handleUndo = useCallback(() => {
+    if (historyIdx <= 0) return;
+    const prev = historyIdx - 1;
+    setHistoryIdx(prev);
+    setHistory(h => { setLayers(h[prev]); return h; });
+  }, [historyIdx]);
 
   // ── Toast helper ──
   const showToast = useCallback((msg, type = 'info', ms = 3000) => {
@@ -69,6 +89,7 @@ export default function MobileEditor({ user }) {
         };
         setLayers(prev => [...prev, newLayer]);
         setSelectedLayerId(newLayer.id);
+        pushHistory([...layers, newLayer]);
         showToast('Image added', 'success');
       };
       img.src = ev.target.result;
@@ -216,7 +237,7 @@ export default function MobileEditor({ user }) {
         <div style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 600, color: T.muted }}>
           {project?.name || 'Untitled'}
         </div>
-        <TopBtn onClick={() => {}} label="↩" />
+        <TopBtn onClick={handleUndo} label="↩" />
         <TopBtn onClick={handleExportPNG} label="Export" accent />
       </div>
 
@@ -246,12 +267,14 @@ export default function MobileEditor({ user }) {
         }}>
           {/* Drag handle */}
           <div
-            style={{ height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-            onTouchStart={(e) => { e._startY = e.touches[0].clientY; }}
+            style={{ height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'grab' }}
+            onTouchStart={(e) => { dragStartY.current = e.touches[0].clientY; }}
             onTouchMove={(e) => {
-              const dy = e.touches[0].clientY - e._startY;
-              if (dy > 60) setActiveTab(null);
+              if (dragStartY.current === null) return;
+              const dy = e.touches[0].clientY - dragStartY.current;
+              if (dy > 50) { setActiveTab(null); dragStartY.current = null; }
             }}
+            onTouchEnd={() => { dragStartY.current = null; }}
           >
             <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border }} />
           </div>
