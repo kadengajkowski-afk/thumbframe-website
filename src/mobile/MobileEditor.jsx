@@ -4,6 +4,14 @@ import MobileCanvas from './MobileCanvas';
 import MobileProjectPicker from './MobileProjectPicker';
 import { releaseCanvas } from './canvasHelpers';
 import supabase from '../supabaseClient';
+import {
+  adjustBrightness,
+  adjustContrast,
+  adjustSaturation,
+  applyVignette,
+  unsharpMask,
+  makeItPop,
+} from '../utils/imageProcessing';
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const C = {
@@ -317,77 +325,23 @@ export default function MobileEditor({ user, setPage }) {
       const tmp = document.createElement('canvas');
       tmp.width = sel.imgElement.naturalWidth || sel.width;
       tmp.height = sel.imgElement.naturalHeight || sel.height;
-      const ctx = tmp.getContext('2d');
+      const ctx = tmp.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(sel.imgElement, 0, 0);
       const id = ctx.getImageData(0, 0, tmp.width, tmp.height);
       const d = id.data;
-      const total = tmp.width * tmp.height;
 
       if (type === 'brighten') {
-        for (let i = 0; i < d.length; i += 4) { d[i] = Math.min(255, d[i] + 25); d[i+1] = Math.min(255, d[i+1] + 25); d[i+2] = Math.min(255, d[i+2] + 25); }
+        adjustBrightness(d, 1.25);
       } else if (type === 'contrast') {
-        let mean = 0;
-        for (let i = 0; i < d.length; i += 4) mean += d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
-        mean /= total;
-        for (let i = 0; i < d.length; i += 4) {
-          d[i]   = Math.min(255, Math.max(0, Math.round(mean + (d[i]   - mean) * 1.3)));
-          d[i+1] = Math.min(255, Math.max(0, Math.round(mean + (d[i+1] - mean) * 1.3)));
-          d[i+2] = Math.min(255, Math.max(0, Math.round(mean + (d[i+2] - mean) * 1.3)));
-        }
+        adjustContrast(d, 0.5);
       } else if (type === 'saturate') {
-        for (let i = 0; i < d.length; i += 4) {
-          const avg = (d[i] + d[i+1] + d[i+2]) / 3;
-          d[i]   = Math.min(255, Math.max(0, Math.round(avg + (d[i]   - avg) * 1.4)));
-          d[i+1] = Math.min(255, Math.max(0, Math.round(avg + (d[i+1] - avg) * 1.4)));
-          d[i+2] = Math.min(255, Math.max(0, Math.round(avg + (d[i+2] - avg) * 1.4)));
-        }
+        adjustSaturation(d, 1.5);
       } else if (type === 'vignette') {
-        const cx = tmp.width / 2, cy = tmp.height / 2;
-        const maxD = Math.sqrt(cx * cx + cy * cy);
-        for (let y = 0; y < tmp.height; y++) {
-          for (let x = 0; x < tmp.width; x++) {
-            const i = (y * tmp.width + x) * 4;
-            const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / maxD;
-            const f = 1 - Math.pow(dist, 1.5) * 0.6;
-            d[i] *= f; d[i+1] *= f; d[i+2] *= f;
-          }
-        }
+        applyVignette(d, tmp.width, tmp.height);
       } else if (type === 'sharpen') {
-        const srcData = new Uint8ClampedArray(d);
-        const w = tmp.width;
-        for (let y = 1; y < tmp.height - 1; y++) {
-          for (let x = 1; x < w - 1; x++) {
-            const idx = (y * w + x) * 4;
-            for (let c = 0; c < 3; c++) {
-              const bl = (srcData[((y-1)*w+x-1)*4+c]+srcData[((y-1)*w+x)*4+c]+srcData[((y-1)*w+x+1)*4+c]+srcData[(y*w+x-1)*4+c]+srcData[idx+c]+srcData[(y*w+x+1)*4+c]+srcData[((y+1)*w+x-1)*4+c]+srcData[((y+1)*w+x)*4+c]+srcData[((y+1)*w+x+1)*4+c])/9;
-              const diff = srcData[idx+c] - bl;
-              if (Math.abs(diff) > 3) d[idx+c] = Math.min(255, Math.max(0, Math.round(srcData[idx+c] + diff * 0.7)));
-            }
-          }
-        }
+        unsharpMask(d, tmp.width, tmp.height);
       } else if (type === 'colorgrade') {
-        // Auto levels + S-curve + vibrance
-        const hist = new Array(256).fill(0);
-        for (let i = 0; i < d.length; i += 4) hist[Math.round(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)]++;
-        let lo = 0, hi = 255, cum = 0;
-        for (let i = 0; i <= 255; i++) { cum += hist[i]; if (cum > total * 0.005) { lo = i; break; } }
-        cum = 0;
-        for (let i = 255; i >= 0; i--) { cum += hist[i]; if (cum > total * 0.005) { hi = i; break; } }
-        const range = Math.max(1, hi - lo);
-        for (let i = 0; i < d.length; i += 4) {
-          const lum = d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114;
-          const target = Math.min(255, Math.max(0, (lum - lo) * 255 / range));
-          const ratio = lum > 0 ? target / lum : 1;
-          d[i]=Math.min(255,Math.max(0,Math.round(d[i]*ratio)));
-          d[i+1]=Math.min(255,Math.max(0,Math.round(d[i+1]*ratio)));
-          d[i+2]=Math.min(255,Math.max(0,Math.round(d[i+2]*ratio)));
-        }
-        for (let i = 0; i < d.length; i += 4) {
-          for (let c = 0; c < 3; c++) {
-            const x = d[i+c] / 255;
-            d[i+c] = Math.round(255 / (1 + Math.exp(-5 * (x - 0.5))));
-          }
-        }
+        makeItPop(d, tmp.width, tmp.height);
       }
 
       ctx.putImageData(id, 0, 0);
