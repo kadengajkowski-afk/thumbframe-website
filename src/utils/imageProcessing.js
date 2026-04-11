@@ -273,9 +273,9 @@ export function unsharpMask(data, w, h, radius = 2, amount = 0.8, threshold = 4)
 function triZoneColorGrade(data, opts) {
   const {
     shadowTint = { r: 0, g: 100, b: 120 },
-    midtoneTint = { r: 128, g: 128, b: 128 },
+    _midtoneTint = { r: 128, g: 128, b: 128 },
     highlightTint = { r: 255, g: 180, b: 80 },
-    shadowStrength = 0.25, midtoneStrength = 0.0, highlightStrength = 0.20
+    shadowStrength = 0.25, _midtoneStrength = 0.0, highlightStrength = 0.20
   } = opts;
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i+1], b = data[i+2];
