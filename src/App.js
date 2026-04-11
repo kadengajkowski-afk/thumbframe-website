@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { trackPageView } from './utils/analytics';
 import Editor from './Editor';
 import FabricCanvas from './FabricCanvas';
+import NewEditor from './editor/NewEditor';
 import MobileEditor from './mobile/MobileEditor';
 import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
@@ -746,10 +747,14 @@ export default function App() {
 
   if (page === 'editor') {
     if (isMobile) return <MobileEditor user={user} />;
-    // Feature flag: ?engine=fabric switches to the new fabric.js V2 canvas
-    const useFabric = new URLSearchParams(window.location.search).get('engine') === 'fabric';
-    if (useFabric) {
+    // Feature flag: ?engine=fabric switches to the fabric.js V2 canvas
+    const engineParam = new URLSearchParams(window.location.search).get('engine');
+    if (engineParam === 'fabric') {
       return <FabricCanvas user={user} darkMode={true} />;
+    }
+    // Feature flag: ?engine=pixi OR user.is_dev === true → PixiJS v8 engine
+    if (engineParam === 'pixi' || user?.is_dev === true) {
+      return <NewEditor user={user} setPage={setPage} />;
     }
     return <Editor onExit={() => setPage('home')} user={user} token={authToken} />;
   }
