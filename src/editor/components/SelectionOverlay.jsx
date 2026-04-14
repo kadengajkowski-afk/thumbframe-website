@@ -48,7 +48,8 @@ const MID_HANDLES = [
 
 // ────────────────────────────────────────────────────────────────────────────
 // extraGuides: guide lines from the move interaction in NewEditor
-export default function SelectionOverlay({ containerRef, extraGuides = [] }) {
+// canvasRef: ref to the PixiJS canvas element (for accurate getBoundingClientRect)
+export default function SelectionOverlay({ containerRef, canvasRef, extraGuides = [] }) {
   const layers            = useEditorStore(s => s.layers);
   const selectedLayerIds  = useEditorStore(s => s.selectedLayerIds);
   const zoom              = useEditorStore(s => s.zoom);
@@ -85,14 +86,17 @@ export default function SelectionOverlay({ containerRef, extraGuides = [] }) {
   const allGuides = [...extraGuides, ...interactionGuides];
 
   // ── Coordinate helper ──────────────────────────────────────────────────────
+  // Prefer the PixiJS canvas element's rect (exact pixel boundary) over the
+  // container's rect. Falls back to container if canvas ref isn't set yet.
   const toWorld = useCallback((clientX, clientY) => {
-    if (!containerRef?.current) return { x: 0, y: 0 };
-    const rect = containerRef.current.getBoundingClientRect();
+    const el = canvasRef?.current || containerRef?.current;
+    if (!el) return { x: 0, y: 0 };
+    const rect = el.getBoundingClientRect();
     return {
       x: (clientX - rect.left - panX) / zoom,
       y: (clientY - rect.top  - panY) / zoom,
     };
-  }, [containerRef, zoom, panX, panY]);
+  }, [canvasRef, containerRef, zoom, panX, panY]);
 
   // ── Global pointer move / up during interaction ────────────────────────────
   useEffect(() => {
@@ -112,7 +116,7 @@ export default function SelectionOverlay({ containerRef, extraGuides = [] }) {
         updateLayer(layerId, changes);
 
         // Update dimension label (screen space, fixed to window)
-        const rect = containerRef?.current?.getBoundingClientRect();
+        const rect = (canvasRef?.current || containerRef?.current)?.getBoundingClientRect();
         if (rect) {
           const screenCY = changes.y * zoom + panY;
           const screenBottom = screenCY + (changes.height * zoom) / 2;
@@ -135,8 +139,9 @@ export default function SelectionOverlay({ containerRef, extraGuides = [] }) {
         updateLayer(layerId, { rotation: newRot });
 
         const deg = Math.round((newRot * 180) / Math.PI);
-        if (containerRef?.current) {
-          const rect = containerRef.current.getBoundingClientRect();
+        const angleEl = canvasRef?.current || containerRef?.current;
+        if (angleEl) {
+          const rect = angleEl.getBoundingClientRect();
           setAngleLabel({
             x: e.clientX - rect.left + 14,
             y: e.clientY - rect.top - 10,
@@ -170,7 +175,7 @@ export default function SelectionOverlay({ containerRef, extraGuides = [] }) {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [interaction, toWorld, updateLayer, commitChange, setInteractionMode, zoom, panX, panY, containerRef]);
+  }, [interaction, toWorld, updateLayer, commitChange, setInteractionMode, zoom, panX, panY, containerRef, canvasRef]);
 
   // ── Handle pointer down on corner/mid handles ──────────────────────────────
   const startResize = useCallback((e, layerId, handle) => {

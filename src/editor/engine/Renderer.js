@@ -31,17 +31,28 @@ export default class Renderer {
   async init(containerEl) {
     if (this._mounted) return;
 
+    // Measure container now so we can size the canvas to fill it exactly.
+    // We do NOT use resizeTo because that sets position:absolute on the canvas
+    // element, which prevents CSS flexbox from centering it.
+    const rect = containerEl.getBoundingClientRect();
+    const w = Math.max(rect.width,  400);
+    const h = Math.max(rect.height, 300);
+
     this.app = new Application();
     await this.app.init({
-      resizeTo: containerEl,
+      width: w,
+      height: h,
       background: '#09090b',
       antialias: true,
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
     });
 
-    containerEl.appendChild(this.app.canvas);
+    // Canvas lives in normal document flow — flexbox on the container centers it.
+    // Do NOT set position:absolute/width/height here; autoDensity handles px dims.
+    this.app.canvas.style.display = 'block';
     this.app.canvas.style.touchAction = 'none';
+    containerEl.appendChild(this.app.canvas);
 
     // ── Viewport container (zoom + pan) ──
     this.viewport = new Container();
@@ -60,7 +71,9 @@ export default class Renderer {
     this.overlayContainer = new Container();
     this.app.stage.addChild(this.overlayContainer);
 
-    // Center canvas in view on first render
+    // Center the 1280×720 canvas in the available space.
+    // Call this ONCE here; after init, NewEditor syncs the store from
+    // renderer.viewport — it never calls applyViewport(1, 0, 0) on startup.
     this._centerCanvas();
 
     this._mounted = true;
@@ -82,7 +95,7 @@ export default class Renderer {
 
   // ── Center the 1280×720 canvas in the viewport ───────────────────────────
   _centerCanvas() {
-    if (!this.app) return;
+    if (!this.app || !this.viewport) return;
     const screenW = this.app.screen.width;
     const screenH = this.app.screen.height;
     const fitScale = Math.min(
@@ -96,6 +109,7 @@ export default class Renderer {
 
   // ── Zoom at cursor position ───────────────────────────────────────────────
   zoomAt(cursorX, cursorY, newScale) {
+    if (!this.viewport) return;
     newScale = Math.max(0.1, Math.min(10, newScale));
     const oldScale = this.viewport.scale.x;
     const worldX = (cursorX - this.viewport.x) / oldScale;
@@ -107,12 +121,14 @@ export default class Renderer {
 
   // ── Pan viewport ──────────────────────────────────────────────────────────
   panBy(dx, dy) {
+    if (!this.viewport) return;
     this.viewport.x += dx;
     this.viewport.y += dy;
   }
 
   // ── Set viewport from store values ────────────────────────────────────────
   applyViewport(zoom, panX, panY) {
+    if (!this.app || !this.viewport) return;
     this.viewport.scale.set(zoom);
     this.viewport.x = panX;
     this.viewport.y = panY;
@@ -138,6 +154,8 @@ export default class Renderer {
           obj.destroy({ children: true });
         }
         this.displayObjects.delete(id);
+        // Free GPU memory tracking entry
+        window.__textureMemoryManager?.unregister(id);
       }
     }
 
@@ -145,8 +163,11 @@ export default class Renderer {
     for (const layer of layers) {
       let obj = this.displayObjects.get(layer.id);
 
-      // Create if doesn't exist or type changed
-      if (!obj || obj._tfType !== layer.type) {
+      // Compute a fingerprint for data-driven recreation (shape fill, text content, etc.)
+      const dataKey = _layerDataKey(layer);
+
+      // Create if: doesn't exist, type changed, or visual data changed
+      if (!obj || obj._tfType !== layer.type || obj._tfDataKey !== dataKey) {
         if (obj) {
           this.layerContainer.removeChild(obj);
           obj.destroy({ children: true });
@@ -155,6 +176,7 @@ export default class Renderer {
         if (!obj) continue;
         obj._tfType = layer.type;
         obj._tfId = layer.id;
+        obj._tfDataKey = dataKey;
         this.displayObjects.set(layer.id, obj);
         this.layerContainer.addChild(obj);
       }
@@ -175,8 +197,11 @@ export default class Renderer {
       const bm = BLEND_MODES[layer.blendMode] || 'normal';
       obj.blendMode = bm;
 
-      // Type-specific updates (avoid recreation)
-      this._updateDisplayObject(obj, layer);
+      // Size sync for images
+      if (layer.type === 'image' && obj.isSprite) {
+        obj.width = layer.width;
+        obj.height = layer.height;
+      }
     }
 
     // ── 3. Reorder children to match layer array order ──
@@ -184,10 +209,28 @@ export default class Renderer {
     for (let i = 0; i < layers.length; i++) {
       const obj = this.displayObjects.get(layers[i].id);
       if (obj && obj.parent === this.layerContainer) {
-        // +1 because canvasBg is child 0 of viewport, but layerContainer is its own container
-        this.layerContainer.setChildIndex(obj, i);
+        if (this.layerContainer.getChildIndex(obj) !== i) {
+          this.layerContainer.setChildIndex(obj, i);
+        }
       }
     }
+
+    // ── 4. Force an immediate render frame ──
+    // PixiJS v8 uses internal dirty-tracking; imperatively mutating the scene
+    // graph does not always trigger a ticker re-render on its own.
+    this._forceRender();
+  }
+
+  // ── Force PixiJS to render a new frame immediately ────────────────────────
+  _forceRender() {
+    if (this.app?.renderer && this.app?.stage) {
+      this.app.renderer.render(this.app.stage);
+    }
+  }
+
+  // Expose for external callers (e.g. after viewport changes from outside)
+  markDirty() {
+    this._forceRender();
   }
 
   // ── Create a new display object for a layer ────────────────────────────────
@@ -205,9 +248,18 @@ export default class Renderer {
   }
 
   _createImageObject(layer) {
+    // Loading placeholder — pulsing gray rectangle
+    if (layer.loading) {
+      const g = new Graphics();
+      g.rect(0, 0, layer.width || 320, layer.height || 180)
+        .fill({ color: 0xffffff, alpha: 0.08 });
+      g._tfIsLoadingPlaceholder = true;
+      return g;
+    }
+
     const src = layer.imageData?.src;
     if (!src) {
-      // Placeholder — grey rect
+      // No src yet — grey rect fallback
       const g = new Graphics();
       g.rect(0, 0, layer.width, layer.height).fill({ color: 0x333333 });
       return g;
@@ -217,11 +269,23 @@ export default class Renderer {
     if (!texture) {
       texture = Texture.from(src);
       this.textureCache.set(src, texture);
+
+      // Register with TextureMemoryManager for GPU memory tracking.
+      // Use textureWidth/textureHeight if stored (post-downscale dimensions),
+      // otherwise fall back to layer display dimensions.
+      const tw = layer.imageData.textureWidth  || layer.width;
+      const th = layer.imageData.textureHeight || layer.height;
+      window.__textureMemoryManager?.register(layer.id, texture, tw, th);
+
+      // Force a re-render once the texture has fully loaded from the ObjectURL
+      // so the sprite doesn't appear blank on slow systems.
+      texture.on('update', () => this._forceRender());
     }
 
     const sprite = new Sprite(texture);
-    sprite.width = layer.width;
+    sprite.width  = layer.width;
     sprite.height = layer.height;
+    sprite.isSprite = true;
     return sprite;
   }
 
@@ -306,15 +370,7 @@ export default class Renderer {
     return g;
   }
 
-  // ── Update existing display object in-place ───────────────────────────────
-  _updateDisplayObject(obj, layer) {
-    if (layer.type === 'image' && obj instanceof Sprite) {
-      obj.width = layer.width;
-      obj.height = layer.height;
-    }
-    // Text and shape updates that require visual changes trigger recreation
-    // via type/data check in sync(). Phase 2 adds diffing for in-place updates.
-  }
+  // (removed: _updateDisplayObject merged into sync() above)
 
   // ── Hit test: which layer is at screen position (x, y)? ──────────────────
   hitTest(screenX, screenY) {
@@ -362,5 +418,31 @@ export default class Renderer {
   resize() {
     if (!this.app) return;
     this.app.resize();
+  }
+}
+
+// ── Layer data fingerprint ────────────────────────────────────────────────────
+// A cheap string key that captures all visual-content fields of a layer.
+// When this key changes, sync() recreates the display object from scratch.
+function _layerDataKey(layer) {
+  switch (layer.type) {
+    case 'shape': {
+      const sd = layer.shapeData;
+      if (!sd) return 'shape:empty';
+      return `shape:${sd.shapeType}:${layer.width}:${layer.height}:${sd.fill}:${sd.stroke}:${sd.strokeWidth}:${sd.cornerRadius}`;
+    }
+    case 'text': {
+      const td = layer.textData;
+      if (!td) return 'text:empty';
+      return `text:${td.content}:${td.fontFamily}:${td.fontSize}:${td.fontWeight}:${td.fill}:${layer.width}:${layer.height}`;
+    }
+    case 'image': {
+      if (layer.loading) return 'image:loading';
+      const id = layer.imageData;
+      if (!id) return 'image:empty';
+      return `image:${id.src}:${layer.width}:${layer.height}`;
+    }
+    default:
+      return layer.type;
   }
 }

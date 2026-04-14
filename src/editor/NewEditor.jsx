@@ -11,12 +11,16 @@ import SelectionOverlay from './components/SelectionOverlay';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import { hitTestLayers, computeMove } from './tools/SelectTool';
 import { computeGuides } from './engine/SmartGuides';
-// Side-effect import: registers window.__filterScaler
+import { processImageFile } from './utils/imageUpload';
+// Side-effect imports: register window singletons
 import './engine/FilterScaler';
+import './engine/TextureMemoryManager';
 
 export default function NewEditor({ user, setPage }) {
   const containerRef = useRef(null);
   const rendererRef  = useRef(null);
+  const canvasRef    = useRef(null);
+  const fileInputRef = useRef(null);
 
   // ── Store subscriptions ──────────────────────────────────────────────────
   const layers             = useEditorStore(s => s.layers);
@@ -39,6 +43,9 @@ export default function NewEditor({ user, setPage }) {
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
   useKeyboardShortcuts(containerRef);
 
+  // ── Upload / drag-drop state ─────────────────────────────────────────────
+  const [isDragOver, setIsDragOver] = useState(false);
+
   // ── Toast state ───────────────────────────────────────────────────────────
   const [toast, setToast] = useState(null);
 
@@ -50,6 +57,69 @@ export default function NewEditor({ user, setPage }) {
     };
     window.addEventListener('tf:toast', handler);
     return () => window.removeEventListener('tf:toast', handler);
+  }, []);
+
+  // ── Paste image from clipboard ───────────────────────────────────────────
+  useEffect(() => {
+    const onPaste = (e) => {
+      // Let the browser handle paste when user is editing text
+      if (useEditorStore.getState().interactionMode === 'editing-text') return;
+
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageItem = items.find(item => item.type.startsWith('image/'));
+      if (!imageItem) return; // No image — silent, don't block other paste handlers
+
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      if (file) processImageFile(file);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, []);
+
+  // ── High memory usage warning ─────────────────────────────────────────────
+  useEffect(() => {
+    const onMemoryWarning = () => {
+      window.dispatchEvent(new CustomEvent('tf:toast', {
+        detail: { message: 'High memory usage. Consider merging or hiding unused layers.' },
+      }));
+    };
+    window.addEventListener('tf-memory-warning', onMemoryWarning);
+    return () => window.removeEventListener('tf-memory-warning', onMemoryWarning);
+  }, []);
+
+  // ── File input handler ────────────────────────────────────────────────────
+  const handleFileInputChange = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (file) processImageFile(file);
+    // Reset so the same file can be re-selected
+    e.target.value = '';
+  }, []);
+
+  // ── Drag-and-drop handlers ────────────────────────────────────────────────
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    // Only clear when leaving the container itself, not a child
+    if (!containerRef.current?.contains(e.relatedTarget)) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.name.match(/\.(png|jpg|jpeg|webp|gif|svg|heic|avif|bmp)$/i));
+    if (files.length === 0) return;
+    if (files.length > 1) {
+      window.dispatchEvent(new CustomEvent('tf:toast', {
+        detail: { message: 'Multiple files dropped — only the first image was added.' },
+      }));
+    }
+    processImageFile(files[0]);
   }, []);
 
   // ── Move drag state ───────────────────────────────────────────────────────
@@ -69,20 +139,41 @@ export default function NewEditor({ user, setPage }) {
   const [activeGuides, setActiveGuides] = useState([]);
 
   // ── Init renderer on mount ───────────────────────────────────────────────
+  // rendererRef.current is set ONLY after init() fully resolves so that the
+  // viewport/layers useEffects below never call into a half-initialised renderer.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
+    let cancelled = false;
     const renderer = new Renderer();
-    rendererRef.current = renderer;
 
     renderer.init(el).then(() => {
-      renderer.sync(useEditorStore.getState().layers);
+      if (cancelled) {
+        renderer.destroy();
+        return;
+      }
+      rendererRef.current = renderer;
+      canvasRef.current = renderer.app.canvas;
+      const state = useEditorStore.getState();
+      renderer.sync(state.layers);
+      // Sync the store FROM the renderer's centered transform, not the other way around.
+      // _centerCanvas() already placed the viewport correctly — reading it back avoids
+      // the applyViewport(1,0,0) override that would reset the centering.
+      useEditorStore.setState({
+        zoom: renderer.viewport.scale.x,
+        panX: renderer.viewport.x,
+        panY: renderer.viewport.y,
+      });
     });
 
     return () => {
-      renderer.destroy();
-      rendererRef.current = null;
+      cancelled = true;
+      if (rendererRef.current) {
+        rendererRef.current.destroy();
+        rendererRef.current = null;
+      }
+      canvasRef.current = null;
     };
   }, []);
 
@@ -97,6 +188,7 @@ export default function NewEditor({ user, setPage }) {
   useEffect(() => {
     if (rendererRef.current) {
       rendererRef.current.applyViewport(zoom, panX, panY);
+      rendererRef.current.markDirty();
     }
   }, [zoom, panX, panY]);
 
@@ -328,17 +420,59 @@ export default function NewEditor({ user, setPage }) {
         onPointerDown={handlePointerDown}
         onWheel={handleWheel}
         onDoubleClick={handleDblClick}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         style={{
           flex: 1,
           minHeight: 0,
           overflow: 'hidden',
           position: 'relative',  // ← required for SelectionOverlay absolute positioning
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#09090b',
           cursor: 'default',
           touchAction: 'none',
+          outline: isDragOver ? '2px solid #f97316' : 'none',
+          outlineOffset: '-2px',
+          transition: 'outline 120ms cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
+        {/* Upload Image button — temporary until Phase 7 toolbar */}
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            position: 'absolute',
+            top: 60,
+            left: 60,
+            zIndex: 20,
+            background: '#f97316',
+            color: '#ffffff',
+            fontSize: 12,
+            fontWeight: 700,
+            padding: '8px 16px',
+            borderRadius: 6,
+            border: 'none',
+            cursor: 'pointer',
+            pointerEvents: 'all',
+          }}
+        >
+          Upload Image
+        </button>
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleFileInputChange}
+        />
+
         {/* SelectionOverlay is a sibling of the PixiJS canvas, stacked above */}
-        <SelectionOverlay containerRef={containerRef} extraGuides={activeGuides} />
+        <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
       </div>
 
       {/* ── Bottom status bar ─────────────────────────────────────────────── */}

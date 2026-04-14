@@ -26,6 +26,9 @@ export function createLayer(overrides = {}) {
     anchorX: overrides.anchorX ?? 0.5,
     anchorY: overrides.anchorY ?? 0.5,
 
+    // Loading state (true while an image is being decoded/uploaded)
+    loading: overrides.loading ?? false,
+
     // Appearance
     opacity: overrides.opacity ?? 1,         // 0–1
     blendMode: overrides.blendMode ?? 'normal', // PixiJS blend mode string

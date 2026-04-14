@@ -68,10 +68,26 @@ const useEditorStore = create(
       _pushHistory(state, `Add '${layer.name}'`);
     }),
 
+    // addLayerSilent — adds a layer without pushing a history entry.
+    // Used for upload placeholders; caller is responsible for commitChange() on success
+    // or removeLayerSilent() on failure.
+    addLayerSilent: (overrides) => set((state) => {
+      const layer = createLayer(overrides);
+      state.layers.push(layer);
+      state.selectedLayerIds = [layer.id];
+    }),
+
     removeLayer: (id) => set((state) => {
       state.layers = state.layers.filter(l => l.id !== id);
       state.selectedLayerIds = state.selectedLayerIds.filter(sid => sid !== id);
       _pushHistory(state, 'Delete Layer');
+    }),
+
+    // removeLayerSilent — removes without pushing history. Used to clean up
+    // failed upload placeholders so the user's undo stack stays clean.
+    removeLayerSilent: (id) => set((state) => {
+      state.layers = state.layers.filter(l => l.id !== id);
+      state.selectedLayerIds = state.selectedLayerIds.filter(sid => sid !== id);
     }),
 
     // updateLayer does NOT push history — use for live dragging, sliders, etc.
