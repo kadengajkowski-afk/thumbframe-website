@@ -83,10 +83,14 @@ export default class Renderer {
   destroy() {
     if (!this._mounted) return;
     this.displayObjects.forEach((obj) => {
-      obj.destroy({ children: true });
+      if (obj && typeof obj.destroy === 'function') {
+        obj.destroy({ children: true });
+      }
     });
     this.displayObjects.clear();
-    this.textureCache.forEach((tex) => tex.destroy(true));
+    this.textureCache.forEach((tex) => {
+      if (tex && typeof tex.destroy === 'function') tex.destroy(true);
+    });
     this.textureCache.clear();
     this.app.destroy(true, { children: true });
     this.app = null;
@@ -268,18 +272,36 @@ export default class Renderer {
     let texture = this.textureCache.get(src);
     if (!texture) {
       texture = Texture.from(src);
+
+      // Texture.from() can return undefined in PixiJS v8 if the source is not
+      // yet resolvable (e.g. ObjectURL not flushed to the asset pipeline).
+      // Fall back to gray placeholder and let the next sync() retry.
+      if (!texture) {
+        const g = new Graphics();
+        g.rect(0, 0, layer.width, layer.height).fill({ color: 0x333333 });
+        return g;
+      }
+
       this.textureCache.set(src, texture);
 
       // Register with TextureMemoryManager for GPU memory tracking.
-      // Use textureWidth/textureHeight if stored (post-downscale dimensions),
-      // otherwise fall back to layer display dimensions.
+      // Use textureWidth/textureHeight (post-downscale) when available.
       const tw = layer.imageData.textureWidth  || layer.width;
       const th = layer.imageData.textureHeight || layer.height;
       window.__textureMemoryManager?.register(layer.id, texture, tw, th);
 
       // Force a re-render once the texture has fully loaded from the ObjectURL
       // so the sprite doesn't appear blank on slow systems.
-      texture.on('update', () => this._forceRender());
+      if (typeof texture.on === 'function') {
+        texture.on('update', () => this._forceRender());
+      }
+    }
+
+    // Guard: if texture is still not valid, show placeholder
+    if (!texture) {
+      const g = new Graphics();
+      g.rect(0, 0, layer.width, layer.height).fill({ color: 0x333333 });
+      return g;
     }
 
     const sprite = new Sprite(texture);
