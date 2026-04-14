@@ -16,7 +16,16 @@ const useEditorStore = create(
 
     // ── Layers ──
     layers: [],
+
+    // ── Selection ──
     selectedLayerIds: [],
+
+    // ── Interaction ──
+    // 'idle' | 'dragging-layer' | 'resizing-layer' | 'rotating-layer'
+    // | 'editing-text' | 'dragging-layer-panel' | 'scrubbing-input'
+    interactionMode: 'idle',
+
+    // ── Active tool ──
     activeTool: 'select', // 'select' | 'move' | 'text' | 'shape' | 'brush' | 'hand' | 'zoom'
 
     // ── Viewport ──
@@ -25,8 +34,28 @@ const useEditorStore = create(
     panY: 0,
 
     // ── History ──
+    // Each entry: { snapshot: string (JSON), label: string }
     history: [],
     historyIndex: -1,
+
+    // ────────────────────────────────────────────────────
+    // INTERACTION MODE
+    // ────────────────────────────────────────────────────
+
+    setInteractionMode: (mode) => set((state) => {
+      const prev = state.interactionMode;
+      if (prev === mode) return;
+      state.interactionMode = mode;
+
+      // Side effects: FilterScaler + RenderLoop
+      if (mode !== 'idle' && prev === 'idle') {
+        window.__filterScaler?.scaleDown();
+        window.__renderLoop?.startContinuous();
+      } else if (mode === 'idle' && prev !== 'idle') {
+        window.__filterScaler?.restoreFullResolution();
+        window.__renderLoop?.stopContinuous();
+      }
+    }),
 
     // ────────────────────────────────────────────────────
     // LAYER ACTIONS
@@ -36,13 +65,13 @@ const useEditorStore = create(
       const layer = createLayer(overrides);
       state.layers.push(layer);
       state.selectedLayerIds = [layer.id];
-      _pushHistory(state);
+      _pushHistory(state, `Add '${layer.name}'`);
     }),
 
     removeLayer: (id) => set((state) => {
       state.layers = state.layers.filter(l => l.id !== id);
       state.selectedLayerIds = state.selectedLayerIds.filter(sid => sid !== id);
-      _pushHistory(state);
+      _pushHistory(state, 'Delete Layer');
     }),
 
     // updateLayer does NOT push history — use for live dragging, sliders, etc.
@@ -52,23 +81,41 @@ const useEditorStore = create(
       Object.assign(layer, changes);
     }),
 
-    // commitChange pushes a history snapshot — call after drag ends, slider releases, etc.
-    commitChange: () => set((state) => {
-      _pushHistory(state);
+    // commitChange pushes a labeled history snapshot.
+    // Call after drag ends, slider releases, etc.
+    commitChange: (label = '') => set((state) => {
+      _pushHistory(state, label);
     }),
 
+    // ── Reorder layers ──
     moveLayerUp: (id) => set((state) => {
       const idx = state.layers.findIndex(l => l.id === id);
       if (idx < 0 || idx >= state.layers.length - 1) return;
       [state.layers[idx], state.layers[idx + 1]] = [state.layers[idx + 1], state.layers[idx]];
-      _pushHistory(state);
+      _pushHistory(state, 'Reorder Layer');
     }),
 
     moveLayerDown: (id) => set((state) => {
       const idx = state.layers.findIndex(l => l.id === id);
       if (idx <= 0) return;
       [state.layers[idx], state.layers[idx - 1]] = [state.layers[idx - 1], state.layers[idx]];
-      _pushHistory(state);
+      _pushHistory(state, 'Reorder Layer');
+    }),
+
+    bringToFront: (id) => set((state) => {
+      const idx = state.layers.findIndex(l => l.id === id);
+      if (idx < 0 || idx === state.layers.length - 1) return;
+      const [layer] = state.layers.splice(idx, 1);
+      state.layers.push(layer);
+      _pushHistory(state, 'Bring to Front');
+    }),
+
+    sendToBack: (id) => set((state) => {
+      const idx = state.layers.findIndex(l => l.id === id);
+      if (idx <= 0) return;
+      const [layer] = state.layers.splice(idx, 1);
+      state.layers.unshift(layer);
+      _pushHistory(state, 'Send to Back');
     }),
 
     // ────────────────────────────────────────────────────
@@ -83,7 +130,7 @@ const useEditorStore = create(
         enabled: true,
         ...effect,
       });
-      _pushHistory(state);
+      _pushHistory(state, 'Add Effect');
     }),
 
     updateEffect: (layerId, effectId, changes) => set((state) => {
@@ -98,7 +145,7 @@ const useEditorStore = create(
       const layer = state.layers.find(l => l.id === layerId);
       if (!layer) return;
       layer.effects = layer.effects.filter(e => e.id !== effectId);
-      _pushHistory(state);
+      _pushHistory(state, 'Remove Effect');
     }),
 
     toggleEffect: (layerId, effectId) => set((state) => {
@@ -116,6 +163,10 @@ const useEditorStore = create(
       state.selectedLayerIds = id ? [id] : [];
     }),
 
+    setSelectedLayerIds: (ids) => set((state) => {
+      state.selectedLayerIds = ids;
+    }),
+
     toggleLayerSelection: (id) => set((state) => {
       const idx = state.selectedLayerIds.indexOf(id);
       if (idx >= 0) {
@@ -127,6 +178,74 @@ const useEditorStore = create(
 
     clearSelection: () => set((state) => {
       state.selectedLayerIds = [];
+    }),
+
+    selectAll: () => set((state) => {
+      state.selectedLayerIds = state.layers.map(l => l.id);
+    }),
+
+    // ────────────────────────────────────────────────────
+    // COMPOUND SELECTION ACTIONS
+    // ────────────────────────────────────────────────────
+
+    deleteSelectedLayers: () => set((state) => {
+      const toDelete = [];
+      let lockedCount = 0;
+
+      for (const id of state.selectedLayerIds) {
+        const layer = state.layers.find(l => l.id === id);
+        if (!layer) continue;
+        if (layer.locked) {
+          lockedCount++;
+        } else {
+          toDelete.push(id);
+        }
+      }
+
+      if (lockedCount > 0) {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('tf:toast', {
+            detail: { message: `${lockedCount} locked layer${lockedCount > 1 ? 's were' : ' was'} not deleted` },
+          }));
+        }, 0);
+      }
+
+      if (toDelete.length === 0) return;
+
+      const toDeleteSet = new Set(toDelete);
+      state.layers = state.layers.filter(l => !toDeleteSet.has(l.id));
+      state.selectedLayerIds = [];
+      _pushHistory(state, `Delete ${toDelete.length} Layer${toDelete.length > 1 ? 's' : ''}`);
+    }),
+
+    duplicateLayer: (id) => set((state) => {
+      const original = state.layers.find(l => l.id === id);
+      if (!original) return;
+
+      const newId = crypto.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2));
+      const copy = {
+        ...JSON.parse(JSON.stringify(original)),
+        id: newId,
+        name: `${original.name} copy`,
+        x: original.x + 20,
+        y: original.y + 20,
+      };
+
+      state.layers.push(copy);
+      state.selectedLayerIds = [newId];
+      _pushHistory(state, `Duplicate '${original.name}'`);
+    }),
+
+    nudgeLayer: (id, dx, dy) => set((state) => {
+      const layer = state.layers.find(l => l.id === id);
+      if (!layer || layer.locked) return;
+      layer.x += dx;
+      layer.y += dy;
+      // History is committed by useKeyboardShortcuts on keyup, not here
+    }),
+
+    nudgeCommit: (name) => set((state) => {
+      _pushHistory(state, `Move '${name}'`);
     }),
 
     // ────────────────────────────────────────────────────
@@ -159,7 +278,9 @@ const useEditorStore = create(
     undo: () => set((state) => {
       if (state.historyIndex <= 0) return;
       state.historyIndex -= 1;
-      state.layers = JSON.parse(state.history[state.historyIndex]);
+      const entry = state.history[state.historyIndex];
+      state.layers = JSON.parse(entry.snapshot);
+      // Validate selection still exists
       const ids = new Set(state.layers.map(l => l.id));
       state.selectedLayerIds = state.selectedLayerIds.filter(id => ids.has(id));
     }),
@@ -167,23 +288,22 @@ const useEditorStore = create(
     redo: () => set((state) => {
       if (state.historyIndex >= state.history.length - 1) return;
       state.historyIndex += 1;
-      state.layers = JSON.parse(state.history[state.historyIndex]);
+      const entry = state.history[state.historyIndex];
+      state.layers = JSON.parse(entry.snapshot);
       const ids = new Set(state.layers.map(l => l.id));
       state.selectedLayerIds = state.selectedLayerIds.filter(id => ids.has(id));
     }),
   }))
 );
 
-// ── Internal history helper ──
-function _pushHistory(state) {
-  const snapshot = JSON.stringify(
-    state.layers.map(l => ({ ...l }))
-  );
+// ── Internal history helper ──────────────────────────────────────────────────
+function _pushHistory(state, label = '') {
+  const snapshot = JSON.stringify(state.layers.map(l => ({ ...l })));
 
-  // Truncate any future entries (branching after undo)
+  // Truncate future (branching after undo)
   state.history = state.history.slice(0, state.historyIndex + 1);
 
-  state.history.push(snapshot);
+  state.history.push({ snapshot, label });
 
   if (state.history.length > MAX_HISTORY) {
     state.history = state.history.slice(state.history.length - MAX_HISTORY);
