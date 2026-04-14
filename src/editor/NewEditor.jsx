@@ -362,6 +362,7 @@ export default function NewEditor({ user, setPage }) {
       background: '#09090b', color: '#F5F5F7',
       fontFamily: '-apple-system, "SF Pro Text", "Segoe UI", sans-serif',
     }}>
+
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <div style={{
         height: 48, flexShrink: 0,
@@ -382,7 +383,6 @@ export default function NewEditor({ user, setPage }) {
           ←
         </button>
 
-        {/* Undo / Redo */}
         <button
           disabled={!canUndo}
           onClick={() => useEditorStore.getState().undo()}
@@ -400,7 +400,11 @@ export default function NewEditor({ user, setPage }) {
           ↪
         </button>
 
-        <span style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 700, color: 'rgba(245,245,247,0.40)' }}>
+        <span style={{
+          flex: 1, textAlign: 'center',
+          fontSize: 13, fontWeight: 700,
+          color: 'rgba(245,245,247,0.40)',
+        }}>
           ThumbFrame — Dev Engine
         </span>
 
@@ -414,88 +418,119 @@ export default function NewEditor({ user, setPage }) {
         </span>
       </div>
 
-      {/* ── Canvas container ─────────────────────────────────────────────── */}
-      <div
-        ref={containerRef}
-        onPointerDown={handlePointerDown}
-        onWheel={handleWheel}
-        onDoubleClick={handleDblClick}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflow: 'hidden',
-          position: 'relative',  // ← required for SelectionOverlay absolute positioning
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#09090b',
-          cursor: 'default',
-          touchAction: 'none',
-          outline: isDragOver ? '2px solid #f97316' : 'none',
-          outlineOffset: '-2px',
-          transition: 'outline 120ms cubic-bezier(0.16, 1, 0.3, 1)',
-        }}
-      >
-        {/* Upload Image button — temporary until Phase 7 toolbar */}
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => fileInputRef.current?.click()}
+      {/* ── Middle row ──────────────────────────────────────────────────── */}
+      <div style={{
+        flex: 1, minHeight: 0,
+        display: 'flex', flexDirection: 'row',
+        overflow: 'hidden',
+      }}>
+
+        {/* ── Left toolbar (temporary — Phase 7 will replace) ─────────── */}
+        <div style={{
+          width: 52, flexShrink: 0,
+          background: '#111113',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', padding: '8px 0', gap: 4,
+        }}>
+          {/* Upload image icon button */}
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => fileInputRef.current?.click()}
+            title="Upload Image"
+            style={toolbarIconBtnStyle}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </button>
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleFileInputChange}
+          />
+        </div>
+
+        {/* ── Canvas area ─────────────────────────────────────────────── */}
+        <div
+          ref={containerRef}
+          onPointerDown={handlePointerDown}
+          onWheel={handleWheel}
+          onDoubleClick={handleDblClick}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           style={{
-            position: 'absolute',
-            top: 60,
-            left: 60,
-            zIndex: 20,
-            background: '#f97316',
-            color: '#ffffff',
-            fontSize: 12,
-            fontWeight: 700,
-            padding: '8px 16px',
-            borderRadius: 6,
-            border: 'none',
-            cursor: 'pointer',
-            pointerEvents: 'all',
+            flex: 1, minHeight: 0, minWidth: 0,
+            overflow: 'hidden',
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#09090b',
+            cursor: 'default',
+            touchAction: 'none',
+            outline: isDragOver ? '2px solid #f97316' : 'none',
+            outlineOffset: '-2px',
+            transition: 'outline 120ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >
-          Upload Image
-        </button>
+          {/* SelectionOverlay sits above the PixiJS canvas */}
+          <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
+        </div>
 
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: 'none' }}
-          onChange={handleFileInputChange}
-        />
+        {/* ── Right panel (temporary — Phase 7 will replace) ──────────── */}
+        <div style={{
+          width: 260, flexShrink: 0,
+          background: '#111113',
+          borderLeft: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <span style={{
+            fontSize: 11, fontWeight: 500,
+            color: 'rgba(245,245,247,0.20)',
+            textAlign: 'center',
+            padding: '0 16px',
+            lineHeight: 1.5,
+          }}>
+            Properties panel<br />Phase 7
+          </span>
+        </div>
 
-        {/* SelectionOverlay is a sibling of the PixiJS canvas, stacked above */}
-        <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
-      </div>
+      </div>{/* end middle row */}
 
-      {/* ── Bottom status bar ─────────────────────────────────────────────── */}
+      {/* ── Status bar ──────────────────────────────────────────────────── */}
       <div style={{
-        height: 28, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: 16, padding: '0 12px',
-        background: '#111113',
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        fontSize: 11, color: 'rgba(245,245,247,0.40)',
+        height: 24, flexShrink: 0,
+        display: 'flex', alignItems: 'center',
+        padding: '0 12px', gap: 0,
+        background: '#0d0d0f',
+        borderTop: '1px solid rgba(255,255,255,0.04)',
+        fontSize: 10, fontWeight: 500,
+        color: 'rgba(245,245,247,0.30)',
+        userSelect: 'none',
       }}>
         <span>{layers.length} layer{layers.length !== 1 ? 's' : ''}</span>
+        <Sep />
         <span>{selectedLayerIds.length > 0 ? `${selectedLayerIds.length} selected` : 'nothing selected'}</span>
+        <Sep />
         <span>{Math.round(zoom * 100)}%</span>
+        <Sep />
         <span>1280 × 720</span>
-        <span style={{ opacity: 0.5 }}>dbl-click = add shape</span>
       </div>
 
-      {/* ── Toast ─────────────────────────────────────────────────────────── */}
+      {/* ── Toast ───────────────────────────────────────────────────────── */}
       {toast && (
         <div style={{
           position: 'fixed',
-          bottom: 48,
+          bottom: 40,
           left: '50%',
           transform: 'translateX(-50%)',
           background: '#1f1f23',
@@ -508,6 +543,7 @@ export default function NewEditor({ user, setPage }) {
           pointerEvents: 'none',
           zIndex: 9999,
           boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+          whiteSpace: 'nowrap',
         }}>
           {toast}
         </div>
@@ -516,7 +552,21 @@ export default function NewEditor({ user, setPage }) {
   );
 }
 
-// ── Shared toolbar button style ───────────────────────────────────────────────
+// ── Status bar separator ──────────────────────────────────────────────────────
+function Sep() {
+  return (
+    <span style={{
+      display: 'inline-block',
+      width: 1,
+      height: 10,
+      background: 'rgba(255,255,255,0.12)',
+      margin: '0 10px',
+      verticalAlign: 'middle',
+    }} />
+  );
+}
+
+// ── Top bar history button style ──────────────────────────────────────────────
 function toolBtnStyle(disabled) {
   return {
     background: 'none',
@@ -529,3 +579,18 @@ function toolBtnStyle(disabled) {
     transition: 'color 150ms ease',
   };
 }
+
+// ── Left toolbar icon button style ───────────────────────────────────────────
+const toolbarIconBtnStyle = {
+  width: 36,
+  height: 36,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'none',
+  border: 'none',
+  borderRadius: 8,
+  color: 'rgba(245,245,247,0.50)',
+  cursor: 'pointer',
+  transition: 'background 120ms ease, color 120ms ease',
+};

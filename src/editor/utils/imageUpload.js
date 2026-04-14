@@ -9,7 +9,7 @@
 // The placeholder layer (loading: true) appears instantly so the user
 // sees something happen before the potentially-slow decode completes.
 
-import { Texture } from 'pixi.js';
+import { Assets } from 'pixi.js';
 import useEditorStore from '../engine/Store';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -148,14 +148,17 @@ export async function processImageFile(file) {
   });
 
   try {
-    // ── SVG: load via ObjectURL, create texture from that ───────────────────
+    // ── SVG: skip bitmap decode — load directly via Assets ──────────────────
     if (file.type === 'image/svg+xml') {
       const src = URL.createObjectURL(file);
-      const texture = Texture.from(src);
-      await new Promise((resolve) => {
-        if (texture.valid) { resolve(); return; }
-        texture.once('update', resolve);
-      });
+      let texture;
+      try {
+        texture = await Assets.load(src);
+      } catch (err) {
+        useEditorStore.getState().removeLayerSilent(layerId);
+        dispatchToast('Could not open this image. The file may be corrupted or in an unrecognized format.');
+        return;
+      }
       useEditorStore.getState().updateLayer(layerId, {
         loading:   false,
         texture,
@@ -170,7 +173,7 @@ export async function processImageFile(file) {
       return;
     }
 
-    // ── Step 3: Decode off-thread with createImageBitmap ────────────────────
+    // ── Step 3: Decode off-thread with createImageBitmap (dimensions only) ──
     let probeBitmap;
     try {
       probeBitmap = await createImageBitmap(file);
@@ -197,47 +200,41 @@ export async function processImageFile(file) {
       return;
     }
 
-    // ── Step 4: Produce the final bitmap (downscaled if needed) ─────────────
+    // ── Step 4 & 5a: Produce ObjectURL (downscaling via OffscreenCanvas if needed)
+    // We always create an ObjectURL first — Assets.load() fetches from it
+    // independently, so there's no timing race with bitmap.close().
     let finalW = origW;
     let finalH = origH;
-    let finalBitmap;
+    let src;
 
     if (origW > MAX_DIMENSION || origH > MAX_DIMENSION) {
       const scale = Math.min(MAX_DIMENSION / origW, MAX_DIMENSION / origH);
       finalW = Math.round(origW * scale);
       finalH = Math.round(origH * scale);
-      // createImageBitmap with resize options runs off-thread
-      finalBitmap = await createImageBitmap(file, {
+      // Downscale via createImageBitmap with resize (off-thread), then canvas → blob
+      const scaledBitmap = await createImageBitmap(file, {
         resizeWidth:   finalW,
         resizeHeight:  finalH,
         resizeQuality: 'high',
       });
+      src = await bitmapToObjectURL(scaledBitmap, finalW, finalH);
+      scaledBitmap.close(); // Safe — we have the ObjectURL
     } else {
-      finalBitmap = await createImageBitmap(file);
+      // No downscale — point directly at the original file
+      src = URL.createObjectURL(file);
     }
 
-    // ── Step 5: Create PixiJS texture on main thread from the bitmap ─────────
-    // Texture.from(ImageBitmap) is synchronous — the bitmap is already decoded.
-    // We wait for texture.valid before storing it on the layer so the Renderer
-    // never receives an uninitialized texture.
-    const texture = Texture.from(finalBitmap);
-    await new Promise((resolve) => {
-      if (texture.valid) { resolve(); return; }
-      // texture.once() is EventEmitter3 API — always present on PixiJS Texture
-      texture.once('update', resolve);
-    });
-
-    // ── Step 5b: Produce ObjectURL for export / history reconstruction ───────
-    // Keep the bitmap alive until after we have the ObjectURL, then close it.
-    const src = await bitmapToObjectURL(finalBitmap, finalW, finalH);
-    finalBitmap.close();
+    // ── Step 5b: Load texture via Assets.load — guaranteed GPU-ready ─────────
+    // Assets.load fetches the ObjectURL independently of any ImageBitmap lifecycle.
+    // The returned texture is fully loaded and valid; no .on() calls needed.
+    const texture = await Assets.load(src);
 
     // ── Step 6: Scale to fit canvas (cover mode) ─────────────────────────────
     const coverScale = Math.max(CANVAS_W / finalW, CANVAS_H / finalH);
     const scaledW    = Math.round(finalW * coverScale);
     const scaledH    = Math.round(finalH * coverScale);
 
-    // ── Step 7: Update placeholder layer — texture is ready, no async risk ───
+    // ── Step 7: Update placeholder layer — texture is fully ready ────────────
     useEditorStore.getState().updateLayer(layerId, {
       loading:   false,
       texture,              // PixiJS Texture — used directly by Renderer
