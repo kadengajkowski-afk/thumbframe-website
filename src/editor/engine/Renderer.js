@@ -252,61 +252,27 @@ export default class Renderer {
   }
 
   _createImageObject(layer) {
-    // Loading placeholder — pulsing gray rectangle
-    if (layer.loading) {
+    // Show placeholder while loading OR while texture isn't ready yet.
+    // The upload pipeline guarantees texture.valid === true before setting
+    // layer.texture, so this branch covers only genuine loading states and
+    // the edge case of undo restoring a layer whose texture was stripped
+    // from the history snapshot.
+    if (layer.loading || !layer.texture) {
       const g = new Graphics();
-      g.rect(0, 0, layer.width || 320, layer.height || 180)
+      g.rect(0, 0, layer.width || 200, layer.height || 150)
         .fill({ color: 0xffffff, alpha: 0.08 });
-      g._tfIsLoadingPlaceholder = true;
       return g;
     }
 
-    const src = layer.imageData?.src;
-    if (!src) {
-      // No src yet — grey rect fallback
-      const g = new Graphics();
-      g.rect(0, 0, layer.width, layer.height).fill({ color: 0x333333 });
-      return g;
-    }
+    // Texture was created and validated in imageUpload.js — use it directly.
+    // No Texture.from(), no async loading, no .on() calls here.
+    const tw = layer.imageData?.textureWidth  || layer.width;
+    const th = layer.imageData?.textureHeight || layer.height;
+    window.__textureMemoryManager?.register(layer.id, layer.texture, tw, th);
 
-    let texture = this.textureCache.get(src);
-    if (!texture) {
-      texture = Texture.from(src);
-
-      // Texture.from() can return undefined in PixiJS v8 if the source is not
-      // yet resolvable (e.g. ObjectURL not flushed to the asset pipeline).
-      // Fall back to gray placeholder and let the next sync() retry.
-      if (!texture) {
-        const g = new Graphics();
-        g.rect(0, 0, layer.width, layer.height).fill({ color: 0x333333 });
-        return g;
-      }
-
-      this.textureCache.set(src, texture);
-
-      // Register with TextureMemoryManager for GPU memory tracking.
-      // Use textureWidth/textureHeight (post-downscale) when available.
-      const tw = layer.imageData.textureWidth  || layer.width;
-      const th = layer.imageData.textureHeight || layer.height;
-      window.__textureMemoryManager?.register(layer.id, texture, tw, th);
-
-      // Force a re-render once the texture has fully loaded from the ObjectURL
-      // so the sprite doesn't appear blank on slow systems.
-      if (typeof texture.on === 'function') {
-        texture.on('update', () => this._forceRender());
-      }
-    }
-
-    // Guard: if texture is still not valid, show placeholder
-    if (!texture) {
-      const g = new Graphics();
-      g.rect(0, 0, layer.width, layer.height).fill({ color: 0x333333 });
-      return g;
-    }
-
-    const sprite = new Sprite(texture);
-    sprite.width  = layer.width;
-    sprite.height = layer.height;
+    const sprite = new Sprite(layer.texture);
+    sprite.width   = layer.width;
+    sprite.height  = layer.height;
     sprite.isSprite = true;
     return sprite;
   }
@@ -460,9 +426,9 @@ function _layerDataKey(layer) {
     }
     case 'image': {
       if (layer.loading) return 'image:loading';
-      const id = layer.imageData;
-      if (!id) return 'image:empty';
-      return `image:${id.src}:${layer.width}:${layer.height}`;
+      if (!layer.texture) return 'image:empty';
+      // texture.uid is a unique auto-incrementing number assigned by PixiJS v8
+      return `image:${layer.texture.uid}:${layer.width}:${layer.height}`;
     }
     default:
       return layer.type;

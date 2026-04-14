@@ -314,7 +314,10 @@ const useEditorStore = create(
 
 // ── Internal history helper ──────────────────────────────────────────────────
 function _pushHistory(state, label = '') {
-  const snapshot = JSON.stringify(state.layers.map(l => ({ ...l })));
+  // Strip non-serializable fields before JSON.stringify.
+  // PixiJS Texture objects contain circular references and cannot be stringified.
+  // After undo/redo, image layers without a texture will render as gray placeholders.
+  const snapshot = JSON.stringify(state.layers.map(({ texture, ...rest }) => rest));
 
   // Truncate future (branching after undo)
   state.history = state.history.slice(0, state.historyIndex + 1);
