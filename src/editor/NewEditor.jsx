@@ -49,6 +49,9 @@ import { DodgeTool, BurnTool, SpongeTool } from './tools/TonalTools';
 import { BlurBrushTool, SharpenBrushTool, SmudgeTool } from './tools/FilterBrushTools';
 import { LightPaintingTool } from './tools/LightPaintingTool';
 import { SpotHealingTool } from './tools/SpotHealingTool';
+import { LassoTool, buildLassoMask } from './tools/LassoTool';
+import { MagicWandTool } from './tools/MagicWandTool';
+import SelectionOverlayCanvas from './components/SelectionOverlayCanvas';
 // Design system CSS vars
 import './editor.css';
 // Side-effect imports: register window singletons
@@ -84,8 +87,10 @@ export default function NewEditor({ user, setPage }) {
     sponge:        new SpongeTool(),
     blur_brush:    new BlurBrushTool(),
     sharpen_brush: new SharpenBrushTool(),
-    smudge:        new SmudgeTool(),
+    smudge:         new SmudgeTool(),
     light_painting: new LightPaintingTool(),
+    lasso:          new LassoTool(),
+    magic_wand:     new MagicWandTool(),
   });
 
   // ── Store subscriptions ──────────────────────────────────────────────────
@@ -118,7 +123,10 @@ export default function NewEditor({ user, setPage }) {
   const thumbfriendPersonality   = useEditorStore(s => s.thumbfriendPersonality);
   const [showAutoThumbnail, setShowAutoThumbnail] = useState(false);
 
-  const setCurrentStreak = useEditorStore(s => s.setCurrentStreak);
+  const setCurrentStreak      = useEditorStore(s => s.setCurrentStreak);
+  const selectionMask         = useEditorStore(s => s.selectionMask);
+  const setSelectionMask      = useEditorStore(s => s.setSelectionMask);
+  const clearPixelSelection   = useEditorStore(s => s.clearPixelSelection);
 
   // ── Fun layer hooks ──────────────────────────────────────────────────────
   const { unlocked: unlockedAchievements, unlock: unlockAchievement, checkTriggers, pendingToast, setPendingToast } = useAchievements(user);
@@ -236,6 +244,104 @@ export default function NewEditor({ user, setPage }) {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkTriggers, unlockAchievement, incrementExports]);
+
+  // ── Lasso / Magic Wand event handling ───────────────────────────────────
+  useEffect(() => {
+    const onLassoComplete = (e) => {
+      const { points } = e.detail;
+      const state = useEditorStore.getState();
+      const targetId = state.selectedLayerIds?.[0];
+      const layer = state.layers?.find(l => l.id === targetId);
+      if (!layer || layer.type !== 'image') return;
+
+      // Canvas area size (the flex container, not the PixiJS app size)
+      const canvasEl = canvasRef.current;
+      const canvasRect = canvasEl?.getBoundingClientRect?.();
+      if (!canvasRect) return;
+
+      const vp = rendererRef.current?.viewport;
+      const vpZoom = vp?.scale?.x ?? 1;
+      const vpX = vp?.x ?? 0;
+      const vpY = vp?.y ?? 0;
+
+      // Convert canvas-world points to layer-local image pixels
+      // layerRect in canvas world space
+      const lx = layer.x - layer.width  / 2;
+      const ly = layer.y - layer.height / 2;
+      const lw = layer.width;
+      const lh = layer.height;
+
+      // We need to get the image pixel dimensions
+      const pc = paintCanvasesRef.current.get(layer.id);
+      const iw = pc?.width  || 1280;
+      const ih = pc?.height || 720;
+
+      // Map canvas-world points into image pixel space
+      const imgPoints = points.map(p => ({
+        x: ((p.x - lx) / lw) * iw,
+        y: ((p.y - ly) / lh) * ih,
+      }));
+
+      // Build mask canvas in image space
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width  = iw;
+      maskCanvas.height = ih;
+      const ctx = maskCanvas.getContext('2d');
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, iw, ih);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(imgPoints[0].x, imgPoints[0].y);
+      for (let i = 1; i < imgPoints.length; i++) {
+        ctx.lineTo(imgPoints[i].x, imgPoints[i].y);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Extract as Uint8Array mask (255 = inside, 0 = outside)
+      const maskData = ctx.getImageData(0, 0, iw, ih).data;
+      const mask = new Uint8Array(iw * ih);
+      for (let i = 0; i < mask.length; i++) mask[i] = maskData[i * 4]; // red channel
+
+      setSelectionMask({ layerId: layer.id, mask, width: iw, height: ih });
+    };
+
+    const onWandComplete = (e) => {
+      const { layerId, mask, width, height } = e.detail;
+      setSelectionMask({ layerId, mask, width, height });
+    };
+
+    const onWandErase = (e) => {
+      // Erase selected pixels from the paint canvas of the selected layer
+      const sm = e.detail || useEditorStore.getState().selectionMask;
+      if (!sm) return;
+      const { layerId, mask, width, height } = sm;
+      const state = useEditorStore.getState();
+      const layer = state.layers?.find(l => l.id === layerId);
+      if (!layer) return;
+
+      const pc = paintCanvasesRef.current.get(layer.id);
+      if (!pc) return;
+      const ctx = pc.getContext('2d');
+      const imgData = ctx.getImageData(0, 0, pc.width, pc.height);
+      const { data } = imgData;
+      for (let i = 0; i < mask.length; i++) {
+        if (mask[i]) data[i * 4 + 3] = 0; // erase alpha
+      }
+      ctx.putImageData(imgData, 0, 0);
+      uploadPaintCanvas(layerId);
+      clearPixelSelection();
+    };
+
+    window.addEventListener('tf:lasso-complete', onLassoComplete);
+    window.addEventListener('tf:wand-complete',  onWandComplete);
+    window.addEventListener('tf:wand-erase',     onWandErase);
+    return () => {
+      window.removeEventListener('tf:lasso-complete', onLassoComplete);
+      window.removeEventListener('tf:wand-complete',  onWandComplete);
+      window.removeEventListener('tf:wand-erase',     onWandErase);
+    };
+  }, [setSelectionMask, clearPixelSelection, uploadPaintCanvas]);
 
   // ── Phase 15: Load YouTube channel data + niche benchmark on mount ────────
   useEffect(() => {
@@ -694,6 +800,16 @@ export default function NewEditor({ user, setPage }) {
       const tool     = state.activeTool;
       const canvasEl = canvasRef.current;
 
+      // ── Lasso tool move ──────────────────────────────────────────────────
+      if (tool === 'lasso' && canvasEl) {
+        const canvasRect = canvasEl.getBoundingClientRect();
+        const vp         = rendererRef.current?.viewport;
+        const cx = (e.clientX - canvasRect.left - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
+        const cy = (e.clientY - canvasRect.top  - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
+        toolsRef.current.lasso?.onPointerMove(e, { canvasPoint: { x: cx, y: cy } });
+        return;
+      }
+
       // ── Cursor position (always, for brush cursor overlay) ───────────────
       if (PAINT_TOOLS.has(tool) && canvasEl) {
         const canvasRect = canvasEl.getBoundingClientRect();
@@ -746,9 +862,22 @@ export default function NewEditor({ user, setPage }) {
       }
     };
 
-    const onUp = () => {
+    const onUp = (e) => {
       const state = useEditorStore.getState();
       const tool  = state.activeTool;
+
+      // ── End lasso stroke ─────────────────────────────────────────────────
+      if (tool === 'lasso') {
+        const canvasEl = canvasRef.current;
+        if (canvasEl) {
+          const canvasRect = canvasEl.getBoundingClientRect();
+          const vp         = rendererRef.current?.viewport;
+          const cx = (e.clientX - canvasRect.left - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
+          const cy = (e.clientY - canvasRect.top  - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
+          toolsRef.current.lasso?.onPointerUp(e, { canvasPoint: { x: cx, y: cy } });
+        }
+        return;
+      }
 
       // ── End painting stroke ──────────────────────────────────────────────
       if (isStrokingRef.current && strokeLayerRef.current) {
@@ -836,6 +965,23 @@ export default function NewEditor({ user, setPage }) {
     const vpZoom = vp?.scale?.x ?? 1;
     const canvasX = (screenX - vpX) / vpZoom;
     const canvasY = (screenY - vpY) / vpZoom;
+
+    // ── Lasso tool ───────────────────────────────────────────────────────────
+    if (tool === 'lasso') {
+      toolsRef.current.lasso?.onPointerDown(e, { canvasPoint: { x: canvasX, y: canvasY } });
+      return;
+    }
+
+    // ── Magic Wand tool ──────────────────────────────────────────────────────
+    if (tool === 'magic_wand') {
+      toolsRef.current.magic_wand?.onPointerDown(e, {
+        canvasPoint:      { x: canvasX, y: canvasY },
+        layers:           ls,
+        selectedLayerIds: sel,
+        paintCanvases:    paintCanvasesRef.current,
+      });
+      return;
+    }
 
     // ── Text tool — always create a new text layer, never select ────────────
     if (tool === 'text') {
@@ -1301,6 +1447,7 @@ export default function NewEditor({ user, setPage }) {
           <StarfieldBackground />
           <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
           <BrushCursor rendererRef={rendererRef} canvasRef={canvasRef} />
+          <SelectionOverlayCanvas width={CW} height={CH} />
 
           {/* Empty state — shown when no layers exist */}
           {layers.length === 0 && (

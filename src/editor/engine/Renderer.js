@@ -10,13 +10,39 @@
 //     └─ overlayContainer (Container) — selection handles, guides (screen-space)
 
 import { Application, Container, Graphics, Sprite, Texture, ImageSource, Text } from 'pixi.js';
-import { BLEND_MODES } from './Layer';
 import { renderTextToCanvas } from '../utils/textRenderer';
 import { AdjustmentFilter } from '../filters/AdjustmentFilter';
 import { getEffectiveAdjustments } from '../presets/colorGrades';
 
 const CW = 1280;
 const CH = 720;
+
+// ── PixiJS v8 blend mode strings ─────────────────────────────────────────────
+// PixiJS 8.x uses string blend mode values directly (no BlendMode enum).
+const BLEND_MODE_MAP = {
+  normal:        'normal',
+  multiply:      'multiply',
+  screen:        'screen',
+  overlay:       'overlay',
+  darken:        'darken',
+  lighten:       'lighten',
+  color_dodge:   'color-dodge',
+  color_burn:    'color-burn',
+  hard_light:    'hard-light',
+  soft_light:    'soft-light',
+  difference:    'difference',
+  exclusion:     'exclusion',
+  hue:           'hue',
+  saturation:    'saturation',
+  color:         'color',
+  luminosity:    'luminosity',
+  add:           'add',
+  // legacy hyphen aliases stored in older layer data
+  'color-dodge': 'color-dodge',
+  'color-burn':  'color-burn',
+  'hard-light':  'hard-light',
+  'soft-light':  'soft-light',
+};
 
 export default class Renderer {
   constructor() {
@@ -72,9 +98,9 @@ export default class Renderer {
     this.viewport = new Container();
     this.app.stage.addChild(this.viewport);
 
-    // ── Canvas background (the 1280×720 white rect) ──
+    // ── Canvas background (the 1280×720 dark rect) ──
     this.canvasBg = new Graphics();
-    this.canvasBg.rect(0, 0, CW, CH).fill({ color: 0xffffff });
+    this.canvasBg.rect(0, 0, CW, CH).fill({ color: 0x1a1a1e });
     this.viewport.addChild(this.canvasBg);
 
     // ── Layer container ──
@@ -256,9 +282,8 @@ export default class Renderer {
       obj.alpha = effectiveLayer.opacity ?? 1;
       obj.visible = effectiveLayer.visible !== false;
 
-      // Blend mode
-      const bm = BLEND_MODES[effectiveLayer.blendMode] || 'normal';
-      obj.blendMode = bm;
+      // Blend mode — use PixiJS v8 BlendMode enum
+      obj.blendMode = BLEND_MODE_MAP[effectiveLayer.blendMode] ?? 'normal';
 
       // Size sync for image and text sprites
       if ((effectiveLayer.type === 'image' || effectiveLayer.type === 'text') && obj.isSprite) {

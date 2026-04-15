@@ -67,6 +67,8 @@ export default function useKeyboardShortcuts(containerRef) {
       if (!meta && !shift && key === 's') { setActiveTool('clone_stamp'); return; }
       if (!meta && !shift && key === 'r') { cycleRetouchTool(); return; }
       if (!meta && !shift && key === 'j') { setActiveTool('spot_healing'); return; }
+      if (!meta && !shift && key === 'l') { setActiveTool('lasso'); return; }
+      if (!meta && !shift && key === 'w') { setActiveTool('magic_wand'); return; }
 
       // ── Brush size / hardness / opacity (paint tools only, not in text edit) ──
       if (isPainting && !isEditingText && !meta) {
@@ -112,10 +114,15 @@ export default function useKeyboardShortcuts(containerRef) {
       if (meta && !shift && key === 'z') { e.preventDefault(); undo(); return; }
       if (meta && shift  && key === 'z') { e.preventDefault(); redo(); return; }
 
-      // ── Delete ────────────────────────────────────────────────────────────
+      // ── Delete — if pixel selection exists, erase selected pixels ───────────
       if ((key === 'Delete' || key === 'Backspace') && !meta) {
         e.preventDefault();
-        deleteSelectedLayers();
+        const selMask = store.selectionMask;
+        if (selMask) {
+          window.dispatchEvent(new CustomEvent('tf:wand-erase', { detail: selMask }));
+        } else {
+          deleteSelectedLayers();
+        }
         return;
       }
 
@@ -131,7 +138,11 @@ export default function useKeyboardShortcuts(containerRef) {
       // ── Select All / Deselect ─────────────────────────────────────────────
       if (meta && !shift && key === 'a') { e.preventDefault(); selectAll(); return; }
       if (meta && shift  && key === 'a') { e.preventDefault(); clearSelection(); return; }
-      if (key === 'Escape') { clearSelection(); return; }
+      if (key === 'Escape') {
+        clearSelection();
+        store.clearPixelSelection?.();
+        return;
+      }
 
       // ── Layer ordering ────────────────────────────────────────────────────
       if (meta && !shift && key === ']') { e.preventDefault(); if (selectedLayerIds.length > 0) moveLayerUp(selectedLayerIds[0]); return; }

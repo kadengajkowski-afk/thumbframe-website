@@ -236,6 +236,18 @@ const useEditorStore = create(
       state.selectedLayerIds = [];
     }),
 
+    // ── Pixel selection (lasso / magic wand) ─────────────────────────────────
+    lassoPoints:   [],    // { x, y }[] in canvas coordinates, live while drawing
+    selectionMask: null,  // { layerId, mask: Uint8Array, width, height } | null
+
+    setLassoPoints:   (pts) => set((state) => { state.lassoPoints = pts; }),
+    setSelectionMask: (m)   => set((state) => { state.selectionMask = m; }),
+    clearPixelSelection: () => set((state) => {
+      state.lassoPoints   = [];
+      state.selectionMask = null;
+      window.dispatchEvent(new CustomEvent('tf:wand-clear'));
+    }),
+
     selectAll: () => set((state) => {
       state.selectedLayerIds = state.layers.map(l => l.id);
     }),

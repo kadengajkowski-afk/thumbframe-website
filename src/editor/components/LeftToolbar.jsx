@@ -64,6 +64,8 @@ const Icons = {
   Light:    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3" fillOpacity="0.3" fill="currentColor"/></svg>,
   Crop:     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>,
   Upload:   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+  Lasso:    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M7 11c0-3.31 2.69-6 6-6s6 2.69 6 6-2.69 6-6 6a5.97 5.97 0 0 1-3.08-.85"/><path d="M4 20c0-2.21 1.34-4 3-4 .88 0 1.67.43 2.22 1.1"/><path d="M3 17l1 3-1 1"/></svg>,
+  Wand:     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="m15 4-3 3 4 4 3-3-4-4z"/><path d="m3 21 9.5-9.5"/><path d="M17 2l1 1"/><path d="M21 6l1 1"/><path d="M22 2l-1 1"/><path d="M18 7l1-1"/></svg>,
 };
 
 const RETOUCH_LABELS = { dodge:'Dodge', burn:'Burn', sponge:'Sponge', blur_brush:'Blur', sharpen_brush:'Sharpen', smudge:'Smudge' };
@@ -98,8 +100,10 @@ export default function LeftToolbar({ onFileUpload, fileInputRef }) {
       fontFamily: 'Inter, -apple-system, sans-serif',
     }}>
 
-      <ToolBtn toolId="select"   activeTool={activeTool} setActiveTool={setActiveTool} title="Select (V)">{Icons.Select}</ToolBtn>
-      <ToolBtn toolId="hand"     activeTool={activeTool} setActiveTool={setActiveTool} title="Hand (H)">{Icons.Hand}</ToolBtn>
+      <ToolBtn toolId="select"     activeTool={activeTool} setActiveTool={setActiveTool} title="Select (V)">{Icons.Select}</ToolBtn>
+      <ToolBtn toolId="hand"       activeTool={activeTool} setActiveTool={setActiveTool} title="Hand (H)">{Icons.Hand}</ToolBtn>
+      <ToolBtn toolId="lasso"      activeTool={activeTool} setActiveTool={setActiveTool} title="Lasso (L)">{Icons.Lasso}</ToolBtn>
+      <ToolBtn toolId="magic_wand" activeTool={activeTool} setActiveTool={setActiveTool} title="Magic Wand (W)">{Icons.Wand}</ToolBtn>
 
       <Sep />
 
