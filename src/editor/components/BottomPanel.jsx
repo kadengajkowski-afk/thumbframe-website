@@ -7,7 +7,7 @@ import useEditorStore from '../engine/Store';
 import LayerRow from './LayerRow';
 import HistoryEntry from './HistoryEntry';
 
-const DEFAULT_HEIGHT = 200;
+const DEFAULT_HEIGHT = 160;
 const MIN_HEIGHT = 80;
 const MAX_HEIGHT = 400;
 
@@ -75,7 +75,10 @@ export default function BottomPanel() {
   return (
     <div style={{
       flexShrink: 0, height: panelHeight,
-      background: 'var(--bg-2)', borderTop: '1px solid var(--border-1)',
+      background: 'rgba(9,9,11,0.90)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      borderTop: '1px solid var(--border-1)',
       display: 'flex', flexDirection: 'column',
       transition: collapsed ? 'height var(--dur-normal) var(--ease-out)' : 'none',
       fontFamily: 'Inter, -apple-system, sans-serif',

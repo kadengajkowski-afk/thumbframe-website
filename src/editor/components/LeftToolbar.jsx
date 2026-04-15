@@ -26,7 +26,8 @@ function ToolBtn({ toolId, activeTool, setActiveTool, title, children, onClick }
           border: isActive ? '1px solid var(--accent-border)' : '1px solid transparent',
           borderRadius: 'var(--radius-lg)', cursor: 'pointer',
           color: isActive ? 'var(--accent)' : hov ? 'var(--text-2)' : 'var(--text-3)',
-          transition: 'background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast)',
+          boxShadow: isActive ? '0 0 12px rgba(249,115,22,0.20)' : 'none',
+          transition: 'background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast), box-shadow var(--dur-fast)',
           position: 'relative',
         }}
       >{children}</button>
@@ -86,7 +87,11 @@ export default function LeftToolbar({ onFileUpload, fileInputRef }) {
   return (
     <div style={{
       width: 52, minWidth: 52, flexShrink: 0, height: '100%',
-      background: 'var(--bg-2)', borderRight: '1px solid var(--border-1)',
+      background: 'rgba(9,9,11,0.90)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      borderRight: '1px solid var(--border-1)',
+      boxShadow: 'inset -1px 0 0 rgba(249,115,22,0.10)',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       padding: '8px 0', gap: 2,
       zIndex: 10,

@@ -8,6 +8,7 @@ import Renderer from './engine/Renderer';
 import useEditorStore from './engine/Store';
 import SelectionOverlay from './components/SelectionOverlay';
 import BrushCursor from './components/BrushCursor';
+import StarfieldBackground from './components/StarfieldBackground';
 import ToastManager from './components/ToastManager';
 import TopBar from './components/TopBar';
 import LeftToolbar from './components/LeftToolbar';
@@ -969,9 +970,20 @@ export default function NewEditor({ user, setPage }) {
     <div style={{
       position: 'fixed', inset: 0,
       display: 'flex', flexDirection: 'column',
-      background: 'var(--bg-1)', color: 'var(--text-1)',
+      background: 'var(--bg-0)', color: 'var(--text-1)',
       fontFamily: 'Inter, -apple-system, sans-serif',
     }}>
+      {/* ── Atmosphere — corner radial glows ───────────────────────────────── */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
+        <div style={{
+          position: 'absolute', top: 0, left: 0, width: 480, height: 480,
+          background: 'radial-gradient(circle at 0% 0%, rgba(249,115,22,0.04) 0%, transparent 70%)',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: 0, right: 0, width: 480, height: 480,
+          background: 'radial-gradient(circle at 100% 100%, rgba(99,102,241,0.04) 0%, transparent 70%)',
+        }} />
+      </div>
 
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <TopBar
@@ -1003,12 +1015,14 @@ export default function NewEditor({ user, setPage }) {
           style={{
             flex: 1, minWidth: 0, height: '100%', overflow: 'hidden',
             position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'var(--bg-1)', cursor: canvasCursor, touchAction: 'none',
+            background: 'var(--bg-0)', cursor: canvasCursor, touchAction: 'none',
             outline: isDragOver ? '2px solid var(--accent)' : 'none',
             outlineOffset: '-2px',
             transition: 'outline var(--dur-fast) var(--ease-out)',
           }}
         >
+          {/* Animated starfield behind the PixiJS canvas */}
+          <StarfieldBackground />
           <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
           <BrushCursor rendererRef={rendererRef} canvasRef={canvasRef} />
         </div>

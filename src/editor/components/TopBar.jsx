@@ -91,8 +91,11 @@ export default function TopBar({ user, setPage, onExport, onShare }) {
       height: 48, minHeight: 48, flexShrink: 0,
       display: 'flex', alignItems: 'center', gap: 4,
       padding: '0 12px',
-      background: 'var(--bg-2)',
+      background: 'rgba(17,17,19,0.90)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
       borderBottom: '1px solid var(--border-1)',
+      boxShadow: '0 1px 0 rgba(249,115,22,0.08)',
       zIndex: 20, userSelect: 'none',
       fontFamily: 'Inter, -apple-system, sans-serif',
     }}>

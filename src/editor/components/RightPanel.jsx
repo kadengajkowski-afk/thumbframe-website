@@ -46,7 +46,11 @@ export default function RightPanel({
   return (
     <div className="obs-scroll" style={{
       width: 260, minWidth: 260, flexShrink: 0, height: '100%',
-      background: 'var(--bg-2)', borderLeft: '1px solid var(--border-1)',
+      background: 'rgba(17,17,19,0.90)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      borderLeft: '1px solid var(--border-1)',
+      boxShadow: 'inset 1px 0 0 rgba(249,115,22,0.06)',
       overflowY: 'auto', overflowX: 'hidden',
       fontFamily: 'Inter, -apple-system, sans-serif',
     }}>
