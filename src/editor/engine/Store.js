@@ -26,7 +26,36 @@ const useEditorStore = create(
     interactionMode: 'idle',
 
     // ── Active tool ──
-    activeTool: 'select', // 'select' | 'move' | 'text' | 'shape' | 'brush' | 'hand' | 'zoom'
+    activeTool: 'select',
+    // Valid values: 'select'|'hand'|'zoom'|'text'|'shape'|'brush'|'eraser'|
+    // 'clone_stamp'|'healing_brush'|'spot_healing'|'dodge'|'burn'|'sponge'|
+    // 'blur_brush'|'sharpen_brush'|'smudge'|'rim_light'|'light_painting'|
+    // 'crop'|'eyedropper'
+
+    // ── Painting tool parameters ──────────────────────────────────────────────
+    toolParams: {
+      brush:         { size:20, hardness:80, opacity:100, flow:100, spacing:25, blendMode:'normal', color:'#ffffff', roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      eraser:        { size:30, hardness:80, opacity:100, flow:100, spacing:25, eraserMode:'normal', tolerance:30, roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      clone_stamp:   { size:30, hardness:80, opacity:100, flow:100, spacing:25, aligned:true, blendMode:'normal', roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      healing_brush: { size:30, hardness:60, opacity:100, flow:100, spacing:25, healMode:'content_aware', roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      spot_healing:  { size:30, hardness:60, opacity:100, flow:100, spacing:25, healMode:'content_aware', roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      dodge:         { size:30, hardness:50, opacity:100, flow:50, spacing:25, range:'midtones', exposure:50, roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      burn:          { size:30, hardness:50, opacity:100, flow:50, spacing:25, range:'midtones', exposure:50, roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      sponge:        { size:30, hardness:50, opacity:100, flow:50, spacing:25, spongeMode:'saturate', roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      blur_brush:    { size:30, hardness:50, opacity:100, flow:60, spacing:25, strength:50, roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      sharpen_brush: { size:30, hardness:50, opacity:100, flow:60, spacing:25, strength:50, roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      smudge:        { size:30, hardness:50, opacity:100, flow:80, spacing:10, strength:70, fingerPaint:false, roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
+      light_painting:{ size:30, hardness:0,  opacity:100, flow:80, spacing:10, color:'#ffffff', intensity:100, brushType:'glow', sparklePoints:6, dynamicSize:false, dynamicOpacity:false },
+    },
+
+    // ── Clone source point (set by Alt+click with clone_stamp) ────────────────
+    cloneSourcePoint: null,   // { x, y } in canvas coordinates | null
+
+    // ── Live cursor canvas position (updated on every pointermove) ────────────
+    cursorCanvasPos: null,    // { x, y } in canvas coordinates | null
+
+    // ── Retouch sub-tool cycling ──────────────────────────────────────────────
+    retouchMode: 'dodge',     // cycles: dodge→burn→sponge→blur_brush→sharpen_brush→smudge
 
     // ── Text editing ──
     isEditingText:  false,
@@ -283,6 +312,29 @@ const useEditorStore = create(
 
     setActiveTool: (tool) => set((state) => {
       state.activeTool = tool;
+    }),
+
+    // ── Painting tool param actions ───────────────────────────────────────────
+
+    updateToolParam: (tool, key, value) => set((state) => {
+      if (!state.toolParams[tool]) state.toolParams[tool] = {};
+      state.toolParams[tool][key] = value;
+    }),
+
+    setCloneSourcePoint: (point) => set((state) => {
+      state.cloneSourcePoint = point;
+    }),
+
+    setCursorCanvasPos: (pos) => set((state) => {
+      state.cursorCanvasPos = pos;
+    }),
+
+    cycleRetouchTool: () => set((state) => {
+      const order = ['dodge','burn','sponge','blur_brush','sharpen_brush','smudge'];
+      const idx   = order.indexOf(state.retouchMode);
+      const next  = order[(idx + 1) % order.length];
+      state.retouchMode = next;
+      state.activeTool  = next;
     }),
 
     // ── Text editing actions ──────────────────────────────────────────────────

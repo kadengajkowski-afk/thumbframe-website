@@ -7,12 +7,22 @@ import { Texture, ImageSource } from 'pixi.js';
 import Renderer from './engine/Renderer';
 import useEditorStore from './engine/Store';
 import SelectionOverlay from './components/SelectionOverlay';
+import BrushCursor from './components/BrushCursor';
+import BrushSettingsPanel from './panels/BrushSettingsPanel';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import { hitTestLayers, computeMove } from './tools/SelectTool';
 import { computeGuides } from './engine/SmartGuides';
 import { processImageFile } from './utils/imageUpload';
 import { renderTextToCanvas, loadFont, DEFAULT_TEXT_DATA } from './utils/textRenderer';
 import { COLOR_GRADES, FREE_GRADES, GRADE_LABELS } from './presets/colorGrades';
+import { BrushPipeline } from './tools/BrushPipeline';
+import { BrushTool } from './tools/BrushTool';
+import { EraserTool } from './tools/EraserTool';
+import { CloneStampTool } from './tools/CloneStampTool';
+import { HealingBrushTool } from './tools/HealingBrushTool';
+import { DodgeTool, BurnTool, SpongeTool } from './tools/TonalTools';
+import { BlurBrushTool, SharpenBrushTool, SmudgeTool } from './tools/FilterBrushTools';
+import { LightPaintingTool } from './tools/LightPaintingTool';
 // Side-effect imports: register window singletons
 import './engine/FilterScaler';
 import './engine/TextureMemoryManager';
@@ -33,6 +43,29 @@ export default function NewEditor({ user, setPage }) {
   const fileInputRef  = useRef(null);
   const editableRef   = useRef(null);  // contenteditable DOM node
   const isEscapingRef = useRef(false); // flag: Escape pressed in contenteditable
+
+  // ── Painting tool refs ───────────────────────────────────────────────────
+  const pipelineRef      = useRef(new BrushPipeline());
+  const paintCanvasesRef = useRef(new Map()); // layerId → HTMLCanvasElement
+  const preStrokeDataRef = useRef(new Map()); // layerId → ImageData (pre-stroke snapshot)
+  const isStrokingRef    = useRef(false);
+  const strokeLayerRef   = useRef(null);      // layerId being painted
+
+  // Tool instances (singletons, created once)
+  const toolsRef = useRef({
+    brush:         new BrushTool(),
+    eraser:        new EraserTool(),
+    clone_stamp:   new CloneStampTool(),
+    healing_brush: new HealingBrushTool(),
+    spot_healing:  new HealingBrushTool(),
+    dodge:         new DodgeTool(),
+    burn:          new BurnTool(),
+    sponge:        new SpongeTool(),
+    blur_brush:    new BlurBrushTool(),
+    sharpen_brush: new SharpenBrushTool(),
+    smudge:        new SmudgeTool(),
+    light_painting: new LightPaintingTool(),
+  });
 
   // ── Store subscriptions ──────────────────────────────────────────────────
   const layers           = useEditorStore(s => s.layers);
@@ -58,6 +91,9 @@ export default function NewEditor({ user, setPage }) {
   const setEditingText       = useEditorStore(s => s.setEditingText);
   const revertText           = useEditorStore(s => s.revertText);
   const exitEditMode         = useEditorStore(s => s.exitEditMode);
+  const setCursorCanvasPos   = useEditorStore(s => s.setCursorCanvasPos);
+  const setCloneSourcePoint  = useEditorStore(s => s.setCloneSourcePoint);
+  const toolParams           = useEditorStore(s => s.toolParams);
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
   useKeyboardShortcuts(containerRef);
@@ -218,6 +254,86 @@ export default function NewEditor({ user, setPage }) {
     });
   }, [setEditingText]);
 
+  // ── Painting helpers ─────────────────────────────────────────────────────
+  const PAINT_TOOLS = new Set([
+    'brush','eraser','clone_stamp','healing_brush','spot_healing',
+    'dodge','burn','sponge','blur_brush','sharpen_brush','smudge','light_painting',
+  ]);
+
+  /** Convert screen event to canvas coordinates */
+  const screenToCanvas = useCallback((e) => {
+    const canvasEl = canvasRef.current;
+    if (!canvasEl) return null;
+    const rect  = canvasEl.getBoundingClientRect();
+    const vp    = rendererRef.current?.viewport;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    return {
+      x: (screenX - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1),
+      y: (screenY - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1),
+    };
+  }, []);
+
+  /** Get or create paint canvas for a layer */
+  const getPaintCanvas = useCallback((layer) => {
+    if (paintCanvasesRef.current.has(layer.id)) {
+      return paintCanvasesRef.current.get(layer.id);
+    }
+    const pc  = document.createElement('canvas');
+    pc.width  = layer.width  || 640;
+    pc.height = layer.height || 360;
+    paintCanvasesRef.current.set(layer.id, pc);
+    return pc;
+  }, []);
+
+  /** Upload current paint canvas to PixiJS as a live preview sprite */
+  const uploadPaintCanvas = useCallback((layerId, paintCanvas) => {
+    rendererRef.current?.updateLayerPaintTexture(layerId, paintCanvas);
+  }, []);
+
+  /** Commit the current paint canvas into the layer's base texture and clear the paint sprite */
+  const commitPaintToLayer = useCallback((layerId) => {
+    const layer = useEditorStore.getState().layers.find(l => l.id === layerId);
+    if (!layer?.texture) return;
+    const paintCanvas = paintCanvasesRef.current.get(layerId);
+    if (!paintCanvas) return;
+
+    // Draw paint onto a copy of the base image
+    const merged    = document.createElement('canvas');
+    merged.width    = layer.width;
+    merged.height   = layer.height;
+    const mergedCtx = merged.getContext('2d');
+
+    // Draw base image texture via PixiJS canvas
+    const renderer = rendererRef.current;
+    if (renderer?.app?.canvas) {
+      // Snapshot just this layer by temporarily hiding everything else and rendering
+      // Simpler: draw the stored OffscreenCanvas source directly
+      const tex = layer.texture;
+      if (tex?.source?.resource) {
+        mergedCtx.drawImage(tex.source.resource, 0, 0, merged.width, merged.height);
+      }
+    }
+    // Composite paint on top
+    mergedCtx.drawImage(paintCanvas, 0, 0);
+
+    // Create new PixiJS texture from merged canvas
+    const src     = new ImageSource({ resource: merged });
+    const texture = new Texture({ source: src });
+    if (window.__renderer) {
+      window.__renderer.textureCache.set(layerId, texture);
+    }
+    updateLayer(layerId, { texture });
+
+    // Clear paint canvas and remove paint sprite
+    const pc  = paintCanvasesRef.current.get(layerId);
+    if (pc) {
+      const pCtx = pc.getContext('2d');
+      pCtx.clearRect(0, 0, pc.width, pc.height);
+    }
+    rendererRef.current?.removePaintSprite(layerId);
+  }, [updateLayer]);
+
   // ── Init renderer on mount ───────────────────────────────────────────────
   useEffect(() => {
     const el = containerRef.current;
@@ -284,13 +400,58 @@ export default function NewEditor({ user, setPage }) {
     }
   }, [zoom, panX, panY]);
 
-  // ── Global pointermove / up for MOVE drag ────────────────────────────────
+  // ── Global pointermove / up for MOVE drag + painting ────────────────────
   useEffect(() => {
+    let lastPaintFrame = 0;
+
     const onMove = (e) => {
+      const state   = useEditorStore.getState();
+      const tool    = state.activeTool;
+      const canvasEl = canvasRef.current;
+
+      // ── Cursor position update (always for paint tools) ──────────────────
+      if (PAINT_TOOLS.has(tool) && canvasEl) {
+        const canvasRect = canvasEl.getBoundingClientRect();
+        const vp = rendererRef.current?.viewport;
+        const screenX = e.clientX - canvasRect.left;
+        const screenY = e.clientY - canvasRect.top;
+        const worldX  = (screenX - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
+        const worldY  = (screenY - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
+        setCursorCanvasPos({ x: worldX, y: worldY });
+      }
+
+      // ── Painting stroke continuation ─────────────────────────────────────
+      if (isStrokingRef.current && strokeLayerRef.current && PAINT_TOOLS.has(tool)) {
+        const now = performance.now();
+        if (now - lastPaintFrame < 16) return; // throttle to ~60fps
+        lastPaintFrame = now;
+
+        const layerId     = strokeLayerRef.current;
+        const ls          = state.layers;
+        const targetLayer = ls.find(l => l.id === layerId);
+        if (!targetLayer) return;
+
+        const canvasRect = canvasEl?.getBoundingClientRect();
+        if (!canvasRect) return;
+        const vp       = rendererRef.current?.viewport;
+        const screenX  = e.clientX - canvasRect.left;
+        const screenY  = e.clientY - canvasRect.top;
+        const worldX   = (screenX - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
+        const worldY   = (screenY - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
+        const localX   = worldX - (targetLayer.x - targetLayer.width  / 2);
+        const localY   = worldY - (targetLayer.y - targetLayer.height / 2);
+
+        const pc     = paintCanvasesRef.current.get(layerId);
+        if (!pc) return;
+        const params = state.toolParams[tool] || {};
+        pipelineRef.current.continueStroke({ x: localX, y: localY }, params);
+        uploadPaintCanvas(layerId, pc);
+        return;
+      }
+
+      // ── Layer move drag ──────────────────────────────────────────────────
       const drag = moveRef.current;
       if (!drag) return;
-
-      const canvasEl = canvasRef.current;
       if (!canvasEl) return;
       const canvasRect = canvasEl.getBoundingClientRect();
       const screenX = e.clientX - canvasRect.left;
@@ -303,7 +464,6 @@ export default function NewEditor({ user, setPage }) {
         drag.startLX, drag.startLY, drag.startWX, drag.startWY, worldX, worldY
       );
 
-      const state = useEditorStore.getState();
       const draggingLayer = state.layers.find(l => l.id === drag.layerId);
       if (draggingLayer) {
         const provisional = { ...draggingLayer, x: newX, y: newY };
@@ -315,24 +475,60 @@ export default function NewEditor({ user, setPage }) {
       }
     };
 
-    const onUp = () => {
+    const onUp = (e) => {
+      const state = useEditorStore.getState();
+      const tool  = state.activeTool;
+
+      // ── End painting stroke ──────────────────────────────────────────────
+      if (isStrokingRef.current && strokeLayerRef.current) {
+        const layerId     = strokeLayerRef.current;
+        const targetLayer = state.layers.find(l => l.id === layerId);
+
+        if (targetLayer) {
+          const pc = paintCanvasesRef.current.get(layerId);
+          if (pc) {
+            const params = state.toolParams[tool] || {};
+            pipelineRef.current.endStroke(pc, params);
+          }
+          commitPaintToLayer(layerId);
+
+          // Build one history entry for the whole stroke
+          const preData = preStrokeDataRef.current.get(layerId);
+          if (preData) {
+            const toolLabel = tool.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            commitChange(`${toolLabel} on '${targetLayer.name}'`);
+            preStrokeDataRef.current.delete(layerId);
+          }
+        }
+
+        isStrokingRef.current  = false;
+        strokeLayerRef.current = null;
+        return;
+      }
+
+      // ── End layer move drag ──────────────────────────────────────────────
       const drag = moveRef.current;
       if (!drag) return;
       moveRef.current = null;
       setActiveGuides([]);
       setInteractionMode('idle');
-      const state = useEditorStore.getState();
       const layer = state.layers.find(l => l.id === drag.layerId);
       commitChange(`Move '${layer?.name || drag.layerName}'`);
     };
 
+    const onLeave = () => {
+      setCursorCanvasPos(null);
+    };
+
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup',   onUp);
+    window.addEventListener('pointerleave', onLeave);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup',   onUp);
+      window.removeEventListener('pointerleave', onLeave);
     };
-  }, [updateLayer, commitChange, setInteractionMode]);
+  }, [updateLayer, commitChange, setInteractionMode, uploadPaintCanvas, commitPaintToLayer, setCursorCanvasPos]);
 
   // ── Canvas pointer down — selection + move + text tool ───────────────────
   const handlePointerDown = useCallback((e) => {
@@ -365,6 +561,53 @@ export default function NewEditor({ user, setPage }) {
       console.log('[NewEditor] Canvas clicked, activeTool:', tool, 'at canvas coords:', canvasX.toFixed(1), canvasY.toFixed(1));
       createTextLayer(canvasX, canvasY);
       return; // critical — must not fall through to hit testing / select logic
+    }
+
+    // ── Painting tools ───────────────────────────────────────────────────────
+    if (PAINT_TOOLS.has(tool)) {
+      // Alt+click with clone stamp: set source point
+      if (tool === 'clone_stamp' && e.altKey) {
+        const sourcePt = { x: canvasX, y: canvasY };
+        setCloneSourcePoint(sourcePt);
+        // Find topmost visible image layer under cursor and set clone source
+        const targetLayer = [...ls].reverse().find(l =>
+          l.visible !== false && l.type === 'image' &&
+          canvasX >= l.x - l.width / 2 && canvasX <= l.x + l.width / 2 &&
+          canvasY >= l.y - l.height / 2 && canvasY <= l.y + l.height / 2
+        );
+        if (targetLayer) {
+          const pc = getPaintCanvas(targetLayer);
+          toolsRef.current.clone_stamp?.setSource?.(canvasX, canvasY, pc);
+        }
+        return;
+      }
+
+      // Find topmost visible image layer under cursor
+      const targetLayer = [...ls].reverse().find(l =>
+        l.visible !== false && l.type === 'image' &&
+        canvasX >= l.x - l.width / 2 && canvasX <= l.x + l.width / 2 &&
+        canvasY >= l.y - l.height / 2 && canvasY <= l.y + l.height / 2
+      );
+      if (!targetLayer || targetLayer.locked) return;
+
+      isStrokingRef.current  = true;
+      strokeLayerRef.current = targetLayer.id;
+
+      // Snapshot pre-stroke state for undo
+      const pc = getPaintCanvas(targetLayer);
+      const pCtx = pc.getContext('2d');
+      preStrokeDataRef.current.set(targetLayer.id, pCtx.getImageData(0, 0, pc.width, pc.height));
+
+      // Convert canvas world coords to layer-local coords
+      const localX = canvasX - (targetLayer.x - targetLayer.width / 2);
+      const localY = canvasY - (targetLayer.y - targetLayer.height / 2);
+      const point  = { x: localX, y: localY };
+
+      const activePipelineTool = toolsRef.current[tool];
+      const params = useEditorStore.getState().toolParams[tool] || {};
+      pipelineRef.current.startStroke(pc, point, params, activePipelineTool);
+      uploadPaintCanvas(targetLayer.id, pc);
+      return;
     }
 
     // Re-use canvasX/Y for select/move tool too (same formula, consistent)
@@ -683,7 +926,8 @@ export default function NewEditor({ user, setPage }) {
   const canRedo = historyIndex < historyLen - 1;
 
   // ── Canvas cursor ─────────────────────────────────────────────────────────
-  const canvasCursor = activeTool === 'text' ? 'text' : 'default';
+  const isPaintTool  = PAINT_TOOLS.has(activeTool);
+  const canvasCursor = isPaintTool ? 'none' : activeTool === 'text' ? 'text' : 'default';
 
   return (
     <div style={{
@@ -753,6 +997,73 @@ export default function NewEditor({ user, setPage }) {
             </svg>
           </button>
 
+          {/* Brush */}
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setActiveTool('brush')}
+            title="Brush (B)"
+            style={toolbarIconBtnStyle(activeTool === 'brush')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 17c3.6-3.6 5.4-5.4 9-5.4s5.4 1.8 5.4 5.4c0 2-1.2 3-3 3-2.4 0-3-1.5-3-3"/>
+              <path d="M9.5 6.5L17 3l1 8-3 3"/>
+            </svg>
+          </button>
+
+          {/* Eraser */}
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setActiveTool('eraser')}
+            title="Eraser (E)"
+            style={toolbarIconBtnStyle(activeTool === 'eraser')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 20H7L3 16l10-10 7 7-3 3"/>
+              <path d="M6.5 17.5l4-4"/>
+            </svg>
+          </button>
+
+          {/* Clone stamp */}
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setActiveTool('clone_stamp')}
+            title="Clone Stamp (S)"
+            style={toolbarIconBtnStyle(activeTool === 'clone_stamp')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+          </button>
+
+          {/* Retouch cycle (dodge/burn/sponge/blur/sharpen/smudge) */}
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => useEditorStore.getState().cycleRetouchTool()}
+            title="Retouch Tools (R) — Dodge / Burn / Sponge / Blur / Sharpen / Smudge"
+            style={toolbarIconBtnStyle(['dodge','burn','sponge','blur_brush','sharpen_brush','smudge'].includes(activeTool))}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 2v3m0 14v3M2 12h3m14 0h3m-3.3-6.7-2.1 2.1M7.4 16.6l-2.1 2.1M16.6 16.6l2.1 2.1M7.4 7.4 5.3 5.3"/>
+            </svg>
+          </button>
+
+          {/* Light painting */}
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setActiveTool('light_painting')}
+            title="Light Painting"
+            style={toolbarIconBtnStyle(activeTool === 'light_painting')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+              <circle cx="12" cy="12" r="3" fill="currentColor" fillOpacity="0.3"/>
+            </svg>
+          </button>
+
+          <div style={{ width: '70%', height: 1, background: 'rgba(255,255,255,0.08)', margin: '4px 0' }} />
+
           {/* Upload image */}
           <button
             onPointerDown={(e) => e.stopPropagation()}
@@ -789,6 +1100,7 @@ export default function NewEditor({ user, setPage }) {
           }}
         >
           <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
+          <BrushCursor rendererRef={rendererRef} canvasRef={canvasRef} />
         </div>
 
         {/* ── Right panel ─────────────────────────────────────────────── */}
@@ -797,7 +1109,9 @@ export default function NewEditor({ user, setPage }) {
           background: '#111113', borderLeft: '1px solid rgba(255,255,255,0.06)',
           overflowY: 'auto',
         }}>
-          {selectedTextLayer ? (
+          {isPaintTool ? (
+            <BrushSettingsPanel />
+          ) : selectedTextLayer ? (
             <TextPanel
               layer={selectedTextLayer}
               onFontChange={handleFontChange}
@@ -841,6 +1155,7 @@ export default function NewEditor({ user, setPage }) {
         <Sep />
         <span>1280 × 720</span>
         {activeTool === 'text' && <><Sep /><span style={{ color: '#f97316' }}>Text tool — click to add</span></>}
+        {isPaintTool && <><Sep /><span style={{ color: '#f97316' }}>{activeTool.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())} — paint on an image layer</span></>}
       </div>
 
       {/* ── Toast ───────────────────────────────────────────────────────── */}

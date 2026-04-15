@@ -33,6 +33,8 @@ export default class Renderer {
     // so the texture is available on the very first sync after upload.
     this.textureCache = new Map();     // layerId → PIXI.Texture
     this.adjustmentFilters = new Map();// layerId → AdjustmentFilter
+    this.paintSprites   = new Map();   // layerId → Sprite (paint canvas overlay)
+    this.paintTextures  = new Map();   // layerId → Texture (paint canvas GPU texture)
 
     this._mounted = false;
   }
@@ -106,6 +108,13 @@ export default class Renderer {
       if (f && typeof f.destroy === 'function') f.destroy();
     });
     this.adjustmentFilters.clear();
+    this.paintSprites.forEach((s) => {
+      if (s?.parent) s.parent.removeChild(s);
+      s?.destroy?.({ children: true });
+    });
+    this.paintSprites.clear();
+    this.paintTextures.forEach((t) => t?.destroy?.(true));
+    this.paintTextures.clear();
     this.app.destroy(true, { children: true });
     this.app = null;
     this._mounted = false;
@@ -302,35 +311,45 @@ export default class Renderer {
   }
 
   _createImageObject(layer) {
-    // Pull from textureCache first — covers undo/redo where layer.texture was
-    // stripped by JSON.stringify in _pushHistory.
-    const texture = this.textureCache.get(layer.id) || layer.texture;
-
-    // NEVER pass a null/invalid texture to Sprite — PixiJS v8 batcher will
-    // crash with "Cannot read properties of null (reading 'alphaMode')".
-    // Use a Graphics placeholder for loading states and any invalid texture.
-    if (layer.loading || !texture || !texture.valid) {
+    // Show placeholder while loading OR while texture isn't ready yet.
+    // The upload pipeline guarantees texture.valid === true before setting
+    // layer.texture, so this branch covers only genuine loading states and
+    // the edge case of undo restoring a layer whose texture was stripped
+    // from the history snapshot.
+    if (layer.loading || !layer.texture) {
       const g = new Graphics();
       g.rect(0, 0, layer.width || 200, layer.height || 150)
         .fill({ color: 0xffffff, alpha: 0.08 });
       return g;
     }
 
-    // Texture is valid — register with memory manager and cache by layerId.
+    // Texture was created and validated in imageUpload.js — use it directly.
+    // No Texture.from(), no async loading, no .on() calls here.
     const tw = layer.imageData?.textureWidth  || layer.width;
     const th = layer.imageData?.textureHeight || layer.height;
-    window.__textureMemoryManager?.register(layer.id, texture, tw, th);
-    this.textureCache.set(layer.id, texture);
+    window.__textureMemoryManager?.register(layer.id, layer.texture, tw, th);
 
-    const sprite = new Sprite(texture);
+    // Cache texture by layerId so undo/redo can recover it (textureCache is never evicted).
+    this.textureCache.set(layer.id, layer.texture);
+
+    const sprite = new Sprite(layer.texture);
     // anchor(0, 0) = top-left origin. sync() compensates by positioning at
     // (layer.x - width/2, layer.y - height/2) so layer.x/y remain the visual center.
     sprite.anchor.set(0, 0);
     sprite._tfAnchorMode = true;
-    sprite.width    = layer.width  || 640;
-    sprite.height   = layer.height || 360;
-    sprite.alpha    = layer.opacity ?? 1;
+    sprite.width   = layer.width  || 640;
+    sprite.height  = layer.height || 360;
+    sprite.alpha   = layer.opacity ?? 1;  // opacity is 0–1 in the schema
     sprite.isSprite = true;
+    console.log('[Renderer] _createImageObject', {
+      loading: layer.loading,
+      hasTexture: !!layer.texture,
+      textureValid: layer.texture?.valid,
+      width: sprite.width,
+      height: sprite.height,
+      alpha: sprite.alpha,
+      x: layer.x, y: layer.y,
+    });
     return sprite;
   }
 
@@ -351,15 +370,6 @@ export default class Renderer {
     const { canvas, displayWidth, displayHeight } = renderTextToCanvas(td);
     const source  = new ImageSource({ resource: canvas });
     const texture = new Texture({ source });
-
-    // Guard: ImageSource construction can yield an invalid texture if the
-    // canvas has zero dimensions or the GPU context was lost.
-    if (!texture || !texture.valid) {
-      const g = new Graphics();
-      g.rect(0, 0, Math.max(layer.width, 200), Math.max(layer.height, 60))
-       .fill({ color: 0xffffff, alpha: 0.08 });
-      return g;
-    }
 
     const sprite = new Sprite(texture);
     // anchor(0,0) + _tfAnchorMode: sync() will position at (layer.x - w/2, layer.y - h/2)
@@ -410,6 +420,78 @@ export default class Renderer {
   }
 
   // (removed: _updateDisplayObject merged into sync() above)
+
+  // ── Paint canvas compositing ──────────────────────────────────────────────
+  // Called by NewEditor on every stroke stamp and on endStroke.
+  // Creates / updates a Sprite that sits on top of the image sprite.
+  updateLayerPaintTexture(layerId, paintCanvas) {
+    if (!this._mounted || !paintCanvas) return;
+
+    // Build / update the GPU texture from the canvas
+    let tex = this.paintTextures.get(layerId);
+    if (tex) {
+      // Update existing texture source in-place
+      tex.source.resource = paintCanvas;
+      tex.source.update();
+    } else {
+      const source = new ImageSource({ resource: paintCanvas });
+      tex = new Texture({ source });
+      this.paintTextures.set(layerId, tex);
+    }
+
+    // Get the matching image sprite so we can co-locate the paint sprite
+    const imgObj = this.displayObjects.get(layerId);
+    if (!imgObj) return;
+
+    let paintSprite = this.paintSprites.get(layerId);
+    if (!paintSprite) {
+      paintSprite = new Sprite(tex);
+      paintSprite.anchor.set(0, 0);
+      paintSprite._tfAnchorMode = true;
+      paintSprite.isSprite      = true;
+      this.paintSprites.set(layerId, paintSprite);
+      this.layerContainer.addChild(paintSprite);
+    } else {
+      paintSprite.texture = tex;
+    }
+
+    // Mirror the image sprite's transform exactly
+    paintSprite.x        = imgObj.x;
+    paintSprite.y        = imgObj.y;
+    paintSprite.width    = imgObj.width;
+    paintSprite.height   = imgObj.height;
+    paintSprite.rotation = imgObj.rotation;
+    paintSprite.scale.set(imgObj.scale.x, imgObj.scale.y);
+    paintSprite.alpha    = 1;
+    paintSprite.visible  = imgObj.visible;
+
+    // Ensure paint sprite is directly after its image sprite in z-order
+    const imgIdx = this.layerContainer.getChildIndex(imgObj);
+    if (imgIdx >= 0) {
+      const paintIdx = this.layerContainer.getChildIndex(paintSprite);
+      const targetIdx = Math.min(imgIdx + 1, this.layerContainer.children.length - 1);
+      if (paintIdx !== targetIdx) {
+        this.layerContainer.setChildIndex(paintSprite, targetIdx);
+      }
+    }
+
+    this._forceRender();
+  }
+
+  // Remove paint sprite when layer is deleted or stroke is committed to base texture
+  removePaintSprite(layerId) {
+    const s = this.paintSprites.get(layerId);
+    if (s) {
+      if (s.parent) s.parent.removeChild(s);
+      s.destroy({ children: true });
+      this.paintSprites.delete(layerId);
+    }
+    const t = this.paintTextures.get(layerId);
+    if (t) {
+      t.destroy(true);
+      this.paintTextures.delete(layerId);
+    }
+  }
 
   // ── Hit test: which layer is at screen position (x, y)? ──────────────────
   hitTest(screenX, screenY) {
