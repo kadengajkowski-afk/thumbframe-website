@@ -333,12 +333,20 @@ export default function NewEditor({ user, setPage }) {
 
   /** Commit the current paint canvas as the layer's new base texture.
    *  The paint canvas already holds the full image (base + all strokes) so we
-   *  use it directly rather than merging again. */
+   *  use it directly rather than merging again.
+   *
+   *  Texture creation MUST use the same OffscreenCanvas → ImageSource → Texture
+   *  pattern as imageUpload.js.  HTMLCanvasElement passed directly to ImageSource
+   *  can produce a source with alphaMode: null, crashing the PixiJS v8 batcher. */
   const commitPaintToLayer = useCallback((layerId) => {
     const paintCanvas = paintCanvasesRef.current.get(layerId);
-    if (!paintCanvas) return;
+    if (!paintCanvas || paintCanvas.width === 0 || paintCanvas.height === 0) return;
 
-    const src     = new ImageSource({ resource: paintCanvas });
+    // Copy HTMLCanvasElement → OffscreenCanvas (identical to imageUpload.js flow)
+    const oc  = new OffscreenCanvas(paintCanvas.width, paintCanvas.height);
+    oc.getContext('2d').drawImage(paintCanvas, 0, 0);
+
+    const src     = new ImageSource({ resource: oc });
     const texture = new Texture({ source: src });
 
     // Update textureCache AND record in paintHistory so undo can recover the

@@ -426,25 +426,43 @@ export default class Renderer {
   // ── Paint canvas compositing ──────────────────────────────────────────────
   // Called by NewEditor on every stroke stamp and on endStroke.
   // Creates / updates a Sprite that sits on top of the image sprite.
+  //
+  // TEXTURE CREATION RULE — must match imageUpload.js exactly:
+  //   OffscreenCanvas → new ImageSource({ resource: oc }) → new Texture({ source })
+  //
+  // Do NOT use Texture.from(canvas) — it can return an uninitialized texture
+  // whose source has alphaMode: null, crashing the PixiJS v8 batcher.
+  // Do NOT mutate source.resource in-place — alphaMode is set at construction
+  // and is not re-derived when the resource is swapped after creation.
+  // Always destroy the old paint texture before creating the new one.
   updateLayerPaintTexture(layerId, paintCanvas) {
     if (!this._mounted || !paintCanvas) return;
+    if (paintCanvas.width === 0 || paintCanvas.height === 0) return;
 
-    // Build / update the GPU texture from the canvas
-    let tex = this.paintTextures.get(layerId);
-    if (tex) {
-      // Update existing texture source in-place
-      tex.source.resource = paintCanvas;
-      tex.source.update();
-    } else {
-      const source = new ImageSource({ resource: paintCanvas });
-      tex = new Texture({ source });
-      this.paintTextures.set(layerId, tex);
+    // ── Step 1: Copy into a fresh OffscreenCanvas (same pattern as imageUpload.js)
+    // This ensures PixiJS v8 initialises alphaMode correctly at source construction.
+    // HTMLCanvasElement can produce an uninitialised ImageSource; OffscreenCanvas does not.
+    const oc  = new OffscreenCanvas(paintCanvas.width, paintCanvas.height);
+    const ctx = oc.getContext('2d');
+    ctx.drawImage(paintCanvas, 0, 0);
+
+    // ── Step 2: Destroy old paint texture for this layer before allocating new one
+    const oldTex = this.paintTextures.get(layerId);
+    if (oldTex) {
+      oldTex.destroy(true);
+      this.paintTextures.delete(layerId);
     }
 
-    // Get the matching image sprite so we can co-locate the paint sprite
+    // ── Step 3: Create texture — identical to imageUpload.js
+    const source = new ImageSource({ resource: oc });
+    const tex    = new Texture({ source });
+    this.paintTextures.set(layerId, tex);
+
+    // ── Step 4: Get the base image sprite so we can co-locate the paint sprite
     const imgObj = this.displayObjects.get(layerId);
     if (!imgObj) return;
 
+    // ── Step 5: Create or update the paint sprite
     let paintSprite = this.paintSprites.get(layerId);
     if (!paintSprite) {
       paintSprite = new Sprite(tex);
@@ -457,20 +475,20 @@ export default class Renderer {
       paintSprite.texture = tex;
     }
 
-    // Mirror the image sprite's transform exactly
+    // ── Step 6: Mirror the base sprite's transform exactly
+    // imgObj uses anchor(0,0) + _tfAnchorMode, so imgObj.x/y = layer top-left.
     paintSprite.x        = imgObj.x;
     paintSprite.y        = imgObj.y;
     paintSprite.width    = imgObj.width;
     paintSprite.height   = imgObj.height;
     paintSprite.rotation = imgObj.rotation;
-    paintSprite.scale.set(imgObj.scale.x, imgObj.scale.y);
     paintSprite.alpha    = 1;
     paintSprite.visible  = imgObj.visible;
 
-    // Ensure paint sprite is directly after its image sprite in z-order
+    // ── Step 7: Ensure paint sprite sits directly above its image sprite in z-order
     const imgIdx = this.layerContainer.getChildIndex(imgObj);
     if (imgIdx >= 0) {
-      const paintIdx = this.layerContainer.getChildIndex(paintSprite);
+      const paintIdx  = this.layerContainer.getChildIndex(paintSprite);
       const targetIdx = Math.min(imgIdx + 1, this.layerContainer.children.length - 1);
       if (paintIdx !== targetIdx) {
         this.layerContainer.setChildIndex(paintSprite, targetIdx);
