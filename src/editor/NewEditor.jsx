@@ -24,6 +24,9 @@ import { renderTextToCanvas, loadFont, DEFAULT_TEXT_DATA } from './utils/textRen
 import { GRADE_LABELS } from './presets/colorGrades';
 import ThumbFriendChat     from './ai/ThumbFriendChat';
 import TemplateBrowser    from './components/TemplateBrowser';
+import AIGeneratePanel    from './ai/AIGeneratePanel';
+import BackgroundRemover  from './components/BackgroundRemover';
+import AssetLibraryPanel  from './components/AssetLibraryPanel';
 import StampTestPreview   from './components/StampTestPreview';
 import FeedSimulator      from './components/FeedSimulator';
 import ExportDialog       from './components/ExportDialog';
@@ -87,8 +90,14 @@ export default function NewEditor({ user, setPage }) {
   const layoutGuide      = useEditorStore(s => s.layoutGuide);
   const showFeedSimulator      = useEditorStore(s => s.showFeedSimulator);
   const setShowFeedSimulator   = useEditorStore(s => s.setShowFeedSimulator);
-  const showTemplateBrowser    = useEditorStore(s => s.showTemplateBrowser);
-  const setShowTemplateBrowser = useEditorStore(s => s.setShowTemplateBrowser);
+  const showTemplateBrowser      = useEditorStore(s => s.showTemplateBrowser);
+  const setShowTemplateBrowser   = useEditorStore(s => s.setShowTemplateBrowser);
+  const showAIGeneratePanel      = useEditorStore(s => s.showAIGeneratePanel);
+  const setShowAIGeneratePanel   = useEditorStore(s => s.setShowAIGeneratePanel);
+  const showBackgroundRemover    = useEditorStore(s => s.showBackgroundRemover);
+  const setShowBackgroundRemover = useEditorStore(s => s.setShowBackgroundRemover);
+  const showAssetLibrary         = useEditorStore(s => s.showAssetLibrary);
+  const setShowAssetLibrary      = useEditorStore(s => s.setShowAssetLibrary);
 
   // ── Store actions ────────────────────────────────────────────────────────
   const selectLayer          = useEditorStore(s => s.selectLayer);
@@ -1272,6 +1281,15 @@ export default function NewEditor({ user, setPage }) {
 
       {/* ── Templates browser modal ─────────────────────────────────── */}
       {showTemplateBrowser && <TemplateBrowser onClose={() => setShowTemplateBrowser(false)} />}
+
+      {/* ── AI Generate panel ────────────────────────────────────────── */}
+      {showAIGeneratePanel && <AIGeneratePanel user={user} onClose={() => setShowAIGeneratePanel(false)} />}
+
+      {/* ── Background Remover modal ─────────────────────────────────── */}
+      {showBackgroundRemover && <BackgroundRemover user={user} onClose={() => setShowBackgroundRemover(false)} />}
+
+      {/* ── Asset Library panel ──────────────────────────────────────── */}
+      {showAssetLibrary && <AssetLibraryPanel user={user} onClose={() => setShowAssetLibrary(false)} />}
 
       {/* ── Feed Simulator modal ────────────────────────────────────── */}
       {showFeedSimulator && <FeedSimulator rendererRef={rendererRef} />}

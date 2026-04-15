@@ -409,6 +409,18 @@ const useEditorStore = create(
     showTemplateBrowser: false,
     setShowTemplateBrowser: (v) => set((state) => { state.showTemplateBrowser = v; }),
 
+    // ── Phase 12: AI Generate ────────────────────────────────────────────────
+    showAIGeneratePanel: false,
+    setShowAIGeneratePanel: (v) => set((state) => { state.showAIGeneratePanel = v; }),
+
+    // ── Phase 13: Background Remover ─────────────────────────────────────────
+    showBackgroundRemover: false,
+    setShowBackgroundRemover: (v) => set((state) => { state.showBackgroundRemover = v; }),
+
+    // ── Phase 14: Asset Library ──────────────────────────────────────────────
+    showAssetLibrary: false,
+    setShowAssetLibrary: (v) => set((state) => { state.showAssetLibrary = v; }),
+
     // applyTemplate — replaces all layers with template layers (new IDs), pushes
     // the resulting state to history so Cmd+Z restores the previous canvas.
     applyTemplate: (layersJson, templateName) => set((state) => {
