@@ -17,7 +17,15 @@ export default function StampTestPreview({ rendererRef }) {
   const [bgMode,     setBgMode]     = useState('dark');
   const [visible,    setVisible]    = useState(true);
   const [flash,      setFlash]      = useState(false);
+  const [ready,      setReady]      = useState(false);
   const prevUrlRef   = useRef(null);
+
+  // Delay the first capture by 2 s to avoid capturing the orange PixiJS
+  // loading frame before the canvas has fully initialised.
+  useEffect(() => {
+    const timer = setTimeout(() => setReady(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const updatePreview = useCallback(async () => {
     const renderer = rendererRef?.current;
@@ -33,7 +41,21 @@ export default function StampTestPreview({ rendererRef }) {
       const off = document.createElement('canvas');
       off.width  = 194;
       off.height = 109;
-      off.getContext('2d').drawImage(img, 0, 0, 194, 109);
+      const ctx = off.getContext('2d');
+      ctx.drawImage(img, 0, 0, 194, 109);
+
+      // Skip frames that are a single solid colour — these are loading states.
+      // Sample 9 pixels across the image; if they are all within 10 units of
+      // each other the frame is almost certainly a solid-colour init frame.
+      const sample = ctx.getImageData(0, 0, 194, 109);
+      const d = sample.data;
+      const pts = [0, 25, 50, 75, 100, 125, 150, 175, 193].map(x =>
+        [d[(0 * 194 + x) * 4], d[(54 * 194 + x) * 4], d[(108 * 194 + x) * 4]]
+      ).flat();
+      const lo = Math.min(...pts);
+      const hi = Math.max(...pts);
+      if (hi - lo < 10) return; // solid frame — skip
+
       off.toBlob(blob => {
         if (!blob) return;
         const url = URL.createObjectURL(blob);
@@ -48,15 +70,16 @@ export default function StampTestPreview({ rendererRef }) {
     img.src = dataUrl;
   }, [rendererRef]);
 
-  // Poll every 500 ms
+  // Poll every 500 ms — but only after the 2 s ready delay.
   useEffect(() => {
-    updatePreview(); // initial
+    if (!ready) return;
+    updatePreview(); // immediate capture once ready
     const id = setInterval(updatePreview, 500);
     return () => {
       clearInterval(id);
       if (prevUrlRef.current?.startsWith('blob:')) URL.revokeObjectURL(prevUrlRef.current);
     };
-  }, [updatePreview]);
+  }, [ready, updatePreview]);
 
   const bg = BG_MODES.find(m => m.id === bgMode) || BG_MODES[0];
 

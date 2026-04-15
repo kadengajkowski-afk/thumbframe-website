@@ -104,35 +104,52 @@ export default function FaceCutoutFlow({ onClose }) {
     setStep('processing');
 
     try {
-      // Read file as base64
-      const b64 = await new Promise((res, rej) => {
+      // Read file as a full data URL (server checks for 'data:' prefix)
+      const dataUrl = await new Promise((res, rej) => {
         const reader = new FileReader();
-        reader.onload = (e) => res(e.target.result.split(',')[1]);
+        reader.onload = (e) => res(e.target.result);
         reader.onerror = rej;
         reader.readAsDataURL(file);
       });
 
-      // Show source preview
-      setSourceUrl(`data:${file.type};base64,${b64}`);
+      setSourceUrl(dataUrl);
 
-      // Call remove-bg API
-      const resp = await fetch(`${RAILWAY_URL}/remove-bg`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ image: b64 }),
-      });
+      // Call remove-bg API — send full data URL so the server's
+      // `src.startsWith('data:')` branch fires correctly.
+      let resp;
+      try {
+        resp = await fetch(`${RAILWAY_URL}/remove-bg`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ image: dataUrl }),
+          signal:  AbortSignal.timeout(30000),
+        });
+      } catch (fetchErr) {
+        throw new Error('Background removal service is unreachable. Check your connection and try again.');
+      }
 
-      if (!resp.ok) throw new Error(`API error ${resp.status}`);
+      if (!resp.ok) {
+        let detail = '';
+        try { detail = (await resp.json()).error || ''; } catch { /* ignore */ }
+        console.error('[FaceCutout] remove-bg failed:', resp.status, detail);
+        if (resp.status === 503 || detail.includes('API_KEY')) {
+          throw new Error('Background removal is not configured on the server. Add REMOVEBG_API_KEY to Railway env vars.');
+        }
+        throw new Error(`Background removal failed (${resp.status}). ${detail || 'The service may be temporarily unavailable — try again in a moment.'}`);
+      }
+
       const data = await resp.json();
-      if (!data.result) throw new Error('No result from API');
+      // Server returns { image: 'data:image/png;base64,...' }
+      const resultDataUrl = data.image;
+      if (!resultDataUrl) throw new Error('No image returned from background removal service.');
 
-      // Apply dilation outline
-      const withOutline = await applyDilationOutline(`data:image/png;base64,${data.result}`);
+      // Apply dilation outline — resultDataUrl is already a full data URL
+      const withOutline = await applyDilationOutline(resultDataUrl);
 
       setResultUrl(withOutline);
       setStep('preview');
     } catch (err) {
-      setError(err.message || 'Background removal failed');
+      setError(err.message || 'Background removal failed. Try again in a moment.');
       setStep('upload');
     }
   }, []);
