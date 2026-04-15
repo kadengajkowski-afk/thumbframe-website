@@ -254,28 +254,21 @@ export default function NewEditor({ user, setPage }) {
     const r = rendererRef.current;
     if (!r) return;
 
-    // ── Texture restoration after undo/redo ───────────────────────────────
-    // History snapshots strip the `texture` field (it can't be JSON-serialised).
-    // After undo/redo, image layers come back with texture: undefined.
-    // The Renderer keeps a texturesByLayerId cache of every GPU texture it has
-    // ever used — use it to silently reattach textures without pushing history.
-    const needsRestore = layers.filter(
-      l => l.type === 'image' && !l.texture && r.texturesByLayerId.has(l.id)
-    );
-    if (needsRestore.length > 0) {
+    // sync() runs unconditionally. Internally it detects texture-less image
+    // layers, recovers their GPU textures from r._layerTextures (the cache
+    // that survives undo/redo), and queues them in r._pendingRestores.
+    r.sync(layers);
+
+    // Drain pending texture restores — silent updateLayer calls (no history).
+    // This keeps the store consistent with what the Renderer already rendered.
+    if (r._pendingRestores.length > 0) {
       const store = useEditorStore.getState();
-      for (const layer of needsRestore) {
-        const tex = r.texturesByLayerId.get(layer.id);
-        if (tex?.valid) {
-          store.updateLayer(layer.id, { texture: tex });
-        }
+      for (const { id, texture } of r._pendingRestores) {
+        store.updateLayer(id, { texture });
       }
-      // Let Zustand flush the updateLayer calls before calling sync().
-      // The next render cycle will re-enter this effect with textures restored.
-      return;
+      // _pendingRestores is reset at the top of the next sync() call.
     }
 
-    r.sync(layers);
     // Hide the sprite of the layer being edited (contenteditable replaces it)
     if (isEditingText && editingLayerId) {
       const obj = r.displayObjects.get(editingLayerId);

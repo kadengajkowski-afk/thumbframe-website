@@ -25,12 +25,20 @@ export default class Renderer {
     this.layerContainer = null;
     this.overlayContainer = null;
     this.canvasBg = null;
-    this.displayObjects = new Map();     // layerId → PIXI.DisplayObject
-    this.textureCache = new Map();       // src string → PIXI.Texture
-    this.adjustmentFilters = new Map();  // layerId → AdjustmentFilter
-    // Textures keyed by layerId — persists across undo/redo so we can reattach
-    // GPU textures that were stripped from history snapshots.
-    this.texturesByLayerId = new Map();  // layerId → PIXI.Texture
+    this.displayObjects = new Map();   // layerId → PIXI.DisplayObject
+    this.textureCache = new Map();     // src string → PIXI.Texture
+    this.adjustmentFilters = new Map();// layerId → AdjustmentFilter
+    // GPU textures keyed by layerId. Persists across undo/redo because
+    // _pushHistory strips textures from JSON snapshots. Never cleared on layer
+    // removal — undo can resurrect the layer and needs the texture back.
+    this._layerTextures = new Map();   // layerId → PIXI.Texture
+
+    // After each sync(), this array holds { id, texture } pairs for layers
+    // whose texture was missing in the store but recovered from _layerTextures.
+    // NewEditor drains this after sync() and calls updateLayer() for each entry
+    // (silent — no history push).
+    this._pendingRestores = [];
+
     this._mounted = false;
   }
 
@@ -103,7 +111,8 @@ export default class Renderer {
       if (f && typeof f.destroy === 'function') f.destroy();
     });
     this.adjustmentFilters.clear();
-    this.texturesByLayerId.clear();
+    this._layerTextures.clear();
+    this._pendingRestores = [];
     this.app.destroy(true, { children: true });
     this.app = null;
     this._mounted = false;
@@ -180,69 +189,85 @@ export default class Renderer {
         // Destroy any adjustment filter
         const adjFilter = this.adjustmentFilters.get(id);
         if (adjFilter) { adjFilter.destroy(); this.adjustmentFilters.delete(id); }
-        // NOTE: intentionally keep texturesByLayerId entry alive here —
-        // undo can re-add this layer and it will need its texture back.
+        // _layerTextures entry intentionally kept — undo can resurrect this
+        // layer and will need its GPU texture reattached.
       }
     }
 
     // ── 2. Create or update display objects for each layer ──
+    // Reset pending restores at the start of each sync pass.
+    this._pendingRestores = [];
+
     for (const layer of layers) {
       let obj = this.displayObjects.get(layer.id);
 
+      // ── Texture recovery (after undo/redo strips texture from snapshot) ───
+      // _pushHistory serialises layers via JSON.stringify, which drops the
+      // non-serialisable `texture` field. After undo/redo the layer exists in
+      // the store but has texture: undefined. We recover the GPU texture from
+      // _layerTextures (keyed by layerId, never evicted) so the Sprite renders
+      // correctly on the very first sync after undo/redo — no render-cycle gap.
+      let effectiveLayer = layer;
+      if (layer.type === 'image' && !layer.texture && !layer.loading) {
+        const cachedTex = this._layerTextures.get(layer.id);
+        if (cachedTex?.valid) {
+          effectiveLayer = { ...layer, texture: cachedTex };
+          // Queue a silent store update so the React state stays consistent.
+          // NewEditor drains this after sync() via updateLayer (no history push).
+          this._pendingRestores.push({ id: layer.id, texture: cachedTex });
+        }
+      }
+
       // Compute a fingerprint for data-driven recreation (shape fill, text content, etc.)
-      const dataKey = _layerDataKey(layer);
+      const dataKey = _layerDataKey(effectiveLayer);
 
       // Create if: doesn't exist, type changed, or visual data changed
-      if (!obj || obj._tfType !== layer.type || obj._tfDataKey !== dataKey) {
+      if (!obj || obj._tfType !== effectiveLayer.type || obj._tfDataKey !== dataKey) {
         if (obj) {
           this.layerContainer.removeChild(obj);
           obj.destroy({ children: true });
         }
-        obj = this._createDisplayObject(layer);
+        obj = this._createDisplayObject(effectiveLayer);
         if (!obj) continue;
-        obj._tfType = layer.type;
-        obj._tfId = layer.id;
+        obj._tfType = effectiveLayer.type;
+        obj._tfId = effectiveLayer.id;
         obj._tfDataKey = dataKey;
-        this.displayObjects.set(layer.id, obj);
+        this.displayObjects.set(effectiveLayer.id, obj);
         this.layerContainer.addChild(obj);
       }
 
       // Update transform
-      obj.rotation = layer.rotation || 0;
-      obj.scale.set(layer.scaleX ?? 1, layer.scaleY ?? 1);
+      obj.rotation = effectiveLayer.rotation || 0;
+      obj.scale.set(effectiveLayer.scaleX ?? 1, effectiveLayer.scaleY ?? 1);
 
       if (obj._tfAnchorMode) {
-        // Image sprites: anchor(0,0) means position is the top-left corner.
-        // layer.x/y are the VISUAL CENTER, so subtract half the display size.
-        // This is texture-size-independent — no pivot math needed.
-        obj.x = layer.x - layer.width  / 2;
-        obj.y = layer.y - layer.height / 2;
+        obj.x = effectiveLayer.x - effectiveLayer.width  / 2;
+        obj.y = effectiveLayer.y - effectiveLayer.height / 2;
         obj.pivot.set(0, 0);
       } else {
-        // Shapes and text: position IS the anchor point; pivot handles centering.
-        obj.x = layer.x;
-        obj.y = layer.y;
+        obj.x = effectiveLayer.x;
+        obj.y = effectiveLayer.y;
         obj.pivot.set(
-          (layer.anchorX ?? 0.5) * layer.width,
-          (layer.anchorY ?? 0.5) * layer.height
+          (effectiveLayer.anchorX ?? 0.5) * effectiveLayer.width,
+          (effectiveLayer.anchorY ?? 0.5) * effectiveLayer.height
         );
       }
 
-      obj.alpha = layer.opacity ?? 1;
-      obj.visible = layer.visible !== false;
+      obj.alpha = effectiveLayer.opacity ?? 1;
+      obj.visible = effectiveLayer.visible !== false;
 
       // Blend mode
-      const bm = BLEND_MODES[layer.blendMode] || 'normal';
+      const bm = BLEND_MODES[effectiveLayer.blendMode] || 'normal';
       obj.blendMode = bm;
 
       // Size sync for image and text sprites
-      if ((layer.type === 'image' || layer.type === 'text') && obj.isSprite) {
-        obj.width  = layer.width;
-        obj.height = layer.height;
+      if ((effectiveLayer.type === 'image' || effectiveLayer.type === 'text') && obj.isSprite) {
+        obj.width  = effectiveLayer.width;
+        obj.height = effectiveLayer.height;
       }
 
       // ── Apply adjustment filter (tonal / colour grading) ──────────────────
-      this._applyAdjustmentFilter(obj, layer);
+      this._applyAdjustmentFilter(obj, effectiveLayer);
     }
 
     // ── 3. Reorder children to match layer array order ──
@@ -307,8 +332,8 @@ export default class Renderer {
     const th = layer.imageData?.textureHeight || layer.height;
     window.__textureMemoryManager?.register(layer.id, layer.texture, tw, th);
 
-    // Cache the texture by layerId so undo can reattach it after snapshots strip it.
-    this.texturesByLayerId.set(layer.id, layer.texture);
+    // Persist the texture by layerId so undo/redo can recover it from _pendingRestores.
+    this._layerTextures.set(layer.id, layer.texture);
 
     const sprite = new Sprite(layer.texture);
     // anchor(0, 0) = top-left origin. sync() compensates by positioning at
