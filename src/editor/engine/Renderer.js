@@ -282,15 +282,10 @@ export default class Renderer {
       obj.alpha = effectiveLayer.opacity ?? 1;
       obj.visible = effectiveLayer.visible !== false;
 
-      // Blend mode — only apply to Sprites with valid textures.
-      // Graphics objects don't have textures; setting blend modes on them is a no-op
-      // in PixiJS v8's batcher and can trigger null-alphaMode crashes during batching.
-      if (obj.isSprite && obj.texture && obj.texture.valid) {
-        obj.blendMode = BLEND_MODE_MAP[effectiveLayer.blendMode] ?? 'normal';
-      } else if (!obj.isSprite) {
-        // Graphics/Container: blend modes are safe here (no texture involved)
-        obj.blendMode = BLEND_MODE_MAP[effectiveLayer.blendMode] ?? 'normal';
-      }
+      // Blend mode — string values work for all PixiJS v8 display objects.
+      // null alphaMode errors come from texture source construction (OffscreenCanvas vs
+      // HTMLCanvasElement), not from setting blend mode on a sprite.
+      obj.blendMode = BLEND_MODE_MAP[effectiveLayer.blendMode] ?? 'normal';
 
       // Size sync for image and text sprites
       if ((effectiveLayer.type === 'image' || effectiveLayer.type === 'text') && obj.isSprite) {
@@ -751,20 +746,6 @@ export default class Renderer {
     const savedS = this.viewport.scale.x;
 
     try {
-      // Sanitize any sprites with null/destroyed textures before rendering.
-      // A destroyed texture has valid===false; replace with Texture.EMPTY so
-      // PixiJS's batcher doesn't crash on a null alphaMode.
-      for (const child of this.layerContainer.children) {
-        if (child.isSprite && (!child.texture || !child.texture.valid)) {
-          child.texture = Texture.EMPTY;
-        }
-      }
-      for (const ps of this.paintSprites.values()) {
-        if (ps && ps.isSprite && (!ps.texture || !ps.texture.valid)) {
-          ps.texture = Texture.EMPTY;
-        }
-      }
-
       // Fit the 1280×720 canvas into the preview dimensions, preserving aspect.
       const scale = Math.min(width / CW, height / CH);
       this.viewport.x = 0;
@@ -782,15 +763,18 @@ export default class Renderer {
       oc.getContext('2d').drawImage(this.app.canvas, 0, 0, srcW, srcH, 0, 0, width, height);
       return oc;
     } catch (err) {
+      // Render errors (e.g. a sprite with an invalid texture) must not propagate —
+      // the viewport must always be restored and the caller must handle null.
+      // IMPORTANT: never mutate sprite textures here — that would corrupt the live scene.
       console.warn('[Renderer] captureForPreview failed:', err);
       return null;
     } finally {
-      // Always restore viewport — runs even if an error was thrown
+      // Always restore viewport — runs even if render threw
       this.viewport.x = savedX;
       this.viewport.y = savedY;
       this.viewport.scale.set(savedS);
       this.overlayContainer.visible = true;
-      try { this.app.renderer.render(this.app.stage); } catch { /* ignore restore-render errors */ }
+      try { this.app.renderer.render(this.app.stage); } catch { /* viewport restored — ignore */ }
     }
   }
 
