@@ -12,6 +12,8 @@
 import { Application, Container, Graphics, Sprite, Texture, ImageSource } from 'pixi.js';
 import { BLEND_MODES } from './Layer';
 import { renderTextToCanvas } from '../utils/textRenderer';
+import { AdjustmentFilter } from '../filters/AdjustmentFilter';
+import { getEffectiveAdjustments } from '../presets/colorGrades';
 
 const CW = 1280;
 const CH = 720;
@@ -23,8 +25,9 @@ export default class Renderer {
     this.layerContainer = null;
     this.overlayContainer = null;
     this.canvasBg = null;
-    this.displayObjects = new Map(); // layerId → PIXI.DisplayObject
-    this.textureCache = new Map();   // src string → PIXI.Texture
+    this.displayObjects = new Map();     // layerId → PIXI.DisplayObject
+    this.textureCache = new Map();       // src string → PIXI.Texture
+    this.adjustmentFilters = new Map();  // layerId → AdjustmentFilter
     this._mounted = false;
   }
 
@@ -93,6 +96,10 @@ export default class Renderer {
       if (tex && typeof tex.destroy === 'function') tex.destroy(true);
     });
     this.textureCache.clear();
+    this.adjustmentFilters.forEach((f) => {
+      if (f && typeof f.destroy === 'function') f.destroy();
+    });
+    this.adjustmentFilters.clear();
     this.app.destroy(true, { children: true });
     this.app = null;
     this._mounted = false;
@@ -166,6 +173,9 @@ export default class Renderer {
         this.displayObjects.delete(id);
         // Free GPU memory tracking entry
         window.__textureMemoryManager?.unregister(id);
+        // Destroy any adjustment filter
+        const adjFilter = this.adjustmentFilters.get(id);
+        if (adjFilter) { adjFilter.destroy(); this.adjustmentFilters.delete(id); }
       }
     }
 
@@ -224,6 +234,9 @@ export default class Renderer {
         obj.width  = layer.width;
         obj.height = layer.height;
       }
+
+      // ── Apply adjustment filter (tonal / colour grading) ──────────────────
+      this._applyAdjustmentFilter(obj, layer);
     }
 
     // ── 3. Reorder children to match layer array order ──
@@ -423,6 +436,35 @@ export default class Renderer {
   resize() {
     if (!this.app) return;
     this.app.resize();
+  }
+
+  // ── Apply (or remove) the AdjustmentFilter for a layer ───────────────────
+  // Called every sync() pass — reuses the existing filter if already created,
+  // updating uniforms in-place instead of allocating a new GPU program.
+  _applyAdjustmentFilter(obj, layer) {
+    const adj = getEffectiveAdjustments(layer.adjustments, layer.colorGrade);
+
+    // Check if any adjustment is meaningfully non-zero
+    const isActive = Object.values(adj).some(v => Math.abs(v) > 0.0005);
+
+    if (!isActive) {
+      // Remove filter to keep render path clean
+      if (obj.filters && obj.filters.length > 0) obj.filters = [];
+      return;
+    }
+
+    let filter = this.adjustmentFilters.get(layer.id);
+    if (!filter) {
+      filter = new AdjustmentFilter();
+      this.adjustmentFilters.set(layer.id, filter);
+    }
+
+    filter.updateAdjustments(adj);
+
+    // Preserve any other filters already on the object (e.g. blur from LayerEffects)
+    const existing = obj.filters || [];
+    const withoutAdj = existing.filter(f => f !== filter);
+    obj.filters = [...withoutAdj, filter];
   }
 }
 

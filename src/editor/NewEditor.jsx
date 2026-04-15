@@ -12,6 +12,7 @@ import { hitTestLayers, computeMove } from './tools/SelectTool';
 import { computeGuides } from './engine/SmartGuides';
 import { processImageFile } from './utils/imageUpload';
 import { renderTextToCanvas, loadFont, DEFAULT_TEXT_DATA } from './utils/textRenderer';
+import { COLOR_GRADES, FREE_GRADES, GRADE_LABELS } from './presets/colorGrades';
 // Side-effect imports: register window singletons
 import './engine/FilterScaler';
 import './engine/TextureMemoryManager';
@@ -149,15 +150,14 @@ export default function NewEditor({ user, setPage }) {
     rendererRef.current?.markDirty();
   }, [updateLayer]);
 
-  // Enter inline text edit mode for a layer.
+  // Enter inline text edit mode for an existing layer (double-click or text-tool click).
   const enterTextEditMode = useCallback((layerId) => {
     setEditingText(layerId);
-    // Focus the contenteditable on next frame (it renders after state update)
+    // Focus the contenteditable on the next frame — it only mounts after the state update re-renders.
     requestAnimationFrame(() => {
       const el = editableRef.current;
       if (!el) return;
       el.focus();
-      // Place cursor at end
       const range = document.createRange();
       range.selectNodeContents(el);
       range.collapse(false);
@@ -167,27 +167,56 @@ export default function NewEditor({ user, setPage }) {
     });
   }, [setEditingText]);
 
-  // Create a new text layer at world position (wx, wy) and enter edit mode.
-  const createTextLayer = useCallback((wx, wy) => {
-    const textData = { ...DEFAULT_TEXT_DATA };
-    const { displayWidth, displayHeight } = renderTextToCanvas(textData);
-
-    const layerId = crypto.randomUUID?.() ||
+  // Create a new text layer at canvas position (cx, cy) and enter edit mode.
+  // Follows the exact sequence: addLayer → render texture → updateLayer → setEditingText.
+  const createTextLayer = useCallback((cx, cy) => {
+    const id = crypto.randomUUID?.() ||
       (Date.now().toString(36) + Math.random().toString(36).slice(2));
 
-    useEditorStore.getState().addLayerSilent({
-      id:     layerId,
-      type:   'text',
-      name:   'Text',
-      x:      wx,
-      y:      wy,
-      width:  displayWidth,
-      height: displayHeight,
+    // Deep-copy the default textData so nested objects (stroke/shadow/glow) are independent
+    const textData = JSON.parse(JSON.stringify(DEFAULT_TEXT_DATA));
+
+    // a. Add layer with placeholder size and null texture
+    useEditorStore.getState().addLayer({
+      id,
+      type:     'text',
+      name:     'Text',
+      x:        cx,
+      y:        cy,
+      width:    400,
+      height:   100,
+      rotation: 0,
+      opacity:  1,
+      visible:  true,
+      locked:   false,
       textData,
+      texture:  null,
     });
 
-    enterTextEditMode(layerId);
-  }, [enterTextEditMode]);
+    // b. Render the text canvas immediately and attach a real texture
+    const { canvas, displayWidth, displayHeight } = renderTextToCanvas(textData);
+    const source  = new ImageSource({ resource: canvas });
+    const texture = new Texture({ source });
+    useEditorStore.getState().updateLayer(id, {
+      texture,
+      width:  displayWidth,
+      height: displayHeight,
+    });
+
+    // c. Enter inline edit mode (focuses contenteditable on next frame)
+    setEditingText(id);
+    requestAnimationFrame(() => {
+      const el = editableRef.current;
+      if (!el) return;
+      el.focus();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+  }, [setEditingText]);
 
   // ── Init renderer on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -246,12 +275,14 @@ export default function NewEditor({ user, setPage }) {
       const drag = moveRef.current;
       if (!drag) return;
 
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      const { zoom: z, panX: px, panY: py } = useEditorStore.getState();
-      const worldX = (e.clientX - rect.left - rect.width  / 2 - px) / z + 640;
-      const worldY = (e.clientY - rect.top  - rect.height / 2 - py) / z + 360;
+      const canvasEl = canvasRef.current;
+      if (!canvasEl) return;
+      const canvasRect = canvasEl.getBoundingClientRect();
+      const screenX = e.clientX - canvasRect.left;
+      const screenY = e.clientY - canvasRect.top;
+      const vp      = rendererRef.current?.viewport;
+      const worldX  = (screenX - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
+      const worldY  = (screenY - (vp?.y ?? 0)) / (vp?.scale?.x ?? 1);
 
       const { x: newX, y: newY } = computeMove(
         drag.startLX, drag.startLY, drag.startWX, drag.startWY, worldX, worldY
@@ -298,28 +329,32 @@ export default function NewEditor({ user, setPage }) {
     if (!rect) return;
 
     const state = useEditorStore.getState();
-    const { zoom: z, panX: px, panY: py, layers: ls, selectedLayerIds: sel, activeTool: tool } = state;
-    const worldX = (e.clientX - rect.left - rect.width  / 2 - px) / z + 640;
-    const worldY = (e.clientY - rect.top  - rect.height / 2 - py) / z + 360;
+    const { layers: ls, selectedLayerIds: sel, activeTool: tool } = state;
 
-    // ── Text tool ────────────────────────────────────────────────────────────
+    // ── Canvas coordinate conversion ─────────────────────────────────────────
+    // Use the PixiJS canvas element and the renderer's actual viewport transform.
+    // This is correct regardless of the store's center-based panX/panY convention.
+    const canvasEl = canvasRef.current || rect; // fallback to container rect
+    const canvasRect = canvasEl?.getBoundingClientRect?.() ?? rect;
+    const screenX = e.clientX - canvasRect.left;
+    const screenY = e.clientY - canvasRect.top;
+    const vp = rendererRef.current?.viewport;
+    const vpX    = vp?.x     ?? 0;
+    const vpY    = vp?.y     ?? 0;
+    const vpZoom = vp?.scale?.x ?? 1;
+    const canvasX = (screenX - vpX) / vpZoom;
+    const canvasY = (screenY - vpY) / vpZoom;
+
+    // ── Text tool — always create a new text layer, never select ────────────
     if (tool === 'text') {
-      const hitId = hitTestLayers(ls, worldX, worldY);
-      if (hitId) {
-        const hitLayer = ls.find(l => l.id === hitId);
-        if (hitLayer?.type === 'text') {
-          selectLayer(hitId);
-          enterTextEditMode(hitId);
-          return;
-        }
-        // Clicked a non-text layer in text mode — select it
-        selectLayer(hitId);
-        return;
-      }
-      // Clicked empty canvas — create text layer here
-      createTextLayer(worldX, worldY);
-      return;
+      console.log('[NewEditor] Canvas clicked, activeTool:', tool, 'at canvas coords:', canvasX.toFixed(1), canvasY.toFixed(1));
+      createTextLayer(canvasX, canvasY);
+      return; // critical — must not fall through to hit testing / select logic
     }
+
+    // Re-use canvasX/Y for select/move tool too (same formula, consistent)
+    const worldX = canvasX;
+    const worldY = canvasY;
 
     // ── Select / move tool ───────────────────────────────────────────────────
     const hitId = hitTestLayers(ls, worldX, worldY);
@@ -369,13 +404,16 @@ export default function NewEditor({ user, setPage }) {
 
   // ── Double-click: enter text edit mode ───────────────────────────────────
   const handleDblClick = useCallback((e) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    const canvasEl = canvasRef.current;
+    if (!canvasEl) return;
+    const canvasRect = canvasEl.getBoundingClientRect();
+    const screenX = e.clientX - canvasRect.left;
+    const screenY = e.clientY - canvasRect.top;
+    const vp     = rendererRef.current?.viewport;
+    const worldX = (screenX - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
+    const worldY = (screenY - (vp?.y ?? 0)) / (vp?.scale?.x ?? 1);
 
-    const { zoom: z, panX: px, panY: py, layers: ls } = useEditorStore.getState();
-    const worldX = (e.clientX - rect.left - rect.width  / 2 - px) / z + 640;
-    const worldY = (e.clientY - rect.top  - rect.height / 2 - py) / z + 360;
-
+    const { layers: ls } = useEditorStore.getState();
     const hitId = hitTestLayers(ls, worldX, worldY);
     if (!hitId) return;
     const hitLayer = ls.find(l => l.id === hitId);
@@ -562,6 +600,69 @@ export default function NewEditor({ user, setPage }) {
     return l?.type === 'text' ? l : null;
   })();
 
+  // ── Selected image/shape layer for effects panel ──────────────────────────
+  const selectedEffectLayer = (() => {
+    if (selectedLayerIds.length !== 1) return null;
+    const l = layers.find(la => la.id === selectedLayerIds[0]);
+    return (l?.type === 'image' || l?.type === 'shape') ? l : null;
+  })();
+
+  // ── Adjustment change handlers ────────────────────────────────────────────
+  const handleAdjustmentChange = useCallback((layerId, key, value) => {
+    const layer = useEditorStore.getState().layers.find(l => l.id === layerId);
+    if (!layer) return;
+    updateLayer(layerId, {
+      adjustments: { ...layer.adjustments, [key]: value },
+    });
+    rendererRef.current?.markDirty();
+  }, [updateLayer]);
+
+  const handleAdjustmentReset = useCallback((layerId, key) => {
+    const layer = useEditorStore.getState().layers.find(l => l.id === layerId);
+    if (!layer) return;
+    updateLayer(layerId, {
+      adjustments: { ...layer.adjustments, [key]: 0 },
+    });
+    commitChange(`Reset ${key}`);
+    rendererRef.current?.markDirty();
+  }, [updateLayer, commitChange]);
+
+  const handleColorGradeSelect = useCallback((layerId, gradeName, isPro) => {
+    if (isPro) {
+      window.dispatchEvent(new CustomEvent('tf:toast', {
+        detail: { message: 'Upgrade to Pro to unlock this colour grade.' },
+      }));
+      return;
+    }
+    const layer = useEditorStore.getState().layers.find(l => l.id === layerId);
+    if (!layer) return;
+    const alreadyActive = layer.colorGrade?.name === gradeName;
+    updateLayer(layerId, {
+      colorGrade: alreadyActive ? null : { name: gradeName, strength: layer.colorGrade?.strength ?? 1.0 },
+    });
+    commitChange(alreadyActive ? 'Remove Grade' : `Apply ${GRADE_LABELS[gradeName]}`);
+    rendererRef.current?.markDirty();
+  }, [updateLayer, commitChange]);
+
+  const handleGradeStrengthChange = useCallback((layerId, strength) => {
+    const layer = useEditorStore.getState().layers.find(l => l.id === layerId);
+    if (!layer?.colorGrade) return;
+    updateLayer(layerId, {
+      colorGrade: { ...layer.colorGrade, strength },
+    });
+    rendererRef.current?.markDirty();
+  }, [updateLayer]);
+
+  const handleMakeItPop = useCallback((layerId) => {
+    const layer = useEditorStore.getState().layers.find(l => l.id === layerId);
+    if (!layer) return;
+    updateLayer(layerId, {
+      colorGrade: { name: 'make_it_pop', strength: 1.0 },
+    });
+    commitChange('Make It Pop');
+    rendererRef.current?.markDirty();
+  }, [updateLayer, commitChange]);
+
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < historyLen - 1;
 
@@ -680,21 +781,30 @@ export default function NewEditor({ user, setPage }) {
           background: '#111113', borderLeft: '1px solid rgba(255,255,255,0.06)',
           overflowY: 'auto',
         }}>
-          {selectedTextLayer
-            ? <TextPanel
-                layer={selectedTextLayer}
-                onFontChange={handleFontChange}
-                onTextDataChange={handleTextDataChange}
-                onCommit={handleTextDataCommit}
-              />
-            : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(245,245,247,0.20)', textAlign: 'center', padding: '0 16px', lineHeight: 1.5 }}>
-                  Properties panel<br />Phase 7
-                </span>
-              </div>
-            )
-          }
+          {selectedTextLayer ? (
+            <TextPanel
+              layer={selectedTextLayer}
+              onFontChange={handleFontChange}
+              onTextDataChange={handleTextDataChange}
+              onCommit={handleTextDataCommit}
+            />
+          ) : selectedEffectLayer ? (
+            <EffectsPanel
+              layer={selectedEffectLayer}
+              onAdjustmentChange={handleAdjustmentChange}
+              onAdjustmentCommit={(label) => commitChange(label)}
+              onAdjustmentReset={handleAdjustmentReset}
+              onColorGradeSelect={handleColorGradeSelect}
+              onGradeStrengthChange={handleGradeStrengthChange}
+              onMakeItPop={handleMakeItPop}
+            />
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+              <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(245,245,247,0.20)', textAlign: 'center', padding: '0 16px', lineHeight: 1.5 }}>
+                Select a layer<br />to edit properties
+              </span>
+            </div>
+          )}
         </div>
 
       </div>{/* end middle row */}
@@ -742,6 +852,141 @@ export default function NewEditor({ user, setPage }) {
           {editingLayer.textData?.content || ''}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Effects / Adjustments panel ──────────────────────────────────────────────
+function EffectsPanel({
+  layer,
+  onAdjustmentChange,
+  onAdjustmentCommit,
+  onAdjustmentReset,
+  onColorGradeSelect,
+  onGradeStrengthChange,
+  onMakeItPop,
+}) {
+  const adj   = layer.adjustments || {};
+  const grade = layer.colorGrade;
+
+  const panelLabel  = { fontSize: 10, fontWeight: 600, color: 'rgba(245,245,247,0.40)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 };
+  const sectionStyle = { padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)' };
+
+  const SLIDERS = [
+    { key: 'exposure',    label: 'Exposure',     min: -3,   max: 3,   step: 0.01 },
+    { key: 'brightness',  label: 'Brightness',   min: -1,   max: 1,   step: 0.01 },
+    { key: 'contrast',    label: 'Contrast',     min: -1,   max: 1,   step: 0.01 },
+    { key: 'highlights',  label: 'Highlights',   min: -1,   max: 1,   step: 0.01 },
+    { key: 'shadows',     label: 'Shadows',      min: -1,   max: 1,   step: 0.01 },
+    { key: 'saturation',  label: 'Saturation',   min: -1,   max: 1,   step: 0.01 },
+    { key: 'vibrance',    label: 'Vibrance',     min: -1,   max: 1,   step: 0.01 },
+    { key: 'temperature', label: 'Temperature',  min: -1,   max: 1,   step: 0.01 },
+    { key: 'tint',        label: 'Tint',         min: -1,   max: 1,   step: 0.01 },
+    { key: 'hue',         label: 'Hue',          min: -180, max: 180, step: 1    },
+  ];
+
+  const gradeEntries = Object.keys(COLOR_GRADES);
+
+  return (
+    <div style={{ padding: 0 }}>
+      {/* Header */}
+      <div style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: 'rgba(245,245,247,0.60)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>Adjustments</span>
+        <button
+          onClick={() => onMakeItPop(layer.id)}
+          style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5, border: 'none', cursor: 'pointer', background: 'rgba(249,115,22,0.18)', color: '#f97316', letterSpacing: '0.02em' }}
+        >
+          Make It Pop
+        </button>
+      </div>
+
+      {/* Colour grade grid */}
+      <div style={sectionStyle}>
+        <div style={panelLabel}>Colour Grade</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
+          {gradeEntries.map((gId) => {
+            const isFree    = FREE_GRADES.has(gId);
+            const isActive  = grade?.name === gId;
+            return (
+              <button
+                key={gId}
+                onClick={() => onColorGradeSelect(layer.id, gId, !isFree)}
+                style={{
+                  padding: '5px 2px',
+                  fontSize: 9,
+                  fontWeight: 600,
+                  borderRadius: 5,
+                  border: isActive ? '1px solid #f97316' : '1px solid rgba(255,255,255,0.08)',
+                  cursor: 'pointer',
+                  background: isActive ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.04)',
+                  color: isActive ? '#f97316' : isFree ? 'rgba(245,245,247,0.70)' : 'rgba(245,245,247,0.35)',
+                  position: 'relative',
+                  lineHeight: 1.3,
+                  transition: 'background 120ms, color 120ms',
+                  textAlign: 'center',
+                }}
+              >
+                {GRADE_LABELS[gId]}
+                {!isFree && (
+                  <span style={{ display: 'block', fontSize: 7, color: '#f97316', fontWeight: 700, marginTop: 1 }}>PRO</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Strength slider — only shown when a grade is active */}
+        {grade && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+              <span style={{ ...panelLabel, marginBottom: 0 }}>Strength</span>
+              <span style={{ fontSize: 10, color: 'rgba(245,245,247,0.40)' }}>{Math.round((grade.strength ?? 1) * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min={0} max={1} step={0.01}
+              value={grade.strength ?? 1}
+              onChange={(e) => onGradeStrengthChange(layer.id, Number(e.target.value))}
+              onPointerUp={() => onAdjustmentCommit('Grade Strength')}
+              style={{ width: '100%', accentColor: '#f97316' }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Adjustment sliders */}
+      <div style={{ padding: '8px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={panelLabel}>Fine-Tune</div>
+        {SLIDERS.map(({ key, label, min, max, step }) => {
+          const val   = adj[key] ?? 0;
+          const isSet = Math.abs(val) > 0.005;
+          return (
+            <div key={key} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                <span style={{ fontSize: 10, fontWeight: 500, color: isSet ? 'rgba(245,245,247,0.75)' : 'rgba(245,245,247,0.40)' }}>
+                  {label}
+                </span>
+                <span
+                  style={{ fontSize: 10, color: isSet ? '#f97316' : 'rgba(245,245,247,0.30)', cursor: isSet ? 'pointer' : 'default', userSelect: 'none' }}
+                  title="Double-click to reset"
+                  onDoubleClick={() => onAdjustmentReset(layer.id, key)}
+                >
+                  {key === 'hue' ? `${Math.round(val)}°` : val.toFixed(2)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={min} max={max} step={step}
+                value={val}
+                onChange={(e) => onAdjustmentChange(layer.id, key, Number(e.target.value))}
+                onPointerUp={() => onAdjustmentCommit(`${label} Adjust`)}
+                onDoubleClick={() => onAdjustmentReset(layer.id, key)}
+                style={{ width: '100%', accentColor: '#f97316' }}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

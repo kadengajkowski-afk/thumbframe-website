@@ -75,6 +75,25 @@ export function createLayer(overrides = {}) {
     //   strokeWidth: number,
     //   cornerRadius: number
     // }
+
+    // ── Tonal / colour adjustments ──────────────────────────────────────────
+    // All values are 0-centred deltas. Applied via AdjustmentFilter (one GPU pass).
+    adjustments: overrides.adjustments ?? {
+      brightness:  0,
+      contrast:    0,
+      saturation:  0,
+      vibrance:    0,
+      exposure:    0,
+      temperature: 0,
+      tint:        0,
+      highlights:  0,
+      shadows:     0,
+      hue:         0,
+      sharpness:   0,  // stored but not yet GPU-accelerated
+    },
+
+    // Active colour grade preset: { name: string, strength: number } | null
+    colorGrade: overrides.colorGrade ?? null,
   };
 }
 
