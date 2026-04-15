@@ -75,6 +75,9 @@ export default function NewEditor({ user, setPage }) {
   const isStrokingRef    = useRef(false);
   const strokeLayerRef   = useRef(null);      // layerId being painted
 
+  // ── Hand tool pan ref ────────────────────────────────────────────────────
+  const handDragRef = useRef(null); // { startClientX, startClientY, startPanX, startPanY }
+
   // Tool instances (singletons, created once)
   const toolsRef = useRef({
     brush:         new BrushTool(),
@@ -631,6 +634,22 @@ export default function NewEditor({ user, setPage }) {
       for (let i = 0; i < mask.length; i++) mask[i] = maskData[i * 4];
 
       setSelectionMask({ layerId: layer.id, mask, width: iw, height: ih });
+
+      // Compute bounds of the mask so marching ants can show the selection rect
+      let minX = iw, minY = ih, maxX = 0, maxY = 0;
+      for (let idx = 0; idx < mask.length; idx++) {
+        if (!mask[idx]) continue;
+        const mx = idx % iw, my = Math.floor(idx / iw);
+        if (mx < minX) minX = mx; if (mx > maxX) maxX = mx;
+        if (my < minY) minY = my; if (my > maxY) maxY = my;
+      }
+      window.dispatchEvent(new CustomEvent('tf:wand-complete', {
+        detail: {
+          layerId: layer.id, mask, width: iw, height: ih,
+          bounds: { minX, minY, maxX, maxY, _iw: iw, _ih: ih },
+          layerRect: { x: lx, y: ly, w: lw, h: lh },
+        },
+      }));
     };
 
     const onWandComplete = (e) => {
@@ -791,6 +810,16 @@ export default function NewEditor({ user, setPage }) {
       const tool     = state.activeTool;
       const canvasEl = canvasRef.current;
 
+      // ── Hand tool — update pan ──────────────────────────────────────────
+      if (tool === 'hand' && handDragRef.current) {
+        const { startClientX, startClientY, startPanX, startPanY } = handDragRef.current;
+        useEditorStore.setState({
+          panX: startPanX + (e.clientX - startClientX),
+          panY: startPanY + (e.clientY - startClientY),
+        });
+        return;
+      }
+
       // ── Lasso tool move ──────────────────────────────────────────────────
       if (tool === 'lasso' && canvasEl) {
         const canvasRect = canvasEl.getBoundingClientRect();
@@ -856,6 +885,12 @@ export default function NewEditor({ user, setPage }) {
     const onUp = (e) => {
       const state = useEditorStore.getState();
       const tool  = state.activeTool;
+
+      // ── End hand pan ─────────────────────────────────────────────────────
+      if (tool === 'hand') {
+        handDragRef.current = null;
+        return;
+      }
 
       // ── End lasso stroke ─────────────────────────────────────────────────
       if (tool === 'lasso') {
@@ -957,6 +992,18 @@ export default function NewEditor({ user, setPage }) {
     const canvasX = (screenX - vpX) / vpZoom;
     const canvasY = (screenY - vpY) / vpZoom;
 
+    // ── Hand tool — pan the viewport ────────────────────────────────────────
+    if (tool === 'hand') {
+      const { panX: curPanX, panY: curPanY } = useEditorStore.getState();
+      handDragRef.current = {
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startPanX:    curPanX,
+        startPanY:    curPanY,
+      };
+      return;
+    }
+
     // ── Lasso tool ───────────────────────────────────────────────────────────
     if (tool === 'lasso') {
       toolsRef.current.lasso?.onPointerDown(e, { canvasPoint: { x: canvasX, y: canvasY } });
@@ -965,6 +1012,12 @@ export default function NewEditor({ user, setPage }) {
 
     // ── Magic Wand tool ──────────────────────────────────────────────────────
     if (tool === 'magic_wand') {
+      // Ensure the paint canvas is seeded from the layer's current texture so
+      // the wand has real pixels to sample — even if the layer has never been painted.
+      const targetId = sel?.[0];
+      const targetLayer = ls?.find(l => l.id === targetId && l.type === 'image');
+      if (targetLayer) getPaintCanvas(targetLayer);
+
       toolsRef.current.magic_wand?.onPointerDown(e, {
         canvasPoint:      { x: canvasX, y: canvasY },
         layers:           ls,
@@ -1438,7 +1491,7 @@ export default function NewEditor({ user, setPage }) {
           <StarfieldBackground />
           <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
           <BrushCursor rendererRef={rendererRef} canvasRef={canvasRef} />
-          <SelectionOverlayCanvas width={CW} height={CH} />
+          <SelectionOverlayCanvas />
 
           {/* Empty state — shown when no layers exist */}
           {layers.length === 0 && (

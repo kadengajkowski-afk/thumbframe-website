@@ -1,39 +1,65 @@
 // src/editor/components/SelectionOverlayCanvas.jsx
 // Transparent 2D canvas overlay that renders:
 //  • Lasso path (orange dashes) while tf:lasso-update fires
-//  • Marching ants border around wand selection bounds
+//  • Marching ants border around wand/lasso selection bounds
 // Position: absolute, fills the canvas area, pointerEvents: none, zIndex: 5
+//
+// Coordinate system: the overlay canvas is sized to match the container
+// (via ResizeObserver), so its internal pixels are 1:1 with CSS pixels.
+// Canvas-world → screen: worldX * vpZoom + vp.x  (read from window.__renderer)
 
-import React, { useRef, useEffect, useCallback } from 'react';
-import useEditorStore from '../engine/Store';
+import React, { useRef, useEffect } from 'react';
 
-export default function SelectionOverlayCanvas({ width, height }) {
+export default function SelectionOverlayCanvas() {
   const canvasRef    = useRef(null);
   const antsTimerRef = useRef(null);
-  const antsStateRef = useRef(null);  // { bounds, dashOffset }
-  const zoom         = useEditorStore(s => s.zoom);
-  const panX         = useEditorStore(s => s.panX);
-  const panY         = useEditorStore(s => s.panY);
+  const antsStateRef = useRef(null);  // { bounds, layerRect, dashOffset }
 
-  // ── Drawing helpers ──────────────────────────────────────────────────────────
+  // ── Keep canvas px in sync with its CSS display size ─────────────────────
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        canvas.width  = Math.round(width)  || 1;
+        canvas.height = Math.round(height) || 1;
+        // Redraw ants immediately after resize so they don't vanish mid-drag
+        if (antsStateRef.current) _drawAnts();
+      }
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const clearCanvas = useCallback(() => {
+  // ── Viewport helper — reads the live renderer transform ──────────────────
+  function vpTransform() {
+    const vp = window.__renderer?.viewport;
+    return {
+      x:    vp?.x        ?? 0,
+      y:    vp?.y        ?? 0,
+      zoom: vp?.scale?.x ?? 1,
+    };
+  }
+
+  function toScreen(p) {
+    const { x: vpX, y: vpY, zoom } = vpTransform();
+    return { x: p.x * zoom + vpX, y: p.y * zoom + vpY };
+  }
+
+  // ── Drawing helpers ───────────────────────────────────────────────────────
+
+  function clearCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-  }, []);
+  }
 
-  const drawLasso = useCallback((points) => {
+  function drawLasso(points) {
     const canvas = canvasRef.current;
-    if (!canvas || !points.length) return;
+    if (!canvas || points.length < 2) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Map canvas-space points to screen pixels (apply viewport transform)
-    const toScreen = (p) => ({
-      x: p.x * zoom + panX,
-      y: p.y * zoom + panY,
-    });
 
     ctx.save();
     ctx.setLineDash([4, 4]);
@@ -41,7 +67,6 @@ export default function SelectionOverlayCanvas({ width, height }) {
     ctx.lineWidth   = 1.5;
     ctx.shadowColor = 'rgba(0,0,0,0.6)';
     ctx.shadowBlur  = 2;
-
     ctx.beginPath();
     const first = toScreen(points[0]);
     ctx.moveTo(first.x, first.y);
@@ -51,89 +76,63 @@ export default function SelectionOverlayCanvas({ width, height }) {
     }
     ctx.stroke();
     ctx.restore();
-  }, [zoom, panX, panY]);
+  }
 
-  const startMarchingAnts = useCallback(({ bounds, layerRect }) => {
-    // Stop any existing marching ants loop
-    if (antsTimerRef.current) clearInterval(antsTimerRef.current);
+  function _drawAnts() {
+    const canvas = canvasRef.current;
+    if (!canvas || !antsStateRef.current) return;
+    const ctx  = canvas.getContext('2d');
+    const { bounds, layerRect, dashOffset } = antsStateRef.current;
 
-    antsStateRef.current = { bounds, layerRect, dashOffset: 0 };
-
-    const draw = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      const { bounds, layerRect, dashOffset } = antsStateRef.current;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Convert image-space bounds to canvas space, then to screen space
-      const imgToCanvas = (imgX, imgY) => {
-        const cxRaw = layerRect.x + (imgX / bounds._iw) * layerRect.w;
-        const cyRaw = layerRect.y + (imgY / bounds._ih) * layerRect.h;
-        return {
-          x: cxRaw * zoom + panX,
-          y: cyRaw * zoom + panY,
-        };
-      };
-
-      const tl = imgToCanvas(bounds.minX, bounds.minY);
-      const br = imgToCanvas(bounds.maxX + 1, bounds.maxY + 1);
-      const rw  = br.x - tl.x;
-      const rh  = br.y - tl.y;
-
-      if (rw <= 0 || rh <= 0) return;
-
-      // White shadow line (background)
-      ctx.save();
-      ctx.setLineDash([5, 5]);
-      ctx.lineDashOffset = -dashOffset;
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-      ctx.lineWidth   = 1.5;
-      ctx.strokeRect(tl.x, tl.y, rw, rh);
-
-      // Dark moving line (ants)
-      ctx.setLineDash([5, 5]);
-      ctx.lineDashOffset = -(dashOffset + 5);
-      ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-      ctx.lineWidth   = 1.5;
-      ctx.strokeRect(tl.x, tl.y, rw, rh);
-      ctx.restore();
-
-      antsStateRef.current.dashOffset = (dashOffset + 0.5) % 10;
+    // image-pixel → canvas-world → screen
+    const imgToScreen = (imgX, imgY) => {
+      const wx = layerRect.x + (imgX / bounds._iw) * layerRect.w;
+      const wy = layerRect.y + (imgY / bounds._ih) * layerRect.h;
+      return toScreen({ x: wx, y: wy });
     };
 
-    draw();
-    antsTimerRef.current = setInterval(draw, 60);
-  }, [zoom, panX, panY]);
+    const tl = imgToScreen(bounds.minX, bounds.minY);
+    const br = imgToScreen(bounds.maxX + 1, bounds.maxY + 1);
+    const rw  = br.x - tl.x;
+    const rh  = br.y - tl.y;
+    if (rw <= 0 || rh <= 0) return;
 
-  const stopMarchingAnts = useCallback(() => {
-    if (antsTimerRef.current) {
-      clearInterval(antsTimerRef.current);
-      antsTimerRef.current = null;
-    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // White line (background)
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.lineDashOffset = -dashOffset;
+    ctx.strokeStyle    = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth      = 1.5;
+    ctx.strokeRect(tl.x, tl.y, rw, rh);
+    // Dark marching ants
+    ctx.lineDashOffset = -(dashOffset + 5);
+    ctx.strokeStyle    = 'rgba(0,0,0,0.75)';
+    ctx.strokeRect(tl.x, tl.y, rw, rh);
+    ctx.restore();
+
+    antsStateRef.current.dashOffset = (dashOffset + 0.5) % 10;
+  }
+
+  function startMarchingAnts({ bounds, layerRect }) {
+    if (antsTimerRef.current) clearInterval(antsTimerRef.current);
+    antsStateRef.current = { bounds, layerRect, dashOffset: 0 };
+    _drawAnts();
+    antsTimerRef.current = setInterval(_drawAnts, 60);
+  }
+
+  function stopMarchingAnts() {
+    if (antsTimerRef.current) { clearInterval(antsTimerRef.current); antsTimerRef.current = null; }
     antsStateRef.current = null;
     clearCanvas();
-  }, [clearCanvas]);
+  }
 
-  // ── Re-render ants when viewport changes ─────────────────────────────────────
-  // (zoom/pan change means the screen rect changes)
-  useEffect(() => {
-    if (!antsStateRef.current) return;
-    // Restart with the same bounds so the draw function picks up new zoom/pan
-    startMarchingAnts(antsStateRef.current);
-  }, [zoom, panX, panY, startMarchingAnts]);
-
-  // ── Event listeners ──────────────────────────────────────────────────────────
-
+  // ── Event listeners ───────────────────────────────────────────────────────
   useEffect(() => {
     const onLassoUpdate = (e) => {
       const { points, drawing } = e.detail;
-      if (!drawing || !points.length) {
-        stopMarchingAnts();
-        clearCanvas();
-        return;
-      }
+      if (!drawing || !points.length) { stopMarchingAnts(); clearCanvas(); return; }
       drawLasso(points);
     };
 
@@ -142,27 +141,22 @@ export default function SelectionOverlayCanvas({ width, height }) {
       startMarchingAnts({ bounds: { ...bounds, _iw: iw, _ih: ih }, layerRect });
     };
 
-    const onWandClear = () => {
-      stopMarchingAnts();
-    };
+    const onWandClear = () => stopMarchingAnts();
 
-    window.addEventListener('tf:lasso-update',   onLassoUpdate);
-    window.addEventListener('tf:wand-complete',  onWandComplete);
-    window.addEventListener('tf:wand-clear',     onWandClear);
-
+    window.addEventListener('tf:lasso-update',  onLassoUpdate);
+    window.addEventListener('tf:wand-complete', onWandComplete);
+    window.addEventListener('tf:wand-clear',    onWandClear);
     return () => {
       window.removeEventListener('tf:lasso-update',  onLassoUpdate);
       window.removeEventListener('tf:wand-complete', onWandComplete);
       window.removeEventListener('tf:wand-clear',    onWandClear);
       if (antsTimerRef.current) clearInterval(antsTimerRef.current);
     };
-  }, [drawLasso, startMarchingAnts, stopMarchingAnts, clearCanvas]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <canvas
       ref={canvasRef}
-      width={width}
-      height={height}
       style={{
         position:      'absolute',
         top:           0,
