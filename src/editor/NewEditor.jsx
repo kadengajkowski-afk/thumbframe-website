@@ -642,8 +642,9 @@ export default function NewEditor({ user, setPage }) {
     rendererRef.current?.markDirty();
   }, [updateLayer, commitChange]);
 
-  const handleColorGradeSelect = useCallback((layerId, gradeName, isPro) => {
-    if (isPro) {
+  const handleColorGradeSelect = useCallback((layerId, gradeName, isProGrade) => {
+    const userIsPro = user?.is_pro === true || user?.plan === 'pro';
+    if (isProGrade && !userIsPro) {
       window.dispatchEvent(new CustomEvent('tf:toast', {
         detail: { message: 'Upgrade to Pro to unlock this colour grade.' },
       }));
@@ -806,6 +807,7 @@ export default function NewEditor({ user, setPage }) {
           ) : selectedEffectLayer ? (
             <EffectsPanel
               layer={selectedEffectLayer}
+              user={user}
               onAdjustmentChange={handleAdjustmentChange}
               onAdjustmentCommit={(label) => commitChange(label)}
               onAdjustmentReset={handleAdjustmentReset}
@@ -874,6 +876,7 @@ export default function NewEditor({ user, setPage }) {
 // ── Effects / Adjustments panel ──────────────────────────────────────────────
 function EffectsPanel({
   layer,
+  user,
   onAdjustmentChange,
   onAdjustmentCommit,
   onAdjustmentReset,
@@ -881,8 +884,9 @@ function EffectsPanel({
   onGradeStrengthChange,
   onMakeItPop,
 }) {
-  const adj   = layer.adjustments || {};
-  const grade = layer.colorGrade;
+  const adj       = layer.adjustments || {};
+  const grade     = layer.colorGrade;
+  const userIsPro = user?.is_pro === true || user?.plan === 'pro';
 
   const panelLabel  = { fontSize: 10, fontWeight: 600, color: 'rgba(245,245,247,0.40)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 };
   const sectionStyle = { padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)' };
@@ -921,6 +925,7 @@ function EffectsPanel({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
           {gradeEntries.map((gId) => {
             const isFree    = FREE_GRADES.has(gId);
+            const isLocked  = !isFree && !userIsPro;
             const isActive  = grade?.name === gId;
             return (
               <button
@@ -934,7 +939,7 @@ function EffectsPanel({
                   border: isActive ? '1px solid #f97316' : '1px solid rgba(255,255,255,0.08)',
                   cursor: 'pointer',
                   background: isActive ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.04)',
-                  color: isActive ? '#f97316' : isFree ? 'rgba(245,245,247,0.70)' : 'rgba(245,245,247,0.35)',
+                  color: isActive ? '#f97316' : isLocked ? 'rgba(245,245,247,0.35)' : 'rgba(245,245,247,0.70)',
                   position: 'relative',
                   lineHeight: 1.3,
                   transition: 'background 120ms, color 120ms',
@@ -942,7 +947,7 @@ function EffectsPanel({
                 }}
               >
                 {GRADE_LABELS[gId]}
-                {!isFree && (
+                {isLocked && (
                   <span style={{ display: 'block', fontSize: 7, color: '#f97316', fontWeight: 700, marginTop: 1 }}>PRO</span>
                 )}
               </button>
