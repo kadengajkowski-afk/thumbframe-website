@@ -768,6 +768,14 @@ export default function NewEditor({ user, setPage }) {
     useEditorStore.setState({ zoom: newZoom, panX: newPanX, panY: newPanY });
   }, []);
 
+  // Register wheel listener as non-passive so preventDefault() actually works
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
+
   // ── Text editing: commit ──────────────────────────────────────────────────
   const commitTextEdit = useCallback(() => {
     const state    = useEditorStore.getState();
@@ -1053,7 +1061,6 @@ export default function NewEditor({ user, setPage }) {
         <div
           ref={containerRef}
           onPointerDown={handlePointerDown}
-          onWheel={handleWheel}
           onDoubleClick={handleDblClick}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
