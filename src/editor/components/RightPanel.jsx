@@ -15,6 +15,9 @@ import FaceCutoutFlow      from './FaceCutoutFlow';
 import VariantGenerator    from '../ai/VariantGenerator';
 import ExpressionCoach     from '../ai/ExpressionCoach';
 import CTRScoreWidget      from '../ai/CTRScoreWidget';
+import FaceEnhancement     from '../ai/FaceEnhancement';
+import StyleTransfer       from '../ai/StyleTransfer';
+import TextSuggestions     from '../ai/TextSuggestions';
 
 const PAINT_TOOLS = new Set([
   'brush','eraser','clone_stamp','healing_brush','spot_healing',
@@ -27,6 +30,7 @@ const COMING_SOON = () => window.dispatchEvent(
 
 export default function RightPanel({
   user,
+  supabaseSession,
   onUpdate,
   onCommit,
   onAdjustmentChange,
@@ -39,6 +43,7 @@ export default function RightPanel({
   onTextDataChange,
   onTextDataCommit,
   onFileUpload,
+  onShowAutoThumbnail,
 }) {
   const [openPanel, setOpenPanel] = useState(null); // 'niches' | 'background' | 'facecutout' | 'variants' | null
 
@@ -94,26 +99,45 @@ export default function RightPanel({
           )}
         </>
       ) : selectedTextLayer ? (
-        <TextPanel
-          layer={selectedTextLayer}
-          onFontChange={onFontChange}
-          onTextDataChange={onTextDataChange}
-          onCommit={onTextDataCommit}
-          onUpdate={onUpdate}
-        />
+        <>
+          <TextPanel
+            layer={selectedTextLayer}
+            onFontChange={onFontChange}
+            onTextDataChange={onTextDataChange}
+            onCommit={onTextDataCommit}
+            onUpdate={onUpdate}
+          />
+          {/* AI Text Suggestions */}
+          <div className="obs-section" style={{ padding: '0 12px 8px' }}>
+            <div className="obs-section-label">AI Text Suggestions</div>
+            <TextSuggestions layer={selectedTextLayer} />
+          </div>
+        </>
       ) : selectedImageLayer ? (
-        <EffectsPanel
-          layer={selectedImageLayer}
-          user={user}
-          onUpdate={onUpdate}
-          onCommit={onCommit}
-          onAdjustmentChange={onAdjustmentChange}
-          onAdjustmentCommit={onAdjustmentCommit}
-          onAdjustmentReset={onAdjustmentReset}
-          onColorGradeSelect={onColorGradeSelect}
-          onGradeStrengthChange={onGradeStrengthChange}
-          onMakeItPop={onMakeItPop}
-        />
+        <>
+          <EffectsPanel
+            layer={selectedImageLayer}
+            user={user}
+            onUpdate={onUpdate}
+            onCommit={onCommit}
+            onAdjustmentChange={onAdjustmentChange}
+            onAdjustmentCommit={onAdjustmentCommit}
+            onAdjustmentReset={onAdjustmentReset}
+            onColorGradeSelect={onColorGradeSelect}
+            onGradeStrengthChange={onGradeStrengthChange}
+            onMakeItPop={onMakeItPop}
+          />
+          {/* Face Enhancement */}
+          <div className="obs-section" style={{ padding: '0 12px 8px' }}>
+            <div className="obs-section-label">Face Enhancement</div>
+            <FaceEnhancement layer={selectedImageLayer} user={user} supabaseSession={supabaseSession} />
+          </div>
+          {/* Style Transfer */}
+          <div className="obs-section" style={{ padding: '0 12px 8px' }}>
+            <div className="obs-section-label">Creator Style</div>
+            <StyleTransfer />
+          </div>
+        </>
       ) : selectedShapeLayer ? (
         <ShapePanel
           layer={selectedShapeLayer}
@@ -183,6 +207,7 @@ export default function RightPanel({
                 { icon: '✦',  label: 'AI Generate', hint: 'Generate AI image',        onClick: () => setShowAIGeneratePanel(true),     id: null },
                 { icon: '📋', label: 'Templates',   hint: 'Browse templates',         onClick: () => setShowTemplateBrowser(true),     id: null },
                 { icon: '🖼', label: 'Assets',      hint: 'Browse stock photos and assets', onClick: () => setShowAssetLibrary(true), id: null },
+                { icon: '🤖', label: 'Auto Thumb',  hint: 'AI generates a full thumbnail layout', onClick: () => onShowAutoThumbnail?.(), id: null },
               ].map(({ icon, label, hint, onClick, id }) => {
                 const isActive = id && openPanel === id;
                 return (

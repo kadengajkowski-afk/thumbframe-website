@@ -4,6 +4,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import useEditorStore from '../engine/Store';
 import { generateTemplatePreviews } from '../utils/generateTemplatePreviews';
+import XPBadge from '../fun/XPBadge';
 
 const ZOOM_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 
@@ -50,6 +51,7 @@ function SaveStatus({ status }) {
 }
 
 export default function TopBar({ user, setPage, onExport, onShare }) {
+  const currentStreak = useEditorStore(s => s.currentStreak);
   const undo        = useEditorStore(s => s.undo);
   const redo        = useEditorStore(s => s.redo);
   const historyIdx  = useEditorStore(s => s.historyIndex);
@@ -118,8 +120,8 @@ export default function TopBar({ user, setPage, onExport, onShare }) {
 
         {/* Logo */}
         <div
-          onClick={() => setPage?.('home')}
-          title="ThumbFrame"
+          onClick={(e) => { setPage?.('home'); window.dispatchEvent(new CustomEvent('tf:logo-click')); }}
+          title="ThumbFrame — click 5× fast for a surprise"
           style={{
             width: 28, height: 28, borderRadius: 6,
             background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -321,6 +323,18 @@ export default function TopBar({ user, setPage, onExport, onShare }) {
             <text x="12" y="16.5" textAnchor="middle" fontFamily="Impact, sans-serif" fontSize="11" fontWeight="900" fill={thumbfriendEnabled ? '#fff' : 'currentColor'}>TF</text>
           </svg>
         </IconBtn>
+
+        <Sep />
+
+        {/* Streak badge */}
+        {currentStreak >= 2 && (
+          <div title={`${currentStreak}-day editing streak`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: '#f97316' }}>
+            🔥 {currentStreak}
+          </div>
+        )}
+
+        {/* XP Badge */}
+        <XPBadge user={user} />
 
         <Sep />
 

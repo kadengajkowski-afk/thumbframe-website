@@ -435,6 +435,60 @@ const useEditorStore = create(
     nicheBenchmark: null,       // { niche, ctrAvg, ctrTop10, ... } | null
     setNicheBenchmark: (b) => set((state) => { state.nicheBenchmark = b; }),
 
+    // ── Phase 17: Sound + Fun layer ──────────────────────────────────────────
+    soundEnabled:     false,
+    soundVolume:      0.3,
+    totalExports:     0,
+    sessionStartTime: Date.now(),
+
+    currentStreak:    0,
+    setCurrentStreak: (v) => set((state) => { state.currentStreak = v; }),
+
+    setSoundEnabled: (v) => set((state) => { state.soundEnabled = v; }),
+    setSoundVolume:  (v) => set((state) => { state.soundVolume  = v; }),
+    incrementExports: () => set((state) => { state.totalExports += 1; }),
+
+    // ── Phase 18: Advanced AI actions ────────────────────────────────────────
+    // applyAutoThumbnail — replaces all layers with AI-generated layer plan.
+    applyAutoThumbnail: (layersJson, colorGrade) => set((state) => {
+      const genId = () => crypto.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2));
+      state.layers = layersJson.map(layer => {
+        const newId = genId();
+        const base  = createLayer({ ...layer, id: newId });
+        return { ...base, ...layer, id: newId, texture: undefined, _preEditContent: null };
+      });
+      state.selectedLayerIds = [];
+      if (colorGrade) {
+        state.layers = state.layers.map(l =>
+          l.type === 'image' ? { ...l, colorGrade: { name: colorGrade, strength: 1.0 } } : l
+        );
+      }
+      _pushHistory(state, 'Auto-Thumbnail');
+    }),
+
+    // applyStyleToCanvas — applies color grade + adjustments to all visible image layers.
+    applyStyleToCanvas: (style) => set((state) => {
+      state.layers = state.layers.map(l => {
+        if (l.type !== 'image' || l.visible === false) return l;
+        return {
+          ...l,
+          colorGrade: { name: style.grade, strength: 1.0 },
+          adjustments: {
+            ...(l.adjustments || {}),
+            brightness: style.brightness || 0,
+            contrast:   style.contrast   || 0,
+            saturation: style.saturation || 0,
+          },
+        };
+      });
+      _pushHistory(state, `Style: ${style.name}`);
+    }),
+
+    // ── Phase 19: Upgrade Modal ──────────────────────────────────────────────
+    upgradeModalTrigger: null,
+    showUpgradeModal: (trigger) => set((state) => { state.upgradeModalTrigger = trigger; }),
+    hideUpgradeModal: () => set((state) => { state.upgradeModalTrigger = null; }),
+
     // applyTemplate — replaces all layers with template layers (new IDs), pushes
     // the resulting state to history so Cmd+Z restores the previous canvas.
     applyTemplate: (layersJson, templateName) => set((state) => {

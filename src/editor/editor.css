@@ -81,6 +81,58 @@
 /* Scrubby input hover cursor */
 .obs-scrub:hover { cursor: ew-resize; }
 
+/* ── Phase 17: Micro-animation keyframes ────────────────────────────────────── */
+@keyframes tf-ripple {
+  from { transform: scale(0); opacity: 1; }
+  to   { transform: scale(3); opacity: 0; }
+}
+@keyframes tf-confetti-particle {
+  0%   { transform: translate(0,0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(var(--vx), var(--vy)) rotate(720deg); opacity: 0; }
+}
+@keyframes tf-shooting-star {
+  from { transform: translateX(-60px) translateY(0) rotate(-30deg); opacity: 1; }
+  to   { transform: translateX(110vw)  translateY(60px) rotate(-30deg); opacity: 0; }
+}
+@keyframes tf-drop-bounce {
+  from { transform: translateY(-12px); opacity: 0; }
+  to   { transform: translateY(0);      opacity: 1; }
+}
+@keyframes tf-crumble {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.8) translateX(20px); }
+}
+@keyframes tf-wipe {
+  0%   { transform: translateX(-100%); }
+  50%  { transform: translateX(0); }
+  100% { transform: translateX(100%); }
+}
+@keyframes tf-rewind-dot {
+  from { opacity: 1; transform: translate(var(--tx), var(--ty)) scale(1); }
+  to   { opacity: 0; transform: translate(0,0) scale(0.3); }
+}
+@keyframes tf-flash {
+  0%   { opacity: 0.15; }
+  100% { opacity: 0; }
+}
+@keyframes tf-ufo-fly {
+  0%   { left: -60px; }
+  100% { left: calc(100vw + 60px); }
+}
+@keyframes tf-aurora {
+  0%   { opacity: 0; }
+  30%  { opacity: 0.4; }
+  100% { opacity: 0; }
+}
+@keyframes tf-achievement-enter {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* Layer drag reorder insertion line */
 .obs-layer-insert-above { border-top: 2px solid var(--accent) !important; }
 .obs-layer-insert-below { border-bottom: 2px solid var(--accent) !important; }

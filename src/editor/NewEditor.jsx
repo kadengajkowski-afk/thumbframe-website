@@ -28,6 +28,15 @@ import AIGeneratePanel    from './ai/AIGeneratePanel';
 import BackgroundRemover  from './components/BackgroundRemover';
 import AssetLibraryPanel  from './components/AssetLibraryPanel';
 import ChannelDashboard   from './components/ChannelDashboard';
+import UpgradeModal       from './components/UpgradeModal';
+import AutoThumbnailGenerator from './ai/AutoThumbnailGenerator';
+import AchievementToast   from './fun/AchievementToast';
+import useAchievements    from './fun/useAchievements';
+import useStreak          from './fun/useStreak';
+import XPBadge            from './fun/XPBadge';
+import { loadSoundPreferences, playWhoosh, playSuccess, playPop, playDelete, playRewind, playAchievement } from './fun/SoundEngine';
+import { animateColorGradeApplied, animateExportSuccess, animateUndo, animateRedo, animateTemplateApplied } from './fun/MicroAnimations';
+import { handleLogoClick, initKonamiListener, triggerKonami, handleStarfieldClick, checkMidnightEasterEgg } from './fun/easterEggs';
 import StampTestPreview   from './components/StampTestPreview';
 import FeedSimulator      from './components/FeedSimulator';
 import ExportDialog       from './components/ExportDialog';
@@ -103,6 +112,22 @@ export default function NewEditor({ user, setPage }) {
   const setShowChannelDashboard  = useEditorStore(s => s.setShowChannelDashboard);
   const setYouTubeData           = useEditorStore(s => s.setYouTubeData);
   const setNicheBenchmark        = useEditorStore(s => s.setNicheBenchmark);
+  const upgradeModalTrigger      = useEditorStore(s => s.upgradeModalTrigger);
+  const showUpgradeModal         = useEditorStore(s => s.showUpgradeModal);
+  const incrementExports         = useEditorStore(s => s.incrementExports);
+  const thumbfriendPersonality   = useEditorStore(s => s.thumbfriendPersonality);
+  const [showAutoThumbnail, setShowAutoThumbnail] = useState(false);
+
+  const setCurrentStreak = useEditorStore(s => s.setCurrentStreak);
+
+  // ── Fun layer hooks ──────────────────────────────────────────────────────
+  const { unlocked: unlockedAchievements, unlock: unlockAchievement, checkTriggers, pendingToast, setPendingToast } = useAchievements(user);
+  const { streak, recordActivity } = useStreak(user);
+
+  // Sync streak to store so TopBar can read it
+  useEffect(() => {
+    if (streak.current > 0) setCurrentStreak(streak.current);
+  }, [streak.current, setCurrentStreak]);
 
   // ── Store actions ────────────────────────────────────────────────────────
   const selectLayer          = useEditorStore(s => s.selectLayer);
@@ -127,6 +152,90 @@ export default function NewEditor({ user, setPage }) {
       setPage?.('mobile-editor');
     }
   }, [setPage]);
+
+  // ── Phase 17: Sound engine + fun layer init ──────────────────────────────
+  useEffect(() => {
+    loadSoundPreferences();
+    recordActivity(); // streak tracking
+    checkMidnightEasterEgg(unlockAchievement);
+    const cleanupKonami = initKonamiListener(() => {
+      triggerKonami(thumbfriendPersonality, unlockAchievement);
+    });
+    // Logo click easter egg
+    const onLogoClick = () => handleLogoClick(unlockAchievement);
+    window.addEventListener('tf:logo-click', onLogoClick);
+    // Shift+Alt+click on canvas area = UFO easter egg
+    const onCanvasClick = (e) => handleStarfieldClick(e, unlockAchievement);
+    window.addEventListener('click', onCanvasClick);
+    return () => {
+      cleanupKonami?.();
+      window.removeEventListener('tf:logo-click', onLogoClick);
+      window.removeEventListener('click', onCanvasClick);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Phase 17: Undo/redo animation ────────────────────────────────────────
+  const prevHistoryIndexRef = useRef(historyIndex);
+  useEffect(() => {
+    const prev = prevHistoryIndexRef.current;
+    if (historyIndex < prev) {
+      // Undo
+      const rect = canvasRef.current?.getBoundingClientRect();
+      animateUndo(rect || null);
+      playRewind();
+    } else if (historyIndex > prev) {
+      // Redo or new commit — distinguish by checking history length hasn't changed
+      // (simplest heuristic: only animate redo when it was already in history)
+    }
+    prevHistoryIndexRef.current = historyIndex;
+  }, [historyIndex]);
+
+  // ── Phase 17: Global event listeners for animations/achievements ──────────
+  useEffect(() => {
+    const onColorGradeApplied = () => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      animateColorGradeApplied(rect || null);
+      playWhoosh();
+      checkTriggers({ usedColorGrade: true, layerCount: useEditorStore.getState().layers.length });
+    };
+    const onExportSuccess = (e) => {
+      const buttonRect = e.detail?.buttonRect || null;
+      animateExportSuccess(buttonRect);
+      playSuccess();
+      incrementExports();
+      const count = useEditorStore.getState().totalExports + 1;
+      checkTriggers({ exportCount: count, sessionMinutes: (Date.now() - useEditorStore.getState().sessionStartTime) / 60000 });
+      unlockAchievement('first_export');
+    };
+    const onTemplateApplied = () => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      animateTemplateApplied(rect || null);
+      checkTriggers({ usedTemplate: true });
+    };
+    const onLayerAdded = () => {
+      playPop();
+      checkTriggers({ layerCount: useEditorStore.getState().layers.length });
+    };
+    const onLayerDeleted = () => { playDelete(); };
+    const onAchievementTrigger = (e) => { checkTriggers(e.detail || {}); };
+
+    window.addEventListener('tf:color-grade-applied', onColorGradeApplied);
+    window.addEventListener('tf:export-success',      onExportSuccess);
+    window.addEventListener('tf:template-applied',    onTemplateApplied);
+    window.addEventListener('tf:layer-added',         onLayerAdded);
+    window.addEventListener('tf:layer-deleted',       onLayerDeleted);
+    window.addEventListener('tf:achievement-trigger', onAchievementTrigger);
+    return () => {
+      window.removeEventListener('tf:color-grade-applied', onColorGradeApplied);
+      window.removeEventListener('tf:export-success',      onExportSuccess);
+      window.removeEventListener('tf:template-applied',    onTemplateApplied);
+      window.removeEventListener('tf:layer-added',         onLayerAdded);
+      window.removeEventListener('tf:layer-deleted',       onLayerDeleted);
+      window.removeEventListener('tf:achievement-trigger', onAchievementTrigger);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkTriggers, unlockAchievement, incrementExports]);
 
   // ── Phase 15: Load YouTube channel data + niche benchmark on mount ────────
   useEffect(() => {
@@ -1276,6 +1385,7 @@ export default function NewEditor({ user, setPage }) {
         {/* ── Right panel ─────────────────────────────────────────────── */}
         <RightPanel
           user={user}
+          supabaseSession={null}
           onUpdate={(layerId, changes) => updateLayer(layerId, changes)}
           onCommit={(label) => commitChange(label || 'Edit')}
           onAdjustmentChange={handleAdjustmentChange}
@@ -1288,6 +1398,7 @@ export default function NewEditor({ user, setPage }) {
           onTextDataChange={handleTextDataChange}
           onTextDataCommit={handleTextDataCommit}
           onFileUpload={() => fileInputRef.current?.click()}
+          onShowAutoThumbnail={() => setShowAutoThumbnail(true)}
         />
 
       </div>{/* end middle row */}
@@ -1332,6 +1443,20 @@ export default function NewEditor({ user, setPage }) {
 
       {/* ── Channel Dashboard modal ─────────────────────────────────── */}
       {showChannelDashboard && <ChannelDashboard user={user} onClose={() => setShowChannelDashboard(false)} />}
+
+      {/* ── Auto-Thumbnail Generator modal ──────────────────────────── */}
+      {showAutoThumbnail && <AutoThumbnailGenerator user={user} onClose={() => setShowAutoThumbnail(false)} />}
+
+      {/* ── Upgrade Modal ────────────────────────────────────────────── */}
+      <UpgradeModal />
+
+      {/* ── Achievement Toast ────────────────────────────────────────── */}
+      {pendingToast && (
+        <AchievementToast
+          achievement={pendingToast}
+          onDone={() => setPendingToast(null)}
+        />
+      )}
 
       {/* ── Feed Simulator modal ────────────────────────────────────── */}
       {showFeedSimulator && <FeedSimulator rendererRef={rendererRef} />}
