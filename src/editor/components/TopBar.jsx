@@ -3,6 +3,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import useEditorStore from '../engine/Store';
+import { generateTemplatePreviews } from '../utils/generateTemplatePreviews';
 
 const ZOOM_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 
@@ -71,7 +72,8 @@ export default function TopBar({ user, setPage, onExport, onShare }) {
   const [nameVal, setNameVal]         = useState('');
   const nameInputRef = useRef(null);
 
-  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
+  const [zoomMenuOpen, setZoomMenuOpen]       = useState(false);
+  const [previewGenProgress, setPreviewGenProgress] = useState(null); // null | { done, total, name }
 
   const commitName = useCallback(() => {
     const trimmed = nameVal.trim();
@@ -243,6 +245,54 @@ export default function TopBar({ user, setPage, onExport, onShare }) {
 
       {/* ── RIGHT ────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto' }}>
+
+        {/* ── DEV: Generate Template Previews (is_dev only) ───────────── */}
+        {user?.is_dev && (
+          <>
+            <button
+              disabled={!!previewGenProgress}
+              title="Admin: generate preview thumbnails for all seeded templates and upload to Supabase Storage"
+              onClick={async () => {
+                const toast = (msg, type = 'info') =>
+                  window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: msg, type } }));
+
+                try {
+                  const result = await generateTemplatePreviews(({ done, total, name }) => {
+                    setPreviewGenProgress({ done, total, name });
+                    toast(`Generating preview ${done + 1}/${total}: ${name}`);
+                  });
+                  setPreviewGenProgress(null);
+                  if (result.errors.length === 0) {
+                    toast(`✓ All ${result.total} template previews generated and uploaded.`, 'success');
+                  } else {
+                    toast(`Done: ${result.done - result.errors.length}/${result.total} succeeded. ${result.errors.length} failed — see console.`, 'warning');
+                  }
+                } catch (err) {
+                  setPreviewGenProgress(null);
+                  toast('Preview generation failed — see console.', 'error');
+                  console.error('[TopBar] generateTemplatePreviews error:', err);
+                }
+              }}
+              style={{
+                height: 28, padding: '0 10px',
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: previewGenProgress ? 'rgba(249,115,22,0.15)' : 'rgba(249,115,22,0.10)',
+                border: '1px solid rgba(249,115,22,0.35)',
+                borderRadius: 'var(--radius-md)',
+                color: 'rgba(249,115,22,0.9)',
+                fontSize: 11, fontWeight: 600, cursor: previewGenProgress ? 'wait' : 'pointer',
+                fontFamily: 'Inter, -apple-system, sans-serif',
+                whiteSpace: 'nowrap',
+                transition: 'background var(--dur-fast)',
+              }}
+            >
+              {previewGenProgress
+                ? `Generating ${previewGenProgress.done}/${previewGenProgress.total}…`
+                : '⚡ Gen Previews'}
+            </button>
+            <Sep />
+          </>
+        )}
 
         <Sep />
 
