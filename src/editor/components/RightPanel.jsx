@@ -1,0 +1,159 @@
+// src/editor/components/RightPanel.jsx
+// Container for the right properties panel.
+// Shows: BrushSettingsPanel (paint tools), TextPanel, EffectsPanel, ShapePanel, or nothing-selected state.
+
+import React from 'react';
+import useEditorStore from '../engine/Store';
+import BrushSettingsPanel from '../panels/BrushSettingsPanel';
+import EffectsPanel       from '../panels/EffectsPanel';
+import TextPanel          from '../panels/TextPanel';
+import ShapePanel         from '../panels/ShapePanel';
+
+const PAINT_TOOLS = new Set([
+  'brush','eraser','clone_stamp','healing_brush','spot_healing',
+  'dodge','burn','sponge','blur_brush','sharpen_brush','smudge','light_painting',
+]);
+
+export default function RightPanel({
+  user,
+  onUpdate,
+  onCommit,
+  onAdjustmentChange,
+  onAdjustmentCommit,
+  onAdjustmentReset,
+  onColorGradeSelect,
+  onGradeStrengthChange,
+  onMakeItPop,
+  onFontChange,
+  onTextDataChange,
+  onTextDataCommit,
+}) {
+  const activeTool       = useEditorStore(s => s.activeTool);
+  const layers           = useEditorStore(s => s.layers);
+  const selectedLayerIds = useEditorStore(s => s.selectedLayerIds);
+
+  const isPainting = PAINT_TOOLS.has(activeTool);
+
+  // Derive selected layer info
+  const selectedLayer = selectedLayerIds.length === 1
+    ? layers.find(l => l.id === selectedLayerIds[0])
+    : null;
+
+  const selectedTextLayer  = selectedLayer?.type === 'text'  ? selectedLayer : null;
+  const selectedImageLayer = selectedLayer?.type === 'image' ? selectedLayer : null;
+  const selectedShapeLayer = selectedLayer?.type === 'shape' ? selectedLayer : null;
+
+  return (
+    <div className="obs-scroll" style={{
+      width: 260, minWidth: 260, flexShrink: 0, height: '100%',
+      background: 'var(--bg-2)', borderLeft: '1px solid var(--border-1)',
+      overflowY: 'auto', overflowX: 'hidden',
+      fontFamily: 'Inter, -apple-system, sans-serif',
+    }}>
+
+      {isPainting ? (
+        <>
+          <BrushSettingsPanel />
+          {/* Show layer props below brush settings if an image is selected */}
+          {selectedImageLayer && (
+            <EffectsPanel
+              layer={selectedImageLayer}
+              user={user}
+              onUpdate={onUpdate}
+              onCommit={onCommit}
+              onAdjustmentChange={onAdjustmentChange}
+              onAdjustmentCommit={onAdjustmentCommit}
+              onAdjustmentReset={onAdjustmentReset}
+              onColorGradeSelect={onColorGradeSelect}
+              onGradeStrengthChange={onGradeStrengthChange}
+              onMakeItPop={onMakeItPop}
+            />
+          )}
+        </>
+      ) : selectedTextLayer ? (
+        <TextPanel
+          layer={selectedTextLayer}
+          onFontChange={onFontChange}
+          onTextDataChange={onTextDataChange}
+          onCommit={onTextDataCommit}
+          onUpdate={onUpdate}
+        />
+      ) : selectedImageLayer ? (
+        <EffectsPanel
+          layer={selectedImageLayer}
+          user={user}
+          onUpdate={onUpdate}
+          onCommit={onCommit}
+          onAdjustmentChange={onAdjustmentChange}
+          onAdjustmentCommit={onAdjustmentCommit}
+          onAdjustmentReset={onAdjustmentReset}
+          onColorGradeSelect={onColorGradeSelect}
+          onGradeStrengthChange={onGradeStrengthChange}
+          onMakeItPop={onMakeItPop}
+        />
+      ) : selectedShapeLayer ? (
+        <ShapePanel
+          layer={selectedShapeLayer}
+          onUpdate={onUpdate}
+          onCommit={onCommit}
+        />
+      ) : (
+        /* Nothing selected */
+        <div style={{
+          padding: '0 12px',
+        }}>
+          {/* Canvas info */}
+          <div className="obs-section" style={{ marginTop: 8 }}>
+            <div className="obs-section-label">Canvas</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-4)', marginBottom: 3 }}>Width</div>
+                <div style={{ fontSize: 12, fontFamily: 'JetBrains Mono, SF Mono, monospace', color: 'var(--text-2)' }}>1280</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-4)', marginBottom: 3 }}>Height</div>
+                <div style={{ fontSize: 12, fontFamily: 'JetBrains Mono, SF Mono, monospace', color: 'var(--text-2)' }}>720</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick actions */}
+          <div className="obs-section">
+            <div className="obs-section-label">Quick Actions</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              {[
+                { icon: '🖼', label: 'Add Image',  hint: 'Upload an image layer' },
+                { icon: 'T',  label: 'Add Text',   hint: 'Press T and click canvas' },
+                { icon: '✦',  label: 'AI Generate', hint: 'Generate AI background' },
+                { icon: '📋', label: 'Templates',  hint: 'Browse templates' },
+              ].map(({ icon, label, hint }) => (
+                <button
+                  key={label}
+                  title={hint}
+                  style={{
+                    height: 48, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    justifyContent: 'center', gap: 4,
+                    background: 'var(--bg-3)', border: '1px solid var(--border-1)',
+                    borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+                    color: 'var(--text-3)', fontSize: 11, fontWeight: 600,
+                    transition: 'background var(--dur-fast), color var(--dur-fast)',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-5)'; e.currentTarget.style.color = 'var(--text-2)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.color = 'var(--text-3)'; }}
+                >
+                  <span style={{ fontSize: 18 }}>{icon}</span>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hint */}
+          <div style={{ padding: '12px 0', fontSize: 11, color: 'var(--text-4)', textAlign: 'center', lineHeight: 1.5 }}>
+            Select a layer to edit its properties
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -3,7 +3,7 @@
 // Custom brush tips: glow, sparkle, streak, lens_flare.
 
 export class LightPaintingTool {
-  handlesComposite = true;
+  handlesComposite = false; // uses wetCanvas accumulation — real-time preview via uploadPaintCanvas merge
 
   constructor() {
     this._wetCanvas = null;
@@ -142,6 +142,7 @@ export class LightPaintingTool {
   }
 
   applyStamp(point, params, targetCanvas, wetCanvas) {
+    console.log('[LightPainting] applyStamp called', point.x, point.y, params?.brushType, params?.color);
     const size      = params.size      ?? 30;
     const flowAlpha = params._flowAlpha ?? (params.flow ?? 80) / 100;
     const tip       = this._generateTip(params);

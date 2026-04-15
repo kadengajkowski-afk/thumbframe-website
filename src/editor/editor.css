@@ -1,0 +1,86 @@
+/* src/editor/editor.css — Observatory design system tokens */
+
+:root {
+  --bg-0: #050507;
+  --bg-1: #09090b;
+  --bg-2: #111113;
+  --bg-3: #18181b;
+  --bg-4: #1f1f23;
+  --bg-5: #27272a;
+
+  --accent:        #f97316;
+  --accent-hover:  #fb923c;
+  --accent-active: #ea580c;
+  --accent-dim:    rgba(249,115,22,0.12);
+  --accent-border: rgba(249,115,22,0.30);
+
+  --text-1: #F5F5F7;
+  --text-2: rgba(245,245,247,0.65);
+  --text-3: rgba(245,245,247,0.40);
+  --text-4: rgba(245,245,247,0.25);
+
+  --border-1: rgba(255,255,255,0.06);
+  --border-2: rgba(255,255,255,0.10);
+  --border-3: rgba(255,255,255,0.18);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --dur-fast:   120ms;
+  --dur-normal: 200ms;
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Thin scrollbar used across all editor panels */
+.obs-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+.obs-scroll::-webkit-scrollbar        { width: 4px; }
+.obs-scroll::-webkit-scrollbar-track  { background: transparent; }
+.obs-scroll::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+/* Focus ring for keyboard nav */
+.obs-focus:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Panel section shared styles */
+.obs-section {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-1);
+}
+
+.obs-section-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-bottom: 8px;
+}
+
+/* Command palette + color picker enter animation */
+@keyframes obs-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes obs-toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes obs-toast-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* Scrubby input hover cursor */
+.obs-scrub:hover { cursor: ew-resize; }
+
+/* Layer drag reorder insertion line */
+.obs-layer-insert-above { border-top: 2px solid var(--accent) !important; }
+.obs-layer-insert-below { border-bottom: 2px solid var(--accent) !important; }

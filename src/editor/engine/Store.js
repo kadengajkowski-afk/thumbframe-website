@@ -10,6 +10,10 @@ const MAX_HISTORY = 100;
 
 const useEditorStore = create(
   immer((set, get) => ({
+    // ── Project metadata ──
+    projectName: 'Untitled',
+    saveStatus: 'saved', // 'saved' | 'saving' | 'unsaved' | 'error'
+
     // ── Canvas ──
     canvasWidth: 1280,
     canvasHeight: 720,
@@ -74,6 +78,9 @@ const useEditorStore = create(
     // ────────────────────────────────────────────────────
     // INTERACTION MODE
     // ────────────────────────────────────────────────────
+
+    setProjectName: (name) => set((state) => { state.projectName = name; }),
+    setSaveStatus:  (status) => set((state) => { state.saveStatus = status; }),
 
     setInteractionMode: (mode) => set((state) => {
       const prev = state.interactionMode;

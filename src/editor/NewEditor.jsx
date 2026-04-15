@@ -8,13 +8,19 @@ import Renderer from './engine/Renderer';
 import useEditorStore from './engine/Store';
 import SelectionOverlay from './components/SelectionOverlay';
 import BrushCursor from './components/BrushCursor';
-import BrushSettingsPanel from './panels/BrushSettingsPanel';
+import ToastManager from './components/ToastManager';
+import TopBar from './components/TopBar';
+import LeftToolbar from './components/LeftToolbar';
+import BottomPanel from './components/BottomPanel';
+import StatusBar from './components/StatusBar';
+import RightPanel from './components/RightPanel';
+import CommandPalette from './components/CommandPalette';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import { hitTestLayers, computeMove } from './tools/SelectTool';
 import { computeGuides } from './engine/SmartGuides';
 import { processImageFile } from './utils/imageUpload';
 import { renderTextToCanvas, loadFont, DEFAULT_TEXT_DATA } from './utils/textRenderer';
-import { COLOR_GRADES, FREE_GRADES, GRADE_LABELS } from './presets/colorGrades';
+import { GRADE_LABELS } from './presets/colorGrades';
 import { BrushPipeline, getCompositeOp } from './tools/BrushPipeline';
 import { BrushTool } from './tools/BrushTool';
 import { EraserTool } from './tools/EraserTool';
@@ -24,18 +30,14 @@ import { DodgeTool, BurnTool, SpongeTool } from './tools/TonalTools';
 import { BlurBrushTool, SharpenBrushTool, SmudgeTool } from './tools/FilterBrushTools';
 import { LightPaintingTool } from './tools/LightPaintingTool';
 import { SpotHealingTool } from './tools/SpotHealingTool';
+// Design system CSS vars
+import './editor.css';
 // Side-effect imports: register window singletons
 import './engine/FilterScaler';
 import './engine/TextureMemoryManager';
 
 const CW = 1280;
 const CH = 720;
-
-const GOOGLE_FONTS = [
-  'Bebas Neue', 'Montserrat', 'Oswald', 'Bangers', 'Anton',
-  'Passion One', 'Russo One', 'Black Ops One', 'Permanent Marker', 'Luckiest Guy',
-];
-const ALL_FONTS = ['Impact', 'Arial Black', 'Inter', ...GOOGLE_FONTS];
 
 export default function NewEditor({ user, setPage }) {
   const containerRef  = useRef(null);
@@ -48,7 +50,6 @@ export default function NewEditor({ user, setPage }) {
   // ── Painting tool refs ───────────────────────────────────────────────────
   const pipelineRef      = useRef(new BrushPipeline());
   const paintCanvasesRef = useRef(new Map()); // layerId → HTMLCanvasElement
-  const preStrokeDataRef = useRef(new Map()); // layerId → ImageData (pre-stroke snapshot)
   const isStrokingRef    = useRef(false);
   const strokeLayerRef   = useRef(null);      // layerId being painted
 
@@ -70,12 +71,10 @@ export default function NewEditor({ user, setPage }) {
 
   // ── Store subscriptions ──────────────────────────────────────────────────
   const layers           = useEditorStore(s => s.layers);
-  const selectedLayerIds = useEditorStore(s => s.selectedLayerIds);
   const zoom             = useEditorStore(s => s.zoom);
   const panX             = useEditorStore(s => s.panX);
   const panY             = useEditorStore(s => s.panY);
   const historyIndex     = useEditorStore(s => s.historyIndex);
-  const historyLen       = useEditorStore(s => s.history.length);
   const activeTool       = useEditorStore(s => s.activeTool);
   const isEditingText    = useEditorStore(s => s.isEditingText);
   const editingLayerId   = useEditorStore(s => s.editingLayerId);
@@ -88,13 +87,11 @@ export default function NewEditor({ user, setPage }) {
   const commitChange         = useEditorStore(s => s.commitChange);
   const setInteractionMode   = useEditorStore(s => s.setInteractionMode);
   const duplicateLayer       = useEditorStore(s => s.duplicateLayer);
-  const setActiveTool        = useEditorStore(s => s.setActiveTool);
   const setEditingText       = useEditorStore(s => s.setEditingText);
   const revertText           = useEditorStore(s => s.revertText);
   const exitEditMode         = useEditorStore(s => s.exitEditMode);
   const setCursorCanvasPos   = useEditorStore(s => s.setCursorCanvasPos);
   const setCloneSourcePoint  = useEditorStore(s => s.setCloneSourcePoint);
-  const toolParams           = useEditorStore(s => s.toolParams);
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
   useKeyboardShortcuts(containerRef);
@@ -102,17 +99,18 @@ export default function NewEditor({ user, setPage }) {
   // ── Upload / drag-drop state ─────────────────────────────────────────────
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // ── Toast ─────────────────────────────────────────────────────────────────
-  const [toast, setToast] = useState(null);
+  // ── Command palette ──────────────────────────────────────────────────────
+  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
 
   useEffect(() => {
     const handler = (e) => {
-      setToast(e.detail.message);
-      clearTimeout(handler._timer);
-      handler._timer = setTimeout(() => setToast(null), 3000);
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCmdPaletteOpen(o => !o);
+      }
     };
-    window.addEventListener('tf:toast', handler);
-    return () => window.removeEventListener('tf:toast', handler);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   // ── Paste image from clipboard ───────────────────────────────────────────
@@ -261,20 +259,6 @@ export default function NewEditor({ user, setPage }) {
     'dodge','burn','sponge','blur_brush','sharpen_brush','smudge','light_painting',
   ]);
 
-  /** Convert screen event to canvas coordinates */
-  const screenToCanvas = useCallback((e) => {
-    const canvasEl = canvasRef.current;
-    if (!canvasEl) return null;
-    const rect  = canvasEl.getBoundingClientRect();
-    const vp    = rendererRef.current?.viewport;
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-    return {
-      x: (screenX - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1),
-      y: (screenY - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1),
-    };
-  }, []);
-
   /** Get or create paint canvas for a layer.
    *  Always initialised with the layer's current image pixels so that the
    *  eraser has real content to erase from and clone stamp can sample correctly. */
@@ -321,8 +305,12 @@ export default function NewEditor({ user, setPage }) {
       const previewCtx = preview.getContext('2d');
       previewCtx.drawImage(pc, 0, 0);
       previewCtx.save();
+      // light_painting accumulates on wetCanvas with 'screen' — use that for preview
+      const compositeOp = tool === 'light_painting'
+        ? 'screen'
+        : getCompositeOp(params.blendMode ?? 'normal');
       previewCtx.globalAlpha              = (params.opacity ?? 100) / 100;
-      previewCtx.globalCompositeOperation = getCompositeOp(params.blendMode ?? 'normal');
+      previewCtx.globalCompositeOperation = compositeOp;
       previewCtx.drawImage(pipeline.wetCanvas, 0, 0);
       previewCtx.restore();
       uploadSrc = preview;
@@ -916,20 +904,6 @@ export default function NewEditor({ user, setPage }) {
     commitChange(label);
   }, [commitChange]);
 
-  // ── Selected text layer for the panel ────────────────────────────────────
-  const selectedTextLayer = (() => {
-    if (selectedLayerIds.length !== 1) return null;
-    const l = layers.find(la => la.id === selectedLayerIds[0]);
-    return l?.type === 'text' ? l : null;
-  })();
-
-  // ── Selected image/shape layer for effects panel ──────────────────────────
-  const selectedEffectLayer = (() => {
-    if (selectedLayerIds.length !== 1) return null;
-    const l = layers.find(la => la.id === selectedLayerIds[0]);
-    return (l?.type === 'image' || l?.type === 'shape') ? l : null;
-  })();
-
   // ── Adjustment change handlers ────────────────────────────────────────────
   const handleAdjustmentChange = useCallback((layerId, key, value) => {
     const layer = useEditorStore.getState().layers.find(l => l.id === layerId);
@@ -987,9 +961,6 @@ export default function NewEditor({ user, setPage }) {
     rendererRef.current?.markDirty();
   }, [updateLayer, commitChange]);
 
-  const canUndo = historyIndex > 0;
-  const canRedo = historyIndex < historyLen - 1;
-
   // ── Canvas cursor ─────────────────────────────────────────────────────────
   const isPaintTool  = PAINT_TOOLS.has(activeTool);
   const canvasCursor = isPaintTool ? 'none' : activeTool === 'text' ? 'text' : 'default';
@@ -998,168 +969,27 @@ export default function NewEditor({ user, setPage }) {
     <div style={{
       position: 'fixed', inset: 0,
       display: 'flex', flexDirection: 'column',
-      background: '#09090b', color: '#F5F5F7',
-      fontFamily: '-apple-system, "SF Pro Text", "Segoe UI", sans-serif',
+      background: 'var(--bg-1)', color: 'var(--text-1)',
+      fontFamily: 'Inter, -apple-system, sans-serif',
     }}>
 
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
-      <div style={{
-        height: 48, minHeight: 48, flexShrink: 0,
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '0 12px',
-        background: '#111113',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        zIndex: 20,
-      }}>
-        <button
-          onClick={() => setPage?.('home')}
-          style={{ background: 'none', border: 'none', color: 'rgba(245,245,247,0.40)', fontSize: 16, cursor: 'pointer', padding: '6px 10px' }}
-        >←</button>
-
-        <button disabled={!canUndo} onClick={() => useEditorStore.getState().undo()} title="Undo (⌘Z)" style={toolBtnStyle(!canUndo)}>↩</button>
-        <button disabled={!canRedo} onClick={() => useEditorStore.getState().redo()} title="Redo (⌘⇧Z)" style={toolBtnStyle(!canRedo)}>↪</button>
-
-        <span style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 700, color: 'rgba(245,245,247,0.40)' }}>
-          ThumbFrame — Dev Engine
-        </span>
-        <span style={{ fontSize: 11, color: '#f97316', fontWeight: 700, padding: '4px 10px', background: 'rgba(249,115,22,0.12)', borderRadius: 6 }}>
-          DEV
-        </span>
-      </div>
+      <TopBar
+        user={user}
+        setPage={setPage}
+        onExport={() => window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Export not yet connected in Phase 7', type: 'info' } }))}
+        onShare={() => window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Share not yet connected in Phase 7', type: 'info' } }))}
+      />
 
       {/* ── Middle row ──────────────────────────────────────────────────── */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
 
         {/* ── Left toolbar ────────────────────────────────────────────── */}
-        <div style={{
-          width: 52, minWidth: 52, flexShrink: 0, height: '100%',
-          background: '#111113', borderRight: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 8, gap: 4,
-        }}>
-          {/* Select tool */}
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => setActiveTool('select')}
-            title="Select (V)"
-            style={toolbarIconBtnStyle(activeTool === 'select')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 3l14 9-7 1-4 7z"/>
-            </svg>
-          </button>
-
-          {/* Text tool */}
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => setActiveTool('text')}
-            title="Text (T)"
-            style={toolbarIconBtnStyle(activeTool === 'text')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="4 7 4 4 20 4 20 7"/>
-              <line x1="9" y1="20" x2="15" y2="20"/>
-              <line x1="12" y1="4" x2="12" y2="20"/>
-            </svg>
-          </button>
-
-          {/* Brush */}
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => setActiveTool('brush')}
-            title="Brush (B)"
-            style={toolbarIconBtnStyle(activeTool === 'brush')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 17c3.6-3.6 5.4-5.4 9-5.4s5.4 1.8 5.4 5.4c0 2-1.2 3-3 3-2.4 0-3-1.5-3-3"/>
-              <path d="M9.5 6.5L17 3l1 8-3 3"/>
-            </svg>
-          </button>
-
-          {/* Eraser */}
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => setActiveTool('eraser')}
-            title="Eraser (E)"
-            style={toolbarIconBtnStyle(activeTool === 'eraser')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 20H7L3 16l10-10 7 7-3 3"/>
-              <path d="M6.5 17.5l4-4"/>
-            </svg>
-          </button>
-
-          {/* Clone stamp */}
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => setActiveTool('clone_stamp')}
-            title="Clone Stamp (S)"
-            style={toolbarIconBtnStyle(activeTool === 'clone_stamp')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2"/>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-            </svg>
-          </button>
-
-          {/* Spot Healing */}
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => setActiveTool('spot_healing')}
-            title="Spot Healing (J) — paint to auto-heal"
-            style={toolbarIconBtnStyle(activeTool === 'spot_healing')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2a5 5 0 0 1 5 5c0 5-5 11-5 11S7 12 7 7a5 5 0 0 1 5-5z"/>
-              <line x1="12" y1="7" x2="12" y2="7" strokeWidth="2.5"/>
-              <path d="M8 14h8"/>
-              <path d="M10 17h4"/>
-            </svg>
-          </button>
-
-          {/* Retouch cycle (dodge/burn/sponge/blur/sharpen/smudge) */}
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => useEditorStore.getState().cycleRetouchTool()}
-            title="Retouch Tools (R) — Dodge / Burn / Sponge / Blur / Sharpen / Smudge"
-            style={toolbarIconBtnStyle(['dodge','burn','sponge','blur_brush','sharpen_brush','smudge'].includes(activeTool))}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 2v3m0 14v3M2 12h3m14 0h3m-3.3-6.7-2.1 2.1M7.4 16.6l-2.1 2.1M16.6 16.6l2.1 2.1M7.4 7.4 5.3 5.3"/>
-            </svg>
-          </button>
-
-          {/* Light painting */}
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => setActiveTool('light_painting')}
-            title="Light Painting"
-            style={toolbarIconBtnStyle(activeTool === 'light_painting')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-              <circle cx="12" cy="12" r="3" fill="currentColor" fillOpacity="0.3"/>
-            </svg>
-          </button>
-
-          <div style={{ width: '70%', height: 1, background: 'rgba(255,255,255,0.08)', margin: '4px 0' }} />
-
-          {/* Upload image */}
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => fileInputRef.current?.click()}
-            title="Upload Image"
-            style={toolbarIconBtnStyle(false)}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-          </button>
-
-          <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileInputChange} />
-        </div>
+        <LeftToolbar
+          onFileUpload={() => fileInputRef.current?.click()}
+          fileInputRef={fileInputRef}
+        />
+        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileInputChange} />
 
         {/* ── Canvas area ─────────────────────────────────────────────── */}
         <div
@@ -1173,10 +1003,10 @@ export default function NewEditor({ user, setPage }) {
           style={{
             flex: 1, minWidth: 0, height: '100%', overflow: 'hidden',
             position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: '#09090b', cursor: canvasCursor, touchAction: 'none',
-            outline: isDragOver ? '2px solid #f97316' : 'none',
+            background: 'var(--bg-1)', cursor: canvasCursor, touchAction: 'none',
+            outline: isDragOver ? '2px solid var(--accent)' : 'none',
             outlineOffset: '-2px',
-            transition: 'outline 120ms cubic-bezier(0.16, 1, 0.3, 1)',
+            transition: 'outline var(--dur-fast) var(--ease-out)',
           }}
         >
           <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
@@ -1184,73 +1014,34 @@ export default function NewEditor({ user, setPage }) {
         </div>
 
         {/* ── Right panel ─────────────────────────────────────────────── */}
-        <div style={{
-          width: 260, minWidth: 260, flexShrink: 0, height: '100%',
-          background: '#111113', borderLeft: '1px solid rgba(255,255,255,0.06)',
-          overflowY: 'auto',
-        }}>
-          {isPaintTool ? (
-            <BrushSettingsPanel />
-          ) : selectedTextLayer ? (
-            <TextPanel
-              layer={selectedTextLayer}
-              onFontChange={handleFontChange}
-              onTextDataChange={handleTextDataChange}
-              onCommit={handleTextDataCommit}
-            />
-          ) : selectedEffectLayer ? (
-            <EffectsPanel
-              layer={selectedEffectLayer}
-              user={user}
-              onAdjustmentChange={handleAdjustmentChange}
-              onAdjustmentCommit={(label) => commitChange(label)}
-              onAdjustmentReset={handleAdjustmentReset}
-              onColorGradeSelect={handleColorGradeSelect}
-              onGradeStrengthChange={handleGradeStrengthChange}
-              onMakeItPop={handleMakeItPop}
-            />
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(245,245,247,0.20)', textAlign: 'center', padding: '0 16px', lineHeight: 1.5 }}>
-                Select a layer<br />to edit properties
-              </span>
-            </div>
-          )}
-        </div>
+        <RightPanel
+          user={user}
+          onUpdate={(layerId, changes) => updateLayer(layerId, changes)}
+          onCommit={(label) => commitChange(label || 'Edit')}
+          onAdjustmentChange={handleAdjustmentChange}
+          onAdjustmentCommit={(label) => commitChange(label)}
+          onAdjustmentReset={handleAdjustmentReset}
+          onColorGradeSelect={handleColorGradeSelect}
+          onGradeStrengthChange={handleGradeStrengthChange}
+          onMakeItPop={handleMakeItPop}
+          onFontChange={handleFontChange}
+          onTextDataChange={handleTextDataChange}
+          onTextDataCommit={handleTextDataCommit}
+        />
 
       </div>{/* end middle row */}
 
-      {/* ── Status bar ──────────────────────────────────────────────────── */}
-      <div style={{
-        height: 24, flexShrink: 0, display: 'flex', alignItems: 'center',
-        padding: '0 12px', gap: 0, background: '#0d0d0f',
-        borderTop: '1px solid rgba(255,255,255,0.04)',
-        fontSize: 10, fontWeight: 500, color: 'rgba(245,245,247,0.30)', userSelect: 'none',
-      }}>
-        <span>{layers.length} layer{layers.length !== 1 ? 's' : ''}</span>
-        <Sep />
-        <span>{selectedLayerIds.length > 0 ? `${selectedLayerIds.length} selected` : 'nothing selected'}</span>
-        <Sep />
-        <span>{Math.round(zoom * 100)}%</span>
-        <Sep />
-        <span>1280 × 720</span>
-        {activeTool === 'text' && <><Sep /><span style={{ color: '#f97316' }}>Text tool — click to add</span></>}
-        {isPaintTool && activeTool !== 'spot_healing' && <><Sep /><span style={{ color: '#f97316' }}>{activeTool.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())} — paint on an image layer</span></>}
-        {activeTool === 'spot_healing' && <><Sep /><span style={{ color: '#f97316' }}>Spot Healing — paint area, release to heal</span></>}
-      </div>
+      {/* ── Bottom panel (Layers + History) ─────────────────────────────── */}
+      <BottomPanel />
 
-      {/* ── Toast ───────────────────────────────────────────────────────── */}
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)',
-          background: '#1f1f23', color: '#F5F5F7', fontSize: 12, fontWeight: 500,
-          padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)',
-          pointerEvents: 'none', zIndex: 9999, boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
-          whiteSpace: 'nowrap',
-        }}>
-          {toast}
-        </div>
-      )}
+      {/* ── Status bar ──────────────────────────────────────────────────── */}
+      <StatusBar />
+
+      {/* ── Toast notifications ─────────────────────────────────────────── */}
+      <ToastManager />
+
+      {/* ── Command palette (Cmd+K) ─────────────────────────────────────── */}
+      <CommandPalette isOpen={cmdPaletteOpen} onClose={() => setCmdPaletteOpen(false)} />
 
       {/* ── Inline text editing overlay ──────────────────────────────── */}
       {isEditingText && editingLayer && (
@@ -1269,376 +1060,3 @@ export default function NewEditor({ user, setPage }) {
   );
 }
 
-// ── Effects / Adjustments panel ──────────────────────────────────────────────
-function EffectsPanel({
-  layer,
-  user,
-  onAdjustmentChange,
-  onAdjustmentCommit,
-  onAdjustmentReset,
-  onColorGradeSelect,
-  onGradeStrengthChange,
-  onMakeItPop,
-}) {
-  const adj       = layer.adjustments || {};
-  const grade     = layer.colorGrade;
-  const userIsPro = user?.is_pro === true || user?.plan === 'pro';
-
-  const panelLabel  = { fontSize: 10, fontWeight: 600, color: 'rgba(245,245,247,0.40)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 };
-  const sectionStyle = { padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)' };
-
-  const SLIDERS = [
-    { key: 'exposure',    label: 'Exposure',     min: -3,   max: 3,   step: 0.01 },
-    { key: 'brightness',  label: 'Brightness',   min: -1,   max: 1,   step: 0.01 },
-    { key: 'contrast',    label: 'Contrast',     min: -1,   max: 1,   step: 0.01 },
-    { key: 'highlights',  label: 'Highlights',   min: -1,   max: 1,   step: 0.01 },
-    { key: 'shadows',     label: 'Shadows',      min: -1,   max: 1,   step: 0.01 },
-    { key: 'saturation',  label: 'Saturation',   min: -1,   max: 1,   step: 0.01 },
-    { key: 'vibrance',    label: 'Vibrance',     min: -1,   max: 1,   step: 0.01 },
-    { key: 'temperature', label: 'Temperature',  min: -1,   max: 1,   step: 0.01 },
-    { key: 'tint',        label: 'Tint',         min: -1,   max: 1,   step: 0.01 },
-    { key: 'hue',         label: 'Hue',          min: -180, max: 180, step: 1    },
-  ];
-
-  const gradeEntries = Object.keys(COLOR_GRADES);
-
-  return (
-    <div style={{ padding: 0 }}>
-      {/* Header */}
-      <div style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: 'rgba(245,245,247,0.60)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span>Adjustments</span>
-        <button
-          onClick={() => onMakeItPop(layer.id)}
-          style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5, border: 'none', cursor: 'pointer', background: 'rgba(249,115,22,0.18)', color: '#f97316', letterSpacing: '0.02em' }}
-        >
-          Make It Pop
-        </button>
-      </div>
-
-      {/* Colour grade grid */}
-      <div style={sectionStyle}>
-        <div style={panelLabel}>Colour Grade</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
-          {gradeEntries.map((gId) => {
-            const isFree    = FREE_GRADES.has(gId);
-            const isLocked  = !isFree && !userIsPro;
-            const isActive  = grade?.name === gId;
-            return (
-              <button
-                key={gId}
-                onClick={() => onColorGradeSelect(layer.id, gId, !isFree)}
-                style={{
-                  padding: '5px 2px',
-                  fontSize: 9,
-                  fontWeight: 600,
-                  borderRadius: 5,
-                  border: isActive ? '1px solid #f97316' : '1px solid rgba(255,255,255,0.08)',
-                  cursor: 'pointer',
-                  background: isActive ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.04)',
-                  color: isActive ? '#f97316' : isLocked ? 'rgba(245,245,247,0.35)' : 'rgba(245,245,247,0.70)',
-                  position: 'relative',
-                  lineHeight: 1.3,
-                  transition: 'background 120ms, color 120ms',
-                  textAlign: 'center',
-                }}
-              >
-                {GRADE_LABELS[gId]}
-                {isLocked && (
-                  <span style={{ display: 'block', fontSize: 7, color: '#f97316', fontWeight: 700, marginTop: 1 }}>PRO</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Strength slider — only shown when a grade is active */}
-        {grade && (
-          <div style={{ marginTop: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span style={{ ...panelLabel, marginBottom: 0 }}>Strength</span>
-              <span style={{ fontSize: 10, color: 'rgba(245,245,247,0.40)' }}>{Math.round((grade.strength ?? 1) * 100)}%</span>
-            </div>
-            <input
-              type="range"
-              min={0} max={1} step={0.01}
-              value={grade.strength ?? 1}
-              onChange={(e) => onGradeStrengthChange(layer.id, Number(e.target.value))}
-              onPointerUp={() => onAdjustmentCommit('Grade Strength')}
-              style={{ width: '100%', accentColor: '#f97316' }}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Adjustment sliders */}
-      <div style={{ padding: '8px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <div style={panelLabel}>Fine-Tune</div>
-        {SLIDERS.map(({ key, label, min, max, step }) => {
-          const val   = adj[key] ?? 0;
-          const isSet = Math.abs(val) > 0.005;
-          return (
-            <div key={key} style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                <span style={{ fontSize: 10, fontWeight: 500, color: isSet ? 'rgba(245,245,247,0.75)' : 'rgba(245,245,247,0.40)' }}>
-                  {label}
-                </span>
-                <span
-                  style={{ fontSize: 10, color: isSet ? '#f97316' : 'rgba(245,245,247,0.30)', cursor: isSet ? 'pointer' : 'default', userSelect: 'none' }}
-                  title="Double-click to reset"
-                  onDoubleClick={() => onAdjustmentReset(layer.id, key)}
-                >
-                  {key === 'hue' ? `${Math.round(val)}°` : val.toFixed(2)}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={min} max={max} step={step}
-                value={val}
-                onChange={(e) => onAdjustmentChange(layer.id, key, Number(e.target.value))}
-                onPointerUp={() => onAdjustmentCommit(`${label} Adjust`)}
-                onDoubleClick={() => onAdjustmentReset(layer.id, key)}
-                style={{ width: '100%', accentColor: '#f97316' }}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Text properties panel ─────────────────────────────────────────────────────
-function TextPanel({ layer, onFontChange, onTextDataChange, onCommit }) {
-  const td = layer.textData;
-  if (!td) return null;
-
-  const panelLabel = { fontSize: 10, fontWeight: 600, color: 'rgba(245,245,247,0.40)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 };
-  const sectionStyle = { padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)' };
-
-  return (
-    <div style={{ padding: 0 }}>
-      <div style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: 'rgba(245,245,247,0.60)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        Text
-      </div>
-
-      {/* Font family */}
-      <div style={sectionStyle}>
-        <div style={panelLabel}>Font</div>
-        <select
-          value={td.fontFamily || 'Impact'}
-          onChange={(e) => onFontChange(layer.id, e.target.value)}
-          style={selectStyle}
-        >
-          {ALL_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
-        </select>
-      </div>
-
-      {/* Font size + weight */}
-      <div style={{ ...sectionStyle, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
-          <div style={panelLabel}>Size</div>
-          <input
-            type="number"
-            min={12} max={400}
-            value={td.fontSize || 96}
-            onChange={(e) => onTextDataChange(layer.id, { fontSize: Number(e.target.value) })}
-            onBlur={() => onCommit('Change Font Size')}
-            style={numInputStyle}
-          />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={panelLabel}>Weight</div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[['400', 'Reg'], ['700', 'Bold'], ['900', 'Black']].map(([w, label]) => (
-              <button
-                key={w}
-                onClick={() => { onTextDataChange(layer.id, { fontWeight: w }); onCommit('Change Font Weight'); }}
-                style={{
-                  flex: 1, padding: '4px 0', fontSize: 10, fontWeight: 600,
-                  borderRadius: 4, border: 'none', cursor: 'pointer',
-                  background: td.fontWeight === w ? '#f97316' : 'rgba(255,255,255,0.06)',
-                  color: td.fontWeight === w ? '#fff' : 'rgba(245,245,247,0.60)',
-                  transition: 'background 120ms',
-                }}
-              >{label}</button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Text color */}
-      <div style={sectionStyle}>
-        <div style={panelLabel}>Color</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            type="color"
-            value={td.fill || '#FFFFFF'}
-            onChange={(e) => onTextDataChange(layer.id, { fill: e.target.value })}
-            onBlur={() => onCommit('Change Text Color')}
-            style={{ width: 28, height: 28, border: 'none', padding: 0, borderRadius: 4, cursor: 'pointer', background: 'none' }}
-          />
-          <span style={{ fontSize: 11, color: 'rgba(245,245,247,0.50)', fontFamily: 'monospace' }}>{td.fill || '#FFFFFF'}</span>
-        </div>
-      </div>
-
-      {/* Align */}
-      <div style={sectionStyle}>
-        <div style={panelLabel}>Align</div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {['left', 'center', 'right'].map(a => (
-            <button
-              key={a}
-              onClick={() => { onTextDataChange(layer.id, { align: a }); onCommit('Change Text Align'); }}
-              style={{
-                flex: 1, padding: '4px 0', fontSize: 10, fontWeight: 600,
-                borderRadius: 4, border: 'none', cursor: 'pointer',
-                background: td.align === a ? '#f97316' : 'rgba(255,255,255,0.06)',
-                color: td.align === a ? '#fff' : 'rgba(245,245,247,0.60)',
-              }}
-            >{a[0].toUpperCase() + a.slice(1)}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* Stroke */}
-      <div style={sectionStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <div style={panelLabel}>Outline</div>
-          <Toggle
-            value={td.stroke?.enabled ?? true}
-            onChange={(v) => { onTextDataChange(layer.id, { stroke: { ...td.stroke, enabled: v } }); onCommit('Toggle Outline'); }}
-          />
-        </div>
-        {td.stroke?.enabled && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              type="color"
-              value={td.stroke.color || '#000000'}
-              onChange={(e) => onTextDataChange(layer.id, { stroke: { ...td.stroke, color: e.target.value } })}
-              onBlur={() => onCommit('Change Outline Color')}
-              style={{ width: 28, height: 28, border: 'none', padding: 0, borderRadius: 4, cursor: 'pointer' }}
-            />
-            <div style={{ flex: 1 }}>
-              <input
-                type="range" min={0} max={20} step={0.5}
-                value={td.stroke.width ?? 4}
-                onChange={(e) => onTextDataChange(layer.id, { stroke: { ...td.stroke, width: Number(e.target.value) } })}
-                onPointerUp={() => onCommit('Change Outline Width')}
-                style={{ width: '100%', accentColor: '#f97316' }}
-              />
-            </div>
-            <span style={{ fontSize: 10, color: 'rgba(245,245,247,0.40)', minWidth: 20 }}>{td.stroke.width ?? 4}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Shadow */}
-      <div style={sectionStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={panelLabel}>Shadow</div>
-          <Toggle
-            value={td.shadow?.enabled ?? true}
-            onChange={(v) => { onTextDataChange(layer.id, { shadow: { ...td.shadow, enabled: v } }); onCommit('Toggle Shadow'); }}
-          />
-        </div>
-      </div>
-
-      {/* Glow */}
-      <div style={sectionStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: td.glow?.enabled ? 8 : 0 }}>
-          <div style={panelLabel}>Glow</div>
-          <Toggle
-            value={td.glow?.enabled ?? false}
-            onChange={(v) => { onTextDataChange(layer.id, { glow: { ...td.glow, enabled: v } }); onCommit('Toggle Glow'); }}
-          />
-        </div>
-        {td.glow?.enabled && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              type="color"
-              value={td.glow.color || '#f97316'}
-              onChange={(e) => onTextDataChange(layer.id, { glow: { ...td.glow, color: e.target.value } })}
-              onBlur={() => onCommit('Change Glow Color')}
-              style={{ width: 28, height: 28, border: 'none', padding: 0, borderRadius: 4, cursor: 'pointer' }}
-            />
-            <div style={{ flex: 1 }}>
-              <input
-                type="range" min={1} max={30} step={1}
-                value={td.glow.blur ?? 12}
-                onChange={(e) => onTextDataChange(layer.id, { glow: { ...td.glow, blur: Number(e.target.value) } })}
-                onPointerUp={() => onCommit('Change Glow Size')}
-                style={{ width: '100%', accentColor: '#f97316' }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Toggle switch ─────────────────────────────────────────────────────────────
-function Toggle({ value, onChange }) {
-  return (
-    <div
-      onClick={() => onChange(!value)}
-      style={{
-        width: 32, height: 18, borderRadius: 9, cursor: 'pointer',
-        background: value ? '#f97316' : 'rgba(255,255,255,0.12)',
-        position: 'relative', transition: 'background 200ms cubic-bezier(0.16,1,0.3,1)',
-        flexShrink: 0,
-      }}
-    >
-      <div style={{
-        position: 'absolute', top: 2,
-        left: value ? 16 : 2,
-        width: 14, height: 14, borderRadius: '50%',
-        background: '#fff',
-        transition: 'left 200ms cubic-bezier(0.16,1,0.3,1)',
-      }} />
-    </div>
-  );
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function Sep() {
-  return (
-    <span style={{
-      display: 'inline-block', width: 1, height: 10,
-      background: 'rgba(255,255,255,0.12)', margin: '0 10px', verticalAlign: 'middle',
-    }} />
-  );
-}
-
-function toolBtnStyle(disabled) {
-  return {
-    background: 'none', border: 'none',
-    color: disabled ? 'rgba(245,245,247,0.20)' : 'rgba(245,245,247,0.65)',
-    fontSize: 16, cursor: disabled ? 'default' : 'pointer',
-    padding: '4px 8px', borderRadius: 6, transition: 'color 150ms ease',
-  };
-}
-
-function toolbarIconBtnStyle(active) {
-  return {
-    width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: active ? 'rgba(249,115,22,0.15)' : 'none',
-    border: active ? '1px solid rgba(249,115,22,0.30)' : '1px solid transparent',
-    borderRadius: 8,
-    color: active ? '#f97316' : 'rgba(245,245,247,0.50)',
-    cursor: 'pointer',
-    transition: 'background 120ms ease, color 120ms ease',
-  };
-}
-
-const selectStyle = {
-  width: '100%', padding: '5px 8px', fontSize: 11, fontWeight: 500,
-  background: '#18181b', color: '#F5F5F7', border: '1px solid rgba(255,255,255,0.10)',
-  borderRadius: 6, cursor: 'pointer', outline: 'none',
-};
-
-const numInputStyle = {
-  width: '100%', padding: '5px 8px', fontSize: 11, fontWeight: 500,
-  background: '#18181b', color: '#F5F5F7', border: '1px solid rgba(255,255,255,0.10)',
-  borderRadius: 6, outline: 'none', boxSizing: 'border-box',
-};
