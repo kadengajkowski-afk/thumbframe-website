@@ -302,45 +302,35 @@ export default class Renderer {
   }
 
   _createImageObject(layer) {
-    // Show placeholder while loading OR while texture isn't ready yet.
-    // The upload pipeline guarantees texture.valid === true before setting
-    // layer.texture, so this branch covers only genuine loading states and
-    // the edge case of undo restoring a layer whose texture was stripped
-    // from the history snapshot.
-    if (layer.loading || !layer.texture) {
+    // Pull from textureCache first — covers undo/redo where layer.texture was
+    // stripped by JSON.stringify in _pushHistory.
+    const texture = this.textureCache.get(layer.id) || layer.texture;
+
+    // NEVER pass a null/invalid texture to Sprite — PixiJS v8 batcher will
+    // crash with "Cannot read properties of null (reading 'alphaMode')".
+    // Use a Graphics placeholder for loading states and any invalid texture.
+    if (layer.loading || !texture || !texture.valid) {
       const g = new Graphics();
       g.rect(0, 0, layer.width || 200, layer.height || 150)
         .fill({ color: 0xffffff, alpha: 0.08 });
       return g;
     }
 
-    // Texture was created and validated in imageUpload.js — use it directly.
-    // No Texture.from(), no async loading, no .on() calls here.
+    // Texture is valid — register with memory manager and cache by layerId.
     const tw = layer.imageData?.textureWidth  || layer.width;
     const th = layer.imageData?.textureHeight || layer.height;
-    window.__textureMemoryManager?.register(layer.id, layer.texture, tw, th);
+    window.__textureMemoryManager?.register(layer.id, texture, tw, th);
+    this.textureCache.set(layer.id, texture);
 
-    // Cache texture by layerId so undo/redo can recover it (textureCache is never evicted).
-    this.textureCache.set(layer.id, layer.texture);
-
-    const sprite = new Sprite(layer.texture);
+    const sprite = new Sprite(texture);
     // anchor(0, 0) = top-left origin. sync() compensates by positioning at
     // (layer.x - width/2, layer.y - height/2) so layer.x/y remain the visual center.
     sprite.anchor.set(0, 0);
     sprite._tfAnchorMode = true;
-    sprite.width   = layer.width  || 640;
-    sprite.height  = layer.height || 360;
-    sprite.alpha   = layer.opacity ?? 1;  // opacity is 0–1 in the schema
+    sprite.width    = layer.width  || 640;
+    sprite.height   = layer.height || 360;
+    sprite.alpha    = layer.opacity ?? 1;
     sprite.isSprite = true;
-    console.log('[Renderer] _createImageObject', {
-      loading: layer.loading,
-      hasTexture: !!layer.texture,
-      textureValid: layer.texture?.valid,
-      width: sprite.width,
-      height: sprite.height,
-      alpha: sprite.alpha,
-      x: layer.x, y: layer.y,
-    });
     return sprite;
   }
 
@@ -361,6 +351,15 @@ export default class Renderer {
     const { canvas, displayWidth, displayHeight } = renderTextToCanvas(td);
     const source  = new ImageSource({ resource: canvas });
     const texture = new Texture({ source });
+
+    // Guard: ImageSource construction can yield an invalid texture if the
+    // canvas has zero dimensions or the GPU context was lost.
+    if (!texture || !texture.valid) {
+      const g = new Graphics();
+      g.rect(0, 0, Math.max(layer.width, 200), Math.max(layer.height, 60))
+       .fill({ color: 0xffffff, alpha: 0.08 });
+      return g;
+    }
 
     const sprite = new Sprite(texture);
     // anchor(0,0) + _tfAnchorMode: sync() will position at (layer.x - w/2, layer.y - h/2)
