@@ -185,6 +185,7 @@ export default function AssetLibraryPanel({ user, onClose }) {
   const [pngs, setPngs]         = useState([]);
   const [page, setPage]         = useState(1);
   const [hasMore, setHasMore]   = useState(true);
+  const [unsplashError, setUnsplashError] = useState(false);
 
   const sentinelRef   = useRef(null);
   const debounceTimer = useRef(null);
@@ -202,12 +203,14 @@ export default function AssetLibraryPanel({ user, onClose }) {
 
       if (!resp.ok) {
         const json = await resp.json().catch(() => ({}));
-        if (json.error === 'unsplash_not_configured' || resp.status === 503) {
+        if (json.error === 'unsplash_not_configured') {
           setError('unsplash_not_configured');
-          setLoading(false);
-          return;
+        } else {
+          setPhotos([]);
+          setUnsplashError(true);
         }
-        throw new Error(`Server error ${resp.status}`);
+        setLoading(false);
+        return;
       }
 
       const json = await resp.json();
@@ -226,7 +229,8 @@ export default function AssetLibraryPanel({ user, onClose }) {
       setError(null);
     } catch (err) {
       console.error('[AssetLibrary] fetchPhotos failed:', err);
-      setError('generic');
+      setPhotos([]);
+      setUnsplashError(true);
     } finally {
       setLoading(false);
     }
@@ -277,6 +281,7 @@ export default function AssetLibraryPanel({ user, onClose }) {
       setPage(1);
       setHasMore(true);
       setError(null);
+      setUnsplashError(false);
       fetchPhotos(query, category, 1, false);
     } else if (tab === 'uploads') {
       fetchUploads();
@@ -295,6 +300,7 @@ export default function AssetLibraryPanel({ user, onClose }) {
       setPhotos([]);
       setPage(1);
       setHasMore(true);
+      setUnsplashError(false);
       fetchPhotos(query, category, 1, false);
     }, 500);
 
@@ -437,12 +443,29 @@ export default function AssetLibraryPanel({ user, onClose }) {
   function renderPhotos() {
     if (error === 'unsplash_not_configured') return renderUnsplashNotConfigured();
 
+    if (unsplashError) {
+      return (
+        <div style={{
+          textAlign: 'center', padding: '40px 20px',
+          color: 'rgba(245,245,247,0.30)',
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📷</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(245,245,247,0.50)', marginBottom: 6 }}>
+            Stock photos not configured
+          </div>
+          <div style={{ fontSize: 11, lineHeight: 1.6 }}>
+            Add UNSPLASH_ACCESS_KEY to Railway environment variables to enable the stock photo library.
+          </div>
+        </div>
+      );
+    }
+
     return (
       <>
         {/* Photo masonry grid */}
         {photos.length === 0 && !loading && (
           <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-4)', fontSize: 13 }}>
-            {error === 'generic' ? 'Failed to load photos. Try again.' : 'No results. Try a different search.'}
+            No results. Try a different search.
           </div>
         )}
 
@@ -651,7 +674,7 @@ export default function AssetLibraryPanel({ user, onClose }) {
         </div>
 
         {/* Search bar — photos tab only */}
-        {tab === 'photos' && error !== 'unsplash_not_configured' && (
+        {tab === 'photos' && error !== 'unsplash_not_configured' && !unsplashError && (
           <div style={{ padding: '12px 16px 0', flexShrink: 0 }}>
             <div style={{ position: 'relative' }}>
               <svg
@@ -684,7 +707,7 @@ export default function AssetLibraryPanel({ user, onClose }) {
         )}
 
         {/* Category pills — photos tab only */}
-        {tab === 'photos' && error !== 'unsplash_not_configured' && (
+        {tab === 'photos' && error !== 'unsplash_not_configured' && !unsplashError && (
           <div style={{
             display: 'flex',
             gap: 6,
