@@ -9,8 +9,9 @@
 //         └─ layerContainer (Container) — one child per layer, z-ordered
 //     └─ overlayContainer (Container) — selection handles, guides (screen-space)
 
-import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Texture, ImageSource } from 'pixi.js';
 import { BLEND_MODES } from './Layer';
+import { renderTextToCanvas } from '../utils/textRenderer';
 
 const CW = 1280;
 const CH = 720;
@@ -131,11 +132,16 @@ export default class Renderer {
   }
 
   // ── Set viewport from store values ────────────────────────────────────────
+  // panX/panY are relative to canvas center: (0,0) = canvas centered in screen.
+  // viewport.x is the absolute offset within the PixiJS screen:
+  //   screenCenter + pan − contentCenter*zoom
   applyViewport(zoom, panX, panY) {
     if (!this.app || !this.viewport) return;
+    const cx = this.app.screen.width  / 2;
+    const cy = this.app.screen.height / 2;
     this.viewport.scale.set(zoom);
-    this.viewport.x = panX;
-    this.viewport.y = panY;
+    this.viewport.x = cx + panX - CW / 2 * zoom;
+    this.viewport.y = cy + panY - CH / 2 * zoom;
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -186,14 +192,26 @@ export default class Renderer {
       }
 
       // Update transform
-      obj.x = layer.x;
-      obj.y = layer.y;
       obj.rotation = layer.rotation || 0;
       obj.scale.set(layer.scaleX ?? 1, layer.scaleY ?? 1);
-      obj.pivot.set(
-        (layer.anchorX ?? 0.5) * layer.width,
-        (layer.anchorY ?? 0.5) * layer.height
-      );
+
+      if (obj._tfAnchorMode) {
+        // Image sprites: anchor(0,0) means position is the top-left corner.
+        // layer.x/y are the VISUAL CENTER, so subtract half the display size.
+        // This is texture-size-independent — no pivot math needed.
+        obj.x = layer.x - layer.width  / 2;
+        obj.y = layer.y - layer.height / 2;
+        obj.pivot.set(0, 0);
+      } else {
+        // Shapes and text: position IS the anchor point; pivot handles centering.
+        obj.x = layer.x;
+        obj.y = layer.y;
+        obj.pivot.set(
+          (layer.anchorX ?? 0.5) * layer.width,
+          (layer.anchorY ?? 0.5) * layer.height
+        );
+      }
+
       obj.alpha = layer.opacity ?? 1;
       obj.visible = layer.visible !== false;
 
@@ -201,9 +219,9 @@ export default class Renderer {
       const bm = BLEND_MODES[layer.blendMode] || 'normal';
       obj.blendMode = bm;
 
-      // Size sync for images
-      if (layer.type === 'image' && obj.isSprite) {
-        obj.width = layer.width;
+      // Size sync for image and text sprites
+      if ((layer.type === 'image' || layer.type === 'text') && obj.isSprite) {
+        obj.width  = layer.width;
         obj.height = layer.height;
       }
     }
@@ -271,9 +289,23 @@ export default class Renderer {
     window.__textureMemoryManager?.register(layer.id, layer.texture, tw, th);
 
     const sprite = new Sprite(layer.texture);
-    sprite.width   = layer.width;
-    sprite.height  = layer.height;
+    // anchor(0, 0) = top-left origin. sync() compensates by positioning at
+    // (layer.x - width/2, layer.y - height/2) so layer.x/y remain the visual center.
+    sprite.anchor.set(0, 0);
+    sprite._tfAnchorMode = true;
+    sprite.width   = layer.width  || 640;
+    sprite.height  = layer.height || 360;
+    sprite.alpha   = layer.opacity ?? 1;  // opacity is 0–1 in the schema
     sprite.isSprite = true;
+    console.log('[Renderer] _createImageObject', {
+      loading: layer.loading,
+      hasTexture: !!layer.texture,
+      textureValid: layer.texture?.valid,
+      width: sprite.width,
+      height: sprite.height,
+      alpha: sprite.alpha,
+      x: layer.x, y: layer.y,
+    });
     return sprite;
   }
 
@@ -281,47 +313,32 @@ export default class Renderer {
     const td = layer.textData;
     if (!td) return new Container();
 
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, layer.width * 2);  // 2x for crisp text
-    canvas.height = Math.max(1, layer.height * 2);
-    const ctx = canvas.getContext('2d');
-
-    const fontSize = (td.fontSize || 48) * 2;
-    ctx.font = `${td.fontStyle || 'normal'} ${td.fontWeight || 'bold'} ${fontSize}px ${td.fontFamily || 'Impact'}`;
-    ctx.textBaseline = 'top';
-    ctx.textAlign = td.textAlign || 'left';
-
-    const x = td.textAlign === 'center' ? canvas.width / 2 :
-              td.textAlign === 'right'  ? canvas.width : 0;
-
-    if (td.shadow) {
-      ctx.shadowColor = td.shadow.color || 'rgba(0,0,0,0.5)';
-      ctx.shadowBlur = (td.shadow.blur || 4) * 2;
-      ctx.shadowOffsetX = (td.shadow.offsetX || 2) * 2;
-      ctx.shadowOffsetY = (td.shadow.offsetY || 2) * 2;
+    // Show a faint placeholder until content arrives
+    if (!td.content) {
+      const g = new Graphics();
+      g.rect(0, 0, Math.max(layer.width, 200), Math.max(layer.height, 60))
+       .fill({ color: 0xffffff, alpha: 0.08 });
+      return g;
     }
 
-    if (td.stroke && td.stroke.width > 0) {
-      ctx.strokeStyle = td.stroke.color || '#000000';
-      ctx.lineWidth = (td.stroke.width || 3) * 2;
-      ctx.lineJoin = 'round';
-      ctx.strokeText(td.content || '', x, 0);
-    }
+    // Render text at 2× resolution via Canvas 2D, upload as PixiJS texture.
+    // renderTextToCanvas handles shadow → glow → stroke → fill in order.
+    const { canvas, displayWidth, displayHeight } = renderTextToCanvas(td);
+    const source  = new ImageSource({ resource: canvas });
+    const texture = new Texture({ source });
 
-    // Reset shadow for fill pass (avoid double-shadow)
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-
-    ctx.fillStyle = td.fill || '#ffffff';
-    ctx.fillText(td.content || '', x, 0);
-
-    const texture = Texture.from(canvas);
     const sprite = new Sprite(texture);
-    sprite.width = layer.width;
-    sprite.height = layer.height;
-    sprite._tfTextCanvas = canvas;
+    // anchor(0,0) + _tfAnchorMode: sync() will position at (layer.x - w/2, layer.y - h/2)
+    // so layer.x/y remain the visual center.
+    sprite.anchor.set(0, 0);
+    sprite._tfAnchorMode = true;
+    sprite.isSprite      = true;
+    // Use the dimensions reported by the renderer (at 1× scale).
+    // layer.width/height should match these; set here so the sprite is correct
+    // even on the first frame before sync() overrides them.
+    sprite.width  = layer.width  || displayWidth;
+    sprite.height = layer.height || displayHeight;
+    sprite.alpha  = layer.opacity ?? 1;
     return sprite;
   }
 
@@ -422,7 +439,17 @@ function _layerDataKey(layer) {
     case 'text': {
       const td = layer.textData;
       if (!td) return 'text:empty';
-      return `text:${td.content}:${td.fontFamily}:${td.fontSize}:${td.fontWeight}:${td.fill}:${layer.width}:${layer.height}`;
+      // Include all visual properties so any style change triggers recreation.
+      const sk = td.stroke
+        ? `${td.stroke.enabled}:${td.stroke.color}:${td.stroke.width}`
+        : 'none';
+      const shk = td.shadow
+        ? `${td.shadow.enabled}:${td.shadow.color}:${td.shadow.blur}:${td.shadow.offsetX}:${td.shadow.offsetY}:${td.shadow.opacity}`
+        : 'none';
+      const gk = td.glow
+        ? `${td.glow.enabled}:${td.glow.color}:${td.glow.blur}:${td.glow.strength}:${td.glow.opacity}`
+        : 'none';
+      return `text:${td.content}:${td.fontFamily}:${td.fontSize}:${td.fontWeight}:${td.fill}:${td.align}:${td.lineHeight}:${td.letterSpacing}:${sk}:${shk}:${gk}`;
     }
     case 'image': {
       if (layer.loading) return 'image:loading';

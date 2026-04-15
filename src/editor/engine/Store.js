@@ -28,6 +28,10 @@ const useEditorStore = create(
     // ── Active tool ──
     activeTool: 'select', // 'select' | 'move' | 'text' | 'shape' | 'brush' | 'hand' | 'zoom'
 
+    // ── Text editing ──
+    isEditingText:  false,
+    editingLayerId: null,
+
     // ── Viewport ──
     zoom: 1,
     panX: 0,
@@ -281,6 +285,46 @@ const useEditorStore = create(
       state.activeTool = tool;
     }),
 
+    // ── Text editing actions ──────────────────────────────────────────────────
+
+    // Enter inline edit mode — saves preEditContent so Escape can revert.
+    setEditingText: (layerId) => set((state) => {
+      const layer = state.layers.find(l => l.id === layerId);
+      if (layer?.textData) {
+        layer._preEditContent = layer.textData.content;
+      }
+      state.isEditingText  = true;
+      state.editingLayerId = layerId;
+    }),
+
+    // Revert to pre-edit content and exit edit mode — no history entry.
+    revertText: () => set((state) => {
+      const layer = state.layers.find(l => l.id === state.editingLayerId);
+      if (layer?.textData && layer._preEditContent !== null && layer._preEditContent !== undefined) {
+        layer.textData.content = layer._preEditContent;
+      }
+      if (layer) layer._preEditContent = null;
+      state.isEditingText  = false;
+      state.editingLayerId = null;
+    }),
+
+    // Exit edit mode after a successful commit (caller has already called
+    // updateLayer with new content + texture + commitChange).
+    exitEditMode: () => set((state) => {
+      const layer = state.layers.find(l => l.id === state.editingLayerId);
+      if (layer) layer._preEditContent = null;
+      state.isEditingText  = false;
+      state.editingLayerId = null;
+    }),
+
+    // Update textData fields in-place — does NOT push history.
+    // Caller must call commitChange() when done (e.g. on slider pointerUp).
+    updateTextData: (layerId, changes) => set((state) => {
+      const layer = state.layers.find(l => l.id === layerId);
+      if (!layer?.textData) return;
+      layer.textData = { ...layer.textData, ...changes };
+    }),
+
     resetViewport: () => set((state) => {
       state.zoom = 1;
       state.panX = 0;
@@ -315,9 +359,11 @@ const useEditorStore = create(
 // ── Internal history helper ──────────────────────────────────────────────────
 function _pushHistory(state, label = '') {
   // Strip non-serializable fields before JSON.stringify.
-  // PixiJS Texture objects contain circular references and cannot be stringified.
-  // After undo/redo, image layers without a texture will render as gray placeholders.
-  const snapshot = JSON.stringify(state.layers.map(({ texture, ...rest }) => rest));
+  // - texture: PixiJS Texture (circular refs, cannot stringify; re-rendered on undo)
+  // - _preEditContent: transient edit state, not needed in history
+  const snapshot = JSON.stringify(
+    state.layers.map(({ texture, _preEditContent, ...rest }) => rest)
+  );
 
   // Truncate future (branching after undo)
   state.history = state.history.slice(0, state.historyIndex + 1);

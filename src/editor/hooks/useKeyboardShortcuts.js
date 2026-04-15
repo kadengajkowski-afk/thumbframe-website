@@ -53,6 +53,10 @@ export default function useKeyboardShortcuts(containerRef) {
         setActiveTool('select');
         return;
       }
+      if (!meta && !shift && key === 't') {
+        setActiveTool('text');
+        return;
+      }
 
       // ── Undo / Redo ───────────────────────────────────────────────────────
       if (meta && !shift && key === 'z') {

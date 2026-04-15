@@ -49,21 +49,23 @@ export function createLayer(overrides = {}) {
     //   cropRect: { x, y, w, h } | null
     // }
 
-    textData: overrides.textData ?? null,
-    // {
-    //   content: string,
-    //   fontFamily: string,
-    //   fontSize: number (px),
-    //   fontWeight: string ('normal'|'bold'|'700' etc),
-    //   fontStyle: string ('normal'|'italic'),
-    //   fill: string (hex color),
-    //   stroke: { color: string, width: number } | null,
-    //   shadow: { color: string, blur: number, offsetX: number, offsetY: number } | null,
-    //   glow: { color: string, blur: number, strength: number } | null,
-    //   letterSpacing: number,
-    //   lineHeight: number,
-    //   textAlign: string ('left'|'center'|'right')
-    // }
+    textData: overrides.textData ?? (overrides.type === 'text' ? {
+      content:       'Type here',
+      fontFamily:    'Impact',
+      fontSize:      96,
+      fontWeight:    '900',
+      fill:          '#FFFFFF',
+      align:         'center',       // 'left' | 'center' | 'right'
+      lineHeight:    1.2,
+      letterSpacing: 0,
+      stroke: { enabled: true,  color: '#000000', width: 4 },
+      shadow: { enabled: true,  color: '#000000', blur: 8, offsetX: 3, offsetY: 3, opacity: 0.8 },
+      glow:   { enabled: false, color: '#f97316', blur: 12, strength: 3, opacity: 0.8 },
+    } : null),
+
+    // Saved text content before entering edit mode — restored on Escape.
+    // null when not in edit mode.
+    _preEditContent: overrides._preEditContent ?? null,
 
     shapeData: overrides.shapeData ?? null,
     // {
