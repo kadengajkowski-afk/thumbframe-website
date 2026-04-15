@@ -14,6 +14,7 @@ import BackgroundPicker    from './BackgroundPicker';
 import FaceCutoutFlow      from './FaceCutoutFlow';
 import VariantGenerator    from '../ai/VariantGenerator';
 import ExpressionCoach     from '../ai/ExpressionCoach';
+import CTRScoreWidget      from '../ai/CTRScoreWidget';
 
 const PAINT_TOOLS = new Set([
   'brush','eraser','clone_stamp','healing_brush','spot_healing',
@@ -207,6 +208,12 @@ export default function RightPanel({
                 );
               })}
             </div>
+          </div>
+
+          {/* CTR Score Widget — always shown in nothing-selected state */}
+          <div className="obs-section">
+            <div className="obs-section-label">CTR Score</div>
+            <CTRScoreWidget />
           </div>
 
           {/* Expression Coach — always shown in nothing-selected state */}

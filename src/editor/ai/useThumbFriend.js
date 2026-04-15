@@ -6,6 +6,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import useEditorStore from '../engine/Store';
 import { checkProactiveAlerts } from './proactiveAlerts';
+import { captureCanvasForAnalysis } from './canvasAnalyzer';
+import { calculateCTRScore } from './ctrScore';
 
 const RAILWAY_URL = (
   process.env.REACT_APP_API_URL ||
@@ -13,21 +15,17 @@ const RAILWAY_URL = (
 );
 
 // ── Mock response for when Railway is unreachable ─────────────────────────────
-// Demonstrates the full experience including action suggestions.
-function buildMock(layers) {
-  const firstImage = layers.find(l => l.type === 'image');
+// Honest about offline state — does NOT pretend to analyze the canvas.
+function buildMock() {
+  const layers = useEditorStore.getState().layers.filter(l => l.visible !== false);
+  const hasContent = layers.length > 0;
   return {
-    message: "I can see your thumbnail! The composition looks solid — main subject is well-positioned. To push it further, try boosting brightness slightly and strengthening your text outline for mobile readability. What aspect would you like help with?",
-    actions: firstImage ? [
-      {
-        type:        'adjust_brightness',
-        target:      firstImage.id,
-        target_name: firstImage.name,
-        params:      { value: 15 },
-        reason:      'Brightness is below optimal range (100–110). +15 will improve feed visibility in dark mode.',
-      },
-    ] : [],
-    expression: 'excited',
+    message: hasContent
+      ? `I can see your canvas but I'm running in offline mode right now — my AI brain isn't connected. Start the Railway server to get real analysis. In the meantime, I can see you have ${layers.length} layer(s) on the canvas.`
+      : "Your canvas is empty! Add an image or some text first, then ask me what I think. I'm running in offline mode right now anyway — start the Railway server to connect my AI brain.",
+    actions:    [],
+    expression: 'neutral',
+    remaining:  null,
   };
 }
 
@@ -75,9 +73,12 @@ export default function useThumbFriend({ user, supabaseSession }) {
   const [expression,      setExpression]      = useState('neutral');
   const [proactiveAlerts, setProactiveAlerts] = useState([]);
   const [unreadCount,     setUnreadCount]     = useState(0);
+  const [isOffline,       setIsOffline]       = useState(false);
 
-  const layers      = useEditorStore(s => s.layers);
-  const personality = useEditorStore(s => s.thumbfriendPersonality);
+  const layers           = useEditorStore(s => s.layers);
+  const personality      = useEditorStore(s => s.thumbfriendPersonality);
+  const youtubeChannelData = useEditorStore(s => s.youtubeChannelData);
+  const nicheBenchmark     = useEditorStore(s => s.nicheBenchmark);
 
   const isPro = !!(user?.is_pro || user?.plan === 'pro');
 
@@ -152,13 +153,22 @@ export default function useThumbFriend({ user, supabaseSession }) {
     setIsLoading(true);
     setExpression('thinking');
 
-    const image      = captureCanvas();
-    const canvasData = buildCanvasData(layers);
+    const image        = captureCanvas();
+    const canvasData   = buildCanvasData(layers);
     // Take history snapshot *before* appending the new user message
-    const history    = serializeHistory(messages);
-    const token      = supabaseSession?.access_token;
+    const history      = serializeHistory(messages);
+    const token        = supabaseSession?.access_token;
+
+    // CTR score — run analysis + scoring, attach to payload so ThumbFriend
+    // can reference the actual score in its response.
+    let ctrScore = null;
+    try {
+      const canvasMetrics = captureCanvasForAnalysis(layers);
+      ctrScore = calculateCTRScore(canvasMetrics, youtubeChannelData, nicheBenchmark);
+    } catch { /* non-fatal */ }
 
     let response = null;
+    let isOffline = false;
 
     try {
       const res = await fetch(`${RAILWAY_URL}/api/thumbfriend/chat`, {
@@ -171,6 +181,7 @@ export default function useThumbFriend({ user, supabaseSession }) {
           message:             text,
           image,
           canvasData,
+          ctrScore,
           conversationHistory: history,
           personality,
         }),
@@ -182,7 +193,11 @@ export default function useThumbFriend({ user, supabaseSession }) {
     }
 
     if (!response) {
-      response = buildMock(layers);
+      isOffline = true;
+      setIsOffline(true);
+      response = buildMock();
+    } else {
+      setIsOffline(false);
     }
 
     const assistantMsg = {
@@ -195,7 +210,7 @@ export default function useThumbFriend({ user, supabaseSession }) {
     setMessages(prev => [...prev, assistantMsg]);
     setExpression(response.expression || 'neutral');
     setIsLoading(false);
-  }, [isLoading, isPro, layers, messages, personality, supabaseSession]);
+  }, [isLoading, isPro, layers, messages, personality, supabaseSession, youtubeChannelData, nicheBenchmark]);
 
   // ── Apply action (msgIdx, actionIdx inside that message) ─────────────────
   const applyAction = useCallback((msgIdx, actionIdx) => {
@@ -272,6 +287,7 @@ export default function useThumbFriend({ user, supabaseSession }) {
     messages,
     isLoading,
     isOpen,
+    isOffline,
     expression,
     proactiveAlerts,
     unreadCount,

@@ -27,6 +27,7 @@ import TemplateBrowser    from './components/TemplateBrowser';
 import AIGeneratePanel    from './ai/AIGeneratePanel';
 import BackgroundRemover  from './components/BackgroundRemover';
 import AssetLibraryPanel  from './components/AssetLibraryPanel';
+import ChannelDashboard   from './components/ChannelDashboard';
 import StampTestPreview   from './components/StampTestPreview';
 import FeedSimulator      from './components/FeedSimulator';
 import ExportDialog       from './components/ExportDialog';
@@ -98,6 +99,10 @@ export default function NewEditor({ user, setPage }) {
   const setShowBackgroundRemover = useEditorStore(s => s.setShowBackgroundRemover);
   const showAssetLibrary         = useEditorStore(s => s.showAssetLibrary);
   const setShowAssetLibrary      = useEditorStore(s => s.setShowAssetLibrary);
+  const showChannelDashboard     = useEditorStore(s => s.showChannelDashboard);
+  const setShowChannelDashboard  = useEditorStore(s => s.setShowChannelDashboard);
+  const setYouTubeData           = useEditorStore(s => s.setYouTubeData);
+  const setNicheBenchmark        = useEditorStore(s => s.setNicheBenchmark);
 
   // ── Store actions ────────────────────────────────────────────────────────
   const selectLayer          = useEditorStore(s => s.selectLayer);
@@ -122,6 +127,40 @@ export default function NewEditor({ user, setPage }) {
       setPage?.('mobile-editor');
     }
   }, [setPage]);
+
+  // ── Phase 15: Load YouTube channel data + niche benchmark on mount ────────
+  useEffect(() => {
+    const RAILWAY_URL = process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app';
+    const isPro = !!(user?.is_pro || user?.plan === 'pro');
+    if (!isPro) return;
+
+    // Load YouTube channel status
+    (async () => {
+      try {
+        const { data: { session } } = await import('../context/AuthContext').catch(() => ({ data: { session: null } }));
+        // Use Supabase session if available via window
+        const token = window.__supabaseSession?.access_token;
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch(`${RAILWAY_URL}/api/youtube/status`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.connected && data.channel) setYouTubeData(data.channel);
+        }
+      } catch { /* YouTube optional — fail silently */ }
+    })();
+
+    // Load default niche benchmark
+    (async () => {
+      try {
+        const res = await fetch(`${RAILWAY_URL}/api/youtube/benchmark?niche=default`).catch(() => null);
+        if (res?.ok) {
+          const data = await res.json();
+          if (data.benchmark) setNicheBenchmark(data.benchmark);
+        }
+      } catch { /* benchmark optional */ }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // ── Upload / drag-drop state ─────────────────────────────────────────────
   const [isDragOver, setIsDragOver] = useState(false);
@@ -1290,6 +1329,9 @@ export default function NewEditor({ user, setPage }) {
 
       {/* ── Asset Library panel ──────────────────────────────────────── */}
       {showAssetLibrary && <AssetLibraryPanel user={user} onClose={() => setShowAssetLibrary(false)} />}
+
+      {/* ── Channel Dashboard modal ─────────────────────────────────── */}
+      {showChannelDashboard && <ChannelDashboard user={user} onClose={() => setShowChannelDashboard(false)} />}
 
       {/* ── Feed Simulator modal ────────────────────────────────────── */}
       {showFeedSimulator && <FeedSimulator rendererRef={rendererRef} />}

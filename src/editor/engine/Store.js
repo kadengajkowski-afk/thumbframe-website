@@ -421,6 +421,20 @@ const useEditorStore = create(
     showAssetLibrary: false,
     setShowAssetLibrary: (v) => set((state) => { state.showAssetLibrary = v; }),
 
+    // ── Phase 15: YouTube Integration ───────────────────────────────────────
+    youtubeChannelData: null,   // { id, title, subscriber_count, ctr_avg, ... } | null
+    youtubeConnected:   false,
+    showChannelDashboard: false,
+    setYouTubeData: (data) => set((state) => {
+      state.youtubeChannelData = data;
+      state.youtubeConnected   = !!data;
+    }),
+    setShowChannelDashboard: (v) => set((state) => { state.showChannelDashboard = v; }),
+
+    // ── Phase 16: Niche Benchmark ────────────────────────────────────────────
+    nicheBenchmark: null,       // { niche, ctrAvg, ctrTop10, ... } | null
+    setNicheBenchmark: (b) => set((state) => { state.nicheBenchmark = b; }),
+
     // applyTemplate — replaces all layers with template layers (new IDs), pushes
     // the resulting state to history so Cmd+Z restores the previous canvas.
     applyTemplate: (layersJson, templateName) => set((state) => {
