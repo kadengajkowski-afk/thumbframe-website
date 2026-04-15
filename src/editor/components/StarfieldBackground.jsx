@@ -89,7 +89,7 @@ class MeteorShower {
 
     // Build tail as overlapping radial gradient circles for realistic glow
     const tailLen = m.tailLen * (0.9 + 0.1 * bright);
-    const steps   = Math.min(28, Math.ceil(tailLen / 5));
+    const steps   = Math.max(2, Math.min(28, Math.ceil(tailLen / 5))); // min 2 so frac never NaN
     const savedOp = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = 'lighter';
 
@@ -458,6 +458,8 @@ export default function StarfieldBackground() {
     let prevTime = performance.now();
 
     const draw = (now) => {
+      raf = requestAnimationFrame(draw); // schedule next frame first so errors can't kill loop
+      try {
       const dt = Math.min(now - prevTime, 100);
       prevTime = now;
       tick++;
@@ -514,7 +516,7 @@ export default function StarfieldBackground() {
 
       planetKiller.update(dt, ctx);
 
-      raf = requestAnimationFrame(draw);
+      } catch (err) { console.error('[Starfield] draw error:', err); }
     };
 
     raf = requestAnimationFrame(draw);

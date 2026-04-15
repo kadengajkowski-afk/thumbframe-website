@@ -1066,7 +1066,7 @@ export default function NewEditor({ user, setPage }) {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           style={{
-            flex: 1, minWidth: 0, height: '100%', overflow: 'hidden',
+            flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden',
             position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: 'var(--bg-0)', cursor: canvasCursor, touchAction: 'none',
             outline: isDragOver ? '2px solid var(--accent)' : 'none',
