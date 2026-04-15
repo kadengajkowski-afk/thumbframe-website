@@ -35,6 +35,7 @@ export default class Renderer {
     this.adjustmentFilters = new Map();// layerId → AdjustmentFilter
     this.paintSprites   = new Map();   // layerId → Sprite (paint canvas overlay)
     this.paintTextures  = new Map();   // layerId → Texture (paint canvas GPU texture)
+    this.paintHistory   = new Map();   // layerId → Map<historyIndex, Texture> (undo versioning)
 
     this._mounted = false;
   }
@@ -115,6 +116,7 @@ export default class Renderer {
     this.paintSprites.clear();
     this.paintTextures.forEach((t) => t?.destroy?.(true));
     this.paintTextures.clear();
+    this.paintHistory.clear();
     this.app.destroy(true, { children: true });
     this.app = null;
     this._mounted = false;
@@ -478,6 +480,17 @@ export default class Renderer {
     this._forceRender();
   }
 
+  // Temporarily set the alpha of a layer's base sprite (0 = hidden, 1 = visible).
+  // Called by NewEditor when a paint stroke starts (hide) and ends (show) so that
+  // the paint-canvas overlay doesn't double-composite on top of the base image.
+  setLayerSpriteAlpha(layerId, alpha) {
+    const obj = this.displayObjects.get(layerId);
+    if (obj) {
+      obj.alpha = alpha;
+      this._forceRender();
+    }
+  }
+
   // Remove paint sprite when layer is deleted or stroke is committed to base texture
   removePaintSprite(layerId) {
     const s = this.paintSprites.get(layerId);
@@ -491,6 +504,9 @@ export default class Renderer {
       t.destroy(true);
       this.paintTextures.delete(layerId);
     }
+    // Restore base sprite visibility (sync() will correct to layer.opacity on next render)
+    const base = this.displayObjects.get(layerId);
+    if (base) base.alpha = 1;
   }
 
   // ── Hit test: which layer is at screen position (x, y)? ──────────────────

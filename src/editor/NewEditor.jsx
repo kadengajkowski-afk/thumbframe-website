@@ -15,7 +15,7 @@ import { computeGuides } from './engine/SmartGuides';
 import { processImageFile } from './utils/imageUpload';
 import { renderTextToCanvas, loadFont, DEFAULT_TEXT_DATA } from './utils/textRenderer';
 import { COLOR_GRADES, FREE_GRADES, GRADE_LABELS } from './presets/colorGrades';
-import { BrushPipeline } from './tools/BrushPipeline';
+import { BrushPipeline, getCompositeOp } from './tools/BrushPipeline';
 import { BrushTool } from './tools/BrushTool';
 import { EraserTool } from './tools/EraserTool';
 import { CloneStampTool } from './tools/CloneStampTool';
@@ -274,7 +274,9 @@ export default function NewEditor({ user, setPage }) {
     };
   }, []);
 
-  /** Get or create paint canvas for a layer */
+  /** Get or create paint canvas for a layer.
+   *  Always initialised with the layer's current image pixels so that the
+   *  eraser has real content to erase from and clone stamp can sample correctly. */
   const getPaintCanvas = useCallback((layer) => {
     if (paintCanvasesRef.current.has(layer.id)) {
       return paintCanvasesRef.current.get(layer.id);
@@ -282,56 +284,75 @@ export default function NewEditor({ user, setPage }) {
     const pc  = document.createElement('canvas');
     pc.width  = layer.width  || 640;
     pc.height = layer.height || 360;
+
+    // Draw the layer's current image onto the paint canvas so tools have real pixels
+    const tex = layer.texture || window.__renderer?.textureCache.get(layer.id);
+    if (tex?.source?.resource) {
+      try {
+        const ctx = pc.getContext('2d');
+        ctx.drawImage(tex.source.resource, 0, 0, pc.width, pc.height);
+      } catch { /* ignore cross-origin / taint errors */ }
+    }
+
     paintCanvasesRef.current.set(layer.id, pc);
     return pc;
   }, []);
 
-  /** Upload current paint canvas to PixiJS as a live preview sprite */
-  const uploadPaintCanvas = useCallback((layerId, paintCanvas) => {
-    rendererRef.current?.updateLayerPaintTexture(layerId, paintCanvas);
-  }, []);
+  /** Upload the current paint canvas (merged with the in-progress wet canvas)
+   *  to PixiJS as a live preview sprite and trigger an immediate render. */
+  const uploadPaintCanvas = useCallback((layerId) => {
+    const pc = paintCanvasesRef.current.get(layerId);
+    if (!pc) return;
+    const renderer = rendererRef.current;
+    if (!renderer) return;
 
-  /** Commit the current paint canvas into the layer's base texture and clear the paint sprite */
+    const pipeline = pipelineRef.current;
+    const state    = useEditorStore.getState();
+    const tool     = state.activeTool;
+    const params   = state.toolParams[tool] || {};
+
+    let uploadSrc = pc;
+
+    // For wet-canvas tools (brush, clone stamp …): merge paint canvas + in-progress
+    // wet canvas so the current stroke is visible before pointerup.
+    if (isStrokingRef.current && pipeline.wetCanvas && !pipeline._tool?.handlesComposite) {
+      const preview    = new OffscreenCanvas(pc.width, pc.height);
+      const previewCtx = preview.getContext('2d');
+      previewCtx.drawImage(pc, 0, 0);
+      previewCtx.save();
+      previewCtx.globalAlpha              = (params.opacity ?? 100) / 100;
+      previewCtx.globalCompositeOperation = getCompositeOp(params.blendMode ?? 'normal');
+      previewCtx.drawImage(pipeline.wetCanvas, 0, 0);
+      previewCtx.restore();
+      uploadSrc = preview;
+    }
+
+    renderer.updateLayerPaintTexture(layerId, uploadSrc);
+    renderer.markDirty();
+  }, []); // reads refs + store.getState() — no React deps needed
+
+  /** Commit the current paint canvas as the layer's new base texture.
+   *  The paint canvas already holds the full image (base + all strokes) so we
+   *  use it directly rather than merging again. */
   const commitPaintToLayer = useCallback((layerId) => {
-    const layer = useEditorStore.getState().layers.find(l => l.id === layerId);
-    if (!layer?.texture) return;
     const paintCanvas = paintCanvasesRef.current.get(layerId);
     if (!paintCanvas) return;
 
-    // Draw paint onto a copy of the base image
-    const merged    = document.createElement('canvas');
-    merged.width    = layer.width;
-    merged.height   = layer.height;
-    const mergedCtx = merged.getContext('2d');
-
-    // Draw base image texture via PixiJS canvas
-    const renderer = rendererRef.current;
-    if (renderer?.app?.canvas) {
-      // Snapshot just this layer by temporarily hiding everything else and rendering
-      // Simpler: draw the stored OffscreenCanvas source directly
-      const tex = layer.texture;
-      if (tex?.source?.resource) {
-        mergedCtx.drawImage(tex.source.resource, 0, 0, merged.width, merged.height);
-      }
-    }
-    // Composite paint on top
-    mergedCtx.drawImage(paintCanvas, 0, 0);
-
-    // Create new PixiJS texture from merged canvas
-    const src     = new ImageSource({ resource: merged });
+    const src     = new ImageSource({ resource: paintCanvas });
     const texture = new Texture({ source: src });
+
+    // Update textureCache AND record in paintHistory so undo can recover the
+    // correct texture for this exact historyIndex (set after commitChange fires).
     if (window.__renderer) {
       window.__renderer.textureCache.set(layerId, texture);
     }
-    updateLayer(layerId, { texture });
 
-    // Clear paint canvas and remove paint sprite
-    const pc  = paintCanvasesRef.current.get(layerId);
-    if (pc) {
-      const pCtx = pc.getContext('2d');
-      pCtx.clearRect(0, 0, pc.width, pc.height);
-    }
+    updateLayer(layerId, { texture, width: paintCanvas.width, height: paintCanvas.height });
+
+    // Remove paint sprite overlay — base sprite will show new texture after sync()
     rendererRef.current?.removePaintSprite(layerId);
+    // Restore base sprite visibility immediately (sync() will correct opacity next render)
+    rendererRef.current?.setLayerSpriteAlpha(layerId, 1);
   }, [updateLayer]);
 
   // ── Init renderer on mount ───────────────────────────────────────────────
@@ -375,13 +396,21 @@ export default function NewEditor({ user, setPage }) {
     // sync() recovers textures stripped by undo/redo snapshots via textureCache.
     r.sync(layers);
 
-    // After sync, update the store for any image layers whose texture was
-    // recovered from the cache — keeps React state consistent with what
-    // the Renderer already rendered. Silent (no history push).
+    // After sync, recover textures for any layer that lost its texture through
+    // JSON serialisation in _pushHistory.  paintHistory is checked first so
+    // undo/redo lands on the correct version of a paint-edited layer rather
+    // than always picking up the latest cached texture.
     const store = useEditorStore.getState();
     for (const layer of layers) {
-      if (layer.type === 'image' && !layer.texture && r.textureCache.has(layer.id)) {
-        store.updateLayer(layer.id, { texture: r.textureCache.get(layer.id) });
+      if (layer.type === 'image' && !layer.texture) {
+        // paintHistory: Map<historyIndex → Texture> — keyed by version
+        const paintHist = window.__renderer?.paintHistory?.get(layer.id);
+        const recovered = paintHist?.get(historyIndex) ?? r.textureCache.get(layer.id);
+        if (recovered) {
+          // Also update textureCache so renderer uses the correct version on next sync
+          r.textureCache.set(layer.id, recovered);
+          store.updateLayer(layer.id, { texture: recovered });
+        }
       }
     }
 
@@ -391,6 +420,14 @@ export default function NewEditor({ user, setPage }) {
       if (obj) obj.alpha = 0;
     }
   }, [layers, isEditingText, editingLayerId]);
+
+  // ── Clear paint canvases on undo / redo ──────────────────────────────────
+  // History snapshots don't contain paint canvas state. When undo/redo fires,
+  // we clear all cached paint canvases so the next stroke re-initialises them
+  // from the now-correct (reverted) layer texture rather than stale pixel data.
+  useEffect(() => {
+    paintCanvasesRef.current.clear();
+  }, [historyIndex]);
 
   // ── Sync viewport ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -402,80 +439,64 @@ export default function NewEditor({ user, setPage }) {
 
   // ── Global pointermove / up for MOVE drag + painting ────────────────────
   useEffect(() => {
-    let lastPaintFrame = 0;
-
     const onMove = (e) => {
-      const state   = useEditorStore.getState();
-      const tool    = state.activeTool;
+      const state    = useEditorStore.getState();
+      const tool     = state.activeTool;
       const canvasEl = canvasRef.current;
 
-      // ── Cursor position update (always for paint tools) ──────────────────
+      // ── Cursor position (always, for brush cursor overlay) ───────────────
       if (PAINT_TOOLS.has(tool) && canvasEl) {
         const canvasRect = canvasEl.getBoundingClientRect();
-        const vp = rendererRef.current?.viewport;
-        const screenX = e.clientX - canvasRect.left;
-        const screenY = e.clientY - canvasRect.top;
-        const worldX  = (screenX - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
-        const worldY  = (screenY - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
-        setCursorCanvasPos({ x: worldX, y: worldY });
+        const vp         = rendererRef.current?.viewport;
+        const screenX    = e.clientX - canvasRect.left;
+        const screenY    = e.clientY - canvasRect.top;
+        setCursorCanvasPos({
+          x: (screenX - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1),
+          y: (screenY - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1),
+        });
       }
 
       // ── Painting stroke continuation ─────────────────────────────────────
+      // Upload on EVERY pointermove — no throttle — so painting feels instant.
       if (isStrokingRef.current && strokeLayerRef.current && PAINT_TOOLS.has(tool)) {
-        const now = performance.now();
-        if (now - lastPaintFrame < 16) return; // throttle to ~60fps
-        lastPaintFrame = now;
-
         const layerId     = strokeLayerRef.current;
-        const ls          = state.layers;
-        const targetLayer = ls.find(l => l.id === layerId);
-        if (!targetLayer) return;
+        const targetLayer = state.layers.find(l => l.id === layerId);
+        if (!targetLayer || !canvasEl) return;
 
-        const canvasRect = canvasEl?.getBoundingClientRect();
-        if (!canvasRect) return;
-        const vp       = rendererRef.current?.viewport;
-        const screenX  = e.clientX - canvasRect.left;
-        const screenY  = e.clientY - canvasRect.top;
-        const worldX   = (screenX - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
-        const worldY   = (screenY - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
-        const localX   = worldX - (targetLayer.x - targetLayer.width  / 2);
-        const localY   = worldY - (targetLayer.y - targetLayer.height / 2);
+        const canvasRect = canvasEl.getBoundingClientRect();
+        const vp         = rendererRef.current?.viewport;
+        const worldX     = (e.clientX - canvasRect.left - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
+        const worldY     = (e.clientY - canvasRect.top  - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
+        const localX     = worldX - (targetLayer.x - targetLayer.width  / 2);
+        const localY     = worldY - (targetLayer.y - targetLayer.height / 2);
 
-        const pc     = paintCanvasesRef.current.get(layerId);
-        if (!pc) return;
         const params = state.toolParams[tool] || {};
         pipelineRef.current.continueStroke({ x: localX, y: localY }, params);
-        uploadPaintCanvas(layerId, pc);
+        uploadPaintCanvas(layerId); // builds preview (paintCanvas + wetCanvas), markDirty
         return;
       }
 
       // ── Layer move drag ──────────────────────────────────────────────────
       const drag = moveRef.current;
-      if (!drag) return;
-      if (!canvasEl) return;
+      if (!drag || !canvasEl) return;
       const canvasRect = canvasEl.getBoundingClientRect();
-      const screenX = e.clientX - canvasRect.left;
-      const screenY = e.clientY - canvasRect.top;
-      const vp      = rendererRef.current?.viewport;
-      const worldX  = (screenX - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
-      const worldY  = (screenY - (vp?.y ?? 0)) / (vp?.scale?.x ?? 1);
+      const vp         = rendererRef.current?.viewport;
+      const worldX     = (e.clientX - canvasRect.left - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
+      const worldY     = (e.clientY - canvasRect.top  - (vp?.y ?? 0)) / (vp?.scale?.x ?? 1);
 
       const { x: newX, y: newY } = computeMove(
         drag.startLX, drag.startLY, drag.startWX, drag.startWY, worldX, worldY
       );
-
       const draggingLayer = state.layers.find(l => l.id === drag.layerId);
       if (draggingLayer) {
         const provisional = { ...draggingLayer, x: newX, y: newY };
-        const { snappedX, snappedY, guides } = computeGuides(
-          provisional, state.layers, drag.layerId
-        );
+        const { snappedX, snappedY, guides } = computeGuides(provisional, state.layers, drag.layerId);
         updateLayer(drag.layerId, { x: snappedX, y: snappedY });
         setActiveGuides(guides);
       }
     };
 
-    const onUp = (e) => {
+    const onUp = () => {
       const state = useEditorStore.getState();
       const tool  = state.activeTool;
 
@@ -490,14 +511,26 @@ export default function NewEditor({ user, setPage }) {
             const params = state.toolParams[tool] || {};
             pipelineRef.current.endStroke(pc, params);
           }
+
+          // commitPaintToLayer creates a new base texture from the paint canvas.
+          // Do this BEFORE commitChange so the history entry captures the new texture.
           commitPaintToLayer(layerId);
 
-          // Build one history entry for the whole stroke
-          const preData = preStrokeDataRef.current.get(layerId);
-          if (preData) {
-            const toolLabel = tool.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            commitChange(`${toolLabel} on '${targetLayer.name}'`);
-            preStrokeDataRef.current.delete(layerId);
+          // Commit one history entry for the whole stroke
+          const toolLabel = tool.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          commitChange(`${toolLabel} on '${targetLayer.name}'`);
+
+          // ── Record post-stroke texture in paintHistory ─────────────────
+          // historyIndex is now updated (commitChange ran). Record the new texture
+          // at this index so the sync effect can recover it on redo.
+          const newHistIdx = useEditorStore.getState().historyIndex;
+          const newTex = useEditorStore.getState().layers.find(l => l.id === layerId)?.texture;
+          if (newTex && window.__renderer) {
+            window.__renderer.paintHistory = window.__renderer.paintHistory || new Map();
+            if (!window.__renderer.paintHistory.has(layerId)) {
+              window.__renderer.paintHistory.set(layerId, new Map());
+            }
+            window.__renderer.paintHistory.get(layerId).set(newHistIdx, newTex);
           }
         }
 
@@ -516,9 +549,7 @@ export default function NewEditor({ user, setPage }) {
       commitChange(`Move '${layer?.name || drag.layerName}'`);
     };
 
-    const onLeave = () => {
-      setCursorCanvasPos(null);
-    };
+    const onLeave = () => setCursorCanvasPos(null);
 
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup',   onUp);
@@ -565,20 +596,29 @@ export default function NewEditor({ user, setPage }) {
 
     // ── Painting tools ───────────────────────────────────────────────────────
     if (PAINT_TOOLS.has(tool)) {
-      // Alt+click with clone stamp: set source point
+      // Alt+click with clone stamp: set source point (LOCAL layer coords, not world)
       if (tool === 'clone_stamp' && e.altKey) {
-        const sourcePt = { x: canvasX, y: canvasY };
-        setCloneSourcePoint(sourcePt);
-        // Find topmost visible image layer under cursor and set clone source
-        const targetLayer = [...ls].reverse().find(l =>
+        setCloneSourcePoint({ x: canvasX, y: canvasY }); // world coords for cursor display
+        const sourceLayer = [...ls].reverse().find(l =>
           l.visible !== false && l.type === 'image' &&
           canvasX >= l.x - l.width / 2 && canvasX <= l.x + l.width / 2 &&
           canvasY >= l.y - l.height / 2 && canvasY <= l.y + l.height / 2
         );
-        if (targetLayer) {
-          const pc = getPaintCanvas(targetLayer);
-          toolsRef.current.clone_stamp?.setSource?.(canvasX, canvasY, pc);
+        if (sourceLayer) {
+          const pc = getPaintCanvas(sourceLayer); // inits with base image if new
+          // Convert world → local so applyStamp can sample at the right pixel
+          const localSrcX = canvasX - (sourceLayer.x - sourceLayer.width  / 2);
+          const localSrcY = canvasY - (sourceLayer.y - sourceLayer.height / 2);
+          toolsRef.current.clone_stamp?.setSource?.(localSrcX, localSrcY, pc);
         }
+        return;
+      }
+
+      // Guard: clone stamp requires a source point to have been set first
+      if (tool === 'clone_stamp' && !toolsRef.current.clone_stamp?._sourceCanvas) {
+        window.dispatchEvent(new CustomEvent('tf:toast', {
+          detail: { message: 'Alt+click on the image to set a clone source point first.' },
+        }));
         return;
       }
 
@@ -593,20 +633,36 @@ export default function NewEditor({ user, setPage }) {
       isStrokingRef.current  = true;
       strokeLayerRef.current = targetLayer.id;
 
-      // Snapshot pre-stroke state for undo
-      const pc = getPaintCanvas(targetLayer);
-      const pCtx = pc.getContext('2d');
-      preStrokeDataRef.current.set(targetLayer.id, pCtx.getImageData(0, 0, pc.width, pc.height));
+      // ── Record pre-stroke texture in paintHistory for undo recovery ────────
+      // _pushHistory strips `texture` from snapshots; we keep a versioned map
+      // (historyIndex → Texture) so the sync effect can restore the right pixels.
+      const preHistIdx = useEditorStore.getState().historyIndex;
+      const preTex = targetLayer.texture || window.__renderer?.textureCache.get(targetLayer.id);
+      if (preTex && window.__renderer) {
+        window.__renderer.paintHistory = window.__renderer.paintHistory || new Map();
+        if (!window.__renderer.paintHistory.has(targetLayer.id)) {
+          window.__renderer.paintHistory.set(targetLayer.id, new Map());
+        }
+        // Record the CURRENT texture at the CURRENT historyIndex (the "before" state)
+        window.__renderer.paintHistory.get(targetLayer.id).set(preHistIdx, preTex);
+      }
 
-      // Convert canvas world coords to layer-local coords
-      const localX = canvasX - (targetLayer.x - targetLayer.width / 2);
+      // getPaintCanvas initialises with base image pixels on first use
+      const pc = getPaintCanvas(targetLayer);
+
+      // Hide base sprite — paint canvas is a full copy of the image; paint sprite
+      // covers it completely so there is no doubling. Erased / painted pixels
+      // replace the base image correctly because the base sprite is not visible.
+      rendererRef.current?.setLayerSpriteAlpha(targetLayer.id, 0);
+
+      // Convert world coords → layer-local coords for the pipeline
+      const localX = canvasX - (targetLayer.x - targetLayer.width  / 2);
       const localY = canvasY - (targetLayer.y - targetLayer.height / 2);
-      const point  = { x: localX, y: localY };
 
       const activePipelineTool = toolsRef.current[tool];
       const params = useEditorStore.getState().toolParams[tool] || {};
-      pipelineRef.current.startStroke(pc, point, params, activePipelineTool);
-      uploadPaintCanvas(targetLayer.id, pc);
+      pipelineRef.current.startStroke(pc, { x: localX, y: localY }, params, activePipelineTool);
+      uploadPaintCanvas(targetLayer.id);
       return;
     }
 
