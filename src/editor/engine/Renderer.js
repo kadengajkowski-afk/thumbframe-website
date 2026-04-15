@@ -170,7 +170,7 @@ export default class Renderer {
   // Only creates/destroys when necessary. Updates properties in-place.
   // ════════════════════════════════════════════════════════════════════════════
   sync(layers) {
-    if (!this._mounted || !this.layerContainer) return;
+    if (!this._mounted || !this.layerContainer || !layers) return;
 
     const currentIds = new Set(layers.map(l => l.id));
     const existingIds = new Set(this.displayObjects.keys());

@@ -261,7 +261,9 @@ export default function NewEditor({ user, setPage }) {
 
     // Drain pending texture restores — silent updateLayer calls (no history).
     // This keeps the store consistent with what the Renderer already rendered.
-    if (r._pendingRestores.length > 0) {
+    // Guard with ?. — during a hot-update a stale renderer instance may not
+    // have _pendingRestores yet (it was added in the undo/redo fix).
+    if (r._pendingRestores?.length > 0) {
       const store = useEditorStore.getState();
       for (const { id, texture } of r._pendingRestores) {
         store.updateLayer(id, { texture });
