@@ -253,6 +253,28 @@ export default function NewEditor({ user, setPage }) {
   useEffect(() => {
     const r = rendererRef.current;
     if (!r) return;
+
+    // ── Texture restoration after undo/redo ───────────────────────────────
+    // History snapshots strip the `texture` field (it can't be JSON-serialised).
+    // After undo/redo, image layers come back with texture: undefined.
+    // The Renderer keeps a texturesByLayerId cache of every GPU texture it has
+    // ever used — use it to silently reattach textures without pushing history.
+    const needsRestore = layers.filter(
+      l => l.type === 'image' && !l.texture && r.texturesByLayerId.has(l.id)
+    );
+    if (needsRestore.length > 0) {
+      const store = useEditorStore.getState();
+      for (const layer of needsRestore) {
+        const tex = r.texturesByLayerId.get(layer.id);
+        if (tex?.valid) {
+          store.updateLayer(layer.id, { texture: tex });
+        }
+      }
+      // Let Zustand flush the updateLayer calls before calling sync().
+      // The next render cycle will re-enter this effect with textures restored.
+      return;
+    }
+
     r.sync(layers);
     // Hide the sprite of the layer being edited (contenteditable replaces it)
     if (isEditingText && editingLayerId) {

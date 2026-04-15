@@ -28,6 +28,9 @@ export default class Renderer {
     this.displayObjects = new Map();     // layerId → PIXI.DisplayObject
     this.textureCache = new Map();       // src string → PIXI.Texture
     this.adjustmentFilters = new Map();  // layerId → AdjustmentFilter
+    // Textures keyed by layerId — persists across undo/redo so we can reattach
+    // GPU textures that were stripped from history snapshots.
+    this.texturesByLayerId = new Map();  // layerId → PIXI.Texture
     this._mounted = false;
   }
 
@@ -100,6 +103,7 @@ export default class Renderer {
       if (f && typeof f.destroy === 'function') f.destroy();
     });
     this.adjustmentFilters.clear();
+    this.texturesByLayerId.clear();
     this.app.destroy(true, { children: true });
     this.app = null;
     this._mounted = false;
@@ -176,6 +180,8 @@ export default class Renderer {
         // Destroy any adjustment filter
         const adjFilter = this.adjustmentFilters.get(id);
         if (adjFilter) { adjFilter.destroy(); this.adjustmentFilters.delete(id); }
+        // NOTE: intentionally keep texturesByLayerId entry alive here —
+        // undo can re-add this layer and it will need its texture back.
       }
     }
 
@@ -300,6 +306,9 @@ export default class Renderer {
     const tw = layer.imageData?.textureWidth  || layer.width;
     const th = layer.imageData?.textureHeight || layer.height;
     window.__textureMemoryManager?.register(layer.id, layer.texture, tw, th);
+
+    // Cache the texture by layerId so undo can reattach it after snapshots strip it.
+    this.texturesByLayerId.set(layer.id, layer.texture);
 
     const sprite = new Sprite(layer.texture);
     // anchor(0, 0) = top-left origin. sync() compensates by positioning at
