@@ -962,6 +962,44 @@ export default function NewEditor({ user, setPage }) {
     rendererRef.current?.markDirty();
   }, [updateLayer, commitChange]);
 
+  // ── Export ────────────────────────────────────────────────────────────────
+  const handleExport = useCallback(() => {
+    const renderer = rendererRef.current;
+    if (!renderer) {
+      window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Nothing to export yet', type: 'error' } }));
+      return;
+    }
+    try {
+      const fullDataUrl = renderer.exportToDataURL('image/png');
+      if (!fullDataUrl) {
+        window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Export failed — try again', type: 'error' } }));
+        return;
+      }
+      // Crop the full renderer canvas down to the exact 1280×720 content area
+      const img = new Image();
+      img.onload = () => {
+        const oc  = document.createElement('canvas');
+        oc.width  = CW;
+        oc.height = CH;
+        oc.getContext('2d').drawImage(img, 0, 0, CW, CH, 0, 0, CW, CH);
+        const croppedUrl = oc.toDataURL('image/png');
+        const name = (useEditorStore.getState().projectName || 'thumbnail')
+          .replace(/[^a-z0-9\-_]/gi, '_').toLowerCase();
+        const a = document.createElement('a');
+        a.href     = croppedUrl;
+        a.download = `${name}.png`;
+        a.click();
+        window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Exported as PNG', type: 'success' } }));
+      };
+      img.onerror = () => {
+        window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Export failed — try again', type: 'error' } }));
+      };
+      img.src = fullDataUrl;
+    } catch {
+      window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Export failed — try again', type: 'error' } }));
+    }
+  }, []);
+
   // ── Canvas cursor ─────────────────────────────────────────────────────────
   const isPaintTool  = PAINT_TOOLS.has(activeTool);
   const canvasCursor = isPaintTool ? 'none' : activeTool === 'text' ? 'text' : 'default';
@@ -989,8 +1027,8 @@ export default function NewEditor({ user, setPage }) {
       <TopBar
         user={user}
         setPage={setPage}
-        onExport={() => window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Export not yet connected in Phase 7', type: 'info' } }))}
-        onShare={() => window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Share not yet connected in Phase 7', type: 'info' } }))}
+        onExport={handleExport}
+        onShare={() => window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Coming soon — this feature is being built.', type: 'info' } }))}
       />
 
       {/* ── Middle row ──────────────────────────────────────────────────── */}
@@ -1041,6 +1079,7 @@ export default function NewEditor({ user, setPage }) {
           onFontChange={handleFontChange}
           onTextDataChange={handleTextDataChange}
           onTextDataCommit={handleTextDataCommit}
+          onFileUpload={() => fileInputRef.current?.click()}
         />
 
       </div>{/* end middle row */}

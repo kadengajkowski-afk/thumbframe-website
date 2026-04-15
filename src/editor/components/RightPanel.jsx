@@ -14,6 +14,10 @@ const PAINT_TOOLS = new Set([
   'dodge','burn','sponge','blur_brush','sharpen_brush','smudge','light_painting',
 ]);
 
+const COMING_SOON = () => window.dispatchEvent(
+  new CustomEvent('tf:toast', { detail: { message: 'Coming soon — this feature is being built.', type: 'info' } })
+);
+
 export default function RightPanel({
   user,
   onUpdate,
@@ -27,8 +31,10 @@ export default function RightPanel({
   onFontChange,
   onTextDataChange,
   onTextDataCommit,
+  onFileUpload,
 }) {
   const activeTool       = useEditorStore(s => s.activeTool);
+  const setActiveTool    = useEditorStore(s => s.setActiveTool);
   const layers           = useEditorStore(s => s.layers);
   const selectedLayerIds = useEditorStore(s => s.selectedLayerIds);
 
@@ -126,14 +132,15 @@ export default function RightPanel({
             <div className="obs-section-label">Quick Actions</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               {[
-                { icon: '🖼', label: 'Add Image',  hint: 'Upload an image layer' },
-                { icon: 'T',  label: 'Add Text',   hint: 'Press T and click canvas' },
-                { icon: '✦',  label: 'AI Generate', hint: 'Generate AI background' },
-                { icon: '📋', label: 'Templates',  hint: 'Browse templates' },
-              ].map(({ icon, label, hint }) => (
+                { icon: '🖼', label: 'Add Image',   hint: 'Upload an image layer',   onClick: onFileUpload },
+                { icon: 'T',  label: 'Add Text',    hint: 'Switch to text tool',     onClick: () => setActiveTool('text') },
+                { icon: '✦',  label: 'AI Generate', hint: 'Generate AI background',  onClick: COMING_SOON },
+                { icon: '📋', label: 'Templates',   hint: 'Browse templates',        onClick: COMING_SOON },
+              ].map(({ icon, label, hint, onClick }) => (
                 <button
                   key={label}
                   title={hint}
+                  onClick={onClick}
                   style={{
                     height: 48, display: 'flex', flexDirection: 'column', alignItems: 'center',
                     justifyContent: 'center', gap: 4,
