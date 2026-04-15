@@ -10,6 +10,17 @@ const PAINT_TOOLS = new Set([
   'light_painting',
 ]);
 
+// Retouch subtools shown in the in-panel switcher row
+const RETOUCH_TOOLS = [
+  { id: 'dodge',        label: 'Dodge'   },
+  { id: 'burn',         label: 'Burn'    },
+  { id: 'sponge',       label: 'Sponge'  },
+  { id: 'blur_brush',   label: 'Blur'    },
+  { id: 'sharpen_brush',label: 'Sharpen' },
+  { id: 'smudge',       label: 'Smudge'  },
+];
+const RETOUCH_SET = new Set(RETOUCH_TOOLS.map(t => t.id));
+
 const BLEND_MODES = [
   'normal','multiply','screen','overlay','darken','lighten',
   'color-dodge','color-burn','hard-light','soft-light',
@@ -47,16 +58,53 @@ function Slider({ label: lbl, min, max, step, value, onChange, hint }) {
   );
 }
 
+// Retouch subtool switcher — shown whenever any retouch tool is active
+function RetouchSubtoolRow({ activeTool, setActiveTool }) {
+  return (
+    <div style={{
+      display: 'flex', flexWrap: 'wrap', gap: 4,
+      padding: '8px 12px',
+      borderBottom: '1px solid rgba(255,255,255,0.06)',
+    }}>
+      {RETOUCH_TOOLS.map(({ id, label: lbl }) => {
+        const isActive = activeTool === id;
+        return (
+          <button
+            key={id}
+            onClick={() => setActiveTool(id)}
+            style={{
+              height: 26, padding: '0 10px', borderRadius: 999,
+              fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              border: isActive
+                ? '1px solid rgba(249,115,22,0.30)'
+                : '1px solid rgba(255,255,255,0.06)',
+              background: isActive
+                ? 'rgba(249,115,22,0.12)'
+                : 'rgba(255,255,255,0.04)',
+              color: isActive ? '#f97316' : 'rgba(245,245,247,0.40)',
+              transition: 'background 100ms, color 100ms, border-color 100ms',
+            }}
+          >
+            {lbl}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function BrushSettingsPanel() {
-  const activeTool     = useEditorStore(s => s.activeTool);
-  const toolParams     = useEditorStore(s => s.toolParams);
+  const activeTool      = useEditorStore(s => s.activeTool);
+  const toolParams      = useEditorStore(s => s.toolParams);
   const updateToolParam = useEditorStore(s => s.updateToolParam);
+  const setActiveTool   = useEditorStore(s => s.setActiveTool);
 
   if (!PAINT_TOOLS.has(activeTool)) return null;
 
   const p  = toolParams[activeTool] || {};
   const up = (key, val) => updateToolParam(activeTool, key, val);
 
+  const isRetouch     = RETOUCH_SET.has(activeTool);
   const showBlend     = activeTool === 'brush' || activeTool === 'clone_stamp';
   const showDodgeBurn = activeTool === 'dodge' || activeTool === 'burn';
   const showSponge    = activeTool === 'sponge';
@@ -65,6 +113,7 @@ export default function BrushSettingsPanel() {
   const showAligned   = activeTool === 'clone_stamp';
   const showLight     = activeTool === 'light_painting';
   const showColor     = ['brush', 'light_painting'].includes(activeTool);
+  const showSpotHeal  = activeTool === 'spot_healing';
 
   return (
     <div style={{ padding: 0 }}>
@@ -72,6 +121,11 @@ export default function BrushSettingsPanel() {
       <div style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: 'rgba(245,245,247,0.60)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         {TOOL_LABELS[activeTool] || activeTool}
       </div>
+
+      {/* Retouch subtool switcher — only for retouch tools */}
+      {isRetouch && (
+        <RetouchSubtoolRow activeTool={activeTool} setActiveTool={setActiveTool} />
+      )}
 
       {/* Color picker (brush + light painting) */}
       {showColor && (
@@ -89,14 +143,25 @@ export default function BrushSettingsPanel() {
         </div>
       )}
 
-      {/* Core sliders */}
+      {/* Core sliders — spot healing only shows Size/Hardness/Opacity */}
       <div style={section}>
         <Slider label="Size"     min={1}   max={500} step={1}   value={p.size     ?? 20}  onChange={(e) => up('size',     Number(e.target.value))} />
         <Slider label="Hardness" min={0}   max={100} step={1}   value={p.hardness ?? 80}  onChange={(e) => up('hardness', Number(e.target.value))} hint={`${p.hardness ?? 80}%`} />
         <Slider label="Opacity"  min={0}   max={100} step={1}   value={p.opacity  ?? 100} onChange={(e) => up('opacity',  Number(e.target.value))} hint={`${p.opacity ?? 100}%`} />
-        <Slider label="Flow"     min={1}   max={100} step={1}   value={p.flow     ?? 100} onChange={(e) => up('flow',     Number(e.target.value))} hint={`${p.flow ?? 100}%`} />
-        <Slider label="Spacing"  min={1}   max={200} step={1}   value={p.spacing  ?? 25}  onChange={(e) => up('spacing',  Number(e.target.value))} />
+        {!showSpotHeal && (
+          <>
+            <Slider label="Flow"    min={1} max={100} step={1} value={p.flow    ?? 100} onChange={(e) => up('flow',    Number(e.target.value))} hint={`${p.flow ?? 100}%`} />
+            <Slider label="Spacing" min={1} max={200} step={1} value={p.spacing ?? 25}  onChange={(e) => up('spacing', Number(e.target.value))} />
+          </>
+        )}
       </div>
+
+      {/* Spot healing info note */}
+      {showSpotHeal && (
+        <div style={{ ...section, fontSize: 10, color: 'rgba(245,245,247,0.30)', lineHeight: 1.5 }}>
+          Paint over the area to heal. Surrounding pixels are sampled automatically on release.
+        </div>
+      )}
 
       {/* Blend mode (brush, clone stamp) */}
       {showBlend && (
@@ -180,26 +245,30 @@ export default function BrushSettingsPanel() {
         </div>
       )}
 
-      {/* Dynamics */}
-      <div style={section}>
-        <div style={label}>Dynamics</div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 11, color: 'rgba(245,245,247,0.65)', marginBottom: 6 }}>
-          <input type="checkbox" checked={p.dynamicSize ?? false} onChange={(e) => up('dynamicSize', e.target.checked)} />
-          Size by speed
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 11, color: 'rgba(245,245,247,0.65)' }}>
-          <input type="checkbox" checked={p.dynamicOpacity ?? false} onChange={(e) => up('dynamicOpacity', e.target.checked)} />
-          Opacity by speed
-        </label>
-      </div>
+      {/* Dynamics (not shown for spot healing) */}
+      {!showSpotHeal && (
+        <div style={section}>
+          <div style={label}>Dynamics</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 11, color: 'rgba(245,245,247,0.65)', marginBottom: 6 }}>
+            <input type="checkbox" checked={p.dynamicSize ?? false} onChange={(e) => up('dynamicSize', e.target.checked)} />
+            Size by speed
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 11, color: 'rgba(245,245,247,0.65)' }}>
+            <input type="checkbox" checked={p.dynamicOpacity ?? false} onChange={(e) => up('dynamicOpacity', e.target.checked)} />
+            Opacity by speed
+          </label>
+        </div>
+      )}
 
       {/* Keyboard shortcut hints */}
       <div style={{ padding: '8px 14px' }}>
         <div style={{ ...label, marginBottom: 4 }}>Shortcuts</div>
         {[
-          ['[ ]',           'Decrease / increase size'],
-          ['Shift+[ ]',     'Decrease / increase hardness'],
-          ['0 – 9',         'Set opacity (0% – 100%)'],
+          ['[ ]',       'Decrease / increase size'],
+          ['Shift+[ ]', 'Decrease / increase hardness'],
+          ['0 – 9',     'Set opacity (0% – 100%)'],
+          ...(isRetouch ? [['R', 'Cycle retouch tools']] : []),
+          ...(activeTool === 'spot_healing' ? [['J', 'Spot Healing Brush']] : []),
         ].map(([k, v]) => (
           <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
             <span style={{ fontSize: 9, fontFamily: 'monospace', color: 'rgba(245,245,247,0.50)', background: 'rgba(255,255,255,0.06)', borderRadius: 3, padding: '1px 4px' }}>{k}</span>

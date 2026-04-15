@@ -23,6 +23,7 @@ import { HealingBrushTool } from './tools/HealingBrushTool';
 import { DodgeTool, BurnTool, SpongeTool } from './tools/TonalTools';
 import { BlurBrushTool, SharpenBrushTool, SmudgeTool } from './tools/FilterBrushTools';
 import { LightPaintingTool } from './tools/LightPaintingTool';
+import { SpotHealingTool } from './tools/SpotHealingTool';
 // Side-effect imports: register window singletons
 import './engine/FilterScaler';
 import './engine/TextureMemoryManager';
@@ -57,7 +58,7 @@ export default function NewEditor({ user, setPage }) {
     eraser:        new EraserTool(),
     clone_stamp:   new CloneStampTool(),
     healing_brush: new HealingBrushTool(),
-    spot_healing:  new HealingBrushTool(),
+    spot_healing:  new SpotHealingTool(),
     dodge:         new DodgeTool(),
     burn:          new BurnTool(),
     sponge:        new SpongeTool(),
@@ -1100,6 +1101,21 @@ export default function NewEditor({ user, setPage }) {
             </svg>
           </button>
 
+          {/* Spot Healing */}
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setActiveTool('spot_healing')}
+            title="Spot Healing (J) — paint to auto-heal"
+            style={toolbarIconBtnStyle(activeTool === 'spot_healing')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a5 5 0 0 1 5 5c0 5-5 11-5 11S7 12 7 7a5 5 0 0 1 5-5z"/>
+              <line x1="12" y1="7" x2="12" y2="7" strokeWidth="2.5"/>
+              <path d="M8 14h8"/>
+              <path d="M10 17h4"/>
+            </svg>
+          </button>
+
           {/* Retouch cycle (dodge/burn/sponge/blur/sharpen/smudge) */}
           <button
             onPointerDown={(e) => e.stopPropagation()}
@@ -1219,7 +1235,8 @@ export default function NewEditor({ user, setPage }) {
         <Sep />
         <span>1280 × 720</span>
         {activeTool === 'text' && <><Sep /><span style={{ color: '#f97316' }}>Text tool — click to add</span></>}
-        {isPaintTool && <><Sep /><span style={{ color: '#f97316' }}>{activeTool.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())} — paint on an image layer</span></>}
+        {isPaintTool && activeTool !== 'spot_healing' && <><Sep /><span style={{ color: '#f97316' }}>{activeTool.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())} — paint on an image layer</span></>}
+        {activeTool === 'spot_healing' && <><Sep /><span style={{ color: '#f97316' }}>Spot Healing — paint area, release to heal</span></>}
       </div>
 
       {/* ── Toast ───────────────────────────────────────────────────────── */}

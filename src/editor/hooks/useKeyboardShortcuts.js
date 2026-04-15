@@ -66,6 +66,7 @@ export default function useKeyboardShortcuts(containerRef) {
       if (!meta && !shift && key === 'e') { setActiveTool('eraser'); return; }
       if (!meta && !shift && key === 's') { setActiveTool('clone_stamp'); return; }
       if (!meta && !shift && key === 'r') { cycleRetouchTool(); return; }
+      if (!meta && !shift && key === 'j') { setActiveTool('spot_healing'); return; }
 
       // ── Brush size / hardness / opacity (paint tools only, not in text edit) ──
       if (isPainting && !isEditingText && !meta) {
