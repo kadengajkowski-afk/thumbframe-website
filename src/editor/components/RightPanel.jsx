@@ -2,12 +2,17 @@
 // Container for the right properties panel.
 // Shows: BrushSettingsPanel (paint tools), TextPanel, EffectsPanel, ShapePanel, or nothing-selected state.
 
-import React from 'react';
+import React, { useState } from 'react';
 import useEditorStore from '../engine/Store';
-import BrushSettingsPanel from '../panels/BrushSettingsPanel';
-import EffectsPanel       from '../panels/EffectsPanel';
-import TextPanel          from '../panels/TextPanel';
-import ShapePanel         from '../panels/ShapePanel';
+import BrushSettingsPanel  from '../panels/BrushSettingsPanel';
+import EffectsPanel        from '../panels/EffectsPanel';
+import TextPanel           from '../panels/TextPanel';
+import ShapePanel          from '../panels/ShapePanel';
+import NichePresetBrowser  from './NichePresetBrowser';
+import BackgroundPicker    from './BackgroundPicker';
+import FaceCutoutFlow      from './FaceCutoutFlow';
+import VariantGenerator    from '../ai/VariantGenerator';
+import ExpressionCoach     from '../ai/ExpressionCoach';
 
 const PAINT_TOOLS = new Set([
   'brush','eraser','clone_stamp','healing_brush','spot_healing',
@@ -33,6 +38,8 @@ export default function RightPanel({
   onTextDataCommit,
   onFileUpload,
 }) {
+  const [openPanel, setOpenPanel] = useState(null); // 'niches' | 'background' | 'facecutout' | 'variants' | null
+
   const activeTool       = useEditorStore(s => s.activeTool);
   const setActiveTool    = useEditorStore(s => s.setActiveTool);
   const layers           = useEditorStore(s => s.layers);
@@ -130,37 +137,80 @@ export default function RightPanel({
           {/* Quick actions */}
           <div className="obs-section">
             <div className="obs-section-label">Quick Actions</div>
+
+            {/* Sub-panel: Niche Presets */}
+            {openPanel === 'niches' && (
+              <div style={{ marginBottom: 6, border: '1px solid var(--border-1)', borderRadius: 8, overflow: 'hidden' }}>
+                <NichePresetBrowser onClose={() => setOpenPanel(null)} />
+              </div>
+            )}
+
+            {/* Sub-panel: Background Picker */}
+            {openPanel === 'background' && (
+              <div style={{ marginBottom: 6, border: '1px solid var(--border-1)', borderRadius: 8, overflow: 'hidden' }}>
+                <BackgroundPicker onClose={() => setOpenPanel(null)} />
+              </div>
+            )}
+
+            {/* Sub-panel: Face Cutout */}
+            {openPanel === 'facecutout' && (
+              <div style={{ marginBottom: 6, border: '1px solid var(--border-1)', borderRadius: 8, overflow: 'hidden' }}>
+                <FaceCutoutFlow onClose={() => setOpenPanel(null)} />
+              </div>
+            )}
+
+            {/* Sub-panel: A/B Variants */}
+            {openPanel === 'variants' && (
+              <div style={{ marginBottom: 6, border: '1px solid var(--border-1)', borderRadius: 8, overflow: 'hidden' }}>
+                <VariantGenerator onClose={() => setOpenPanel(null)} />
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               {[
-                { icon: '🖼', label: 'Add Image',   hint: 'Upload an image layer',   onClick: onFileUpload },
-                { icon: 'T',  label: 'Add Text',    hint: 'Switch to text tool',     onClick: () => setActiveTool('text') },
-                { icon: '✦',  label: 'AI Generate', hint: 'Generate AI background',  onClick: COMING_SOON },
-                { icon: '📋', label: 'Templates',   hint: 'Browse templates',        onClick: COMING_SOON },
-              ].map(({ icon, label, hint, onClick }) => (
-                <button
-                  key={label}
-                  title={hint}
-                  onClick={onClick}
-                  style={{
-                    height: 48, display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    justifyContent: 'center', gap: 4,
-                    background: 'var(--bg-3)', border: '1px solid var(--border-1)',
-                    borderRadius: 'var(--radius-lg)', cursor: 'pointer',
-                    color: 'var(--text-3)', fontSize: 11, fontWeight: 600,
-                    transition: 'background var(--dur-fast), color var(--dur-fast)',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-5)'; e.currentTarget.style.color = 'var(--text-2)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.color = 'var(--text-3)'; }}
-                >
-                  <span style={{ fontSize: 18 }}>{icon}</span>
-                  <span>{label}</span>
-                </button>
-              ))}
+                { icon: '🖼', label: 'Add Image',    hint: 'Upload an image layer',    onClick: onFileUpload,                          id: null },
+                { icon: 'T',  label: 'Add Text',     hint: 'Switch to text tool',      onClick: () => setActiveTool('text'),            id: null },
+                { icon: '⛏️', label: 'Niche Presets', hint: 'Apply a niche style preset', onClick: () => setOpenPanel(p => p === 'niches' ? null : 'niches'), id: 'niches' },
+                { icon: '🌄', label: 'Background',   hint: 'Add a solid or gradient background', onClick: () => setOpenPanel(p => p === 'background' ? null : 'background'), id: 'background' },
+                { icon: '✂️', label: 'Face Cutout',  hint: 'Remove background from a face image', onClick: () => setOpenPanel(p => p === 'facecutout' ? null : 'facecutout'), id: 'facecutout' },
+                { icon: '⚡', label: 'A/B Variants', hint: 'Apply a style variant to all image layers', onClick: () => setOpenPanel(p => p === 'variants' ? null : 'variants'), id: 'variants' },
+                { icon: '✦',  label: 'AI Generate', hint: 'Generate AI background',   onClick: COMING_SOON,                           id: null },
+                { icon: '📋', label: 'Templates',   hint: 'Browse templates',         onClick: COMING_SOON,                           id: null },
+              ].map(({ icon, label, hint, onClick, id }) => {
+                const isActive = id && openPanel === id;
+                return (
+                  <button
+                    key={label}
+                    title={hint}
+                    onClick={onClick}
+                    style={{
+                      height: 48, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      justifyContent: 'center', gap: 4,
+                      background: isActive ? 'rgba(249,115,22,0.10)' : 'var(--bg-3)',
+                      border: isActive ? '1px solid rgba(249,115,22,0.40)' : '1px solid var(--border-1)',
+                      borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+                      color: isActive ? '#f97316' : 'var(--text-3)', fontSize: 11, fontWeight: 600,
+                      transition: 'background var(--dur-fast), color var(--dur-fast)',
+                    }}
+                    onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'var(--bg-5)'; e.currentTarget.style.color = 'var(--text-2)'; } }}
+                    onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.color = 'var(--text-3)'; } }}
+                  >
+                    <span style={{ fontSize: 18 }}>{icon}</span>
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
+          {/* Expression Coach — always shown in nothing-selected state */}
+          <div className="obs-section" style={{ paddingBottom: 8 }}>
+            <div className="obs-section-label">Expression Coach</div>
+            <ExpressionCoach />
+          </div>
+
           {/* Hint */}
-          <div style={{ padding: '12px 0', fontSize: 11, color: 'var(--text-4)', textAlign: 'center', lineHeight: 1.5 }}>
+          <div style={{ padding: '4px 0 12px', fontSize: 11, color: 'var(--text-4)', textAlign: 'center', lineHeight: 1.5 }}>
             Select a layer to edit its properties
           </div>
         </div>

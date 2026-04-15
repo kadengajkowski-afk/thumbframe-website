@@ -59,8 +59,10 @@ export default function TopBar({ user, setPage, onExport, onShare }) {
   const projectName = useEditorStore(s => s.projectName ?? 'Untitled');
   const saveStatus  = useEditorStore(s => s.saveStatus ?? 'saved');
   const setProjectName      = useEditorStore(s => s.setProjectName);
-  const thumbfriendEnabled  = useEditorStore(s => s.thumbfriendEnabled);
+  const thumbfriendEnabled    = useEditorStore(s => s.thumbfriendEnabled);
   const setThumbfriendEnabled = useEditorStore(s => s.setThumbfriendEnabled);
+  const showFeedSimulator     = useEditorStore(s => s.showFeedSimulator);
+  const setShowFeedSimulator  = useEditorStore(s => s.setShowFeedSimulator);
 
   const canUndo = historyIdx > 0;
   const canRedo = historyIdx < historyLen - 1;
@@ -243,6 +245,19 @@ export default function TopBar({ user, setPage, onExport, onShare }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto' }}>
 
         <Sep />
+
+        {/* Feed Simulator toggle */}
+        <IconBtn
+          onClick={() => setShowFeedSimulator(!showFeedSimulator)}
+          title={showFeedSimulator ? 'Hide Feed Simulator' : 'Preview in YouTube Feed (P)'}
+          active={showFeedSimulator}
+          size={32}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={showFeedSimulator ? '#f97316' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="10 8 16 12 10 16 10 8" fill={showFeedSimulator ? '#f97316' : 'none'} stroke={showFeedSimulator ? '#f97316' : 'currentColor'}/>
+          </svg>
+        </IconBtn>
 
         {/* ThumbFriend toggle */}
         <IconBtn

@@ -22,7 +22,9 @@ import { computeGuides } from './engine/SmartGuides';
 import { processImageFile } from './utils/imageUpload';
 import { renderTextToCanvas, loadFont, DEFAULT_TEXT_DATA } from './utils/textRenderer';
 import { GRADE_LABELS } from './presets/colorGrades';
-import ThumbFriendChat from './ai/ThumbFriendChat';
+import ThumbFriendChat     from './ai/ThumbFriendChat';
+import StampTestPreview   from './components/StampTestPreview';
+import FeedSimulator      from './components/FeedSimulator';
 import { BrushPipeline, getCompositeOp } from './tools/BrushPipeline';
 import { BrushTool } from './tools/BrushTool';
 import { EraserTool } from './tools/EraserTool';
@@ -80,6 +82,9 @@ export default function NewEditor({ user, setPage }) {
   const activeTool       = useEditorStore(s => s.activeTool);
   const isEditingText    = useEditorStore(s => s.isEditingText);
   const editingLayerId   = useEditorStore(s => s.editingLayerId);
+  const layoutGuide      = useEditorStore(s => s.layoutGuide);
+  const showFeedSimulator  = useEditorStore(s => s.showFeedSimulator);
+  const setShowFeedSimulator = useEditorStore(s => s.setShowFeedSimulator);
 
   // ── Store actions ────────────────────────────────────────────────────────
   const selectLayer          = useEditorStore(s => s.selectLayer);
@@ -114,6 +119,20 @@ export default function NewEditor({ user, setPage }) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // P key — toggle Feed Simulator
+  useEffect(() => {
+    const handler = (e) => {
+      if (useEditorStore.getState().isEditingText) return;
+      if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA') return;
+      if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        setShowFeedSimulator(v => !v);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [setShowFeedSimulator]);
 
   // ── Paste image from clipboard ───────────────────────────────────────────
   useEffect(() => {
@@ -1079,6 +1098,52 @@ export default function NewEditor({ user, setPage }) {
           <StarfieldBackground />
           <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
           <BrushCursor rendererRef={rendererRef} canvasRef={canvasRef} />
+
+          {/* Layout guide SVG overlay — rendered above canvas, pointer-events none */}
+          {layoutGuide && (
+            <svg
+              style={{
+                position: 'absolute', inset: 0, width: '100%', height: '100%',
+                pointerEvents: 'none', zIndex: 10,
+              }}
+            >
+              {layoutGuide.zones?.map((zone, i) => {
+                // Convert canvas-space (1280×720) coords to CSS % via containerRef size
+                const containerEl = containerRef.current;
+                const cw = containerEl?.clientWidth  || 1;
+                const ch = containerEl?.clientHeight || 1;
+                // The canvas is centered; compute its rendered position
+                const scale = Math.min(cw / CW, ch / CH);
+                const offsetX = (cw - CW * scale) / 2;
+                const offsetY = (ch - CH * scale) / 2;
+                const rx = offsetX + zone.x * scale;
+                const ry = offsetY + zone.y * scale;
+                const rw = zone.width  * scale;
+                const rh = zone.height * scale;
+                return (
+                  <g key={i}>
+                    <rect
+                      x={rx} y={ry} width={rw} height={rh}
+                      fill={`${zone.color}22`}
+                      stroke={zone.color}
+                      strokeWidth={1.5}
+                      strokeDasharray="4 3"
+                      rx={3}
+                    />
+                    <text
+                      x={rx + 4} y={ry + 11}
+                      fontSize={9} fill={zone.color}
+                      fontFamily="Inter, -apple-system, sans-serif"
+                      fontWeight={600}
+                    >{zone.label}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          )}
+
+          {/* Stamp test preview — bottom-right of canvas area */}
+          <StampTestPreview rendererRef={rendererRef} />
         </div>
 
         {/* ── Right panel ─────────────────────────────────────────────── */}
@@ -1125,6 +1190,9 @@ export default function NewEditor({ user, setPage }) {
           {editingLayer.textData?.content || ''}
         </div>
       )}
+
+      {/* ── Feed Simulator modal ────────────────────────────────────── */}
+      {showFeedSimulator && <FeedSimulator rendererRef={rendererRef} />}
 
       {/* ── ThumbFriend AI chat bubble ───────────────────────────────── */}
       <ThumbFriendChat
