@@ -55,7 +55,8 @@ export default class Renderer {
     await this.app.init({
       width: w,
       height: h,
-      background: '#09090b',
+      background: 0x000000,
+      backgroundAlpha: 0,      // transparent outside the 1280×720 canvasBg — lets starfield show through
       antialias: true,
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
