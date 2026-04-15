@@ -6,6 +6,11 @@
 import React, { useState } from 'react';
 import useEditorStore from '../engine/Store';
 
+// Adjustments are normalized floats matching the AdjustmentFilter uniform range:
+//   brightness / contrast / saturation / vibrance / highlights / shadows / tint: –1 to +1
+//   temperature: –1 to +1
+//   exposure: –3 to +3 (EV stops, pow(2, uExposure) in shader)
+//   hue: –180 to +180 (degrees)
 const VARIANTS = [
   {
     id:          'bright_pop',
@@ -13,7 +18,7 @@ const VARIANTS = [
     icon:        '☀️',
     description: 'Maximum brightness and saturation. Grabs attention instantly.',
     colorGrade:  { name: 'warm',   strength: 0.60 },
-    adjustments: { brightness: 20, contrast: 10,  saturation: 25, vibrance: 20, exposure: 8, temperature: 12, tint: 0, highlights: -5,  shadows: 8,  hue: 0, sharpness: 0 },
+    adjustments: { brightness: 0.20, contrast: 0.10, saturation: 0.25, vibrance: 0.20, exposure: 0.08, temperature: 0.12, tint: 0, highlights: -0.05, shadows: 0.08, hue: 0, sharpness: 0 },
     accent:      '#f97316',
   },
   {
@@ -22,7 +27,7 @@ const VARIANTS = [
     icon:        '🧊',
     description: 'Cold, cinematic blues. Clean and professional feel.',
     colorGrade:  { name: 'cool',   strength: 0.70 },
-    adjustments: { brightness: 8,  contrast: 18,  saturation: -10, vibrance: 5, exposure: 3, temperature: -20, tint: 0, highlights: -10, shadows: 5, hue: 0, sharpness: 0 },
+    adjustments: { brightness: 0.08, contrast: 0.18, saturation: -0.10, vibrance: 0.05, exposure: 0.03, temperature: -0.20, tint: 0, highlights: -0.10, shadows: 0.05, hue: 0, sharpness: 0 },
     accent:      '#38bdf8',
   },
   {
@@ -31,7 +36,7 @@ const VARIANTS = [
     icon:        '⚡',
     description: 'Punchy blacks and whites. High visual impact.',
     colorGrade:  { name: 'cinema', strength: 0.80 },
-    adjustments: { brightness: 5,  contrast: 40,  saturation: 10, vibrance: 10, exposure: 0, temperature: 5, tint: 0, highlights: -25, shadows: 20, hue: 0, sharpness: 0 },
+    adjustments: { brightness: 0.05, contrast: 0.40, saturation: 0.10, vibrance: 0.10, exposure: 0, temperature: 0.05, tint: 0, highlights: -0.25, shadows: 0.20, hue: 0, sharpness: 0 },
     accent:      '#a3a3a3',
   },
   {
@@ -40,7 +45,7 @@ const VARIANTS = [
     icon:        '💜',
     description: 'Electric colours with a neon glow. YouTube gaming staple.',
     colorGrade:  { name: 'neon',   strength: 0.65 },
-    adjustments: { brightness: 10, contrast: 20,  saturation: 40, vibrance: 30, exposure: 3, temperature: 0, tint: 5, highlights: -8,  shadows: 5,  hue: 0, sharpness: 0 },
+    adjustments: { brightness: 0.10, contrast: 0.20, saturation: 0.40, vibrance: 0.30, exposure: 0.03, temperature: 0, tint: 0.05, highlights: -0.08, shadows: 0.05, hue: 0, sharpness: 0 },
     accent:      '#a855f7',
   },
   {
@@ -49,7 +54,7 @@ const VARIANTS = [
     icon:        '🎬',
     description: 'Desaturated and moody. Storytelling-first aesthetic.',
     colorGrade:  { name: 'moody',  strength: 0.75 },
-    adjustments: { brightness: -5, contrast: 22,  saturation: -25, vibrance: -5, exposure: -3, temperature: -8, tint: 0, highlights: -18, shadows: 12, hue: 0, sharpness: 0 },
+    adjustments: { brightness: -0.05, contrast: 0.22, saturation: -0.25, vibrance: -0.05, exposure: -0.03, temperature: -0.08, tint: 0, highlights: -0.18, shadows: 0.12, hue: 0, sharpness: 0 },
     accent:      '#78716c',
   },
 ];

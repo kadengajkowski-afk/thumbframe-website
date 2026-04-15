@@ -570,6 +570,47 @@ export default class Renderer {
     return dataUrl;
   }
 
+  // ── Capture a small preview thumbnail (used by StampTestPreview) ──────────
+  // Renders the exact 1280×720 canvas content into an HTMLCanvasElement at
+  // the requested dimensions, regardless of the current viewport zoom/pan.
+  // The viewport is temporarily scaled so the thumbnail fits exactly within
+  // (width × height) at position (0, 0), so the drawImage source rect is
+  // always within the PixiJS canvas bounds.
+  captureForPreview(width = 194, height = 109) {
+    if (!this.app?._mounted && !this._mounted) return null;
+
+    this.overlayContainer.visible = false;
+    const savedX = this.viewport.x;
+    const savedY = this.viewport.y;
+    const savedS = this.viewport.scale.x;
+
+    // Fit the 1280×720 canvas into the preview dimensions, preserving aspect.
+    const scale = Math.min(width / CW, height / CH);
+    this.viewport.x = 0;
+    this.viewport.y = 0;
+    this.viewport.scale.set(scale);
+
+    this.app.renderer.render(this.app.stage);
+
+    // The rendered thumbnail now occupies exactly (CW*scale × CH*scale) starting
+    // at (0,0) in the PixiJS canvas. Copy only that region.
+    const srcW = Math.round(CW * scale);
+    const srcH = Math.round(CH * scale);
+    const oc  = document.createElement('canvas');
+    oc.width  = width;
+    oc.height = height;
+    oc.getContext('2d').drawImage(this.app.canvas, 0, 0, srcW, srcH, 0, 0, width, height);
+
+    // Restore viewport
+    this.viewport.x = savedX;
+    this.viewport.y = savedY;
+    this.viewport.scale.set(savedS);
+    this.overlayContainer.visible = true;
+    this.app.renderer.render(this.app.stage);
+
+    return oc;
+  }
+
   // ── Resize handler ────────────────────────────────────────────────────────
   resize() {
     if (!this.app) return;

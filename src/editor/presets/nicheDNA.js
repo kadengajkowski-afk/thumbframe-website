@@ -1,7 +1,11 @@
 // src/editor/presets/nicheDNA.js
 // Niche DNA presets — one-click style packages tuned for each major YouTube niche.
 // colorGrade names must match keys in colorGrades.js.
-// adjustments values are 0-centred deltas matching the store schema.
+// adjustments values are normalized floats matching the AdjustmentFilter uniform range:
+//   brightness / contrast / saturation / vibrance / highlights / shadows: –1 to +1
+//   temperature / tint: –1 to +1
+//   exposure: –3 to +3 (EV stops)
+//   hue: –180 to +180 (degrees)
 
 export const NICHE_PRESETS = [
   {
@@ -10,7 +14,7 @@ export const NICHE_PRESETS = [
     icon:        '⛏️',
     description: 'Bold, saturated, pixelated energy. High brightness for that blocky feel.',
     colorGrade:  { name: 'gaming', strength: 0.75 },
-    adjustments: { brightness: 15, contrast: 20, saturation: 30, vibrance: 20, exposure: 5, temperature: 0, tint: 0, highlights: -10, shadows: 5, hue: 0, sharpness: 0 },
+    adjustments: { brightness: 0.15, contrast: 0.20, saturation: 0.30, vibrance: 0.20, exposure: 0.05, temperature: 0, tint: 0, highlights: -0.10, shadows: 0.05, hue: 0, sharpness: 0 },
     textDefaults: {
       fontFamily: 'Impact', fontSize: 96, fontWeight: '900',
       fill: '#FFFF00',
@@ -32,7 +36,7 @@ export const NICHE_PRESETS = [
     icon:        '🎯',
     description: 'Vibrant, neon-tinged. High energy with bold color contrast.',
     colorGrade:  { name: 'neon', strength: 0.65 },
-    adjustments: { brightness: 10, contrast: 25, saturation: 40, vibrance: 30, exposure: 5, temperature: 0, tint: 0, highlights: -5, shadows: 5, hue: 0, sharpness: 0 },
+    adjustments: { brightness: 0.10, contrast: 0.25, saturation: 0.40, vibrance: 0.30, exposure: 0.05, temperature: 0, tint: 0, highlights: -0.05, shadows: 0.05, hue: 0, sharpness: 0 },
     textDefaults: {
       fontFamily: 'Impact', fontSize: 96, fontWeight: '900',
       fill: '#00FFFF',
@@ -54,7 +58,7 @@ export const NICHE_PRESETS = [
     icon:        '💀',
     description: 'Dark, moody, desaturated. Red accents for tension.',
     colorGrade:  { name: 'moody', strength: 0.90 },
-    adjustments: { brightness: -20, contrast: 30, saturation: -30, vibrance: -10, exposure: -5, temperature: -10, tint: 5, highlights: -20, shadows: 10, hue: 0, sharpness: 0 },
+    adjustments: { brightness: -0.20, contrast: 0.30, saturation: -0.30, vibrance: -0.10, exposure: -0.05, temperature: -0.10, tint: 0.05, highlights: -0.20, shadows: 0.10, hue: 0, sharpness: 0 },
     textDefaults: {
       fontFamily: 'Impact', fontSize: 96, fontWeight: '900',
       fill: '#FF0000',
@@ -76,7 +80,7 @@ export const NICHE_PRESETS = [
     icon:        '🌆',
     description: 'Cinematic, poster-like. High contrast with warm tones.',
     colorGrade:  { name: 'cinema', strength: 0.80 },
-    adjustments: { brightness: 5, contrast: 35, saturation: 20, vibrance: 10, exposure: 0, temperature: 10, tint: 0, highlights: -15, shadows: 15, hue: 0, sharpness: 0 },
+    adjustments: { brightness: 0.05, contrast: 0.35, saturation: 0.20, vibrance: 0.10, exposure: 0, temperature: 0.10, tint: 0, highlights: -0.15, shadows: 0.15, hue: 0, sharpness: 0 },
     textDefaults: {
       fontFamily: 'Impact', fontSize: 112, fontWeight: '900',
       fill: '#FFFFFF',
@@ -98,7 +102,7 @@ export const NICHE_PRESETS = [
     icon:        '📸',
     description: 'Warm, natural, authentic. Clean look that feels personal.',
     colorGrade:  { name: 'warm', strength: 0.60 },
-    adjustments: { brightness: 10, contrast: 10, saturation: 15, vibrance: 15, exposure: 3, temperature: 15, tint: 0, highlights: -8, shadows: 5, hue: 0, sharpness: 0 },
+    adjustments: { brightness: 0.10, contrast: 0.10, saturation: 0.15, vibrance: 0.15, exposure: 0.03, temperature: 0.15, tint: 0, highlights: -0.08, shadows: 0.05, hue: 0, sharpness: 0 },
     textDefaults: {
       fontFamily: 'Impact', fontSize: 80, fontWeight: '700',
       fill: '#FFFFFF',
@@ -120,7 +124,7 @@ export const NICHE_PRESETS = [
     icon:        '💻',
     description: 'Clean, cool, precise. Blue tones and sharp contrast.',
     colorGrade:  { name: 'cool', strength: 0.70 },
-    adjustments: { brightness: 15, contrast: 20, saturation: -10, vibrance: 5, exposure: 5, temperature: -15, tint: 0, highlights: -10, shadows: 8, hue: 0, sharpness: 0 },
+    adjustments: { brightness: 0.15, contrast: 0.20, saturation: -0.10, vibrance: 0.05, exposure: 0.05, temperature: -0.15, tint: 0, highlights: -0.10, shadows: 0.08, hue: 0, sharpness: 0 },
     textDefaults: {
       fontFamily: 'Impact', fontSize: 80, fontWeight: '900',
       fill: '#00D4FF',
@@ -142,7 +146,7 @@ export const NICHE_PRESETS = [
     icon:        '🍳',
     description: 'Warm and appetizing. Golden tones, high brightness.',
     colorGrade:  { name: 'golden_hour', strength: 0.70 },
-    adjustments: { brightness: 20, contrast: 15, saturation: 25, vibrance: 20, exposure: 5, temperature: 20, tint: 0, highlights: -5, shadows: 10, hue: 0, sharpness: 0 },
+    adjustments: { brightness: 0.20, contrast: 0.15, saturation: 0.25, vibrance: 0.20, exposure: 0.05, temperature: 0.20, tint: 0, highlights: -0.05, shadows: 0.10, hue: 0, sharpness: 0 },
     textDefaults: {
       fontFamily: 'Impact', fontSize: 80, fontWeight: '900',
       fill: '#FFFFFF',

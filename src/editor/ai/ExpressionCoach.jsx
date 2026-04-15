@@ -101,14 +101,21 @@ export default function ExpressionCoach() {
 
   const layers = useEditorStore(s => s.layers);
 
-  // Check MediaPipe availability on mount
+  // Check MediaPipe availability — wait 10 s before concluding it's absent so
+  // late-loading CDN scripts get a fair chance. Always silent in the UI.
   useEffect(() => {
-    const available = !!(
+    const check = () => !!(
       window.FaceLandmarker ||
       window.mediapipe?.FaceLandmarker ||
       window.FilesetResolver
     );
-    setMpAvailable(available);
+    if (check()) { setMpAvailable(true); return; }
+    const timer = setTimeout(() => {
+      const available = check();
+      if (!available) console.warn('[ExpressionCoach] MediaPipe not detected — using brightness heuristic.');
+      setMpAvailable(available);
+    }, 10000);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleScan = useCallback(async () => {
@@ -189,15 +196,15 @@ export default function ExpressionCoach() {
         Expression Coach
       </div>
 
-      {/* MediaPipe status */}
-      {mpAvailable === false && (
+      {/* Tip — shown while MediaPipe status is still undetermined or unavailable */}
+      {mpAvailable !== true && (
         <div style={{
           margin: '0 12px 8px',
           padding: '5px 8px',
-          background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.20)',
-          borderRadius: 6, fontSize: 9, color: '#fbbf24', lineHeight: 1.4,
+          background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-1)',
+          borderRadius: 6, fontSize: 9, color: 'var(--text-4)', lineHeight: 1.4,
         }}>
-          MediaPipe not loaded — using brightness heuristic. Scores are approximate.
+          For best results, use a thumbnail with a clear face visible.
         </div>
       )}
 
@@ -269,10 +276,10 @@ export default function ExpressionCoach() {
             label={`Expression score for ${nicheData.label}`}
           />
 
-          {/* Source note */}
+          {/* Source note — only show for heuristic, keep it friendly */}
           {result.source === 'heuristic' && (
             <div style={{ fontSize: 8, color: 'var(--text-5)', marginBottom: 6, lineHeight: 1.3 }}>
-              Approximate score — load MediaPipe for precise blendshape analysis.
+              Score is approximate — add a photo with a clear face for precise analysis.
             </div>
           )}
 

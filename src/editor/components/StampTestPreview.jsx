@@ -27,48 +27,40 @@ export default function StampTestPreview({ rendererRef }) {
     return () => clearTimeout(timer);
   }, []);
 
-  const updatePreview = useCallback(async () => {
-    const renderer = rendererRef?.current;
+  const updatePreview = useCallback(() => {
+    // captureForPreview renders the exact 1280×720 canvas content at 194×109
+    // by temporarily scaling the viewport — no zoom/pan artefacts possible.
+    const renderer = window.__renderer;
     if (!renderer?._mounted) return;
 
-    // exportToDataURL temporarily sets viewport to 1:1 (synchronous, no visible flicker)
-    const dataUrl = renderer.exportToDataURL('image/jpeg', 0.92);
-    if (!dataUrl) return;
+    const off = renderer.captureForPreview(194, 109);
+    if (!off) return;
 
-    // Down-scale to 194×109 with JPEG compression at 0.85 (compression simulation)
-    const img = new Image();
-    img.onload = () => {
-      const off = document.createElement('canvas');
-      off.width  = 194;
-      off.height = 109;
-      const ctx = off.getContext('2d');
-      ctx.drawImage(img, 0, 0, 194, 109);
+    // Skip solid-colour frames (PixiJS init / loading states).
+    // Sample 9 columns × 3 rows; if all luma values are within 10 units
+    // the frame is a blank init colour — skip it.
+    const ctx = off.getContext('2d');
+    const d   = ctx.getImageData(0, 0, 194, 109).data;
+    const pts = [0, 25, 50, 75, 100, 125, 150, 175, 193].map(x =>
+      [d[(0  * 194 + x) * 4],
+       d[(54 * 194 + x) * 4],
+       d[(108* 194 + x) * 4]]
+    ).flat();
+    const lo = Math.min(...pts);
+    const hi = Math.max(...pts);
+    if (hi - lo < 10) return; // solid frame — skip
 
-      // Skip frames that are a single solid colour — these are loading states.
-      // Sample 9 pixels across the image; if they are all within 10 units of
-      // each other the frame is almost certainly a solid-colour init frame.
-      const sample = ctx.getImageData(0, 0, 194, 109);
-      const d = sample.data;
-      const pts = [0, 25, 50, 75, 100, 125, 150, 175, 193].map(x =>
-        [d[(0 * 194 + x) * 4], d[(54 * 194 + x) * 4], d[(108 * 194 + x) * 4]]
-      ).flat();
-      const lo = Math.min(...pts);
-      const hi = Math.max(...pts);
-      if (hi - lo < 10) return; // solid frame — skip
-
-      off.toBlob(blob => {
-        if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        // Revoke previous blob
-        if (prevUrlRef.current?.startsWith('blob:')) URL.revokeObjectURL(prevUrlRef.current);
-        prevUrlRef.current = url;
-        setPreviewSrc(url);
-        setFlash(true);
-        setTimeout(() => setFlash(false), 180);
-      }, 'image/jpeg', 0.85);
-    };
-    img.src = dataUrl;
-  }, [rendererRef]);
+    // JPEG compression simulation (0.85 quality)
+    off.toBlob(blob => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      if (prevUrlRef.current?.startsWith('blob:')) URL.revokeObjectURL(prevUrlRef.current);
+      prevUrlRef.current = url;
+      setPreviewSrc(url);
+      setFlash(true);
+      setTimeout(() => setFlash(false), 180);
+    }, 'image/jpeg', 0.85);
+  }, []); // window.__renderer is a stable global — no deps needed
 
   // Poll every 500 ms — but only after the 2 s ready delay.
   useEffect(() => {
