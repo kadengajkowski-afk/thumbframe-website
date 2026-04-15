@@ -589,23 +589,29 @@ export default function NewEditor({ user, setPage }) {
     const onLassoComplete = (e) => {
       const { points } = e.detail;
       const state = useEditorStore.getState();
-      const targetId = state.selectedLayerIds?.[0];
-      const layer = state.layers?.find(l => l.id === targetId);
-      if (!layer || layer.type !== 'image') return;
+      let targetId = state.selectedLayerIds?.[0];
+      let layer = state.layers?.find(l => l.id === targetId && l.type === 'image');
 
-      const canvasEl = canvasRef.current;
-      const canvasRect = canvasEl?.getBoundingClientRect?.();
-      if (!canvasRect) return;
+      // Auto-select the topmost visible image layer if none is selected
+      if (!layer) {
+        layer = [...state.layers].reverse().find(l => l.type === 'image' && l.visible !== false);
+        if (layer) useEditorStore.getState().selectLayer(layer.id);
+      }
 
-      // Convert canvas-world points to layer-local image pixels
+      if (!layer) {
+        console.warn('[Lasso] No image layer selected — draw on an image layer first');
+        return;
+      }
+
+      // Convert canvas-world points to layer-local image pixels.
+      // Seed the paint canvas so it has the correct dimensions (layer.width × layer.height).
+      const pc = getPaintCanvas(layer);
+      const iw = pc.width;
+      const ih = pc.height;
       const lx = layer.x - layer.width  / 2;
       const ly = layer.y - layer.height / 2;
       const lw = layer.width;
       const lh = layer.height;
-
-      const pc = paintCanvasesRef.current.get(layer.id);
-      const iw = pc?.width  || 1280;
-      const ih = pc?.height || 720;
 
       const imgPoints = points.map(p => ({
         x: ((p.x - lx) / lw) * iw,
@@ -616,26 +622,36 @@ export default function NewEditor({ user, setPage }) {
       const maskCanvas = document.createElement('canvas');
       maskCanvas.width  = iw;
       maskCanvas.height = ih;
-      const ctx = maskCanvas.getContext('2d');
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, iw, ih);
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.moveTo(imgPoints[0].x, imgPoints[0].y);
+      const mctx = maskCanvas.getContext('2d');
+      mctx.fillStyle = '#000000';
+      mctx.fillRect(0, 0, iw, ih);
+      mctx.fillStyle = '#ffffff';
+      mctx.beginPath();
+      mctx.moveTo(imgPoints[0].x, imgPoints[0].y);
       for (let i = 1; i < imgPoints.length; i++) {
-        ctx.lineTo(imgPoints[i].x, imgPoints[i].y);
+        mctx.lineTo(imgPoints[i].x, imgPoints[i].y);
       }
-      ctx.closePath();
-      ctx.fill();
+      mctx.closePath();
+      mctx.fill();
 
       // Extract Uint8Array mask (255 = inside)
-      const maskData = ctx.getImageData(0, 0, iw, ih).data;
+      const maskData = mctx.getImageData(0, 0, iw, ih).data;
       const mask = new Uint8Array(iw * ih);
       for (let i = 0; i < mask.length; i++) mask[i] = maskData[i * 4];
 
+      // Count selected pixels for debugging
+      let selectedCount = 0;
+      for (let i = 0; i < mask.length; i++) if (mask[i]) selectedCount++;
+      console.log(`[Lasso] mask built: ${iw}×${ih}, selected=${selectedCount} px`);
+
+      if (selectedCount === 0) {
+        console.warn('[Lasso] Empty selection — lasso polygon may be outside layer bounds');
+        return;
+      }
+
       setSelectionMask({ layerId: layer.id, mask, width: iw, height: ih });
 
-      // Compute bounds of the mask so marching ants can show the selection rect
+      // Compute bounds of the mask for marching ants
       let minX = iw, minY = ih, maxX = 0, maxY = 0;
       for (let idx = 0; idx < mask.length; idx++) {
         if (!mask[idx]) continue;
@@ -646,7 +662,7 @@ export default function NewEditor({ user, setPage }) {
       window.dispatchEvent(new CustomEvent('tf:wand-complete', {
         detail: {
           layerId: layer.id, mask, width: iw, height: ih,
-          bounds: { minX, minY, maxX, maxY, _iw: iw, _ih: ih },
+          bounds: { minX, minY, maxX, maxY },
           layerRect: { x: lx, y: ly, w: lw, h: lh },
         },
       }));
@@ -665,8 +681,8 @@ export default function NewEditor({ user, setPage }) {
       const layer = state.layers?.find(l => l.id === layerId);
       if (!layer) return;
 
-      const pc = paintCanvasesRef.current.get(layer.id);
-      if (!pc) return;
+      // Seed paint canvas if it doesn't exist yet (layer was never painted)
+      const pc = getPaintCanvas(layer);
       const ctx = pc.getContext('2d');
       const imgData = ctx.getImageData(0, 0, pc.width, pc.height);
       const { data } = imgData;
@@ -686,7 +702,7 @@ export default function NewEditor({ user, setPage }) {
       window.removeEventListener('tf:wand-complete',  onWandComplete);
       window.removeEventListener('tf:wand-erase',     onWandErase);
     };
-  }, [setSelectionMask, clearPixelSelection, uploadPaintCanvas]);
+  }, [setSelectionMask, clearPixelSelection, uploadPaintCanvas, getPaintCanvas]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Init renderer on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -1012,16 +1028,27 @@ export default function NewEditor({ user, setPage }) {
 
     // ── Magic Wand tool ──────────────────────────────────────────────────────
     if (tool === 'magic_wand') {
-      // Ensure the paint canvas is seeded from the layer's current texture so
-      // the wand has real pixels to sample — even if the layer has never been painted.
       const targetId = sel?.[0];
-      const targetLayer = ls?.find(l => l.id === targetId && l.type === 'image');
-      if (targetLayer) getPaintCanvas(targetLayer);
+      let targetLayer = ls?.find(l => l.id === targetId && l.type === 'image');
+
+      // Auto-select the topmost visible image layer if none is selected
+      if (!targetLayer) {
+        targetLayer = [...ls].reverse().find(l => l.type === 'image' && l.visible !== false);
+        if (targetLayer) selectLayer(targetLayer.id);
+      }
+
+      if (!targetLayer) {
+        console.warn('[MagicWand] No image layer selected or found');
+        return;
+      }
+
+      // Seed paint canvas so the wand has real pixels to sample
+      getPaintCanvas(targetLayer);
 
       toolsRef.current.magic_wand?.onPointerDown(e, {
         canvasPoint:      { x: canvasX, y: canvasY },
         layers:           ls,
-        selectedLayerIds: sel,
+        selectedLayerIds: [targetLayer.id],
         paintCanvases:    paintCanvasesRef.current,
       });
       return;
