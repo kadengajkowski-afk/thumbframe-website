@@ -26,18 +26,13 @@ export default class Renderer {
     this.overlayContainer = null;
     this.canvasBg = null;
     this.displayObjects = new Map();   // layerId → PIXI.DisplayObject
-    this.textureCache = new Map();     // src string → PIXI.Texture
-    this.adjustmentFilters = new Map();// layerId → AdjustmentFilter
     // GPU textures keyed by layerId. Persists across undo/redo because
     // _pushHistory strips textures from JSON snapshots. Never cleared on layer
     // removal — undo can resurrect the layer and needs the texture back.
-    this._layerTextures = new Map();   // layerId → PIXI.Texture
-
-    // After each sync(), this array holds { id, texture } pairs for layers
-    // whose texture was missing in the store but recovered from _layerTextures.
-    // NewEditor drains this after sync() and calls updateLayer() for each entry
-    // (silent — no history push).
-    this._pendingRestores = [];
+    // Also pre-populated by imageUpload.js via window.__renderer.textureCache
+    // so the texture is available on the very first sync after upload.
+    this.textureCache = new Map();     // layerId → PIXI.Texture
+    this.adjustmentFilters = new Map();// layerId → AdjustmentFilter
 
     this._mounted = false;
   }
@@ -111,8 +106,6 @@ export default class Renderer {
       if (f && typeof f.destroy === 'function') f.destroy();
     });
     this.adjustmentFilters.clear();
-    this._layerTextures.clear();
-    this._pendingRestores = [];
     this.app.destroy(true, { children: true });
     this.app = null;
     this._mounted = false;
@@ -189,15 +182,12 @@ export default class Renderer {
         // Destroy any adjustment filter
         const adjFilter = this.adjustmentFilters.get(id);
         if (adjFilter) { adjFilter.destroy(); this.adjustmentFilters.delete(id); }
-        // _layerTextures entry intentionally kept — undo can resurrect this
+        // textureCache entry intentionally kept — undo can resurrect this
         // layer and will need its GPU texture reattached.
       }
     }
 
     // ── 2. Create or update display objects for each layer ──
-    // Reset pending restores at the start of each sync pass.
-    this._pendingRestores = [];
-
     for (const layer of layers) {
       let obj = this.displayObjects.get(layer.id);
 
@@ -205,16 +195,14 @@ export default class Renderer {
       // _pushHistory serialises layers via JSON.stringify, which drops the
       // non-serialisable `texture` field. After undo/redo the layer exists in
       // the store but has texture: undefined. We recover the GPU texture from
-      // _layerTextures (keyed by layerId, never evicted) so the Sprite renders
+      // textureCache (keyed by layerId, never evicted) so the Sprite renders
       // correctly on the very first sync after undo/redo — no render-cycle gap.
+      // NewEditor also drains this after sync() via updateLayer to keep the store consistent.
       let effectiveLayer = layer;
       if (layer.type === 'image' && !layer.texture && !layer.loading) {
-        const cachedTex = this._layerTextures.get(layer.id);
+        const cachedTex = this.textureCache.get(layer.id);
         if (cachedTex?.valid) {
           effectiveLayer = { ...layer, texture: cachedTex };
-          // Queue a silent store update so the React state stays consistent.
-          // NewEditor drains this after sync() via updateLayer (no history push).
-          this._pendingRestores.push({ id: layer.id, texture: cachedTex });
         }
       }
 
@@ -332,8 +320,8 @@ export default class Renderer {
     const th = layer.imageData?.textureHeight || layer.height;
     window.__textureMemoryManager?.register(layer.id, layer.texture, tw, th);
 
-    // Persist the texture by layerId so undo/redo can recover it from _pendingRestores.
-    this._layerTextures.set(layer.id, layer.texture);
+    // Cache texture by layerId so undo/redo can recover it (textureCache is never evicted).
+    this.textureCache.set(layer.id, layer.texture);
 
     const sprite = new Sprite(layer.texture);
     // anchor(0, 0) = top-left origin. sync() compensates by positioning at

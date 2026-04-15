@@ -3,13 +3,16 @@
 //
 // Flow:
 //   validate → add placeholder layer → createImageBitmap (off-thread) →
-//   downscale if needed → derive ObjectURL → update layer → store in IndexedDB →
-//   commitChange
+//   downscale if needed → draw into OffscreenCanvas → ImageSource → Texture →
+//   update layer → store in IndexedDB → commitChange
+//
+// OffscreenCanvas is used exclusively for texture creation — it is never a DOM
+// element and cannot appear in the page outside the PixiJS canvas.
 //
 // The placeholder layer (loading: true) appears instantly so the user
 // sees something happen before the potentially-slow decode completes.
 
-import { Assets } from 'pixi.js';
+import { Texture, ImageSource } from 'pixi.js';
 import useEditorStore from '../engine/Store';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -40,25 +43,7 @@ function generateId() {
     (Date.now().toString(36) + Math.random().toString(36).slice(2));
 }
 
-// ── Draw bitmap to a canvas and get a Blob → ObjectURL ───────────────────────
-async function bitmapToObjectURL(bitmap, width, height) {
-  if (typeof OffscreenCanvas !== 'undefined') {
-    const canvas = new OffscreenCanvas(width, height);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    const blob = await canvas.convertToBlob({ type: 'image/png' });
-    return URL.createObjectURL(blob);
-  }
-  // Fallback for older browsers (no OffscreenCanvas)
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    canvas.width  = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    canvas.toBlob((blob) => resolve(URL.createObjectURL(blob)), 'image/png');
-  });
-}
+
 
 // ── IndexedDB helpers ─────────────────────────────────────────────────────────
 let _db = null;
@@ -148,20 +133,39 @@ export async function processImageFile(file) {
   });
 
   try {
-    // ── SVG: skip bitmap decode — load directly via Assets ──────────────────
+    // ── SVG: load via <img> (never appended to DOM) → OffscreenCanvas → texture ──
+    // OffscreenCanvas is never part of the DOM — PixiJS cannot accidentally append it.
     if (file.type === 'image/svg+xml') {
       const src = URL.createObjectURL(file);
-      let texture;
+      let svgTexture;
       try {
-        texture = await Assets.load(src);
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = src;
+        });
+        const w = img.naturalWidth  || CANVAS_W;
+        const h = img.naturalHeight || CANVAS_H;
+        const oc = new OffscreenCanvas(w, h);
+        oc.getContext('2d').drawImage(img, 0, 0);
+        // img goes out of scope here — never appended to DOM, will be GC'd
+        const source = new ImageSource({ resource: oc });
+        svgTexture = new Texture({ source });
       } catch (err) {
+        URL.revokeObjectURL(src);
         useEditorStore.getState().removeLayerSilent(layerId);
         dispatchToast('Could not open this image. The file may be corrupted or in an unrecognized format.');
         return;
       }
+      // Pre-register texture in renderer cache BEFORE updateLayer so the first
+      // sync() after upload has it available and undo/redo can recover it.
+      if (window.__renderer) {
+        window.__renderer.textureCache.set(layerId, svgTexture);
+      }
       useEditorStore.getState().updateLayer(layerId, {
         loading:   false,
-        texture,
+        texture:   svgTexture,
         x:         CANVAS_W / 2,
         y:         CANVAS_H / 2,
         width:     CANVAS_W,
@@ -200,34 +204,45 @@ export async function processImageFile(file) {
       return;
     }
 
-    // ── Step 4 & 5a: Produce ObjectURL (downscaling via OffscreenCanvas if needed)
-    // We always create an ObjectURL first — Assets.load() fetches from it
-    // independently, so there's no timing race with bitmap.close().
+    // ── Step 4: Decode final bitmap (downscaling off-thread if needed) ──────────
     let finalW = origW;
     let finalH = origH;
-    let src;
+    let finalBitmap;
 
     if (origW > MAX_DIMENSION || origH > MAX_DIMENSION) {
       const scale = Math.min(MAX_DIMENSION / origW, MAX_DIMENSION / origH);
       finalW = Math.round(origW * scale);
       finalH = Math.round(origH * scale);
-      // Downscale via createImageBitmap with resize (off-thread), then canvas → blob
-      const scaledBitmap = await createImageBitmap(file, {
+      finalBitmap = await createImageBitmap(file, {
         resizeWidth:   finalW,
         resizeHeight:  finalH,
         resizeQuality: 'high',
       });
-      src = await bitmapToObjectURL(scaledBitmap, finalW, finalH);
-      scaledBitmap.close(); // Safe — we have the ObjectURL
     } else {
-      // No downscale — point directly at the original file
-      src = URL.createObjectURL(file);
+      finalBitmap = await createImageBitmap(file);
     }
 
-    // ── Step 5b: Load texture via Assets.load — guaranteed GPU-ready ─────────
-    // Assets.load fetches the ObjectURL independently of any ImageBitmap lifecycle.
-    // The returned texture is fully loaded and valid; no .on() calls needed.
-    const texture = await Assets.load(src);
+    // ── Step 5a: Draw bitmap into an OffscreenCanvas → PixiJS texture ───────────
+    // OffscreenCanvas is NEVER a DOM element — it cannot be appended to the page
+    // and PixiJS cannot accidentally render it outside the canvas element.
+    // This also avoids the "texSubImage2D: source data has been detached" error
+    // that occurs when an ImageBitmap is closed before the GPU upload.
+    // OffscreenCanvas has no .close() method, so it stays valid indefinitely.
+    const oc = new OffscreenCanvas(finalW, finalH);
+    oc.getContext('2d').drawImage(finalBitmap, 0, 0);
+    finalBitmap.close(); // Safe — pixels are now in the OffscreenCanvas
+
+    const source  = new ImageSource({ resource: oc });
+    const texture = new Texture({ source });
+
+    // Pre-register texture in renderer cache BEFORE updateLayer so the first
+    // sync() after upload has it available and undo/redo can recover it.
+    if (window.__renderer) {
+      window.__renderer.textureCache.set(layerId, texture);
+    }
+
+    // ── Step 5b: ObjectURL for export / IndexedDB only (NOT passed to PixiJS) ────
+    const src = URL.createObjectURL(file);
 
     // ── Step 6: Scale to fit canvas (cover mode) ─────────────────────────────
     const coverScale = Math.max(CANVAS_W / finalW, CANVAS_H / finalH);

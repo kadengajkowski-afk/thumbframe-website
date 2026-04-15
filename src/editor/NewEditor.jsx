@@ -228,8 +228,9 @@ export default function NewEditor({ user, setPage }) {
 
     renderer.init(el).then(() => {
       if (cancelled) { renderer.destroy(); return; }
-      rendererRef.current = renderer;
-      canvasRef.current   = renderer.app.canvas;
+      rendererRef.current  = renderer;
+      window.__renderer    = renderer;
+      canvasRef.current    = renderer.app.canvas;
       const state = useEditorStore.getState();
       renderer.sync(state.layers);
 
@@ -245,6 +246,7 @@ export default function NewEditor({ user, setPage }) {
         rendererRef.current.destroy();
         rendererRef.current = null;
       }
+      window.__renderer = null;
       canvasRef.current = null;
     };
   }, []);
@@ -254,21 +256,17 @@ export default function NewEditor({ user, setPage }) {
     const r = rendererRef.current;
     if (!r) return;
 
-    // sync() runs unconditionally. Internally it detects texture-less image
-    // layers, recovers their GPU textures from r._layerTextures (the cache
-    // that survives undo/redo), and queues them in r._pendingRestores.
+    // sync() recovers textures stripped by undo/redo snapshots via textureCache.
     r.sync(layers);
 
-    // Drain pending texture restores — silent updateLayer calls (no history).
-    // This keeps the store consistent with what the Renderer already rendered.
-    // Guard with ?. — during a hot-update a stale renderer instance may not
-    // have _pendingRestores yet (it was added in the undo/redo fix).
-    if (r._pendingRestores?.length > 0) {
-      const store = useEditorStore.getState();
-      for (const { id, texture } of r._pendingRestores) {
-        store.updateLayer(id, { texture });
+    // After sync, update the store for any image layers whose texture was
+    // recovered from the cache — keeps React state consistent with what
+    // the Renderer already rendered. Silent (no history push).
+    const store = useEditorStore.getState();
+    for (const layer of layers) {
+      if (layer.type === 'image' && !layer.texture && r.textureCache.has(layer.id)) {
+        store.updateLayer(layer.id, { texture: r.textureCache.get(layer.id) });
       }
-      // _pendingRestores is reset at the top of the next sync() call.
     }
 
     // Hide the sprite of the layer being edited (contenteditable replaces it)
