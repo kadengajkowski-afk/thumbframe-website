@@ -92,6 +92,90 @@ export async function getOriginalFromDB(layerId) {
   }
 }
 
+// ── Fill an existing placeholder layer with a new image ──────────────────────
+// Used when a user clicks an image placeholder layer and selects a file.
+// Replaces the placeholder in-place (keeps position/size), adds to history.
+export async function processImageFileIntoLayer(file, layerId) {
+  if (!file || !layerId) return;
+
+  if (file.size > MAX_FILE_SIZE) {
+    dispatchToast(`Image is too large. Maximum file size is 50MB.`);
+    return;
+  }
+  if (!SUPPORTED_TYPES.has(file.type)) {
+    dispatchToast('Unsupported file format. Use PNG, JPEG, or WebP.');
+    return;
+  }
+
+  const store = useEditorStore.getState();
+  const layer = store.layers.find(l => l.id === layerId);
+  if (!layer) return;
+
+  // Mark as loading
+  store.updateLayer(layerId, { loading: true });
+
+  try {
+    let finalBitmap;
+    let origW, origH, finalW, finalH;
+
+    if (file.type === 'image/svg+xml') {
+      const src = URL.createObjectURL(file);
+      const img = new Image();
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = src; });
+      origW = finalW = img.naturalWidth || 640;
+      origH = finalH = img.naturalHeight || 360;
+      const oc = new OffscreenCanvas(finalW, finalH);
+      oc.getContext('2d').drawImage(img, 0, 0);
+      const source = new ImageSource({ resource: oc });
+      const texture = new Texture({ source });
+      if (window.__renderer) window.__renderer.textureCache.set(layerId, texture);
+      store.updateLayer(layerId, {
+        loading: false, texture,
+        imageData: { src, originalWidth: origW, originalHeight: origH, textureWidth: finalW, textureHeight: finalH, mask: null, cropRect: null },
+        placeholder: undefined,  // clear placeholder
+      });
+      store.commitChange(`Fill placeholder with image`);
+      return;
+    }
+
+    let probeBitmap = await createImageBitmap(file);
+    origW = probeBitmap.width; origH = probeBitmap.height;
+    probeBitmap.close();
+
+    finalW = origW; finalH = origH;
+    if (origW > MAX_DIMENSION || origH > MAX_DIMENSION) {
+      const scale = Math.min(MAX_DIMENSION / origW, MAX_DIMENSION / origH);
+      finalW = Math.round(origW * scale); finalH = Math.round(origH * scale);
+      finalBitmap = await createImageBitmap(file, { resizeWidth: finalW, resizeHeight: finalH, resizeQuality: 'high' });
+    } else {
+      finalBitmap = await createImageBitmap(file);
+    }
+
+    const oc = new OffscreenCanvas(finalW, finalH);
+    oc.getContext('2d').drawImage(finalBitmap, 0, 0);
+    finalBitmap.close();
+
+    const source = new ImageSource({ resource: oc });
+    const texture = new Texture({ source });
+    if (window.__renderer) window.__renderer.textureCache.set(layerId, texture);
+
+    const src = URL.createObjectURL(file);
+
+    store.updateLayer(layerId, {
+      loading: false, texture,
+      imageData: { src, originalWidth: origW, originalHeight: origH, textureWidth: finalW, textureHeight: finalH, mask: null, cropRect: null },
+      placeholder: undefined,  // clear placeholder so it renders as real image
+    });
+
+    storeOriginalInDB(layerId, file).catch(() => {});
+    store.commitChange(`Fill placeholder with image`);
+  } catch (err) {
+    console.error('[imageUpload] processImageFileIntoLayer failed:', err);
+    store.updateLayer(layerId, { loading: false });
+    dispatchToast('Could not open this image. Try another file.');
+  }
+}
+
 // ── Main upload pipeline ──────────────────────────────────────────────────────
 export async function processImageFile(file) {
   if (!file) return;

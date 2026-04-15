@@ -19,10 +19,11 @@ import CommandPalette from './components/CommandPalette';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import { hitTestLayers, computeMove } from './tools/SelectTool';
 import { computeGuides } from './engine/SmartGuides';
-import { processImageFile } from './utils/imageUpload';
+import { processImageFile, processImageFileIntoLayer } from './utils/imageUpload';
 import { renderTextToCanvas, loadFont, DEFAULT_TEXT_DATA } from './utils/textRenderer';
 import { GRADE_LABELS } from './presets/colorGrades';
 import ThumbFriendChat     from './ai/ThumbFriendChat';
+import TemplateBrowser    from './components/TemplateBrowser';
 import StampTestPreview   from './components/StampTestPreview';
 import FeedSimulator      from './components/FeedSimulator';
 import ExportDialog       from './components/ExportDialog';
@@ -84,8 +85,10 @@ export default function NewEditor({ user, setPage }) {
   const isEditingText    = useEditorStore(s => s.isEditingText);
   const editingLayerId   = useEditorStore(s => s.editingLayerId);
   const layoutGuide      = useEditorStore(s => s.layoutGuide);
-  const showFeedSimulator  = useEditorStore(s => s.showFeedSimulator);
-  const setShowFeedSimulator = useEditorStore(s => s.setShowFeedSimulator);
+  const showFeedSimulator      = useEditorStore(s => s.showFeedSimulator);
+  const setShowFeedSimulator   = useEditorStore(s => s.setShowFeedSimulator);
+  const showTemplateBrowser    = useEditorStore(s => s.showTemplateBrowser);
+  const setShowTemplateBrowser = useEditorStore(s => s.setShowTemplateBrowser);
 
   // ── Store actions ────────────────────────────────────────────────────────
   const selectLayer          = useEditorStore(s => s.selectLayer);
@@ -115,8 +118,9 @@ export default function NewEditor({ user, setPage }) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   // ── Command palette ──────────────────────────────────────────────────────
-  const [cmdPaletteOpen,   setCmdPaletteOpen]   = useState(false);
-  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [cmdPaletteOpen,      setCmdPaletteOpen]      = useState(false);
+  const [showExportDialog,    setShowExportDialog]    = useState(false);
+  const [placeholderTargetId, setPlaceholderTargetId] = useState(null);
 
   useEffect(() => {
     const handler = (e) => {
@@ -194,9 +198,16 @@ export default function NewEditor({ user, setPage }) {
   // ── File input handler ────────────────────────────────────────────────────
   const handleFileInputChange = useCallback((e) => {
     const file = e.target.files?.[0];
-    if (file) processImageFile(file);
+    if (file) {
+      if (placeholderTargetId) {
+        processImageFileIntoLayer(file, placeholderTargetId);
+      } else {
+        processImageFile(file);
+      }
+    }
+    setPlaceholderTargetId(null);
     e.target.value = '';
-  }, []);
+  }, [placeholderTargetId]);
 
   // ── Drag-and-drop ─────────────────────────────────────────────────────────
   const handleDragOver = useCallback((e) => {
@@ -763,6 +774,14 @@ export default function NewEditor({ user, setPage }) {
     const hitLayer = ls.find(l => l.id === hitId);
     if (!hitLayer) return;
 
+    // ── Image placeholder click: open file picker to fill it ────────────────
+    if (hitLayer.type === 'image' && hitLayer.placeholder?.type === 'image' && !hitLayer.texture) {
+      selectLayer(hitId);
+      setPlaceholderTargetId(hitId);
+      fileInputRef.current?.click();
+      return;
+    }
+
     if (e.shiftKey) {
       toggleLayerSelection(hitId);
     } else if (!sel.includes(hitId)) {
@@ -1250,6 +1269,9 @@ export default function NewEditor({ user, setPage }) {
           {editingLayer.textData?.content || ''}
         </div>
       )}
+
+      {/* ── Templates browser modal ─────────────────────────────────── */}
+      {showTemplateBrowser && <TemplateBrowser onClose={() => setShowTemplateBrowser(false)} />}
 
       {/* ── Feed Simulator modal ────────────────────────────────────── */}
       {showFeedSimulator && <FeedSimulator rendererRef={rendererRef} />}

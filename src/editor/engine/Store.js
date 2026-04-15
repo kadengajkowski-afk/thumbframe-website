@@ -394,6 +394,45 @@ const useEditorStore = create(
     // THUMBFRIEND
     // ────────────────────────────────────────────────────
 
+    // ── Phase 9 UI state ──
+    showFeedSimulator:   false,
+    showVariantGenerator:false,
+    showNichePresets:    false,
+    layoutGuide:         null,   // { zones: [{ label, x, y, width, height, color }] } | null
+
+    setShowFeedSimulator:    (v) => set((state) => { state.showFeedSimulator    = v; }),
+    setShowVariantGenerator: (v) => set((state) => { state.showVariantGenerator = v; }),
+    setShowNichePresets:     (v) => set((state) => { state.showNichePresets     = v; }),
+    setLayoutGuide:          (g) => set((state) => { state.layoutGuide          = g; }),
+
+    // ── Phase 11: Templates ─────────────────────────────────────────────────
+    showTemplateBrowser: false,
+    setShowTemplateBrowser: (v) => set((state) => { state.showTemplateBrowser = v; }),
+
+    // applyTemplate — replaces all layers with template layers (new IDs), pushes
+    // the resulting state to history so Cmd+Z restores the previous canvas.
+    applyTemplate: (layersJson, templateName) => set((state) => {
+      const genId = () => crypto.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2));
+      state.layers = layersJson.map(layer => {
+        const newId = genId();
+        const base  = createLayer({ ...layer, id: newId });
+        // Spread layer AFTER base to restore template-specific fields (placeholder,
+        // gradientFill, etc.) that createLayer doesn't carry through.
+        return { ...base, ...layer, id: newId, texture: undefined, _preEditContent: null };
+      });
+      state.selectedLayerIds = [];
+      _pushHistory(state, `Apply Template: ${templateName}`);
+    }),
+
+    // addLayerAtBottom — inserts at position 0 (lowest z-index). One history entry.
+    addLayerAtBottom: (overrides) => set((state) => {
+      const layer = createLayer(overrides);
+      state.layers.unshift(layer);
+      state.selectedLayerIds = [layer.id];
+      _pushHistory(state, `Add '${layer.name}'`);
+    }),
+
+    // ── ThumbFriend ──────────────────────────────────────────────────────────
     thumbfriendEnabled:     true,
     thumbfriendPersonality: 'chill_creative_director',
 

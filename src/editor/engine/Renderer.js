@@ -9,7 +9,7 @@
 //         └─ layerContainer (Container) — one child per layer, z-ordered
 //     └─ overlayContainer (Container) — selection handles, guides (screen-space)
 
-import { Application, Container, Graphics, Sprite, Texture, ImageSource } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Texture, ImageSource, Text } from 'pixi.js';
 import { BLEND_MODES } from './Layer';
 import { renderTextToCanvas } from '../utils/textRenderer';
 import { AdjustmentFilter } from '../filters/AdjustmentFilter';
@@ -314,12 +314,22 @@ export default class Renderer {
   }
 
   _createImageObject(layer) {
-    // Show placeholder while loading OR while texture isn't ready yet.
-    // The upload pipeline guarantees texture.valid === true before setting
-    // layer.texture, so this branch covers only genuine loading states and
-    // the edge case of undo restoring a layer whose texture was stripped
-    // from the history snapshot.
-    if (layer.loading || !layer.texture) {
+    // Loading state — gray spinner box
+    if (layer.loading) {
+      const g = new Graphics();
+      g.rect(0, 0, layer.width || 200, layer.height || 150)
+        .fill({ color: 0xffffff, alpha: 0.05 });
+      return g;
+    }
+
+    // Placeholder: no texture yet but placeholder metadata defined.
+    // Render an orange dashed rectangle with label using Canvas 2D.
+    if (!layer.texture && layer.placeholder) {
+      return this._createImagePlaceholder(layer);
+    }
+
+    // No texture and no placeholder — generic empty gray box.
+    if (!layer.texture) {
       const g = new Graphics();
       g.rect(0, 0, layer.width || 200, layer.height || 150)
         .fill({ color: 0xffffff, alpha: 0.08 });
@@ -368,9 +378,22 @@ export default class Renderer {
       return g;
     }
 
+    // Template text placeholder: render with semi-transparent orange fill
+    // until the user edits it (content still matches the placeholder label).
+    let effectiveTd = td;
+    if (layer.placeholder?.type === 'text' && td.content === layer.placeholder.label) {
+      effectiveTd = {
+        ...td,
+        fill: 'rgba(249,115,22,0.55)',
+        stroke: { ...td.stroke, enabled: false },
+        shadow: { ...td.shadow, enabled: false },
+        glow:   { ...td.glow,   enabled: false },
+      };
+    }
+
     // Render text at 2× resolution via Canvas 2D, upload as PixiJS texture.
     // renderTextToCanvas handles shadow → glow → stroke → fill in order.
-    const { canvas, displayWidth, displayHeight } = renderTextToCanvas(td);
+    const { canvas, displayWidth, displayHeight } = renderTextToCanvas(effectiveTd);
     const source  = new ImageSource({ resource: canvas });
     const texture = new Texture({ source });
 
@@ -390,6 +413,11 @@ export default class Renderer {
   }
 
   _createShapeObject(layer) {
+    // Gradient fills: render via Canvas 2D → OffscreenCanvas → Sprite
+    if (layer.gradientFill) {
+      return this._createGradientShapeObject(layer);
+    }
+
     const sd = layer.shapeData;
     if (!sd) return new Container();
 
@@ -420,6 +448,109 @@ export default class Renderer {
     }
 
     return g;
+  }
+
+  // ── Gradient shape — Canvas 2D → OffscreenCanvas → Sprite ────────────────
+  // Called by _createShapeObject when layer.gradientFill is present.
+  _createGradientShapeObject(layer) {
+    const gf = layer.gradientFill;
+    const w  = Math.max(Math.round(layer.width  || 1), 1);
+    const h  = Math.max(Math.round(layer.height || 1), 1);
+
+    // Cap to GPU texture limits (avoid OOM on gigantic backgrounds)
+    const maxDim = 4096;
+    const scale  = Math.min(1, maxDim / Math.max(w, h));
+    const tw = Math.round(w * scale);
+    const th = Math.round(h * scale);
+
+    const oc  = new OffscreenCanvas(tw, th);
+    const ctx = oc.getContext('2d');
+
+    let gradient;
+    if (gf.type === 'radial') {
+      gradient = ctx.createRadialGradient(tw / 2, th / 2, 0, tw / 2, th / 2, Math.max(tw, th) / 2);
+    } else {
+      // Linear — convert CSS-style angle (0° = top, 90° = right) to canvas coords
+      const deg = (gf.angle ?? 180);
+      const rad = (deg - 90) * (Math.PI / 180);
+      const len = Math.sqrt(tw * tw + th * th) / 2;
+      const cx  = tw / 2, cy = th / 2;
+      gradient = ctx.createLinearGradient(
+        cx - Math.cos(rad) * len, cy - Math.sin(rad) * len,
+        cx + Math.cos(rad) * len, cy + Math.sin(rad) * len,
+      );
+    }
+
+    for (const stop of (gf.stops || [])) {
+      try { gradient.addColorStop(stop.offset, stop.color); } catch { /* skip invalid */ }
+    }
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, tw, th);
+
+    const source  = new ImageSource({ resource: oc });
+    const texture = new Texture({ source });
+    const sprite  = new Sprite(texture);
+    sprite.anchor.set(0, 0);
+    sprite._tfAnchorMode = true;
+    sprite.isSprite      = true;
+    sprite.width  = layer.width;
+    sprite.height = layer.height;
+    return sprite;
+  }
+
+  // ── Image placeholder — dashed orange border + label ─────────────────────
+  // Rendered via Canvas 2D, returned as a Sprite so _tfAnchorMode positioning
+  // (layer.x/y as center) works exactly like a real image sprite.
+  _createImagePlaceholder(layer) {
+    const w   = Math.max(Math.round(layer.width  || 200), 4);
+    const h   = Math.max(Math.round(layer.height || 150), 4);
+    const lbl = layer.placeholder?.label || 'ADD IMAGE';
+
+    const oc  = new OffscreenCanvas(w, h);
+    const ctx = oc.getContext('2d');
+
+    // Background fill
+    ctx.fillStyle = 'rgba(249,115,22,0.06)';
+    ctx.fillRect(0, 0, w, h);
+
+    // Dashed border
+    ctx.strokeStyle = 'rgba(249,115,22,0.35)';
+    ctx.lineWidth   = 2;
+    ctx.setLineDash([12, 7]);
+    ctx.strokeRect(1, 1, w - 2, h - 2);
+
+    // Camera emoji icon
+    const iconSize = Math.max(Math.min(w, h) * 0.14, 14);
+    ctx.setLineDash([]);
+    ctx.font         = `${Math.round(iconSize)}px serif`;
+    ctx.fillStyle    = 'rgba(249,115,22,0.40)';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('📷', w / 2, h / 2 - iconSize * 0.1);
+
+    // Label text
+    const maxLabelW = w * 0.85;
+    let labelSize   = Math.max(Math.min(w / (lbl.length * 0.6), 18), 10);
+    ctx.font      = `700 ${Math.round(labelSize)}px Inter, -apple-system, sans-serif`;
+    // shrink until label fits
+    while (ctx.measureText(lbl).width > maxLabelW && labelSize > 8) {
+      labelSize -= 0.5;
+      ctx.font = `700 ${Math.round(labelSize)}px Inter, -apple-system, sans-serif`;
+    }
+    ctx.fillStyle    = 'rgba(249,115,22,0.55)';
+    ctx.textBaseline = 'top';
+    ctx.fillText(lbl, w / 2, h / 2 + iconSize * 0.6);
+
+    const source  = new ImageSource({ resource: oc });
+    const texture = new Texture({ source });
+    const sprite  = new Sprite(texture);
+    sprite.anchor.set(0, 0);
+    sprite._tfAnchorMode = true;
+    sprite.isSprite      = true;
+    sprite.width  = w;
+    sprite.height = h;
+    return sprite;
   }
 
   // (removed: _updateDisplayObject merged into sync() above)
@@ -699,6 +830,12 @@ export default class Renderer {
 function _layerDataKey(layer) {
   switch (layer.type) {
     case 'shape': {
+      if (layer.gradientFill) {
+        // Include all gradient params so any change triggers recreation
+        const gf = layer.gradientFill;
+        const stops = (gf.stops || []).map(s => `${s.offset}:${s.color}`).join('|');
+        return `shape:gradient:${gf.type}:${gf.angle ?? ''}:${layer.width}:${layer.height}:${stops}`;
+      }
       const sd = layer.shapeData;
       if (!sd) return 'shape:empty';
       return `shape:${sd.shapeType}:${layer.width}:${layer.height}:${sd.fill}:${sd.stroke}:${sd.strokeWidth}:${sd.cornerRadius}`;
@@ -716,10 +853,15 @@ function _layerDataKey(layer) {
       const gk = td.glow
         ? `${td.glow.enabled}:${td.glow.color}:${td.glow.blur}:${td.glow.strength}:${td.glow.opacity}`
         : 'none';
-      return `text:${td.content}:${td.fontFamily}:${td.fontSize}:${td.fontWeight}:${td.fill}:${td.align}:${td.lineHeight}:${td.letterSpacing}:${sk}:${shk}:${gk}`;
+      // Placeholder state: orange fill is applied when content === placeholder.label
+      const isPlaceholder = layer.placeholder?.type === 'text' && td.content === layer.placeholder.label;
+      return `text:${isPlaceholder ? 'ph:' : ''}${td.content}:${td.fontFamily}:${td.fontSize}:${td.fontWeight}:${td.fill}:${td.align}:${td.lineHeight}:${td.letterSpacing}:${sk}:${shk}:${gk}`;
     }
     case 'image': {
       if (layer.loading) return 'image:loading';
+      if (!layer.texture && layer.placeholder) {
+        return `image:placeholder:${layer.placeholder.label}:${layer.width}:${layer.height}`;
+      }
       if (!layer.texture) return 'image:empty';
       // texture.uid is a unique auto-incrementing number assigned by PixiJS v8
       return `image:${layer.texture.uid}:${layer.width}:${layer.height}`;

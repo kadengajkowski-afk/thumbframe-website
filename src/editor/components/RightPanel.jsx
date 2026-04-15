@@ -4,6 +4,7 @@
 
 import React, { useState } from 'react';
 import useEditorStore from '../engine/Store';
+
 import BrushSettingsPanel  from '../panels/BrushSettingsPanel';
 import EffectsPanel        from '../panels/EffectsPanel';
 import TextPanel           from '../panels/TextPanel';
@@ -40,10 +41,11 @@ export default function RightPanel({
 }) {
   const [openPanel, setOpenPanel] = useState(null); // 'niches' | 'background' | 'facecutout' | 'variants' | null
 
-  const activeTool       = useEditorStore(s => s.activeTool);
-  const setActiveTool    = useEditorStore(s => s.setActiveTool);
-  const layers           = useEditorStore(s => s.layers);
-  const selectedLayerIds = useEditorStore(s => s.selectedLayerIds);
+  const activeTool              = useEditorStore(s => s.activeTool);
+  const setActiveTool           = useEditorStore(s => s.setActiveTool);
+  const layers                  = useEditorStore(s => s.layers);
+  const selectedLayerIds        = useEditorStore(s => s.selectedLayerIds);
+  const setShowTemplateBrowser  = useEditorStore(s => s.setShowTemplateBrowser);
 
   const isPainting = PAINT_TOOLS.has(activeTool);
 
@@ -175,7 +177,7 @@ export default function RightPanel({
                 { icon: '✂️', label: 'Face Cutout',  hint: 'Remove background from a face image', onClick: () => setOpenPanel(p => p === 'facecutout' ? null : 'facecutout'), id: 'facecutout' },
                 { icon: '⚡', label: 'A/B Variants', hint: 'Apply a style variant to all image layers', onClick: () => setOpenPanel(p => p === 'variants' ? null : 'variants'), id: 'variants' },
                 { icon: '✦',  label: 'AI Generate', hint: 'Generate AI background',   onClick: COMING_SOON,                           id: null },
-                { icon: '📋', label: 'Templates',   hint: 'Browse templates',         onClick: COMING_SOON,                           id: null },
+                { icon: '📋', label: 'Templates',   hint: 'Browse templates',         onClick: () => setShowTemplateBrowser(true),     id: null },
               ].map(({ icon, label, hint, onClick, id }) => {
                 const isActive = id && openPanel === id;
                 return (
