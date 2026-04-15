@@ -366,6 +366,14 @@ export default function NewEditor({ user, setPage }) {
       rendererRef.current  = renderer;
       window.__renderer    = renderer;
       canvasRef.current    = renderer.app.canvas;
+
+      // Layer the PixiJS canvas above StarfieldBackground (z-index 0).
+      // The canvas stays in flex normal-flow (position:relative keeps it there),
+      // but now it forms a stacking context at z:1 so stars never appear on top.
+      const c = renderer.app.canvas;
+      c.style.position = 'relative';
+      c.style.zIndex   = '1';
+
       const state = useEditorStore.getState();
       renderer.sync(state.layers);
 
