@@ -4,6 +4,7 @@
 // image layer at the bottom of the layer stack in one undo step.
 
 import React, { useState } from 'react';
+import { Texture, ImageSource } from 'pixi.js';
 import useEditorStore from '../engine/Store';
 
 const CW = 1280;
@@ -79,39 +80,50 @@ const BACKGROUNDS = [
   },
 ];
 
-function renderBackground(bg) {
-  return new Promise((resolve) => {
-    const oc = document.createElement('canvas');
-    oc.width  = CW;
-    oc.height = CH;
-    const ctx = oc.getContext('2d');
-    bg.draw(ctx);
-    oc.toBlob((blob) => {
-      if (!blob) { resolve(null); return; }
-      const url = URL.createObjectURL(blob);
-      resolve(url);
-    }, 'image/jpeg', 0.92);
-  });
+// Creates a PixiJS Texture from a background definition using OffscreenCanvas.
+// OffscreenCanvas is required by the PixiJS v8 texture pipeline (see imageUpload.js).
+function renderBackgroundTexture(bg) {
+  const oc  = new OffscreenCanvas(CW, CH);
+  const ctx = oc.getContext('2d');
+  bg.draw(ctx);
+  const source  = new ImageSource({ resource: oc });
+  const texture = new Texture({ source });
+  return texture;
 }
 
 export default function BackgroundPicker({ onClose }) {
   const [selected,  setSelected]  = useState(null);
   const [applying,  setApplying]  = useState(false);
 
-  const addLayerAtBottom = useEditorStore(s => s.addLayerAtBottom);
-  const commitChange     = useEditorStore(s => s.commitChange);
+  const addLayerSilent = useEditorStore(s => s.addLayerSilent);
+  const updateLayer    = useEditorStore(s => s.updateLayer);
+  const commitChange   = useEditorStore(s => s.commitChange);
 
   const selectedBg = BACKGROUNDS.find(b => b.id === selected);
 
-  const handleApply = async () => {
+  const handleApply = () => {
     if (!selectedBg || applying) return;
     setApplying(true);
 
     try {
-      const blobUrl = await renderBackground(selectedBg);
-      if (!blobUrl) throw new Error('render failed');
+      // Create PixiJS texture synchronously from OffscreenCanvas
+      const texture = renderBackgroundTexture(selectedBg);
 
-      addLayerAtBottom({
+      // Pre-generate ID so we can register the texture in the renderer cache
+      // before the layer is added, ensuring the first sync() has the texture.
+      const layerId = crypto.randomUUID?.() ||
+        (Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+      if (window.__renderer) {
+        window.__renderer.textureCache.set(layerId, texture);
+      }
+
+      // addLayerSilent → updateLayer → commitChange:
+      // All three are synchronous Zustand set() calls.
+      // React 18 batches them into a single render cycle, so the layer
+      // is never visible without its texture.
+      addLayerSilent({
+        id:     layerId,
         name:   `${selectedBg.label} Background`,
         type:   'image',
         x:      CW / 2,
@@ -119,7 +131,7 @@ export default function BackgroundPicker({ onClose }) {
         width:  CW,
         height: CH,
         imageData: {
-          src:           blobUrl,
+          src:           null,
           originalWidth:  CW,
           originalHeight: CH,
           mask:           null,
@@ -127,6 +139,7 @@ export default function BackgroundPicker({ onClose }) {
         },
       });
 
+      updateLayer(layerId, { texture });
       commitChange('Add Background');
       window.__renderer?.markDirty();
 

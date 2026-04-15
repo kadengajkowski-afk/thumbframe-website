@@ -4,6 +4,7 @@
 // dilation outline → place the cutout on the canvas at left-third position.
 
 import React, { useState, useRef, useCallback } from 'react';
+import { Texture, ImageSource } from 'pixi.js';
 import useEditorStore from '../engine/Store';
 
 const CW = 1280;
@@ -93,9 +94,9 @@ export default function FaceCutoutFlow({ onClose }) {
 
   const fileInputRef = useRef(null);
 
-  const addLayerAtBottom  = useEditorStore(s => s.addLayerAtBottom);
-  const commitChange      = useEditorStore(s => s.commitChange);
-  const layers            = useEditorStore(s => s.layers);
+  const addLayerSilent = useEditorStore(s => s.addLayerSilent);
+  const updateLayer    = useEditorStore(s => s.updateLayer);
+  const commitChange   = useEditorStore(s => s.commitChange);
 
   const handleFile = useCallback(async (file) => {
     if (!file?.type.startsWith('image/')) return;
@@ -148,44 +149,67 @@ export default function FaceCutoutFlow({ onClose }) {
 
     const img = new Image();
     img.onload = () => {
-      const aspectRatio = img.naturalWidth / img.naturalHeight;
-      // Fit to roughly 55% of canvas height
-      const targetH = Math.round(CH * 0.85);
-      const targetW = Math.round(targetH * aspectRatio);
-      // Place at left third (x = 15% of canvas width from left edge, anchored center)
-      const x = Math.round(CW * 0.15 + targetW / 2);
-      const y = Math.round(CH / 2);
+      try {
+        const aspectRatio = img.naturalWidth / img.naturalHeight;
+        // Scale to 60% of canvas height (spec requirement)
+        const targetH = Math.round(CH * 0.60);
+        const targetW = Math.round(targetH * aspectRatio);
+        // Place at left 15% horizontally, centered vertically
+        const x = Math.round(CW * 0.15 + targetW / 2);
+        const y = Math.round(CH / 2);
 
-      addLayerAtBottom({
-        name:   'Face Cutout',
-        type:   'image',
-        x, y,
-        width:  targetW,
-        height: targetH,
-        imageData: {
-          src:           resultUrl,
-          originalWidth:  img.naturalWidth,
-          originalHeight: img.naturalHeight,
-          mask:           null,
-          cropRect:       null,
-        },
-      });
+        // Create PixiJS texture using OffscreenCanvas (same pattern as imageUpload.js)
+        const oc  = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
+        oc.getContext('2d').drawImage(img, 0, 0);
+        const source  = new ImageSource({ resource: oc });
+        const texture = new Texture({ source });
 
-      commitChange('Add Face Cutout');
-      window.__renderer?.markDirty();
+        // Pre-generate ID and register texture in cache before adding the layer
+        const layerId = crypto.randomUUID?.() ||
+          (Date.now().toString(36) + Math.random().toString(36).slice(2));
 
-      window.dispatchEvent(new CustomEvent('tf:toast', {
-        detail: { message: 'Face cutout added to canvas!' },
-      }));
+        if (window.__renderer) {
+          window.__renderer.textureCache.set(layerId, texture);
+        }
 
-      onClose?.();
+        // addLayerSilent → updateLayer → commitChange — all synchronous,
+        // batched by React 18 so the layer is never visible without its texture.
+        addLayerSilent({
+          id:     layerId,
+          name:   'Face Cutout',
+          type:   'image',
+          x, y,
+          width:  targetW,
+          height: targetH,
+          imageData: {
+            src:           resultUrl,
+            originalWidth:  img.naturalWidth,
+            originalHeight: img.naturalHeight,
+            mask:           null,
+            cropRect:       null,
+          },
+        });
+
+        updateLayer(layerId, { texture });
+        commitChange('Add Face Cutout');
+        window.__renderer?.markDirty();
+
+        window.dispatchEvent(new CustomEvent('tf:toast', {
+          detail: { message: 'Face cutout added to canvas!' },
+        }));
+
+        onClose?.();
+      } catch {
+        setError('Failed to place image on canvas');
+        setStep('preview');
+      }
     };
     img.onerror = () => {
       setError('Failed to place image on canvas');
       setStep('preview');
     };
     img.src = resultUrl;
-  }, [resultUrl, addLayerAtBottom, commitChange, onClose]);
+  }, [resultUrl, addLayerSilent, updateLayer, commitChange, onClose]);
 
   return (
     <div style={{ padding: '0 12px 12px', fontFamily: 'Inter, -apple-system, sans-serif' }}>
