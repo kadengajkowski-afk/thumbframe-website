@@ -58,7 +58,9 @@ export default function TopBar({ user, setPage, onExport, onShare }) {
   const setPan      = useEditorStore(s => s.setPan);
   const projectName = useEditorStore(s => s.projectName ?? 'Untitled');
   const saveStatus  = useEditorStore(s => s.saveStatus ?? 'saved');
-  const setProjectName = useEditorStore(s => s.setProjectName);
+  const setProjectName      = useEditorStore(s => s.setProjectName);
+  const thumbfriendEnabled  = useEditorStore(s => s.thumbfriendEnabled);
+  const setThumbfriendEnabled = useEditorStore(s => s.setThumbfriendEnabled);
 
   const canUndo = historyIdx > 0;
   const canRedo = historyIdx < historyLen - 1;
@@ -239,6 +241,21 @@ export default function TopBar({ user, setPage, onExport, onShare }) {
 
       {/* ── RIGHT ────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto' }}>
+
+        <Sep />
+
+        {/* ThumbFriend toggle */}
+        <IconBtn
+          onClick={() => setThumbfriendEnabled(!thumbfriendEnabled)}
+          title={thumbfriendEnabled ? 'Hide ThumbFriend' : 'Show ThumbFriend'}
+          active={thumbfriendEnabled}
+          size={32}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="2" width="20" height="20" rx="5" fill={thumbfriendEnabled ? '#f97316' : 'none'} stroke={thumbfriendEnabled ? '#f97316' : 'currentColor'} strokeWidth="2"/>
+            <text x="12" y="16.5" textAnchor="middle" fontFamily="Impact, sans-serif" fontSize="11" fontWeight="900" fill={thumbfriendEnabled ? '#fff' : 'currentColor'}>TF</text>
+          </svg>
+        </IconBtn>
 
         <Sep />
 

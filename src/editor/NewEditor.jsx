@@ -22,6 +22,7 @@ import { computeGuides } from './engine/SmartGuides';
 import { processImageFile } from './utils/imageUpload';
 import { renderTextToCanvas, loadFont, DEFAULT_TEXT_DATA } from './utils/textRenderer';
 import { GRADE_LABELS } from './presets/colorGrades';
+import ThumbFriendChat from './ai/ThumbFriendChat';
 import { BrushPipeline, getCompositeOp } from './tools/BrushPipeline';
 import { BrushTool } from './tools/BrushTool';
 import { EraserTool } from './tools/EraserTool';
@@ -1124,6 +1125,13 @@ export default function NewEditor({ user, setPage }) {
           {editingLayer.textData?.content || ''}
         </div>
       )}
+
+      {/* ── ThumbFriend AI chat bubble ───────────────────────────────── */}
+      <ThumbFriendChat
+        user={user}
+        supabaseSession={null}
+        setPage={setPage}
+      />
     </div>
   );
 }

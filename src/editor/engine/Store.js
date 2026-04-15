@@ -391,6 +391,65 @@ const useEditorStore = create(
     }),
 
     // ────────────────────────────────────────────────────
+    // THUMBFRIEND
+    // ────────────────────────────────────────────────────
+
+    thumbfriendEnabled:     true,
+    thumbfriendPersonality: 'chill_creative_director',
+
+    setThumbfriendEnabled: (enabled) => set((state) => {
+      state.thumbfriendEnabled = enabled;
+    }),
+
+    setThumbfriendPersonality: (personality) => set((state) => {
+      state.thumbfriendPersonality = personality;
+    }),
+
+    // Apply a ThumbFriend-suggested canvas action. Finds layer by id then name,
+    // falls back to first image layer. Calls existing updateLayer + commitChange.
+    executeThumbFriendAction: (action) => {
+      const { layers, updateLayer, commitChange } = get();
+
+      // Resolve target layer
+      let targetId = null;
+      if (action.target) {
+        targetId = layers.find(l => l.id   === action.target)?.id
+                || layers.find(l => l.name === action.target)?.id;
+      }
+      if (!targetId) targetId = layers.find(l => l.type === 'image')?.id;
+      if (!targetId) return;
+
+      const layer = layers.find(l => l.id === targetId);
+      if (!layer) return;
+
+      switch (action.type) {
+        case 'adjust_brightness':
+          updateLayer(targetId, { adjustments: { ...layer.adjustments, brightness: action.params.value } });
+          break;
+        case 'adjust_contrast':
+          updateLayer(targetId, { adjustments: { ...layer.adjustments, contrast: action.params.value } });
+          break;
+        case 'adjust_saturation':
+          updateLayer(targetId, { adjustments: { ...layer.adjustments, saturation: action.params.value } });
+          break;
+        case 'apply_color_grade':
+          updateLayer(targetId, { colorGrade: { name: action.params.preset, strength: action.params.strength ?? 1.0 } });
+          break;
+        case 'move_layer':
+          updateLayer(targetId, { x: action.params.x, y: action.params.y });
+          break;
+        case 'resize_layer':
+          updateLayer(targetId, { width: action.params.width, height: action.params.height });
+          break;
+        default:
+          break;
+      }
+
+      commitChange(`ThumbFriend: ${action.reason || action.type}`);
+      window.__renderer?.markDirty();
+    },
+
+    // ────────────────────────────────────────────────────
     // HISTORY (UNDO/REDO)
     // ────────────────────────────────────────────────────
 
