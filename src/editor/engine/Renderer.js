@@ -282,8 +282,15 @@ export default class Renderer {
       obj.alpha = effectiveLayer.opacity ?? 1;
       obj.visible = effectiveLayer.visible !== false;
 
-      // Blend mode — use PixiJS v8 BlendMode enum
-      obj.blendMode = BLEND_MODE_MAP[effectiveLayer.blendMode] ?? 'normal';
+      // Blend mode — only apply to Sprites with valid textures.
+      // Graphics objects don't have textures; setting blend modes on them is a no-op
+      // in PixiJS v8's batcher and can trigger null-alphaMode crashes during batching.
+      if (obj.isSprite && obj.texture && obj.texture.valid) {
+        obj.blendMode = BLEND_MODE_MAP[effectiveLayer.blendMode] ?? 'normal';
+      } else if (!obj.isSprite) {
+        // Graphics/Container: blend modes are safe here (no texture involved)
+        obj.blendMode = BLEND_MODE_MAP[effectiveLayer.blendMode] ?? 'normal';
+      }
 
       // Size sync for image and text sprites
       if ((effectiveLayer.type === 'image' || effectiveLayer.type === 'text') && obj.isSprite) {
@@ -603,23 +610,19 @@ export default class Renderer {
     const ctx = oc.getContext('2d');
     ctx.drawImage(paintCanvas, 0, 0);
 
-    // ── Step 2: Destroy old paint texture for this layer before allocating new one
-    const oldTex = this.paintTextures.get(layerId);
-    if (oldTex) {
-      oldTex.destroy(true);
-      this.paintTextures.delete(layerId);
-    }
-
-    // ── Step 3: Create texture — identical to imageUpload.js
+    // ── Step 2: Create new texture BEFORE touching the old one.
+    // The RenderLoop can fire between any two lines during an active stroke.
+    // The sprite must NEVER reference a destroyed texture, so we assign the new
+    // texture first and only then destroy the old one.
     const source = new ImageSource({ resource: oc });
     const tex    = new Texture({ source });
-    this.paintTextures.set(layerId, tex);
+    if (!tex || !tex.source) return; // guard: creation can fail on headless/SSR
 
-    // ── Step 4: Get the base image sprite so we can co-locate the paint sprite
+    // ── Step 3: Get the base image sprite so we can co-locate the paint sprite
     const imgObj = this.displayObjects.get(layerId);
-    if (!imgObj) return;
+    if (!imgObj) { tex.destroy(true); return; }
 
-    // ── Step 5: Create or update the paint sprite
+    // ── Step 4: Create or update the paint sprite — assign new texture atomically
     let paintSprite = this.paintSprites.get(layerId);
     if (!paintSprite) {
       paintSprite = new Sprite(tex);
@@ -629,8 +632,15 @@ export default class Renderer {
       this.paintSprites.set(layerId, paintSprite);
       this.layerContainer.addChild(paintSprite);
     } else {
-      paintSprite.texture = tex;
+      paintSprite.texture = tex; // sprite now points to the new texture
     }
+
+    // ── Step 5: Destroy old texture AFTER sprite no longer references it
+    const oldTex = this.paintTextures.get(layerId);
+    if (oldTex && oldTex !== tex) {
+      oldTex.destroy(true);
+    }
+    this.paintTextures.set(layerId, tex);
 
     // ── Step 6: Mirror the base sprite's transform exactly
     // imgObj uses anchor(0,0) + _tfAnchorMode, so imgObj.x/y = layer top-left.
@@ -733,38 +743,55 @@ export default class Renderer {
   // (width × height) at position (0, 0), so the drawImage source rect is
   // always within the PixiJS canvas bounds.
   captureForPreview(width = 194, height = 109) {
-    if (!this.app?._mounted && !this._mounted) return null;
+    if (!this._mounted) return null;
 
     this.overlayContainer.visible = false;
     const savedX = this.viewport.x;
     const savedY = this.viewport.y;
     const savedS = this.viewport.scale.x;
 
-    // Fit the 1280×720 canvas into the preview dimensions, preserving aspect.
-    const scale = Math.min(width / CW, height / CH);
-    this.viewport.x = 0;
-    this.viewport.y = 0;
-    this.viewport.scale.set(scale);
+    try {
+      // Sanitize any sprites with null/destroyed textures before rendering.
+      // A destroyed texture has valid===false; replace with Texture.EMPTY so
+      // PixiJS's batcher doesn't crash on a null alphaMode.
+      for (const child of this.layerContainer.children) {
+        if (child.isSprite && (!child.texture || !child.texture.valid)) {
+          child.texture = Texture.EMPTY;
+        }
+      }
+      for (const ps of this.paintSprites.values()) {
+        if (ps && ps.isSprite && (!ps.texture || !ps.texture.valid)) {
+          ps.texture = Texture.EMPTY;
+        }
+      }
 
-    this.app.renderer.render(this.app.stage);
+      // Fit the 1280×720 canvas into the preview dimensions, preserving aspect.
+      const scale = Math.min(width / CW, height / CH);
+      this.viewport.x = 0;
+      this.viewport.y = 0;
+      this.viewport.scale.set(scale);
 
-    // The rendered thumbnail now occupies exactly (CW*scale × CH*scale) starting
-    // at (0,0) in the PixiJS canvas. Copy only that region.
-    const srcW = Math.round(CW * scale);
-    const srcH = Math.round(CH * scale);
-    const oc  = document.createElement('canvas');
-    oc.width  = width;
-    oc.height = height;
-    oc.getContext('2d').drawImage(this.app.canvas, 0, 0, srcW, srcH, 0, 0, width, height);
+      this.app.renderer.render(this.app.stage);
 
-    // Restore viewport
-    this.viewport.x = savedX;
-    this.viewport.y = savedY;
-    this.viewport.scale.set(savedS);
-    this.overlayContainer.visible = true;
-    this.app.renderer.render(this.app.stage);
-
-    return oc;
+      // Copy only the rendered region (CW*scale × CH*scale) starting at (0,0).
+      const srcW = Math.round(CW * scale);
+      const srcH = Math.round(CH * scale);
+      const oc  = document.createElement('canvas');
+      oc.width  = width;
+      oc.height = height;
+      oc.getContext('2d').drawImage(this.app.canvas, 0, 0, srcW, srcH, 0, 0, width, height);
+      return oc;
+    } catch (err) {
+      console.warn('[Renderer] captureForPreview failed:', err);
+      return null;
+    } finally {
+      // Always restore viewport — runs even if an error was thrown
+      this.viewport.x = savedX;
+      this.viewport.y = savedY;
+      this.viewport.scale.set(savedS);
+      this.overlayContainer.visible = true;
+      try { this.app.renderer.render(this.app.stage); } catch { /* ignore restore-render errors */ }
+    }
   }
 
   // ── Full-resolution export ───────────────────────────────────────────────
