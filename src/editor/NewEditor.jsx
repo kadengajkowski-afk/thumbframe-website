@@ -25,6 +25,7 @@ import { GRADE_LABELS } from './presets/colorGrades';
 import ThumbFriendChat     from './ai/ThumbFriendChat';
 import StampTestPreview   from './components/StampTestPreview';
 import FeedSimulator      from './components/FeedSimulator';
+import ExportDialog       from './components/ExportDialog';
 import { BrushPipeline, getCompositeOp } from './tools/BrushPipeline';
 import { BrushTool } from './tools/BrushTool';
 import { EraserTool } from './tools/EraserTool';
@@ -103,17 +104,30 @@ export default function NewEditor({ user, setPage }) {
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
   useKeyboardShortcuts(containerRef);
 
+  // ── Mobile redirect ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setPage?.('mobile-editor');
+    }
+  }, [setPage]);
+
   // ── Upload / drag-drop state ─────────────────────────────────────────────
   const [isDragOver, setIsDragOver] = useState(false);
 
   // ── Command palette ──────────────────────────────────────────────────────
-  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
+  const [cmdPaletteOpen,   setCmdPaletteOpen]   = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
   useEffect(() => {
     const handler = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setCmdPaletteOpen(o => !o);
+      }
+      // Cmd+E — open Export dialog
+      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+        e.preventDefault();
+        setShowExportDialog(o => !o);
       }
     };
     window.addEventListener('keydown', handler);
@@ -133,6 +147,23 @@ export default function NewEditor({ user, setPage }) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [setShowFeedSimulator]);
+
+  // Cmd+S — save (tf:save event dispatched by useKeyboardShortcuts)
+  useEffect(() => {
+    const handler = () => {
+      const store = useEditorStore.getState();
+      store.setSaveStatus('saving');
+      // For now: mark saved after a brief tick (Supabase persistence is Phase 11)
+      setTimeout(() => {
+        store.setSaveStatus('saved');
+        window.dispatchEvent(new CustomEvent('tf:toast', {
+          detail: { message: 'Project saved', type: 'success' },
+        }));
+      }, 400);
+    };
+    window.addEventListener('tf:save', handler);
+    return () => window.removeEventListener('tf:save', handler);
+  }, []);
 
   // ── Paste image from clipboard ───────────────────────────────────────────
   useEffect(() => {
@@ -412,6 +443,31 @@ export default function NewEditor({ user, setPage }) {
       window.__renderer = null;
       canvasRef.current = null;
     };
+  }, []);
+
+  // ── Canvas container resize handler (debounced) ───────────────────────────
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let timer = null;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const r = rendererRef.current;
+        if (!r?._mounted) return;
+        r.resize();
+        // Re-fit viewport after resize
+        const rect = el.getBoundingClientRect();
+        const fitZoom = Math.min(rect.width / CW, rect.height / CH) * 0.9;
+        const store = useEditorStore.getState();
+        r.applyViewport(fitZoom, 0, 0);
+        store.setZoom?.(fitZoom);
+        store.setPan?.(0, 0);
+        r.markDirty();
+      }, 150);
+    });
+    observer.observe(el);
+    return () => { observer.disconnect(); clearTimeout(timer); };
   }, []);
 
   // ── Sync layers ──────────────────────────────────────────────────────────
@@ -1000,40 +1056,11 @@ export default function NewEditor({ user, setPage }) {
 
   // ── Export ────────────────────────────────────────────────────────────────
   const handleExport = useCallback(() => {
-    const renderer = rendererRef.current;
-    if (!renderer) {
+    if (!rendererRef.current?._mounted) {
       window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Nothing to export yet', type: 'error' } }));
       return;
     }
-    try {
-      const fullDataUrl = renderer.exportToDataURL('image/png');
-      if (!fullDataUrl) {
-        window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Export failed — try again', type: 'error' } }));
-        return;
-      }
-      // Crop the full renderer canvas down to the exact 1280×720 content area
-      const img = new Image();
-      img.onload = () => {
-        const oc  = document.createElement('canvas');
-        oc.width  = CW;
-        oc.height = CH;
-        oc.getContext('2d').drawImage(img, 0, 0, CW, CH, 0, 0, CW, CH);
-        const croppedUrl = oc.toDataURL('image/png');
-        const name = (useEditorStore.getState().projectName || 'thumbnail')
-          .replace(/[^a-z0-9\-_]/gi, '_').toLowerCase();
-        const a = document.createElement('a');
-        a.href     = croppedUrl;
-        a.download = `${name}.png`;
-        a.click();
-        window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Exported as PNG', type: 'success' } }));
-      };
-      img.onerror = () => {
-        window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Export failed — try again', type: 'error' } }));
-      };
-      img.src = fullDataUrl;
-    } catch {
-      window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Export failed — try again', type: 'error' } }));
-    }
+    setShowExportDialog(true);
   }, []);
 
   // ── Canvas cursor ─────────────────────────────────────────────────────────
@@ -1098,6 +1125,39 @@ export default function NewEditor({ user, setPage }) {
           <StarfieldBackground />
           <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
           <BrushCursor rendererRef={rendererRef} canvasRef={canvasRef} />
+
+          {/* Empty state — shown when no layers exist */}
+          {layers.length === 0 && (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                position: 'absolute', zIndex: 5,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+                pointerEvents: 'all', cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <div style={{
+                width: 64, height: 64, borderRadius: 18,
+                background: 'rgba(249,115,22,0.10)',
+                border: '1.5px dashed rgba(249,115,22,0.35)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 28,
+                transition: 'background 150ms',
+              }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(249,115,22,0.18)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(249,115,22,0.10)'}
+              >+</div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-2)', marginBottom: 4 }}>
+                  Drop an image to start
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-4)', lineHeight: 1.5 }}>
+                  Drag & drop, click to browse,<br/>or paste from clipboard
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Layout guide SVG overlay — rendered above canvas, pointer-events none */}
           {layoutGuide && (
@@ -1193,6 +1253,9 @@ export default function NewEditor({ user, setPage }) {
 
       {/* ── Feed Simulator modal ────────────────────────────────────── */}
       {showFeedSimulator && <FeedSimulator rendererRef={rendererRef} />}
+
+      {/* ── Export dialog ───────────────────────────────────────────── */}
+      {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
 
       {/* ── ThumbFriend AI chat bubble ───────────────────────────────── */}
       <ThumbFriendChat

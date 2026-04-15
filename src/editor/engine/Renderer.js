@@ -611,6 +611,52 @@ export default class Renderer {
     return oc;
   }
 
+  // ── Full-resolution export ───────────────────────────────────────────────
+  // Always outputs exactly 1280×720, regardless of the current PixiJS canvas
+  // size (which can be smaller when the browser window is compact).
+  // Temporarily scales the viewport so the entire thumbnail fits within the
+  // actual WebGL canvas bounds, draws that region into an off-screen 1280×720
+  // canvas (upscaling via high-quality 2D bilinear), then restores state.
+  exportFullRes(format = 'image/png', quality = 0.92) {
+    if (!this._mounted) return null;
+
+    this.overlayContainer.visible = false;
+    const savedX = this.viewport.x;
+    const savedY = this.viewport.y;
+    const savedS = this.viewport.scale.x;
+
+    // Fit 1280×720 into the actual PixiJS canvas (avoid clipping)
+    const canvasW = this.app.canvas.width;
+    const canvasH = this.app.canvas.height;
+    const scale   = Math.min(canvasW / CW, canvasH / CH);
+
+    this.viewport.x = 0;
+    this.viewport.y = 0;
+    this.viewport.scale.set(scale);
+    this.app.renderer.render(this.app.stage);
+
+    const srcW = Math.round(CW * scale);
+    const srcH = Math.round(CH * scale);
+
+    // Draw into a 1280×720 output (scales up if needed, preserving sharpness)
+    const oc  = document.createElement('canvas');
+    oc.width  = CW;
+    oc.height = CH;
+    const ctx = oc.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(this.app.canvas, 0, 0, srcW, srcH, 0, 0, CW, CH);
+
+    // Restore viewport
+    this.viewport.x = savedX;
+    this.viewport.y = savedY;
+    this.viewport.scale.set(savedS);
+    this.overlayContainer.visible = true;
+    this.app.renderer.render(this.app.stage);
+
+    return oc.toDataURL(format, quality);
+  }
+
   // ── Resize handler ────────────────────────────────────────────────────────
   resize() {
     if (!this.app) return;

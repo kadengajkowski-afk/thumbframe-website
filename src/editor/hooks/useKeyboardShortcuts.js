@@ -100,6 +100,14 @@ export default function useKeyboardShortcuts(containerRef) {
         }
       }
 
+      // ── Save (Cmd+S) ─────────────────────────────────────────────────────
+      if (meta && !shift && key === 's') {
+        e.preventDefault();
+        // Trigger the tf:save event so NewEditor can handle persistence
+        window.dispatchEvent(new Event('tf:save'));
+        return;
+      }
+
       // ── Undo / Redo ───────────────────────────────────────────────────────
       if (meta && !shift && key === 'z') { e.preventDefault(); undo(); return; }
       if (meta && shift  && key === 'z') { e.preventDefault(); redo(); return; }
