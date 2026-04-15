@@ -389,30 +389,40 @@ export default function StarfieldBackground() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
 
-    let W = 0, H = 0;
-    let raf;
-    let stars = [], glows = [];
+    const ctx = canvas.getContext('2d');
     const GLOW_COLORS = ['249,115,22', '251,146,60', '234,179,8'];
 
+    // ── Event instances ────────────────────────────────────────────────────
     const meteorShower = new MeteorShower();
     const planetKiller = new PlanetKiller();
 
-    // First shower fires in 20-40 s; subsequent ones in 60-120 s
+    // ── Mutable state — only valid after initStars() ───────────────────────
+    let initialized     = false;
+    let W = 0, H = 0;
+    let stars = [], glows = [];
+    let tick     = 0;
+    let prevTime = performance.now();
+
+    // Event-sequencing state
     let nextShowerIn        = rand(20000, 40000);
     let pendingPlanetKiller = false;
     let planetKillerDelay   = 0;
 
-    // ── Init stars ────────────────────────────────────────────────────────
-    function init(w, h) {
+    // ── initStars — never called with zero dimensions ──────────────────────
+    function initStars(w, h) {
+      if (w <= 0 || h <= 0) return;
+
+      canvas.width  = w;
+      canvas.height = h;
       W = w; H = h;
+
       meteorShower.resize(w, h);
       planetKiller.resize(w, h);
 
       stars = Array.from({ length: 160 }, () => ({
-        x:       Math.random() * W,
-        y:       Math.random() * H,
+        x:       Math.random() * w,
+        y:       Math.random() * h,
         r:       0.4 + Math.random() * 1.5,
         op:      0.20 + Math.random() * 0.55,
         dx:      (Math.random() - 0.5) * 0.06,
@@ -420,9 +430,10 @@ export default function StarfieldBackground() {
         twSpeed: 0.002 + Math.random() * 0.005,
         phase:   Math.random() * Math.PI * 2,
       }));
+
       glows = Array.from({ length: 12 }, () => ({
-        x:          Math.random() * W,
-        y:          Math.random() * H,
+        x:          Math.random() * w,
+        y:          Math.random() * h,
         r:          3 + Math.random() * 5,
         op:         0.05 + Math.random() * 0.09,
         dx:         (Math.random() - 0.5) * 0.03,
@@ -431,97 +442,111 @@ export default function StarfieldBackground() {
         pulseSpeed: 0.001 + Math.random() * 0.002,
         phase:      Math.random() * Math.PI * 2,
       }));
+
+      initialized = true;
     }
 
-    // ── Resize ────────────────────────────────────────────────────────────
-    const ro = new ResizeObserver(entries => {
-      for (const e of entries) {
-        const w = Math.round(e.contentRect.width);
-        const h = Math.round(e.contentRect.height);
-        if (w > 0 && h > 0) {
-          canvas.width  = w;
-          canvas.height = h;
-          init(w, h);
-        }
-      }
-    });
-    const parent = canvas.parentElement;
-    if (parent) ro.observe(parent);
-    const iw = canvas.offsetWidth  || parent?.offsetWidth  || 800;
-    const ih = canvas.offsetHeight || parent?.offsetHeight || 600;
-    canvas.width  = iw;
-    canvas.height = ih;
-    init(iw, ih);
-
-    // ── Animation loop ────────────────────────────────────────────────────
-    let tick     = 0;
-    let prevTime = performance.now();
+    // ── Animation loop ─────────────────────────────────────────────────────
+    let animId;
 
     const draw = (now) => {
-      raf = requestAnimationFrame(draw); // schedule next frame first so errors can't kill loop
+      animId = requestAnimationFrame(draw);
+
+      // Skip drawing until we have real dimensions
+      if (!initialized || W <= 0 || H <= 0) return;
+
       try {
-      const dt = Math.min(now - prevTime, 100);
-      prevTime = now;
-      tick++;
+        const dt = Math.min(now - prevTime, 100);
+        prevTime = now;
+        tick++;
 
-      ctx.clearRect(0, 0, W, H);
+        ctx.clearRect(0, 0, W, H);
 
-      // Background stars
-      for (const s of stars) {
-        s.x = ((s.x + s.dx) % W + W) % W;
-        s.y = ((s.y + s.dy) % H + H) % H;
-        const alpha = Math.max(0.04, s.op + Math.sin(tick * s.twSpeed + s.phase) * 0.13);
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
-        ctx.fill();
-      }
-
-      // Orange glow blobs
-      for (const g of glows) {
-        g.x = ((g.x + g.dx) % W + W) % W;
-        g.y = ((g.y + g.dy) % H + H) % H;
-        const alpha  = Math.max(0.008, g.op + Math.sin(tick * g.pulseSpeed + g.phase) * 0.025);
-        const spread = g.r * 5;
-        const grad   = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, spread);
-        grad.addColorStop(0,   `rgba(${g.color},${alpha.toFixed(3)})`);
-        grad.addColorStop(0.4, `rgba(${g.color},${(alpha * 0.3).toFixed(3)})`);
-        grad.addColorStop(1,   `rgba(${g.color},0)`);
-        ctx.beginPath();
-        ctx.arc(g.x, g.y, spread, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
-        ctx.fill();
-      }
-
-      // Event scheduling
-      if (!meteorShower.active && !planetKiller.active && !pendingPlanetKiller) {
-        nextShowerIn -= dt;
-        if (nextShowerIn <= 0) meteorShower.trigger();
-      }
-
-      const showerDone = meteorShower.update(dt, ctx);
-      if (showerDone && !pendingPlanetKiller) {
-        pendingPlanetKiller = true;
-        planetKillerDelay   = 1000;
-      }
-
-      if (pendingPlanetKiller) {
-        planetKillerDelay -= dt;
-        if (planetKillerDelay <= 0) {
-          pendingPlanetKiller = false;
-          planetKiller.trigger();
-          nextShowerIn = rand(60000, 120000);
+        // Background stars
+        for (const s of stars) {
+          s.x = ((s.x + s.dx) % W + W) % W;
+          s.y = ((s.y + s.dy) % H + H) % H;
+          const alpha = Math.max(0.04, s.op + Math.sin(tick * s.twSpeed + s.phase) * 0.13);
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
+          ctx.fill();
         }
-      }
 
-      planetKiller.update(dt, ctx);
+        // Orange glow blobs
+        for (const g of glows) {
+          g.x = ((g.x + g.dx) % W + W) % W;
+          g.y = ((g.y + g.dy) % H + H) % H;
+          const alpha  = Math.max(0.008, g.op + Math.sin(tick * g.pulseSpeed + g.phase) * 0.025);
+          const spread = g.r * 5;
+          const grad   = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, spread);
+          grad.addColorStop(0,   `rgba(${g.color},${alpha.toFixed(3)})`);
+          grad.addColorStop(0.4, `rgba(${g.color},${(alpha * 0.3).toFixed(3)})`);
+          grad.addColorStop(1,   `rgba(${g.color},0)`);
+          ctx.beginPath();
+          ctx.arc(g.x, g.y, spread, 0, Math.PI * 2);
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
+
+        // Event scheduling
+        if (!meteorShower.active && !planetKiller.active && !pendingPlanetKiller) {
+          nextShowerIn -= dt;
+          if (nextShowerIn <= 0) meteorShower.trigger();
+        }
+
+        const showerDone = meteorShower.update(dt, ctx);
+        if (showerDone && !pendingPlanetKiller) {
+          pendingPlanetKiller = true;
+          planetKillerDelay   = 1000;
+        }
+
+        if (pendingPlanetKiller) {
+          planetKillerDelay -= dt;
+          if (planetKillerDelay <= 0) {
+            pendingPlanetKiller = false;
+            planetKiller.trigger();
+            nextShowerIn = rand(60000, 120000);
+          }
+        }
+
+        planetKiller.update(dt, ctx);
 
       } catch (err) { console.error('[Starfield] draw error:', err); }
     };
 
-    raf = requestAnimationFrame(draw);
+    // ── ResizeObserver — always reinit with real dimensions ────────────────
+    const parent = canvas.parentElement;
+    const ro = new ResizeObserver(entries => {
+      for (const e of entries) {
+        const w = Math.round(e.contentRect.width);
+        const h = Math.round(e.contentRect.height);
+        if (w > 0 && h > 0) initStars(w, h);
+      }
+    });
+    if (parent) ro.observe(parent);
+
+    // ── Try immediate init ─────────────────────────────────────────────────
+    const pw = parent?.offsetWidth  || 0;
+    const ph = parent?.offsetHeight || 0;
+    if (pw > 0 && ph > 0) initStars(pw, ph);
+
+    // ── Start loop (runs even while uninitialized — just skips drawing) ────
+    animId = requestAnimationFrame(draw);
+
+    // ── One-frame safety delay: catches cases where layout finalizes ───────
+    // after useEffect but before the ResizeObserver fires
+    const safetyId = requestAnimationFrame(() => {
+      if (!initialized && parent) {
+        const w2 = parent.offsetWidth;
+        const h2 = parent.offsetHeight;
+        if (w2 > 0 && h2 > 0) initStars(w2, h2);
+      }
+    });
+
     return () => {
-      cancelAnimationFrame(raf);
+      cancelAnimationFrame(animId);
+      cancelAnimationFrame(safetyId);
       ro.disconnect();
     };
   }, []);
