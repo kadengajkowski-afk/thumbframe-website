@@ -11,7 +11,7 @@ export default function useStreak(user) {
       .from('user_streaks')
       .select('*')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
         if (data) {
           setStreak({ current: data.current_streak, longest: data.longest_streak, freezeAvailable: data.streak_freeze_available });
@@ -28,7 +28,7 @@ export default function useStreak(user) {
       .from('user_streaks')
       .select('*')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     const last = existing?.last_active_date;
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);

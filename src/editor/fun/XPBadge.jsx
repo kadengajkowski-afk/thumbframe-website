@@ -11,11 +11,11 @@ export default function XPBadge({ user }) {
       .from('user_xp')
       .select('total_xp, level')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
       .then(({ data }) => { if (data) setXpData(data); });
 
     const handler = () => {
-      supabase.from('user_xp').select('total_xp, level').eq('user_id', user.id).single()
+      supabase.from('user_xp').select('total_xp, level').eq('user_id', user.id).maybeSingle()
         .then(({ data }) => { if (data) setXpData(data); });
     };
     window.addEventListener('tf:xp-updated', handler);
