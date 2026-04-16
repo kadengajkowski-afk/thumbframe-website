@@ -747,16 +747,12 @@ export default function App() {
 
   if (page === 'editor') {
     if (isMobile) return <MobileEditor user={user} />;
-    // Feature flag: ?engine=fabric switches to the fabric.js V2 canvas
+    // ?engine=fabric escapes to the legacy Fabric.js canvas (dev fallback only)
     const engineParam = new URLSearchParams(window.location.search).get('engine');
     if (engineParam === 'fabric') {
       return <FabricCanvas user={user} darkMode={true} />;
     }
-    // Feature flag: ?engine=pixi OR user.is_dev === true → PixiJS v8 engine
-    if (engineParam === 'pixi' || user?.is_dev === true) {
-      return <NewEditor user={user} setPage={setPage} />;
-    }
-    return <Editor onExit={() => setPage('home')} user={user} token={authToken} />;
+    return <NewEditor user={user} setPage={setPage} />;
   }
 
   // Marketing pages — self-contained with own Navbar/Footer (code-split with Suspense)
