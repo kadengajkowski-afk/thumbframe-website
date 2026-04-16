@@ -8,6 +8,7 @@ import useEditorStore from '../engine/Store';
 import { checkProactiveAlerts } from './proactiveAlerts';
 import { captureCanvasForAnalysis } from './canvasAnalyzer';
 import { calculateCTRScore } from './ctrScore';
+import supabase from '../../supabaseClient';
 
 const RAILWAY_URL = (
   process.env.REACT_APP_API_URL ||
@@ -157,7 +158,24 @@ export default function useThumbFriend({ user, supabaseSession }) {
     const canvasData   = buildCanvasData(layers);
     // Take history snapshot *before* appending the new user message
     const history      = serializeHistory(messages);
-    const token        = supabaseSession?.access_token;
+
+    // Fetch token fresh at call time — supabaseSession prop is unreliable
+    // (NewEditor passes null). Try localStorage first (fastest), then live session.
+    let token = null;
+    try {
+      const lsKey = Object.keys(localStorage).find(k => k.includes('auth-token'));
+      if (lsKey) {
+        const stored = JSON.parse(localStorage.getItem(lsKey));
+        token = stored?.access_token || stored?.data?.session?.access_token || null;
+      }
+    } catch { /* ignore */ }
+    if (!token) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        token = data?.session?.access_token || null;
+      } catch { /* ignore */ }
+    }
+    console.log('[ThumbFriend] token:', token ? 'present' : 'MISSING');
 
     // CTR score — run analysis + scoring, attach to payload so ThumbFriend
     // can reference the actual score in its response.
@@ -210,7 +228,8 @@ export default function useThumbFriend({ user, supabaseSession }) {
     setMessages(prev => [...prev, assistantMsg]);
     setExpression(response.expression || 'neutral');
     setIsLoading(false);
-  }, [isLoading, isPro, layers, messages, personality, supabaseSession, youtubeChannelData, nicheBenchmark]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, isPro, layers, messages, personality, youtubeChannelData, nicheBenchmark]);
 
   // ── Apply action (msgIdx, actionIdx inside that message) ─────────────────
   const applyAction = useCallback((msgIdx, actionIdx) => {
