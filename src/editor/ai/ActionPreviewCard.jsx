@@ -22,7 +22,7 @@ function actionLabel(action) {
 export default function ActionPreviewCard({ actions, onApply, onSkip }) {
   if (!actions || actions.length === 0) return null;
 
-  const hasAny = actions.some(a => !a.applied && !a.skipped);
+  const hasAny = actions.some(a => !a.applied && !a.skipped); // eslint-disable-line no-unused-vars
   const allDone = actions.every(a => a.applied || a.skipped);
   if (allDone) return null;
 

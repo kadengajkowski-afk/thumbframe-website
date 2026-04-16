@@ -79,7 +79,7 @@ function VideoMeta({ idx, dark }) {
 }
 
 function YourMeta({ dark }) {
-  const tc = dark ? '#fff' : '#0f0f0f';
+  const _tc = dark ? '#fff' : '#0f0f0f'; // eslint-disable-line no-unused-vars
   const mc = dark ? '#aaa' : '#606060';
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>

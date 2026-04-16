@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useRef } from 'react';
-import useEditorStore from '../engine/Store';
 import supabase from '../../supabaseClient';
 import { processImageFile } from '../utils/imageUpload';
 
@@ -45,7 +44,7 @@ const OUTLINE_COLORS = [
 // ── Main component ────────────────────────────────────────────────────────────
 export default function BackgroundRemover({ user, onClose }) {
   const [step, setStep]                   = useState('upload');
-  const [originalFile, setOriginalFile]   = useState(null);
+  const [, setOriginalFile]   = useState(null);
   const [originalUrl, setOriginalUrl]     = useState(null);
   const [processedUrl, setProcessedUrl]   = useState(null);
   const [fallbackMode, setFallbackMode]   = useState(false);

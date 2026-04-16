@@ -9,7 +9,7 @@
 //         └─ layerContainer (Container) — one child per layer, z-ordered
 //     └─ overlayContainer (Container) — selection handles, guides (screen-space)
 
-import { Application, Container, Graphics, Sprite, Texture, ImageSource, Text } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Texture, ImageSource } from 'pixi.js';
 import { renderTextToCanvas } from '../utils/textRenderer';
 import { AdjustmentFilter } from '../filters/AdjustmentFilter';
 import { getEffectiveAdjustments } from '../presets/colorGrades';

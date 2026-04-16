@@ -93,7 +93,6 @@ export async function fillSelection(layer, color, updateLayer) {
   if (!pixels) return;
   const { canvas, ctx, width, height } = pixels;
   const { mask } = selectionManager;
-  const { data } = ctx.getImageData(0, 0, width, height);
 
   // Parse color via a 1×1 canvas
   const tmp = document.createElement('canvas');

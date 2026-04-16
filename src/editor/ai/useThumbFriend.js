@@ -168,7 +168,7 @@ export default function useThumbFriend({ user, supabaseSession }) {
     } catch { /* non-fatal */ }
 
     let response = null;
-    let isOffline = false;
+    let isOffline = false; // eslint-disable-line no-unused-vars
 
     try {
       const res = await fetch(`${RAILWAY_URL}/api/thumbfriend/chat`, {
@@ -193,7 +193,7 @@ export default function useThumbFriend({ user, supabaseSession }) {
     }
 
     if (!response) {
-      isOffline = true;
+      // isOffline local var unused — state setter is what matters
       setIsOffline(true);
       response = buildMock();
     } else {

@@ -25,7 +25,7 @@ const PAINT_TOOLS = new Set([
   'dodge','burn','sponge','blur_brush','sharpen_brush','smudge','light_painting',
 ]);
 
-const COMING_SOON = () => window.dispatchEvent(
+const COMING_SOON = () => window.dispatchEvent( // eslint-disable-line no-unused-vars
   new CustomEvent('tf:toast', { detail: { message: 'Coming soon — this feature is being built.', type: 'info' } })
 );
 

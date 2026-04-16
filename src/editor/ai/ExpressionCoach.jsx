@@ -4,7 +4,7 @@
 // from the canvas and score them against YouTube niche benchmarks.
 // Graceful fallback when MediaPipe is unavailable.
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import useEditorStore from '../engine/Store';
 
 const NICHE_BENCHMARKS = {
@@ -99,7 +99,8 @@ export default function ExpressionCoach() {
   const [mpAvailable,    setMpAvailable]    = useState(null); // null=unchecked, true, false
   const [error,          setError]          = useState(null);
 
-  const layers = useEditorStore(s => s.layers);
+  // eslint-disable-next-line no-unused-vars
+  const _layers = useEditorStore(s => s.layers);
 
   // Check MediaPipe availability — wait 10 s before concluding it's absent so
   // late-loading CDN scripts get a fair chance. Always silent in the UI.

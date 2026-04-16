@@ -88,7 +88,7 @@ async function applyDilationOutline(imageDataUrl, outlineColor = '#ffffff', radi
 
 export default function FaceCutoutFlow({ onClose }) {
   const [step,       setStep]       = useState('upload'); // upload | processing | preview | placing
-  const [sourceUrl,  setSourceUrl]  = useState(null);
+  const [, setSourceUrl]  = useState(null);
   const [resultUrl,  setResultUrl]  = useState(null);
   const [error,      setError]      = useState(null);
 

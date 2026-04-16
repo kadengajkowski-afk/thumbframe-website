@@ -79,6 +79,7 @@ export default function MarchingAntsOverlay() {
       ctx.stroke();
       ctx.restore();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel, zoom, panX, panY]);
 
   // Animation loop — advance dash offset

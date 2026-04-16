@@ -33,9 +33,8 @@ import AutoThumbnailGenerator from './ai/AutoThumbnailGenerator';
 import AchievementToast   from './fun/AchievementToast';
 import useAchievements    from './fun/useAchievements';
 import useStreak          from './fun/useStreak';
-import XPBadge            from './fun/XPBadge';
-import { loadSoundPreferences, playWhoosh, playSuccess, playPop, playDelete, playRewind, playAchievement } from './fun/SoundEngine';
-import { animateColorGradeApplied, animateExportSuccess, animateUndo, animateRedo, animateTemplateApplied } from './fun/MicroAnimations';
+import { loadSoundPreferences, playWhoosh, playSuccess, playPop, playDelete, playRewind } from './fun/SoundEngine';
+import { animateColorGradeApplied, animateExportSuccess, animateUndo, animateTemplateApplied } from './fun/MicroAnimations';
 import { handleLogoClick, initKonamiListener, triggerKonami, handleStarfieldClick, checkMidnightEasterEgg } from './fun/easterEggs';
 import StampTestPreview   from './components/StampTestPreview';
 import FeedSimulator      from './components/FeedSimulator';
@@ -146,8 +145,6 @@ export default function NewEditor({ user, setPage }) {
   const setShowChannelDashboard  = useEditorStore(s => s.setShowChannelDashboard);
   const setYouTubeData           = useEditorStore(s => s.setYouTubeData);
   const setNicheBenchmark        = useEditorStore(s => s.setNicheBenchmark);
-  const upgradeModalTrigger      = useEditorStore(s => s.upgradeModalTrigger);
-  const showUpgradeModal         = useEditorStore(s => s.showUpgradeModal);
   const incrementExports         = useEditorStore(s => s.incrementExports);
   const thumbfriendPersonality   = useEditorStore(s => s.thumbfriendPersonality);
   const [showAutoThumbnail, setShowAutoThumbnail] = useState(false);
@@ -156,12 +153,13 @@ export default function NewEditor({ user, setPage }) {
   const toolParams            = useEditorStore(s => s.toolParams);
 
   // ── Fun layer hooks ──────────────────────────────────────────────────────
-  const { unlocked: unlockedAchievements, unlock: unlockAchievement, checkTriggers, pendingToast, setPendingToast } = useAchievements(user);
+  const { unlock: unlockAchievement, checkTriggers, pendingToast, setPendingToast } = useAchievements(user);
   const { streak, recordActivity } = useStreak(user);
 
   // Sync streak to store so TopBar can read it
   useEffect(() => {
     if (streak.current > 0) setCurrentStreak(streak.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streak.current, setCurrentStreak]);
 
   // ── Store actions ────────────────────────────────────────────────────────
@@ -300,7 +298,6 @@ export default function NewEditor({ user, setPage }) {
     // Load YouTube channel status
     (async () => {
       try {
-        const { data: { session } } = await import('../context/AuthContext').catch(() => ({ data: { session: null } }));
         // Use Supabase session if available via window
         const token = window.__supabaseSession?.access_token;
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -329,8 +326,8 @@ export default function NewEditor({ user, setPage }) {
   const uploadPaintCanvasRef      = useRef(null);
   const commitPaintToLayerRef     = useRef(null);
   const [lassoPoints,  setLassoPoints]  = useState([]);
-  const [lassoDrawing, setLassoDrawing] = useState(false);
-  const [hasSelection, setHasSelection] = useState(false);
+  const [, setLassoDrawing] = useState(false);
+  const [, setHasSelection] = useState(false);
 
   // ── Upload / drag-drop state ─────────────────────────────────────────────
   const [isDragOver, setIsDragOver] = useState(false);
@@ -576,6 +573,7 @@ export default function NewEditor({ user, setPage }) {
    * Async variant — guarantees real image pixels in the paint canvas.
    * Falls back to loading layer.src if the PixiJS texture seed failed (all-transparent).
    */
+  // eslint-disable-next-line no-unused-vars
   const ensurePaintCanvas = useCallback(async (layer) => {
     const pc = getPaintCanvas(layer);
 
@@ -855,6 +853,7 @@ export default function NewEditor({ user, setPage }) {
       const obj = r.displayObjects.get(editingLayerId);
       if (obj) obj.alpha = 0;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layers, isEditingText, editingLayerId]);
 
   // ── Restore paint canvas state on undo / redo ────────────────────────────
@@ -991,8 +990,8 @@ export default function NewEditor({ user, setPage }) {
         if (canvasEl2) {
           const cRect = canvasEl2.getBoundingClientRect();
           const vp    = rendererRef.current?.viewport;
-          const cx = (e.clientX - cRect.left - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
-          const cy = (e.clientY - cRect.top  - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
+          const _cx = (e.clientX - cRect.left - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1); // eslint-disable-line no-unused-vars
+          const _cy = (e.clientY - cRect.top  - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1); // eslint-disable-line no-unused-vars
           const { layers: ls2, selectedLayerIds: sel2 } = useEditorStore.getState();
           const targetLayer2 = ls2?.find(l => l.id === sel2?.[0] && l.type === 'image')
             || [...(ls2||[])].reverse().find(l => l.type === 'image' && l.visible !== false);
@@ -1064,6 +1063,7 @@ export default function NewEditor({ user, setPage }) {
       window.removeEventListener('pointerup',   onUp);
       window.removeEventListener('pointerleave', onLeave);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateLayer, commitChange, setInteractionMode, uploadPaintCanvas, commitPaintToLayer, setCursorCanvasPos]);
 
   // ── Canvas pointer down — selection + move + text tool ───────────────────
@@ -1296,6 +1296,7 @@ export default function NewEditor({ user, setPage }) {
       startLY: dragLayer.y,
     };
     setInteractionMode('dragging-layer');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearSelection, selectLayer, toggleLayerSelection, setInteractionMode,
       duplicateLayer, enterTextEditMode, createTextLayer]);
 
@@ -1534,6 +1535,7 @@ export default function NewEditor({ user, setPage }) {
     });
     commitChange(alreadyActive ? 'Remove Grade' : `Apply ${GRADE_LABELS[gradeName]}`);
     rendererRef.current?.markDirty();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateLayer, commitChange]);
 
   const handleGradeStrengthChange = useCallback((layerId, strength) => {

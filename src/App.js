@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { trackPageView } from './utils/analytics';
-import Editor from './Editor';
 import FabricCanvas from './FabricCanvas';
 import NewEditor from './editor/NewEditor';
 import MobileEditor from './mobile/MobileEditor';

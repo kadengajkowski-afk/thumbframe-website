@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import useEditorStore from '../engine/Store';
-import { calculateCTRScore, DEFAULT_BENCHMARK } from './ctrScore';
+import { calculateCTRScore } from './ctrScore';
 import { captureCanvasForAnalysis } from './canvasAnalyzer';
 
 // ── Constants ────────────────────────────────────────────────────────────────

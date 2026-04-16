@@ -3,7 +3,7 @@
 // Currently supports: glow (outer glow via blur composite).
 // Drop shadow and stroke are complex multi-pass effects — Phase 6.
 
-import { BlurFilter, ColorMatrixFilter } from 'pixi.js';
+import { BlurFilter } from 'pixi.js';
 
 /**
  * Given a layer's effects array, return an array of PixiJS filters to apply.

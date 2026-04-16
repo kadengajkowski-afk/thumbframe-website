@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import useEditorStore from '../engine/Store';
 import supabase from '../../supabaseClient';
 import { processImageFile } from '../utils/imageUpload';
 

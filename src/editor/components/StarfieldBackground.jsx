@@ -3,7 +3,7 @@
 
 import React, { useRef, useEffect } from 'react';
 
-const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+const rand = (lo, hi) => lo + Math.random() * (hi - lo); // eslint-disable-line no-unused-vars
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ShootingStar

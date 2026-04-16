@@ -95,13 +95,11 @@ function _analyzeLayersOnly(layers) {
 
 function _analyzePixels(data, w, h) {
   const total = w * h;
-  let rSum = 0, gSum = 0, bSum = 0;
   let lumSum = 0;
   const lumValues = [];
 
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i + 1], b = data[i + 2];
-    rSum += r; gSum += g; bSum += b;
     const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b; // ITU-R BT.709
     lumSum += lum;
     lumValues.push(lum);
