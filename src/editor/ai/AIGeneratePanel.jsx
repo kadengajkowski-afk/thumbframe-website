@@ -218,7 +218,7 @@ export default function AIGeneratePanel({ user, onClose, setPage }) {
 
   const textareaRef     = useRef(null);
   const historyStripRef = useRef(null);
-  const isPro           = user?.is_pro;
+  const isPro           = user?.is_pro === true || user?.plan === 'pro' || user?.plan === 'Pro';
 
   // ── Placeholder cycling ──────────────────────────────────────────────────────
   useEffect(() => {
