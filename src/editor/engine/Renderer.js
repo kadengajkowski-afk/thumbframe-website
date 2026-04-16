@@ -645,8 +645,12 @@ export default class Renderer {
     originalSprite.renderable = true;
     originalSprite.alpha      = 1;
 
-    // Destroy old texture after sprite no longer references it
-    if (oldTexture && oldTexture !== newTexture) {
+    // Destroy old texture after sprite no longer references it,
+    // but NEVER destroy the original cached texture — undo needs it.
+    // On the first paint operation oldTexture === textureCache entry;
+    // destroying it makes textureCache return an invalid GPU resource on undo.
+    const cachedOriginal = this.textureCache.get(layerId);
+    if (oldTexture && oldTexture !== newTexture && oldTexture !== cachedOriginal) {
       oldTexture.destroy(true);
     }
 

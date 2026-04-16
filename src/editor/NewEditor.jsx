@@ -788,17 +788,16 @@ export default function NewEditor({ user, setPage }) {
       const state = useEditorStore.getState();
       renderer.sync(state.layers);
 
-      // Fit canvas to container. Use rAF so the browser has finished painting
-      // the flex layout — getBoundingClientRect() returns correct dims after paint.
-      requestAnimationFrame(() => {
-        if (cancelled) return;
-        renderer.resize(); // ensure PixiJS canvas matches actual container size
-        const rect = el.getBoundingClientRect();
-        const fitZoom = Math.min(rect.width / CW, rect.height / CH) * 0.9;
-        renderer.applyViewport(fitZoom, 0, 0);
-        useEditorStore.setState({ zoom: fitZoom, panX: 0, panY: 0 });
-        renderer.markDirty();
-      });
+      // Fit canvas to container. .then() runs after await app.init() which is
+      // async — by the time we reach here the browser has painted the flex layout,
+      // so getBoundingClientRect() returns correct dimensions. Call resize() first
+      // to ensure the PixiJS canvas matches the actual container before measuring.
+      renderer.resize();
+      const rect = el.getBoundingClientRect();
+      const fitZoom = Math.min(rect.width / CW, rect.height / CH) * 0.9;
+      renderer.applyViewport(fitZoom, 0, 0);
+      useEditorStore.setState({ zoom: fitZoom, panX: 0, panY: 0 });
+      renderer.markDirty();
     });
 
     return () => {
@@ -898,6 +897,15 @@ export default function NewEditor({ user, setPage }) {
           window.__uploadPaintTexture?.(layerId, savedCanvas);
         }
       });
+    }
+
+    // Force a re-sync after clearing paintDataLayers. The layers effect may have
+    // fired first (declared earlier) and skipped paint layers. After this effect
+    // clears the guard, we need sync to run again so sprites get the correct texture.
+    const r = rendererRef.current;
+    if (r?._mounted) {
+      r.sync(useEditorStore.getState().layers);
+      r.markDirty();
     }
   }, [historyIndex]);
 
