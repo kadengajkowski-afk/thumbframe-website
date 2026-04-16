@@ -756,6 +756,14 @@ export default function NewEditor({ user, setPage }) {
     return () => window.removeEventListener('keydown', handler);
   }, []); // empty deps — reads from store directly
 
+  // ── Lock body scroll while editor is mounted ────────────────────────────
+  // Prevents scrollbars from affecting viewport measurements and layout.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   // ── Init renderer on mount ───────────────────────────────────────────────
   useEffect(() => {
     const el = containerRef.current;
@@ -780,10 +788,17 @@ export default function NewEditor({ user, setPage }) {
       const state = useEditorStore.getState();
       renderer.sync(state.layers);
 
-      const rect = el.getBoundingClientRect();
-      const fitZoom = Math.min(rect.width / CW, rect.height / CH) * 0.9;
-      renderer.applyViewport(fitZoom, 0, 0);
-      useEditorStore.setState({ zoom: fitZoom, panX: 0, panY: 0 });
+      // Fit canvas to container. Use rAF so the browser has finished painting
+      // the flex layout — getBoundingClientRect() returns correct dims after paint.
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        renderer.resize(); // ensure PixiJS canvas matches actual container size
+        const rect = el.getBoundingClientRect();
+        const fitZoom = Math.min(rect.width / CW, rect.height / CH) * 0.9;
+        renderer.applyViewport(fitZoom, 0, 0);
+        useEditorStore.setState({ zoom: fitZoom, panX: 0, panY: 0 });
+        renderer.markDirty();
+      });
     });
 
     return () => {
@@ -1573,9 +1588,11 @@ export default function NewEditor({ user, setPage }) {
   return (
     <div style={{
       position: 'fixed', inset: 0,
+      width: '100vw', height: '100vh',
       display: 'flex', flexDirection: 'column',
       background: 'var(--bg-0)', color: 'var(--text-1)',
       fontFamily: 'Inter, -apple-system, sans-serif',
+      overflow: 'hidden',
     }}>
       {/* ── Atmosphere — corner radial glows ───────────────────────────────── */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
