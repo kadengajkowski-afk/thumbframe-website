@@ -47,9 +47,31 @@ function buildUser(session) {
     name:             session.user.user_metadata?.name || session.user.email?.split('@')[0],
     plan:             session.user.user_metadata?.is_pro ? 'pro' : 'free',
     is_pro:           session.user.user_metadata?.is_pro === true,
+    is_dev:           session.user.user_metadata?.is_dev === true, // may be absent; enriched below
     stripeCustomerId: session.user.user_metadata?.stripeCustomerId || null,
     createdAt:        session.user.created_at,
   };
+}
+
+// ── Fetch is_dev + is_pro from the profiles table ─────────────────────────────
+// profiles.id is a bigint, NOT the auth UUID — query by email instead.
+async function fetchProfile(email) {
+  if (!email) return {};
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('is_dev, is_pro, plan')
+      .eq('email', email)
+      .single();
+    if (error) {
+      console.warn('[Auth] fetchProfile error:', error.message);
+      return {};
+    }
+    return data || {};
+  } catch (err) {
+    console.warn('[Auth] fetchProfile threw:', err);
+    return {};
+  }
 }
 
 // ── Fresh token helper — always calls getSession() so Supabase auto-refreshes ─
@@ -62,10 +84,18 @@ export async function getFreshToken() {
 // ── Provider ──────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }) {
   // Instantly paint from cache so returning users never see a blank flash.
+  // If the cached user is missing is_dev, drop it so bootstrap re-fetches the profile.
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem('thumbframe_user');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      // Evict stale cache entries that pre-date is_dev being tracked
+      if (parsed && !Object.prototype.hasOwnProperty.call(parsed, 'is_dev')) {
+        localStorage.removeItem('thumbframe_user');
+        return null;
+      }
+      return parsed;
     } catch {
       return null;
     }
@@ -90,8 +120,19 @@ export function AuthProvider({ children }) {
           localStorage.setItem('thumbframe_token', token);
           setToken(token);
 
-          // Try to enrich user data from backend /api/me (non-fatal if absent).
+          // Start with session data, then enrich from profiles table + /api/me
           let enriched = buildUser(session);
+
+          // ── Fetch is_dev + is_pro directly from profiles table (keyed by email) ──
+          const profile = await fetchProfile(session.user.email);
+          enriched = {
+            ...enriched,
+            is_dev: profile.is_dev === true,
+            is_pro: profile.is_pro === true || enriched.is_pro,
+            plan:   profile.plan || enriched.plan,
+          };
+
+          // Try to enrich further from backend /api/me (non-fatal if absent).
           try {
             const r = await fetch(`${API_URL}/api/me`, {
               headers: { Authorization: `Bearer ${token}` },
@@ -101,7 +142,7 @@ export function AuthProvider({ children }) {
               enriched = {
                 ...enriched,
                 plan:             u.plan || enriched.plan,
-                is_pro:           u.plan === 'pro',
+                is_pro:           u.plan === 'pro' || enriched.is_pro,
                 stripeStatus:     u.stripeStatus || null,
                 trialEndsAt:      u.trialEndsAt  || null,
                 stripeCustomerId: u.stripeCustomerId || enriched.stripeCustomerId,
@@ -112,6 +153,14 @@ export function AuthProvider({ children }) {
           } catch {
             // Backend unreachable — use Supabase data, no problem.
           }
+
+          console.log('[Auth] user loaded:', {
+            id: enriched.id,
+            email: enriched.email,
+            is_dev: enriched.is_dev,
+            is_pro: enriched.is_pro,
+            plan: enriched.plan,
+          });
 
           if (mounted) {
             setUser(enriched);
@@ -149,9 +198,24 @@ export function AuthProvider({ children }) {
         const freshToken = session.access_token;
         localStorage.setItem('thumbframe_token', freshToken);
         setToken(freshToken);
-        const u = buildUser(session);
-        setUser(u);
-        localStorage.setItem('thumbframe_user', JSON.stringify(u));
+        // Fetch profile so is_dev is always present after sign-in
+        ;(async () => {
+          let u = buildUser(session);
+          const profile = await fetchProfile(session.user.email);
+          u = {
+            ...u,
+            is_dev: profile.is_dev === true,
+            is_pro: profile.is_pro === true || u.is_pro,
+            plan:   profile.plan || u.plan,
+          };
+          console.log('[Auth] onAuthStateChange user:', {
+            email: u.email, is_dev: u.is_dev, is_pro: u.is_pro,
+          });
+          if (mounted) {
+            setUser(u);
+            localStorage.setItem('thumbframe_user', JSON.stringify(u));
+          }
+        })();
       } else if (event === 'SIGNED_OUT') {
         localStorage.removeItem('thumbframe_token');
         localStorage.removeItem('thumbframe_user');

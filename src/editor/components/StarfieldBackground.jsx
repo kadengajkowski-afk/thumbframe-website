@@ -1,382 +1,88 @@
 // src/editor/components/StarfieldBackground.jsx
-// Animated starfield with periodic cinematic space events:
-//   MeteorShower  — depth-layered meteors with additive blending, colour variation, acceleration
-//   PlanetKiller  — rocky asteroid with procedural texture, sparks, amber warmth flash
-// Timing: first shower 20-40 s → 1 s gap → asteroid (6-10 s) → 60-120 s gap → repeat
+// Animated starfield — 160 background stars with twinkle + occasional shooting stars.
 
 import React, { useRef, useEffect } from 'react';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-const rand    = (lo, hi) => lo + Math.random() * (hi - lo);
-const randInt = (lo, hi) => Math.floor(rand(lo, hi + 1));
-const clamp   = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-
-// Weighted colour picker
-const METEOR_COLOR_TYPES = [
-  { r: 255, g: 255, b: 255, weight: 5 },   // white (most common)
-  { r: 200, g: 220, b: 255, weight: 4 },   // blue-white
-  { r: 255, g: 155, b:  70, weight: 1 },   // orange rare
-  { r: 175, g: 255, b: 185, weight: 1 },   // green rare
-];
-const COLOR_WEIGHT_TOTAL = METEOR_COLOR_TYPES.reduce((s, c) => s + c.weight, 0);
-function pickColor() {
-  let r = Math.random() * COLOR_WEIGHT_TOTAL;
-  for (const c of METEOR_COLOR_TYPES) { r -= c.weight; if (r <= 0) return c; }
-  return METEOR_COLOR_TYPES[0];
-}
-
-// Depth-layer config: bg (slow/dim) → fg (fast/bright)
-const LAYER_CFG = [
-  { speedLo: 500, speedHi:  800, brightnessLo: 0.35, brightnessHi: 0.60, headSize: 1.5, tailLen: 60,  accel: 1.10, countLo: 6,  countHi: 9  },
-  { speedLo: 900, speedHi: 1200, brightnessLo: 0.60, brightnessHi: 0.85, headSize: 2.2, tailLen: 110, accel: 1.25, countLo: 5,  countHi: 8  },
-  { speedLo:1300, speedHi: 1800, brightnessLo: 0.85, brightnessHi: 1.00, headSize: 3.0, tailLen: 160, accel: 1.40, countLo: 3,  countHi: 5  },
-];
+const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MeteorShower
+// ShootingStar
 // ─────────────────────────────────────────────────────────────────────────────
-class MeteorShower {
-  constructor() {
-    this.meteors = [];
-    this.active  = false;
-    this.W = 800; this.H = 600;
+class ShootingStar {
+  constructor(canvasW, canvasH) {
+    this.reset(canvasW, canvasH);
   }
 
-  resize(w, h) { this.W = w; this.H = h; }
+  reset(canvasW, canvasH) {
+    const spawnZone = Math.random();
 
-  trigger() {
-    this.active  = true;
-    this.meteors = [];
-
-    LAYER_CFG.forEach((cfg, layerIdx) => {
-      const count = randInt(cfg.countLo, cfg.countHi);
-      for (let i = 0; i < count; i++) {
-        const color = pickColor();
-        this.meteors.push({
-          layer:   layerIdx,
-          x:       this.W * 0.45 + rand(0, this.W * 0.65),
-          y:       rand(-150, -10),
-          speed:   rand(cfg.speedLo, cfg.speedHi),
-          accel:   cfg.accel,
-          angle:   210 + rand(-18, 18),           // roughly south-west
-          tailLen: cfg.tailLen * rand(0.75, 1.25),
-          headSize:cfg.headSize,
-          bright:  rand(cfg.brightnessLo, cfg.brightnessHi),
-          color,
-          delay:   i * rand(60, 130) + layerIdx * rand(30, 80),
-          elapsed: 0,
-          done:    false,
-          flicker: rand(0.003, 0.008),
-          flickerPhase: rand(0, Math.PI * 2),
-        });
-      }
-    });
-  }
-
-  _draw(ctx, m, rad) {
-    const t      = (m.elapsed - m.delay) / 1000;
-    // Integrate with acceleration: x = v0*t + 0.5*(accel*v0)*t^2
-    const effSpeed = m.speed + 0.5 * (m.accel - 1) * m.speed * t;
-    const dist   = m.speed * t + 0.5 * (m.accel - 1) * m.speed * t * t;
-    const x      = m.x + Math.cos(rad) * dist;
-    const y      = m.y + Math.sin(rad) * dist;
-
-    // Flicker brightness
-    const flicker = 1 + Math.sin(m.elapsed * m.flicker * 1000 + m.flickerPhase) * 0.08;
-    const bright  = clamp(m.bright * flicker, 0, 1);
-
-    // Build tail as overlapping radial gradient circles for realistic glow
-    const tailLen = m.tailLen * (0.9 + 0.1 * bright);
-    const steps   = Math.max(2, Math.min(28, Math.ceil(tailLen / 5))); // min 2 so frac never NaN
-    const savedOp = ctx.globalCompositeOperation;
-    ctx.globalCompositeOperation = 'lighter';
-
-    for (let s = 0; s < steps; s++) {
-      const frac   = s / (steps - 1);             // 0 = head, 1 = tail end
-      const sx     = x - Math.cos(rad) * tailLen * frac;
-      const sy     = y - Math.sin(rad) * tailLen * frac;
-
-      // Alpha falls off quadratically toward tail
-      const alpha  = bright * (1 - frac * frac) * (s === 0 ? 1.0 : 0.38);
-      // Colour shifts: white at head → meteor colour in tail
-      const rr     = Math.round(255 + (m.color.r - 255) * frac);
-      const gg     = Math.round(255 + (m.color.g - 255) * frac);
-      const bb     = Math.round(255 + (m.color.b - 255) * frac);
-
-      // Radius tapers from headSize → tiny
-      const circR  = m.headSize * (1 - frac * 0.7) * (m.layer + 1) * 0.55 + 1.2;
-
-      const grd    = ctx.createRadialGradient(sx, sy, 0, sx, sy, circR * 4);
-      grd.addColorStop(0,   `rgba(${rr},${gg},${bb},${(alpha * 0.9).toFixed(3)})`);
-      grd.addColorStop(0.4, `rgba(${rr},${gg},${bb},${(alpha * 0.35).toFixed(3)})`);
-      grd.addColorStop(1,   `rgba(${rr},${gg},${bb},0)`);
-
-      ctx.beginPath();
-      ctx.arc(sx, sy, circR * 4, 0, Math.PI * 2);
-      ctx.fillStyle = grd;
-      ctx.fill();
+    if (spawnZone < 0.5) {
+      // Spawn across entire top edge
+      this.x = Math.random() * canvasW;
+      this.y = -10;
+      // Travel downward at varied angles
+      this.angle = (200 + Math.random() * 60) * Math.PI / 180; // 200-260 degrees
+    } else if (spawnZone < 0.8) {
+      // Spawn along entire right edge
+      this.x = canvasW + 10;
+      this.y = Math.random() * canvasH;
+      // Travel left-downward
+      this.angle = (195 + Math.random() * 40) * Math.PI / 180; // 195-235 degrees
+    } else {
+      // Spawn along top-left area too
+      this.x = Math.random() * canvasW * 0.4;
+      this.y = -10;
+      // Travel more steeply downward
+      this.angle = (230 + Math.random() * 40) * Math.PI / 180; // 230-270 degrees
     }
 
-    // Bright white core at head
-    const coreR  = m.headSize * (m.layer * 0.4 + 0.9);
-    const coreG  = ctx.createRadialGradient(x, y, 0, x, y, coreR * 5);
-    coreG.addColorStop(0,   `rgba(255,255,255,${(bright * 0.95).toFixed(3)})`);
-    coreG.addColorStop(0.25,`rgba(255,255,255,${(bright * 0.55).toFixed(3)})`);
-    coreG.addColorStop(1,   'rgba(255,255,255,0)');
-    ctx.beginPath();
-    ctx.arc(x, y, coreR * 5, 0, Math.PI * 2);
-    ctx.fillStyle = coreG;
-    ctx.fill();
-
-    ctx.globalCompositeOperation = savedOp;
-
-    return { x, y, effSpeed };
+    // Vary speed more — slow dreamy ones and fast streaks
+    this.speed = 300 + Math.random() * 600;
+    this.tailLength = 50 + Math.random() * 100;
+    this.isOrange = Math.random() < 0.3;
+    this.isBright = Math.random() < 0.2;
+    this.brightness = this.isBright ? 1.0 : 0.4 + Math.random() * 0.5;
+    this.headSize = this.isBright ? 2.5 : 1.2 + Math.random() * 1.2;
+    this.alive = true;
+    this.canvasW = canvasW;
+    this.canvasH = canvasH;
   }
 
-  // Returns true when all meteors are done (signal: spawn planet killer)
-  update(dt, ctx) {
-    if (!this.active) return false;
-
-    let allDone = true;
-    for (const m of this.meteors) {
-      m.elapsed += dt;
-      if (m.elapsed < m.delay) { allDone = false; continue; }
-      if (m.done) continue;
-
-      const rad  = (m.angle * Math.PI) / 180;
-      const { x, y } = this._draw(ctx, m, rad);
-
-      if (x < -300 || y > this.H + 300) { m.done = true; continue; }
-      allDone = false;
+  update(dt) {
+    const dist = this.speed * dt / 1000;
+    this.x += Math.cos(this.angle) * dist;
+    this.y += Math.sin(this.angle) * dist;
+    if (this.x < -200 || this.y > this.canvasH + 200) {
+      this.alive = false;
     }
-
-    if (allDone) { this.active = false; return true; }
-    return false;
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PlanetKiller
-// ─────────────────────────────────────────────────────────────────────────────
-class PlanetKiller {
-  constructor() {
-    this.active  = false;
-    this.elapsed = 0;
-    this.W = 800; this.H = 600;
   }
 
-  resize(w, h) { this.W = w; this.H = h; }
-
-  trigger() {
-    this.active      = true;
-    this.elapsed     = 0;
-    this.duration    = rand(6000, 10000);
-    this.size        = rand(55, 95);
-    this.startX      = this.W + this.size + 20;
-    this.startY      = rand(-this.size * 0.5, this.size);
-    this.endX        = -this.size * 2;
-    this.endY        = this.H + this.size;
-    this.rotation    = rand(0, Math.PI * 2);
-    this.rotSpeed    = (Math.random() - 0.5) * 0.6;
-    this.trail       = [];
-    this.flashed     = false;
-    this.flashProgress = 0; // 0 = not started, > 0 animates sin curve
-    this._seed       = Math.random() * 1000;
-
-    // Sparks that break off during passage
-    const sparkCount = randInt(6, 10);
-    this.sparks = Array.from({ length: sparkCount }, (_, i) => ({
-      breakT:  rand(0.15, 0.75),
-      offsetX: rand(-this.size * 0.8, this.size * 0.8),
-      offsetY: rand(-this.size * 0.8, this.size * 0.8),
-      vx:      rand(-120, 120),
-      vy:      rand(-90, 30),
-      life:    rand(1200, 2500),
-      elapsed: 0,
-      size:    rand(2, 8),
-      broken:  false,
-      bx: 0, by: 0,
-      color: Math.random() < 0.6
-        ? { r: 255, g: rand(120, 200), b: 40 }   // amber
-        : { r: 200, g: 220, b: 255 },             // blue-white
-    }));
-  }
-
-  // Build irregular rocky silhouette (13 points, multi-freq sin perturbation)
-  _rockyPath(ctx, size, seed) {
-    const pts = 13;
-    ctx.beginPath();
-    for (let i = 0; i < pts; i++) {
-      const angle = (i / pts) * Math.PI * 2;
-      const r = size * (
-        0.74
-        + Math.sin(i * 2.3 + seed)         * 0.14
-        + Math.sin(i * 5.1 + seed * 0.7)   * 0.08
-        + Math.sin(i * 8.7 + seed * 1.3)   * 0.04
-      );
-      if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
-      else         ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
-    }
-    ctx.closePath();
-  }
-
-  update(dt, ctx) {
-    if (!this.active) return;
-    this.elapsed += dt;
-
-    const t  = Math.min(1, this.elapsed / this.duration);
-    const x  = this.startX + (this.endX - this.startX) * t;
-    const y  = this.startY + (this.endY - this.startY) * t;
-    this.rotation += this.rotSpeed * (dt / 16);
-
-    // ── Additive smoke trail ──────────────────────────────────────────────
-    this.trail.push({ x, y, age: 0, r: this.size * rand(0.25, 0.45) });
-    for (const p of this.trail) p.age += dt;
-    this.trail = this.trail.filter(p => p.age < 1800);
-
-    const savedOp = ctx.globalCompositeOperation;
-    for (const p of this.trail) {
-      const a = (1 - p.age / 1800) * 0.12;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * (0.5 + p.age / 1800), 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(110,85,55,${a.toFixed(3)})`;
-      ctx.fill();
-    }
-
-    // ── Sparks ────────────────────────────────────────────────────────────
-    for (const sp of this.sparks) {
-      if (!sp.broken && t >= sp.breakT) {
-        sp.broken = true;
-        sp.bx = x + sp.offsetX;
-        sp.by = y + sp.offsetY;
-      }
-      if (!sp.broken) continue;
-
-      sp.elapsed += dt;
-      if (sp.elapsed > sp.life) continue;
-
-      const st   = sp.elapsed / sp.life;
-      const sx   = sp.bx + sp.vx * (sp.elapsed / 1000);
-      const sy   = sp.by + sp.vy * (sp.elapsed / 1000) + 40 * (sp.elapsed / 1000) ** 2; // gravity
-      const alpha = (1 - st) * 0.85;
-      const sr    = sp.size * (1 - st * 0.6);
-
-      ctx.globalCompositeOperation = 'lighter';
-      const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr * 3);
-      sg.addColorStop(0,  `rgba(${sp.color.r},${sp.color.g},${sp.color.b},${(alpha * 0.9).toFixed(3)})`);
-      sg.addColorStop(1,  `rgba(${sp.color.r},${sp.color.g},${sp.color.b},0)`);
-      ctx.beginPath();
-      ctx.arc(sx, sy, sr * 3, 0, Math.PI * 2);
-      ctx.fillStyle = sg;
-      ctx.fill();
-      ctx.globalCompositeOperation = savedOp;
-    }
-
-    // ── Asteroid body ─────────────────────────────────────────────────────
+  draw(ctx) {
     ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(this.rotation);
-
-    // Pulsing orange entry-heat glow (additive)
-    const glowPulse = 0.08 + 0.03 * Math.sin(this.elapsed * 0.006);
     ctx.globalCompositeOperation = 'lighter';
-    const outerGlow = ctx.createRadialGradient(0, 0, this.size * 0.5, 0, 0, this.size * 1.8);
-    outerGlow.addColorStop(0,   `rgba(249,115,22,0)`);
-    outerGlow.addColorStop(0.6, `rgba(249,115,22,${glowPulse.toFixed(3)})`);
-    outerGlow.addColorStop(1,   'rgba(249,115,22,0)');
+    const color = this.isOrange ? [249, 115, 22] : [255, 255, 255];
+    const tailColor = this.isOrange ? [249, 115, 22] : [200, 220, 255];
+    const tailEndX = this.x - Math.cos(this.angle) * this.tailLength;
+    const tailEndY = this.y - Math.sin(this.angle) * this.tailLength;
+    const grad = ctx.createLinearGradient(this.x, this.y, tailEndX, tailEndY);
+    grad.addColorStop(0, `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${this.brightness})`);
+    grad.addColorStop(0.4, `rgba(${tailColor[0]}, ${tailColor[1]}, ${tailColor[2]}, ${this.brightness * 0.3})`);
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = this.headSize * 0.8;
     ctx.beginPath();
-    ctx.arc(0, 0, this.size * 1.8, 0, Math.PI * 2);
-    ctx.fillStyle = outerGlow;
-    ctx.fill();
-    ctx.globalCompositeOperation = savedOp;
-
-    // Rocky silhouette — fill base colour
-    this._rockyPath(ctx, this.size, this._seed);
-    const bodyGrad = ctx.createRadialGradient(
-      -this.size * 0.25, -this.size * 0.25, 0,
-       0, 0, this.size,
-    );
-    bodyGrad.addColorStop(0,   '#52505a');
-    bodyGrad.addColorStop(0.5, '#2e2c34');
-    bodyGrad.addColorStop(1,   '#1a1820');
-    ctx.fillStyle = bodyGrad;
-    ctx.fill();
-
-    // Surface texture inside clip region
-    ctx.save();
-    this._rockyPath(ctx, this.size, this._seed);
-    ctx.clip();
-
-    // Lighter rock patches (additive — luminous surface facets)
-    ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 5; i++) {
-      const px = Math.sin(i * 1.9 + this._seed) * this.size * 0.45;
-      const py = Math.cos(i * 2.7 + this._seed) * this.size * 0.45;
-      const pr = this.size * (0.12 + Math.abs(Math.sin(i * 3.1)) * 0.10);
-      const pg = ctx.createRadialGradient(px, py, 0, px, py, pr);
-      pg.addColorStop(0,   'rgba(100,95,115,0.18)');
-      pg.addColorStop(1,   'rgba(100,95,115,0)');
-      ctx.beginPath();
-      ctx.arc(px, py, pr, 0, Math.PI * 2);
-      ctx.fillStyle = pg;
-      ctx.fill();
-    }
-    ctx.globalCompositeOperation = savedOp;
-
-    // Craters
-    for (let i = 0; i < 6; i++) {
-      const cx = Math.sin(i * 1.7 + this._seed * 0.4) * this.size * 0.5;
-      const cy = Math.cos(i * 2.3 + this._seed * 0.6) * this.size * 0.5;
-      const cr = Math.max(1, this.size * (0.07 + Math.abs(Math.sin(i + this._seed)) * 0.05));
-      ctx.beginPath();
-      ctx.arc(cx, cy, cr, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fill();
-      // Crater rim highlight
-      ctx.beginPath();
-      ctx.arc(cx - cr * 0.25, cy - cr * 0.25, cr * 0.55, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(120,115,130,0.12)';
-      ctx.fill();
-    }
-
-    // Rim shadow (top-right darkening)
-    const rimG = ctx.createRadialGradient(
-      this.size * 0.3, -this.size * 0.3, this.size * 0.3,
-      0, 0, this.size * 1.1,
-    );
-    rimG.addColorStop(0,   'rgba(0,0,0,0)');
-    rimG.addColorStop(0.7, 'rgba(0,0,0,0.0)');
-    rimG.addColorStop(1,   'rgba(0,0,0,0.55)');
+    ctx.moveTo(this.x, this.y);
+    ctx.lineTo(tailEndX, tailEndY);
+    ctx.stroke();
+    const headGrad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.headSize * 4);
+    headGrad.addColorStop(0, `rgba(255, 255, 255, ${this.brightness})`);
+    headGrad.addColorStop(0.3, `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${this.brightness * 0.6})`);
+    headGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = headGrad;
     ctx.beginPath();
-    ctx.arc(0, 0, this.size * 1.1, 0, Math.PI * 2);
-    ctx.fillStyle = rimG;
+    ctx.arc(this.x, this.y, this.headSize * 4, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.restore(); // pop clip
-
-    ctx.restore(); // pop translate/rotate
-
-    // ── Amber warmth flash near midpoint ─────────────────────────────────
-    if (t > 0.42 && t < 0.70) {
-      if (!this.flashed) {
-        this.flashed      = true;
-        this.flashProgress = 0.001;
-      }
-    }
-    if (this.flashProgress > 0) {
-      this.flashProgress += dt;
-      const fp     = this.flashProgress / 300;          // 0→1 over 300 ms
-      const falpha = Math.sin(Math.min(fp, 1) * Math.PI) * 0.06; // peaks at 0.06
-      if (falpha > 0.001) {
-        ctx.fillStyle = `rgba(255,160,50,${falpha.toFixed(4)})`;
-        ctx.fillRect(0, 0, this.W, this.H);
-      }
-      if (fp >= 1) this.flashProgress = 0;
-    }
-
-    if (t >= 1) this.active = false;
+    ctx.restore();
   }
 }
 
@@ -393,21 +99,16 @@ export default function StarfieldBackground() {
     const ctx = canvas.getContext('2d');
     const GLOW_COLORS = ['249,115,22', '251,146,60', '234,179,8'];
 
-    // ── Event instances ────────────────────────────────────────────────────
-    const meteorShower = new MeteorShower();
-    const planetKiller = new PlanetKiller();
-
     // ── Mutable state — only valid after initStars() ───────────────────────
-    let initialized     = false;
+    let initialized = false;
     let W = 0, H = 0;
     let stars = [], glows = [];
     let tick     = 0;
     let prevTime = performance.now();
 
-    // Event-sequencing state
-    let nextShowerIn        = rand(20000, 40000);
-    let pendingPlanetKiller = false;
-    let planetKillerDelay   = 0;
+    // Shooting star state
+    let shootingStars = [];
+    let nextStarIn = 2000 + Math.random() * 4000;
 
     // ── initStars — never called with zero dimensions ──────────────────────
     function initStars(w, h) {
@@ -416,9 +117,6 @@ export default function StarfieldBackground() {
       canvas.width  = w;
       canvas.height = h;
       W = w; H = h;
-
-      meteorShower.resize(w, h);
-      planetKiller.resize(w, h);
 
       stars = Array.from({ length: 160 }, () => ({
         x:       Math.random() * w,
@@ -489,28 +187,20 @@ export default function StarfieldBackground() {
           ctx.fill();
         }
 
-        // Event scheduling
-        if (!meteorShower.active && !planetKiller.active && !pendingPlanetKiller) {
-          nextShowerIn -= dt;
-          if (nextShowerIn <= 0) meteorShower.trigger();
-        }
-
-        const showerDone = meteorShower.update(dt, ctx);
-        if (showerDone && !pendingPlanetKiller) {
-          pendingPlanetKiller = true;
-          planetKillerDelay   = 1000;
-        }
-
-        if (pendingPlanetKiller) {
-          planetKillerDelay -= dt;
-          if (planetKillerDelay <= 0) {
-            pendingPlanetKiller = false;
-            planetKiller.trigger();
-            nextShowerIn = rand(60000, 120000);
+        // Shooting stars
+        nextStarIn -= dt;
+        if (nextStarIn <= 0 && shootingStars.length < 4) {
+          shootingStars.push(new ShootingStar(canvas.width, canvas.height));
+          if (Math.random() < 0.25) {
+            shootingStars.push(new ShootingStar(canvas.width, canvas.height));
           }
+          nextStarIn = 2000 + Math.random() * 4000;
         }
-
-        planetKiller.update(dt, ctx);
+        for (const star of shootingStars) {
+          star.update(dt);
+          star.draw(ctx);
+        }
+        shootingStars = shootingStars.filter(s => s.alive);
 
       } catch (err) { console.error('[Starfield] draw error:', err); }
     };

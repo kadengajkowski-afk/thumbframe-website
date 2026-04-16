@@ -50,6 +50,8 @@ const useEditorStore = create(
       sharpen_brush: { size:30, hardness:50, opacity:100, flow:60, spacing:25, strength:50, roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
       smudge:        { size:30, hardness:50, opacity:100, flow:80, spacing:10, strength:70, fingerPaint:false, roundness:100, angle:0, scatter:0, dynamicSize:false, dynamicOpacity:false },
       light_painting:{ size:30, hardness:0,  opacity:100, flow:80, spacing:10, color:'#ffffff', intensity:100, brushType:'glow', sparklePoints:6, dynamicSize:false, dynamicOpacity:false },
+      lasso:          { mode: 'mask',  feather: 0 },
+      magic_wand:     { tolerance: 32, contiguous: true, mode: 'erase' },
     },
 
     // ── Clone source point (set by Alt+click with clone_stamp) ────────────────

@@ -277,6 +277,25 @@ export default function ThumbFriendChat({ user, supabaseSession, setPage }) {
             </button>
           </div>
 
+          {/* ── Offline indicator ─────────────────────────────────────── */}
+          {tf.isOffline && (
+            <div style={{
+              padding: '4px 12px',
+              background: 'rgba(255,255,255,0.03)',
+              borderBottom: '1px solid rgba(255,255,255,0.04)',
+              display: 'flex', alignItems: 'center', gap: 5,
+              flexShrink: 0,
+            }}>
+              <div style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: '#71717a', flexShrink: 0,
+              }} />
+              <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>
+                Offline — Railway not connected
+              </span>
+            </div>
+          )}
+
           {/* ── Personality selector strip (Pro only) ──────────────────── */}
           {tf.isPro && (
             <div style={{

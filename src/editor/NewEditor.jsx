@@ -49,9 +49,11 @@ import { DodgeTool, BurnTool, SpongeTool } from './tools/TonalTools';
 import { BlurBrushTool, SharpenBrushTool, SmudgeTool } from './tools/FilterBrushTools';
 import { LightPaintingTool } from './tools/LightPaintingTool';
 import { SpotHealingTool } from './tools/SpotHealingTool';
-import { LassoTool, buildLassoMask } from './tools/LassoTool';
-import { MagicWandTool } from './tools/MagicWandTool';
-import SelectionOverlayCanvas from './components/SelectionOverlayCanvas';
+import { magicWand, lasso } from './tools/toolInstances';
+import { selectionManager } from './tools/SelectionState';
+import { deleteSelection }   from './tools/selectionActions';
+import MarchingAntsOverlay  from './components/MarchingAntsOverlay';
+import LassoDrawingOverlay  from './components/LassoDrawingOverlay';
 // Design system CSS vars
 import './editor.css';
 // Side-effect imports: register window singletons
@@ -60,6 +62,8 @@ import './engine/TextureMemoryManager';
 
 const CW = 1280;
 const CH = 720;
+
+// magicWand and lasso are imported module-level singletons from toolInstances.js
 
 export default function NewEditor({ user, setPage }) {
   const containerRef  = useRef(null);
@@ -72,6 +76,28 @@ export default function NewEditor({ user, setPage }) {
   // ── Painting tool refs ───────────────────────────────────────────────────
   const pipelineRef      = useRef(new BrushPipeline());
   const paintCanvasesRef = useRef(new Map()); // layerId → HTMLCanvasElement
+  // Expose paint canvases globally so MagicWandTool and LassoTool can read pixels
+  // without needing React prop drilling. Assigned once on mount (ref is stable).
+  useEffect(() => {
+    window.__editorStore         = useEditorStore;
+    window.__paintCanvases       = paintCanvasesRef.current;
+    window.__commitPaintToLayer  = (layerId) => commitPaintToLayerRef.current?.(layerId);
+    window.__uploadPaintTexture  = (layerId, srcCanvas) => {
+      console.log('[__uploadPaintTexture] called for', layerId, srcCanvas?.width, '×', srcCanvas?.height);
+      let pc = paintCanvasesRef.current.get(layerId);
+      if (!pc) {
+        pc = document.createElement('canvas');
+        pc.width  = srcCanvas.width;
+        pc.height = srcCanvas.height;
+        paintCanvasesRef.current.set(layerId, pc);
+      }
+      const pCtx = pc.getContext('2d');
+      pCtx.clearRect(0, 0, pc.width, pc.height);
+      pCtx.drawImage(srcCanvas, 0, 0);
+      console.log('[__uploadPaintTexture] calling uploadPaintCanvas, ref set:', !!uploadPaintCanvasRef.current);
+      uploadPaintCanvasRef.current?.(layerId);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const isStrokingRef    = useRef(false);
   const strokeLayerRef   = useRef(null);      // layerId being painted
 
@@ -92,8 +118,8 @@ export default function NewEditor({ user, setPage }) {
     sharpen_brush: new SharpenBrushTool(),
     smudge:         new SmudgeTool(),
     light_painting: new LightPaintingTool(),
-    lasso:          new LassoTool(),
-    magic_wand:     new MagicWandTool(),
+    lasso:          lasso,
+    magic_wand:     magicWand,
   });
 
   // ── Store subscriptions ──────────────────────────────────────────────────
@@ -127,9 +153,7 @@ export default function NewEditor({ user, setPage }) {
   const [showAutoThumbnail, setShowAutoThumbnail] = useState(false);
 
   const setCurrentStreak      = useEditorStore(s => s.setCurrentStreak);
-  const selectionMask         = useEditorStore(s => s.selectionMask);
-  const setSelectionMask      = useEditorStore(s => s.setSelectionMask);
-  const clearPixelSelection   = useEditorStore(s => s.clearPixelSelection);
+  const toolParams            = useEditorStore(s => s.toolParams);
 
   // ── Fun layer hooks ──────────────────────────────────────────────────────
   const { unlocked: unlockedAchievements, unlock: unlockAchievement, checkTriggers, pendingToast, setPendingToast } = useAchievements(user);
@@ -156,6 +180,25 @@ export default function NewEditor({ user, setPage }) {
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
   useKeyboardShortcuts(containerRef);
+
+  // ── Subscribe to selectionManager to track hasSelection state ───────────
+  useEffect(() => {
+    return selectionManager.subscribe(sm => setHasSelection(sm.hasSelection()));
+  }, []);
+
+  // ── Sync selection tool params → live tool instances ────────────────────
+  useEffect(() => {
+    const params = toolParams?.magic_wand || {};
+    magicWand.setTolerance(params.tolerance ?? 32);
+    magicWand.setContiguous(params.contiguous ?? true);
+    magicWand.setAntiAlias(params.antiAlias ?? false);
+  }, [toolParams?.magic_wand]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const params = toolParams?.lasso || {};
+    lasso.setSubTool(params.subTool || 'freehand');
+    lasso.setFeather(params.feather ?? 0);
+  }, [toolParams?.lasso]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Mobile redirect ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -282,6 +325,13 @@ export default function NewEditor({ user, setPage }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  // ── Selection + lasso drawing state ─────────────────────────────────────
+  const uploadPaintCanvasRef      = useRef(null);
+  const commitPaintToLayerRef     = useRef(null);
+  const [lassoPoints,  setLassoPoints]  = useState([]);
+  const [lassoDrawing, setLassoDrawing] = useState(false);
+  const [hasSelection, setHasSelection] = useState(false);
+
   // ── Upload / drag-drop state ─────────────────────────────────────────────
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -319,6 +369,17 @@ export default function NewEditor({ user, setPage }) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [setShowFeedSimulator]);
+
+  // ── Clear selection when switching away from selection tools ────────────
+  useEffect(() => {
+    if (activeTool !== 'magic_wand' && activeTool !== 'lasso') {
+      selectionManager.clear();
+    }
+    lasso.cancelFreehand();
+    lasso.cancelPolygon();
+    setLassoPoints([]);
+    setLassoDrawing(false);
+  }, [activeTool]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cmd+S — save (tf:save event dispatched by useKeyboardShortcuts)
   useEffect(() => {
@@ -490,9 +551,7 @@ export default function NewEditor({ user, setPage }) {
     'dodge','burn','sponge','blur_brush','sharpen_brush','smudge','light_painting',
   ]);
 
-  /** Get or create paint canvas for a layer.
-   *  Always initialised with the layer's current image pixels so that the
-   *  eraser has real content to erase from and clone stamp can sample correctly. */
+  /** Get or create paint canvas for a layer (sync, may be blank if texture unavailable). */
   const getPaintCanvas = useCallback((layer) => {
     if (paintCanvasesRef.current.has(layer.id)) {
       return paintCanvasesRef.current.get(layer.id);
@@ -501,18 +560,58 @@ export default function NewEditor({ user, setPage }) {
     pc.width  = layer.width  || 640;
     pc.height = layer.height || 360;
 
-    // Draw the layer's current image onto the paint canvas so tools have real pixels
-    const tex = layer.texture || window.__renderer?.textureCache.get(layer.id);
+    // Best-effort seed from PixiJS texture (fast path, may silently fail)
+    const tex = layer.texture || window.__renderer?.textureCache?.get(layer.id);
     if (tex?.source?.resource) {
       try {
-        const ctx = pc.getContext('2d');
-        ctx.drawImage(tex.source.resource, 0, 0, pc.width, pc.height);
-      } catch { /* ignore cross-origin / taint errors */ }
+        pc.getContext('2d').drawImage(tex.source.resource, 0, 0, pc.width, pc.height);
+      } catch { /* cross-origin taint — will fall back in ensurePaintCanvas */ }
     }
 
     paintCanvasesRef.current.set(layer.id, pc);
     return pc;
   }, []);
+
+  /**
+   * Async variant — guarantees real image pixels in the paint canvas.
+   * Falls back to loading layer.src if the PixiJS texture seed failed (all-transparent).
+   */
+  const ensurePaintCanvas = useCallback(async (layer) => {
+    const pc = getPaintCanvas(layer);
+
+    // Check if canvas already has opaque pixels (seeded correctly)
+    const ctx = pc.getContext('2d');
+    const sample = ctx.getImageData(0, 0, Math.min(pc.width, 64), Math.min(pc.height, 64));
+    let hasOpaque = false;
+    for (let i = 3; i < sample.data.length; i += 4) {
+      if (sample.data[i] > 0) { hasOpaque = true; break; }
+    }
+    if (hasOpaque) return pc; // already seeded
+
+    // Canvas is all-transparent — load from layer.src
+    const src = layer.src;
+    if (!src) {
+      console.warn('[ensurePaintCanvas] layer has no src, paint canvas will be blank', layer.id);
+      return pc;
+    }
+
+    console.log('[ensurePaintCanvas] seeding from layer.src for', layer.id, src.slice(0, 60));
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise((res, rej) => {
+        img.onload  = res;
+        img.onerror = rej;
+        img.src     = src;
+      });
+      ctx.clearRect(0, 0, pc.width, pc.height);
+      ctx.drawImage(img, 0, 0, pc.width, pc.height);
+      console.log('[ensurePaintCanvas] seeded', pc.width, '×', pc.height, 'from layer.src');
+    } catch (err) {
+      console.warn('[ensurePaintCanvas] failed to load layer.src:', err);
+    }
+    return pc;
+  }, [getPaintCanvas]);
 
   /** Upload the current paint canvas (merged with the in-progress wet canvas)
    *  to PixiJS as a live preview sprite and trigger an immediate render. */
@@ -550,6 +649,8 @@ export default function NewEditor({ user, setPage }) {
     renderer.updateLayerPaintTexture(layerId, uploadSrc);
     renderer.markDirty();
   }, []); // reads refs + store.getState() — no React deps needed
+  // uploadPaintCanvasRef kept current on every render
+  uploadPaintCanvasRef.current = uploadPaintCanvas;
 
   /** Commit the current paint canvas as the layer's new base texture.
    *  The paint canvas already holds the full image (base + all strokes) so we
@@ -575,134 +676,87 @@ export default function NewEditor({ user, setPage }) {
       window.__renderer.textureCache.set(layerId, texture);
     }
 
-    updateLayer(layerId, { texture, width: paintCanvas.width, height: paintCanvas.height });
+    // Do NOT pass width/height — the paint canvas may be at natural image resolution
+    // (e.g. 3000×2000) while the layer displays at a smaller size (e.g. 400×300).
+    // Only the texture changes; display dimensions and _hasPaintData stay as-is.
+    // paintDataLayers in Renderer is cleared by removePaintSprite() below.
+    updateLayer(layerId, { texture });
 
     // Remove paint sprite overlay — base sprite will show new texture after sync()
     rendererRef.current?.removePaintSprite(layerId);
     // Restore base sprite visibility immediately (sync() will correct opacity next render)
     rendererRef.current?.setLayerSpriteAlpha(layerId, 1);
   }, [updateLayer]);
+  // commitPaintToLayerRef kept current AFTER the useCallback is defined (avoids hoisting bug)
+  commitPaintToLayerRef.current = commitPaintToLayer;
 
-  // ── Lasso / Magic Wand event handling ───────────────────────────────────
-  // NOTE: must live AFTER uploadPaintCanvas / commitPaintToLayer definitions.
+  // ── Selection keyboard handler ────────────────────────────────────────────
+  // Delete/Escape/Ctrl+D/Ctrl+Shift+I/Ctrl+A for selection tools
   useEffect(() => {
-    const onLassoComplete = (e) => {
-      const { points } = e.detail;
-      const state = useEditorStore.getState();
-      let targetId = state.selectedLayerIds?.[0];
-      let layer = state.layers?.find(l => l.id === targetId && l.type === 'image');
+    const handler = async (e) => {
+      if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA') return;
 
-      // Auto-select the topmost visible image layer if none is selected
-      if (!layer) {
-        layer = [...state.layers].reverse().find(l => l.type === 'image' && l.visible !== false);
-        if (layer) useEditorStore.getState().selectLayer(layer.id);
-      }
+      console.log('[keydown]', e.key, 'selection:', selectionManager.hasSelection(), 'target:', e.target.tagName);
 
-      if (!layer) {
-        console.warn('[Lasso] No image layer selected — draw on an image layer first');
+      // Delete/Backspace — erase selected pixels
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectionManager.hasSelection()) {
+        e.preventDefault();
+        e.stopPropagation();
+        const state = useEditorStore.getState();
+        const layer = state.layers?.find(l => l.id === selectionManager.layerId);
+        if (!layer) {
+          console.warn('[Delete] no layer found for selectionManager.layerId:', selectionManager.layerId);
+          return;
+        }
+        await deleteSelection(layer, state.updateLayer);
         return;
       }
 
-      // Convert canvas-world points to layer-local image pixels.
-      // Seed the paint canvas so it has the correct dimensions (layer.width × layer.height).
-      const pc = getPaintCanvas(layer);
-      const iw = pc.width;
-      const ih = pc.height;
-      const lx = layer.x - layer.width  / 2;
-      const ly = layer.y - layer.height / 2;
-      const lw = layer.width;
-      const lh = layer.height;
-
-      const imgPoints = points.map(p => ({
-        x: ((p.x - lx) / lw) * iw,
-        y: ((p.y - ly) / lh) * ih,
-      }));
-
-      // Build mask canvas in image space (white = selected, black = not)
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width  = iw;
-      maskCanvas.height = ih;
-      const mctx = maskCanvas.getContext('2d');
-      mctx.fillStyle = '#000000';
-      mctx.fillRect(0, 0, iw, ih);
-      mctx.fillStyle = '#ffffff';
-      mctx.beginPath();
-      mctx.moveTo(imgPoints[0].x, imgPoints[0].y);
-      for (let i = 1; i < imgPoints.length; i++) {
-        mctx.lineTo(imgPoints[i].x, imgPoints[i].y);
-      }
-      mctx.closePath();
-      mctx.fill();
-
-      // Extract Uint8Array mask (255 = inside)
-      const maskData = mctx.getImageData(0, 0, iw, ih).data;
-      const mask = new Uint8Array(iw * ih);
-      for (let i = 0; i < mask.length; i++) mask[i] = maskData[i * 4];
-
-      // Count selected pixels for debugging
-      let selectedCount = 0;
-      for (let i = 0; i < mask.length; i++) if (mask[i]) selectedCount++;
-      console.log(`[Lasso] mask built: ${iw}×${ih}, selected=${selectedCount} px`);
-
-      if (selectedCount === 0) {
-        console.warn('[Lasso] Empty selection — lasso polygon may be outside layer bounds');
+      // Escape — cancel lasso or clear selection
+      if (e.key === 'Escape') {
+        if (lasso.isDrawing() || lasso.getPolyPoints().length > 0) {
+          lasso.cancelFreehand();
+          lasso.cancelPolygon();
+          setLassoPoints([]);
+          setLassoDrawing(false);
+        } else {
+          selectionManager.clear();
+        }
         return;
       }
 
-      setSelectionMask({ layerId: layer.id, mask, width: iw, height: ih });
-
-      // Compute bounds of the mask for marching ants
-      let minX = iw, minY = ih, maxX = 0, maxY = 0;
-      for (let idx = 0; idx < mask.length; idx++) {
-        if (!mask[idx]) continue;
-        const mx = idx % iw, my = Math.floor(idx / iw);
-        if (mx < minX) minX = mx; if (mx > maxX) maxX = mx;
-        if (my < minY) minY = my; if (my > maxY) maxY = my;
+      // Ctrl+D — deselect
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        selectionManager.clear();
+        return;
       }
-      window.dispatchEvent(new CustomEvent('tf:wand-complete', {
-        detail: {
-          layerId: layer.id, mask, width: iw, height: ih,
-          bounds: { minX, minY, maxX, maxY },
-          layerRect: { x: lx, y: ly, w: lw, h: lh },
-        },
-      }));
-    };
 
-    const onWandComplete = (e) => {
-      const { layerId, mask, width, height } = e.detail;
-      setSelectionMask({ layerId, mask, width, height });
-    };
-
-    const onWandErase = (e) => {
-      const sm = e.detail || useEditorStore.getState().selectionMask;
-      if (!sm) return;
-      const { layerId, mask } = sm;
-      const state = useEditorStore.getState();
-      const layer = state.layers?.find(l => l.id === layerId);
-      if (!layer) return;
-
-      // Seed paint canvas if it doesn't exist yet (layer was never painted)
-      const pc = getPaintCanvas(layer);
-      const ctx = pc.getContext('2d');
-      const imgData = ctx.getImageData(0, 0, pc.width, pc.height);
-      const { data } = imgData;
-      for (let i = 0; i < mask.length; i++) {
-        if (mask[i]) data[i * 4 + 3] = 0; // erase alpha
+      // Ctrl+Shift+I — invert selection
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'I') {
+        e.preventDefault();
+        selectionManager.invert();
+        return;
       }
-      ctx.putImageData(imgData, 0, 0);
-      uploadPaintCanvas(layerId);
-      clearPixelSelection();
-    };
 
-    window.addEventListener('tf:lasso-complete', onLassoComplete);
-    window.addEventListener('tf:wand-complete',  onWandComplete);
-    window.addEventListener('tf:wand-erase',     onWandErase);
-    return () => {
-      window.removeEventListener('tf:lasso-complete', onLassoComplete);
-      window.removeEventListener('tf:wand-complete',  onWandComplete);
-      window.removeEventListener('tf:wand-erase',     onWandErase);
+      // Ctrl+A — select all pixels on selected layer (only when selection tool active)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        const state = useEditorStore.getState();
+        if (state.activeTool === 'magic_wand' || state.activeTool === 'lasso') {
+          e.preventDefault();
+          const layer = state.layers?.find(l => l.id === state.selectedLayerIds?.[0] && l.type === 'image');
+          if (layer) {
+            const iw = layer.width, ih = layer.height;
+            const mask = new Uint8Array(iw * ih).fill(255);
+            selectionManager.set(mask, iw, ih, layer.id);
+          }
+        }
+        return;
+      }
     };
-  }, [setSelectionMask, clearPixelSelection, uploadPaintCanvas, getPaintCanvas]); // eslint-disable-line react-hooks/exhaustive-deps
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []); // empty deps — reads from store directly
 
   // ── Init renderer on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -803,12 +857,34 @@ export default function NewEditor({ user, setPage }) {
     }
   }, [layers, isEditingText, editingLayerId]);
 
-  // ── Clear paint canvases on undo / redo ──────────────────────────────────
-  // History snapshots don't contain paint canvas state. When undo/redo fires,
-  // we clear all cached paint canvases so the next stroke re-initialises them
-  // from the now-correct (reverted) layer texture rather than stale pixel data.
+  // ── Restore paint canvas state on undo / redo ────────────────────────────
+  // History snapshots don't contain paint canvas state (pixel data can't be
+  // JSON-serialised). window.__paintHistory stores per-historyIndex canvas
+  // snapshots so every undo/redo step restores the correct pixel state.
   useEffect(() => {
     paintCanvasesRef.current.clear();
+    const renderer = rendererRef.current;
+    if (renderer) {
+      // Clear paintDataLayers so sync() resumes normal sprite management.
+      // With the in-place texture approach there are no paintSprites, but
+      // paintDataLayers is still populated — must be cleared explicitly.
+      renderer.paintDataLayers?.clear();
+      // Remove any leftover paint sprites from the old approach
+      const ids = [...renderer.paintSprites.keys()];
+      ids.forEach(id => renderer.removePaintSprite(id));
+    }
+
+    // Restore paint canvas for this historyIndex if one was recorded.
+    // __paintHistory: Map<layerId → Map<historyIndex → HTMLCanvasElement>>
+    if (window.__paintHistory) {
+      window.__paintHistory.forEach((indexMap, layerId) => {
+        const savedCanvas = indexMap.get(historyIndex);
+        if (savedCanvas) {
+          // Re-upload the saved canvas — re-enters paintDataLayers and renders correctly
+          window.__uploadPaintTexture?.(layerId, savedCanvas);
+        }
+      });
+    }
   }, [historyIndex]);
 
   // ── Sync viewport ────────────────────────────────────────────────────────
@@ -836,13 +912,14 @@ export default function NewEditor({ user, setPage }) {
         return;
       }
 
-      // ── Lasso tool move ──────────────────────────────────────────────────
-      if (tool === 'lasso' && canvasEl) {
-        const canvasRect = canvasEl.getBoundingClientRect();
-        const vp         = rendererRef.current?.viewport;
-        const cx = (e.clientX - canvasRect.left - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
-        const cy = (e.clientY - canvasRect.top  - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
-        toolsRef.current.lasso?.onPointerMove(e, { canvasPoint: { x: cx, y: cy } });
+      // ── Lasso freehand move ──────────────────────────────────────────────────
+      if (tool === 'lasso' && lasso.subTool === 'freehand' && lasso.isDrawing() && canvasEl) {
+        const cRect = canvasEl.getBoundingClientRect();
+        const vp    = rendererRef.current?.viewport;
+        const cx = (e.clientX - cRect.left - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
+        const cy = (e.clientY - cRect.top  - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
+        const pts = lasso.continueFreehand({ x: cx, y: cy });
+        setLassoPoints([...pts]);
         return;
       }
 
@@ -908,15 +985,22 @@ export default function NewEditor({ user, setPage }) {
         return;
       }
 
-      // ── End lasso stroke ─────────────────────────────────────────────────
-      if (tool === 'lasso') {
-        const canvasEl = canvasRef.current;
-        if (canvasEl) {
-          const canvasRect = canvasEl.getBoundingClientRect();
-          const vp         = rendererRef.current?.viewport;
-          const cx = (e.clientX - canvasRect.left - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
-          const cy = (e.clientY - canvasRect.top  - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
-          toolsRef.current.lasso?.onPointerUp(e, { canvasPoint: { x: cx, y: cy } });
+      // ── End lasso freehand stroke ────────────────────────────────────────
+      if (tool === 'lasso' && lasso.subTool === 'freehand' && lasso.isDrawing()) {
+        const canvasEl2 = canvasRef.current;
+        if (canvasEl2) {
+          const cRect = canvasEl2.getBoundingClientRect();
+          const vp    = rendererRef.current?.viewport;
+          const cx = (e.clientX - cRect.left - (vp?.x ?? 0)) / (vp?.scale?.x ?? 1);
+          const cy = (e.clientY - cRect.top  - (vp?.y ?? 0)) / (vp?.scale?.y ?? 1);
+          const { layers: ls2, selectedLayerIds: sel2 } = useEditorStore.getState();
+          const targetLayer2 = ls2?.find(l => l.id === sel2?.[0] && l.type === 'image')
+            || [...(ls2||[])].reverse().find(l => l.type === 'image' && l.visible !== false);
+          const mode = e.shiftKey ? 'add' : (e.altKey ? 'subtract' : 'replace');
+          lasso.endFreehand(targetLayer2, mode).then(() => {
+            setLassoPoints([]);
+            setLassoDrawing(false);
+          });
         }
         return;
       }
@@ -995,18 +1079,36 @@ export default function NewEditor({ user, setPage }) {
     const { layers: ls, selectedLayerIds: sel, activeTool: tool } = state;
 
     // ── Canvas coordinate conversion ─────────────────────────────────────────
-    // Use the PixiJS canvas element and the renderer's actual viewport transform.
-    // This is correct regardless of the store's center-based panX/panY convention.
-    const canvasEl = canvasRef.current || rect; // fallback to container rect
-    const canvasRect = canvasEl?.getBoundingClientRect?.() ?? rect;
-    const screenX = e.clientX - canvasRect.left;
-    const screenY = e.clientY - canvasRect.top;
+    // Pointer events fire on containerRef, so measure screenX/Y from container.
+    // The PixiJS canvas may be larger than the container (if resize hasn't fired yet),
+    // so we can't use canvasRef.getBoundingClientRect() directly for the origin —
+    // it would report a negative left when the canvas overflows.
+    // vp.x/vp.y are the viewport origin in PixiJS canvas-pixel space.
+    // Since the canvas is appended inside the container and sized to match it,
+    // canvas-pixel space == container-client space after the resize handler fires.
+    // We add the canvas-to-container offset as a correction for the stale-size case.
+    const canvasEl   = canvasRef.current;
+    const canvasRect = canvasEl ? canvasEl.getBoundingClientRect() : rect;
+    // Offset: how far the canvas left edge is from the container left edge.
+    // Usually 0 once resize() has run; non-zero only during the startup frame.
+    const canvasOffsetX = canvasRect.left - rect.left;
+    const canvasOffsetY = canvasRect.top  - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
     const vp = rendererRef.current?.viewport;
-    const vpX    = vp?.x     ?? 0;
-    const vpY    = vp?.y     ?? 0;
+    const vpX    = (vp?.x     ?? 0) + canvasOffsetX;
+    const vpY    = (vp?.y     ?? 0) + canvasOffsetY;
     const vpZoom = vp?.scale?.x ?? 1;
     const canvasX = (screenX - vpX) / vpZoom;
     const canvasY = (screenY - vpY) / vpZoom;
+
+    if (tool === 'magic_wand') {
+      console.log('[screenToCanvas] screen:', e.clientX, e.clientY,
+        'rect:', rect.left, rect.top,
+        'viewport x/y/zoom:', vp?.x, vp?.y, vpZoom,
+        'canvasOffset:', canvasOffsetX, canvasOffsetY,
+        'result canvasXY:', canvasX, canvasY);
+    }
 
     // ── Hand tool — pan the viewport ────────────────────────────────────────
     if (tool === 'hand') {
@@ -1022,35 +1124,41 @@ export default function NewEditor({ user, setPage }) {
 
     // ── Lasso tool ───────────────────────────────────────────────────────────
     if (tool === 'lasso') {
-      toolsRef.current.lasso?.onPointerDown(e, { canvasPoint: { x: canvasX, y: canvasY } });
+      const targetLayer = ls?.find(l => l.id === sel?.[0] && l.type === 'image')
+        || [...(ls || [])].reverse().find(l => l.type === 'image' && l.visible !== false);
+      if (!targetLayer) return;
+      const mode = e.shiftKey ? 'add' : (e.altKey ? 'subtract' : 'replace');
+      if (lasso.subTool === 'polygonal') {
+        const pts = lasso.addPolyPoint({ x: canvasX, y: canvasY });
+        setLassoPoints([...pts]);
+        if (lasso.isNearPolyStart({ x: canvasX, y: canvasY })) {
+          lasso.closePolygon(targetLayer, mode).then(() => {
+            setLassoPoints([]);
+            setLassoDrawing(false);
+          });
+        } else {
+          setLassoDrawing(true);
+        }
+      } else {
+        // freehand
+        lasso.startFreehand({ x: canvasX, y: canvasY });
+        setLassoPoints([{ x: canvasX, y: canvasY }]);
+        setLassoDrawing(true);
+      }
       return;
     }
 
     // ── Magic Wand tool ──────────────────────────────────────────────────────
     if (tool === 'magic_wand') {
-      const targetId = sel?.[0];
-      let targetLayer = ls?.find(l => l.id === targetId && l.type === 'image');
-
-      // Auto-select the topmost visible image layer if none is selected
+      const targetLayer = ls?.find(l => l.id === sel?.[0] && l.type === 'image')
+        || [...(ls || [])].reverse().find(l => l.type === 'image' && l.visible !== false);
+      console.log('[NewEditor] magic_wand pointerdown', canvasX, canvasY, 'layer:', targetLayer?.id, 'type:', targetLayer?.type);
       if (!targetLayer) {
-        targetLayer = [...ls].reverse().find(l => l.type === 'image' && l.visible !== false);
-        if (targetLayer) selectLayer(targetLayer.id);
-      }
-
-      if (!targetLayer) {
-        console.warn('[MagicWand] No image layer selected or found');
+        console.warn('[MagicWand] No image layer found');
         return;
       }
-
-      // Seed paint canvas so the wand has real pixels to sample
-      getPaintCanvas(targetLayer);
-
-      toolsRef.current.magic_wand?.onPointerDown(e, {
-        canvasPoint:      { x: canvasX, y: canvasY },
-        layers:           ls,
-        selectedLayerIds: [targetLayer.id],
-        paintCanvases:    paintCanvasesRef.current,
-      });
+      const mode = e.shiftKey ? 'add' : (e.altKey ? 'subtract' : 'replace');
+      magicWand.select(canvasX, canvasY, targetLayer, mode);
       return;
     }
 
@@ -1486,7 +1594,6 @@ export default function NewEditor({ user, setPage }) {
         onExport={handleExport}
         onShare={() => window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message: 'Coming soon — this feature is being built.', type: 'info' } }))}
       />
-
       {/* ── Middle row ──────────────────────────────────────────────────── */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
 
@@ -1518,7 +1625,12 @@ export default function NewEditor({ user, setPage }) {
           <StarfieldBackground />
           <SelectionOverlay containerRef={containerRef} canvasRef={canvasRef} extraGuides={activeGuides} />
           <BrushCursor rendererRef={rendererRef} canvasRef={canvasRef} />
-          <SelectionOverlayCanvas />
+          <LassoDrawingOverlay
+            points={lassoPoints}
+            viewport={window.__renderer?.viewport}
+            isPolygonal={lasso.subTool === 'polygonal'}
+          />
+          <MarchingAntsOverlay />
 
           {/* Empty state — shown when no layers exist */}
           {layers.length === 0 && (

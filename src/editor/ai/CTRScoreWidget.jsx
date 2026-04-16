@@ -222,10 +222,11 @@ export default function CTRScoreWidget({ pixiApp }) {
                     </span>
                   </div>
                   {/* Bar track */}
-                  <div style={{ height: 4, borderRadius: 2, background: 'var(--bg-5)', overflow: 'hidden' }}>
+                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
                     <div style={{
                       height: '100%',
                       width:  `${Math.min(100, Math.max(0, rounded))}%`,
+                      minWidth: 2,
                       background: barColor(rounded),
                       borderRadius: 2,
                       transition: 'width 0.4s ease',
@@ -272,7 +273,8 @@ export default function CTRScoreWidget({ pixiApp }) {
                 </div>
               ) : (
                 factors.map((factor, i) => {
-                  const dotColor = factor.score != null ? barColor(factor.score) : '#eab308';
+                  // factors from ctrScore.js are plain strings
+                  const text = typeof factor === 'string' ? factor : (factor.suggestion || factor.label || String(factor));
                   return (
                     <div key={i} style={{
                       display:      'flex',
@@ -285,21 +287,16 @@ export default function CTRScoreWidget({ pixiApp }) {
                         width:        7,
                         height:       7,
                         borderRadius: '50%',
-                        background:   dotColor,
+                        background:   '#eab308',
                         flexShrink:   0,
                         marginTop:    3,
                       }} />
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 1 }}>
-                          {factor.label || FACTOR_LABELS[factor.key] || factor.key}
-                          {factor.score != null && (
-                            <span style={{ fontWeight: 400, color: dotColor, marginLeft: 4 }}>
-                              {Math.round(factor.score)}
-                            </span>
-                          )}
+                        <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                          {text}
                         </div>
-                        {factor.suggestion && (
-                          <div style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.4 }}>
+                        {typeof factor === 'object' && factor.suggestion && factor.suggestion !== text && (
+                          <div style={{ fontSize: 10, color: 'var(--text-4)', lineHeight: 1.4, marginTop: 2 }}>
                             {factor.suggestion}
                           </div>
                         )}

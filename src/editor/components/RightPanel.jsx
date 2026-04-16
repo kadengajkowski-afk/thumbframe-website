@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import useEditorStore from '../engine/Store';
 
 import BrushSettingsPanel  from '../panels/BrushSettingsPanel';
+import { MagicWandPanel, LassoPanel } from '../panels/SelectionToolPanel';
 import EffectsPanel        from '../panels/EffectsPanel';
 import TextPanel           from '../panels/TextPanel';
 import ShapePanel          from '../panels/ShapePanel';
@@ -78,6 +79,9 @@ export default function RightPanel({
       overflowY: 'auto', overflowX: 'hidden',
       fontFamily: 'Inter, -apple-system, sans-serif',
     }}>
+
+      {activeTool === 'magic_wand' && <MagicWandPanel />}
+      {activeTool === 'lasso'      && <LassoPanel />}
 
       {isPainting ? (
         <>

@@ -62,6 +62,10 @@ export default class Renderer {
     this.paintSprites   = new Map();   // layerId → Sprite (paint canvas overlay)
     this.paintTextures  = new Map();   // layerId → Texture (paint canvas GPU texture)
     this.paintHistory   = new Map();   // layerId → Map<historyIndex, Texture> (undo versioning)
+    // Tracks layers with committed pixel edits (erase/fill).
+    // Lives in the Renderer, NOT in React state, so it never triggers a re-render
+    // and never causes _createImageObject to run after an erase.
+    this.paintDataLayers = new Set(); // layerIds that have active paint data
 
     this._mounted = false;
   }
@@ -69,6 +73,7 @@ export default class Renderer {
   // ── Initialize PixiJS v8 ──────────────────────────────────────────────────
   async init(containerEl) {
     if (this._mounted) return;
+    this._containerEl = containerEl; // stored for resize()
 
     // Measure container now so we can size the canvas to fill it exactly.
     // We do NOT use resizeTo because that sets position:absolute on the canvas
@@ -117,6 +122,8 @@ export default class Renderer {
     this._centerCanvas();
 
     this._mounted = true;
+    window.__displayObjects = this.displayObjects;
+    window.__pixiApp        = this.app;
   }
 
   // ── Destroy and clean up ──────────────────────────────────────────────────
@@ -229,6 +236,15 @@ export default class Renderer {
     for (const layer of layers) {
       let obj = this.displayObjects.get(layer.id);
 
+      // ── Paint-data fast path ─────────────────────────────────────────────────
+      // If this layer has had a pixel edit (erase/fill), the original sprite's
+      // texture has been replaced in-place via updateLayerPaintTexture.
+      // Do NOT call _createImageObject — it would reload the original texture
+      // and undo the pixel edit.
+      if (this.paintDataLayers?.has(layer.id)) {
+        continue;
+      }
+
       // ── Texture recovery (after undo/redo strips texture from snapshot) ───
       // _pushHistory serialises layers via JSON.stringify, which drops the
       // non-serialisable `texture` field. After undo/redo the layer exists in
@@ -281,6 +297,7 @@ export default class Renderer {
 
       obj.alpha = effectiveLayer.opacity ?? 1;
       obj.visible = effectiveLayer.visible !== false;
+
 
       // Blend mode — string values work for all PixiJS v8 display objects.
       // null alphaMode errors come from texture source construction (OffscreenCanvas vs
@@ -341,6 +358,14 @@ export default class Renderer {
   }
 
   _createImageObject(layer) {
+    // Never recreate the base sprite while the paint sprite is the active display.
+    // sync() already skips this layer in the fast path, but _createImageObject can
+    // be called directly (e.g. from _updateDisplayObject). Guard here too.
+    if (this.paintDataLayers?.has(layer.id)) {
+      console.log('[Renderer] _createImageObject skipped — paint layer active:', layer.id.slice(0, 8));
+      return this.displayObjects.get(layer.id) ?? null;
+    }
+
     // Loading state — gray spinner box
     if (layer.loading) {
       const g = new Graphics();
@@ -583,80 +608,61 @@ export default class Renderer {
   // (removed: _updateDisplayObject merged into sync() above)
 
   // ── Paint canvas compositing ──────────────────────────────────────────────
-  // Called by NewEditor on every stroke stamp and on endStroke.
-  // Creates / updates a Sprite that sits on top of the image sprite.
+  // Updates the ORIGINAL sprite's texture in-place with the modified pixel data.
+  // Avoids all paint-sprite complexity — the original sprite IS the display.
   //
-  // TEXTURE CREATION RULE — must match imageUpload.js exactly:
-  //   OffscreenCanvas → new ImageSource({ resource: oc }) → new Texture({ source })
-  //
-  // Do NOT use Texture.from(canvas) — it can return an uninitialized texture
-  // whose source has alphaMode: null, crashing the PixiJS v8 batcher.
-  // Do NOT mutate source.resource in-place — alphaMode is set at construction
-  // and is not re-derived when the resource is swapped after creation.
-  // Always destroy the old paint texture before creating the new one.
   updateLayerPaintTexture(layerId, paintCanvas) {
-    if (!this._mounted || !paintCanvas) return;
-    if (paintCanvas.width === 0 || paintCanvas.height === 0) return;
+    console.log('[Renderer] updateLayerPaintTexture', layerId, paintCanvas?.width, paintCanvas?.height);
 
-    // ── Step 1: Copy into a fresh OffscreenCanvas (same pattern as imageUpload.js)
-    // This ensures PixiJS v8 initialises alphaMode correctly at source construction.
-    // HTMLCanvasElement can produce an uninitialised ImageSource; OffscreenCanvas does not.
-    const oc  = new OffscreenCanvas(paintCanvas.width, paintCanvas.height);
-    const ctx = oc.getContext('2d');
-    ctx.drawImage(paintCanvas, 0, 0);
+    if (!paintCanvas || paintCanvas.width === 0 || paintCanvas.height === 0) return;
 
-    // ── Step 2: Create new texture BEFORE touching the old one.
-    // The RenderLoop can fire between any two lines during an active stroke.
-    // The sprite must NEVER reference a destroyed texture, so we assign the new
-    // texture first and only then destroy the old one.
-    const source = new ImageSource({ resource: oc });
-    const tex    = new Texture({ source });
-    if (!tex || !tex.source) return; // guard: creation can fail on headless/SSR
-
-    // ── Step 3: Get the base image sprite so we can co-locate the paint sprite
-    const imgObj = this.displayObjects.get(layerId);
-    if (!imgObj) { tex.destroy(true); return; }
-
-    // ── Step 4: Create or update the paint sprite — assign new texture atomically
-    let paintSprite = this.paintSprites.get(layerId);
-    if (!paintSprite) {
-      paintSprite = new Sprite(tex);
-      paintSprite.anchor.set(0, 0);
-      paintSprite._tfAnchorMode = true;
-      paintSprite.isSprite      = true;
-      this.paintSprites.set(layerId, paintSprite);
-      this.layerContainer.addChild(paintSprite);
-    } else {
-      paintSprite.texture = tex; // sprite now points to the new texture
+    const originalSprite = this.displayObjects.get(layerId);
+    if (!originalSprite) {
+      console.warn('[Renderer] no original sprite for', layerId);
+      return;
     }
 
-    // ── Step 5: Destroy old texture AFTER sprite no longer references it
-    const oldTex = this.paintTextures.get(layerId);
-    if (oldTex && oldTex !== tex) {
-      oldTex.destroy(true);
+    // Verify incoming canvas content BEFORE any copy
+    const incomingCtx = paintCanvas.getContext('2d');
+    const incomingPx  = incomingCtx.getImageData(Math.floor(paintCanvas.width / 2), Math.floor(paintCanvas.height / 2), 1, 1).data;
+    console.log('[Renderer] incoming canvas center pixel:', incomingPx[0], incomingPx[1], incomingPx[2], incomingPx[3]);
+
+    // Copy to OffscreenCanvas for PixiJS v8 texture creation
+    // Texture.from(canvas/bitmap) produces alphaMode: null → batcher crash.
+    // OffscreenCanvas → new ImageSource({ resource: oc }) → new Texture({ source })
+    // is the only path confirmed safe in PixiJS v8 (same as imageUpload.js).
+    const oc = new OffscreenCanvas(paintCanvas.width, paintCanvas.height);
+    oc.getContext('2d').drawImage(paintCanvas, 0, 0);
+
+    const oldTexture = originalSprite.texture;
+
+    const newSource  = new ImageSource({ resource: oc });
+    const newTexture = new Texture({ source: newSource });
+
+    // Swap texture on the existing, correctly-positioned sprite
+    originalSprite.texture    = newTexture;
+    originalSprite.visible    = true;
+    originalSprite.renderable = true;
+    originalSprite.alpha      = 1;
+
+    // Destroy old texture after sprite no longer references it
+    if (oldTexture && oldTexture !== newTexture) {
+      oldTexture.destroy(true);
     }
-    this.paintTextures.set(layerId, tex);
 
-    // ── Step 6: Mirror the base sprite's transform exactly
-    // imgObj uses anchor(0,0) + _tfAnchorMode, so imgObj.x/y = layer top-left.
-    paintSprite.x        = imgObj.x;
-    paintSprite.y        = imgObj.y;
-    paintSprite.width    = imgObj.width;
-    paintSprite.height   = imgObj.height;
-    paintSprite.rotation = imgObj.rotation;
-    paintSprite.alpha    = 1;
-    paintSprite.visible  = imgObj.visible;
-
-    // ── Step 7: Ensure paint sprite sits directly above its image sprite in z-order
-    const imgIdx = this.layerContainer.getChildIndex(imgObj);
-    if (imgIdx >= 0) {
-      const paintIdx  = this.layerContainer.getChildIndex(paintSprite);
-      const targetIdx = Math.min(imgIdx + 1, this.layerContainer.children.length - 1);
-      if (paintIdx !== targetIdx) {
-        this.layerContainer.setChildIndex(paintSprite, targetIdx);
-      }
+    // Remove any existing paint sprites for this layer (left from earlier approach)
+    if (this.paintSprites?.has(layerId)) {
+      const ps = this.paintSprites.get(layerId);
+      if (ps.parent) ps.parent.removeChild(ps);
+      ps.destroy({ children: true });
+      this.paintSprites.delete(layerId);
     }
 
+    // Mark layer as modified so sync() skips _createImageObject and preserves texture
+    if (!this.paintDataLayers) this.paintDataLayers = new Set();
+    this.paintDataLayers.add(layerId);
+
+    console.log('[Renderer] original sprite texture updated in-place');
     this._forceRender();
   }
 
@@ -684,9 +690,11 @@ export default class Renderer {
       t.destroy(true);
       this.paintTextures.delete(layerId);
     }
-    // Restore base sprite visibility (sync() will correct to layer.opacity on next render)
+    // Clear paint-data guard so sync() resumes normal sprite management
+    this.paintDataLayers.delete(layerId);
+    // Restore base sprite — sync() will set the correct opacity/visibility on next tick
     const base = this.displayObjects.get(layerId);
-    if (base) base.alpha = 1;
+    if (base) { base.visible = true; base.renderable = true; base.alpha = 1; }
   }
 
   // ── Hit test: which layer is at screen position (x, y)? ──────────────────
@@ -825,9 +833,20 @@ export default class Renderer {
   }
 
   // ── Resize handler ────────────────────────────────────────────────────────
+  // Resizes the PixiJS canvas to the current container dimensions.
+  // Must be called from the ResizeObserver in NewEditor so the canvas
+  // always matches the container — otherwise getBoundingClientRect() on the
+  // canvas element can report a left offset that breaks coordinate conversion.
   resize() {
-    if (!this.app) return;
-    this.app.resize();
+    if (!this.app || !this._containerEl) return;
+    const rect = this._containerEl.getBoundingClientRect();
+    const w = Math.max(Math.round(rect.width),  400);
+    const h = Math.max(Math.round(rect.height), 300);
+    // app.renderer.screen is in CSS pixels (logical), regardless of resolution/autoDensity.
+    if (this.app.renderer.screen.width  !== w ||
+        this.app.renderer.screen.height !== h) {
+      this.app.renderer.resize(w, h);
+    }
   }
 
   // ── Apply (or remove) the AdjustmentFilter for a layer ───────────────────

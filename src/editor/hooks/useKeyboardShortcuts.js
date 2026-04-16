@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from 'react';
 import useEditorStore from '../engine/Store';
+import { selectionManager } from '../tools/SelectionState';
 
 const PAINT_TOOLS = new Set([
   'brush','eraser','clone_stamp','healing_brush','spot_healing',
@@ -114,15 +115,12 @@ export default function useKeyboardShortcuts(containerRef) {
       if (meta && !shift && key === 'z') { e.preventDefault(); undo(); return; }
       if (meta && shift  && key === 'z') { e.preventDefault(); redo(); return; }
 
-      // ── Delete — if pixel selection exists, erase selected pixels ───────────
+      // ── Delete ────────────────────────────────────────────────────────────
       if ((key === 'Delete' || key === 'Backspace') && !meta) {
+        // Selection takes priority — let the NewEditor keydown handler handle it
+        if (selectionManager.hasSelection()) return;
         e.preventDefault();
-        const selMask = store.selectionMask;
-        if (selMask) {
-          window.dispatchEvent(new CustomEvent('tf:wand-erase', { detail: selMask }));
-        } else {
-          deleteSelectedLayers();
-        }
+        deleteSelectedLayers();
         return;
       }
 

@@ -16,6 +16,8 @@ import { computeCornerResize, computeMidResize, computeRotation, snapRotation } 
 const ACCENT = '#f97316';
 const WHITE = '#ffffff';
 const ROTATION_HANDLE_OFFSET = 20; // px above top-center in screen space
+const CW = 1280; // canvas content width
+const CH = 720;  // canvas content height
 
 // ── Utility: dispatch toast ───────────────────────────────────────────────────
 function toast(message) {
@@ -23,10 +25,15 @@ function toast(message) {
 }
 
 // ── Layer → screen bounding box ───────────────────────────────────────────────
-function layerToScreen(layer, zoom, panX, panY) {
-  // layer.x, layer.y is the center of the layer
-  const cx = layer.x * zoom + panX;
-  const cy = layer.y * zoom + panY;
+// containerW/H = container element dimensions (canvas fills container exactly).
+// Center-based system: panX=0 means the 1280×720 canvas is centered in the container.
+// A world point (worldX, worldY) maps to:
+//   screenX = containerW/2 + panX + (worldX - CW/2) * zoom
+//   screenY = containerH/2 + panY + (worldY - CH/2) * zoom
+function layerToScreen(layer, zoom, panX, panY, containerW, containerH) {
+  // layer.x, layer.y is the center of the layer in world coords
+  const cx = containerW / 2 + panX + (layer.x - CW / 2) * zoom;
+  const cy = containerH / 2 + panY + (layer.y - CH / 2) * zoom;
   const w = layer.width * zoom;
   const h = layer.height * zoom;
   return { cx, cy, w, h, left: cx - w / 2, top: cy - h / 2 };
@@ -86,15 +93,15 @@ export default function SelectionOverlay({ containerRef, canvasRef, extraGuides 
   const allGuides = [...extraGuides, ...interactionGuides];
 
   // ── Coordinate helper ──────────────────────────────────────────────────────
-  // Prefer the PixiJS canvas element's rect (exact pixel boundary) over the
-  // container's rect. Falls back to container if canvas ref isn't set yet.
+  // Center-based inverse of layerToScreen:
+  //   worldX = (clientX - rect.left - containerW/2 - panX) / zoom + CW/2
   const toWorld = useCallback((clientX, clientY) => {
     const el = canvasRef?.current || containerRef?.current;
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
     return {
-      x: (clientX - rect.left - panX) / zoom,
-      y: (clientY - rect.top  - panY) / zoom,
+      x: (clientX - rect.left - rect.width  / 2 - panX) / zoom + CW / 2,
+      y: (clientY - rect.top  - rect.height / 2 - panY) / zoom + CH / 2,
     };
   }, [canvasRef, containerRef, zoom, panX, panY]);
 
@@ -118,9 +125,9 @@ export default function SelectionOverlay({ containerRef, canvasRef, extraGuides 
         // Update dimension label (screen space, fixed to window)
         const rect = (canvasRef?.current || containerRef?.current)?.getBoundingClientRect();
         if (rect) {
-          const screenCY = changes.y * zoom + panY;
+          const screenCX = rect.width  / 2 + panX + (changes.x - CW / 2) * zoom;
+          const screenCY = rect.height / 2 + panY + (changes.y - CH / 2) * zoom;
           const screenBottom = screenCY + (changes.height * zoom) / 2;
-          const screenCX = changes.x * zoom + panX;
           setDimLabel({
             x: rect.left + screenCX,
             y: rect.top + screenBottom + 6,
@@ -226,11 +233,23 @@ export default function SelectionOverlay({ containerRef, canvasRef, extraGuides 
     setTimeout(() => setShakeLayerId(null), 300);
   };
 
+  // ── Container dimensions for center-based coordinate math ───────────────────
+  // The PixiJS canvas is sized to fill the container exactly (no flex offset).
+  // We only need the container width/height to compute screen-space positions.
+  const containerEl = containerRef?.current;
+  const containerRect = containerEl ? containerEl.getBoundingClientRect() : null;
+  const containerW = containerRect ? containerRect.width  : 0;
+  const containerH = containerRect ? containerRect.height : 0;
+
   // ── Render ─────────────────────────────────────────────────────────────────
   if (selectedLayerIds.length === 0) {
     return (
       <div style={overlayContainerStyle}>
         {/* Still render guides even without selection */}
+        {allGuides.map((g, i) => (
+          <GuideRule key={i} guide={g} zoom={zoom} panX={panX} panY={panY}
+            containerW={containerW} containerH={containerH} />
+        ))}
       </div>
     );
   }
@@ -243,12 +262,13 @@ export default function SelectionOverlay({ containerRef, canvasRef, extraGuides 
 
       {/* ── Smart guides ───────────────────────────────────────────────── */}
       {allGuides.map((g, i) => (
-        <GuideRule key={i} guide={g} zoom={zoom} panX={panX} panY={panY} />
+        <GuideRule key={i} guide={g} zoom={zoom} panX={panX} panY={panY}
+          containerW={containerW} containerH={containerH} />
       ))}
 
       {/* ── Per-layer selection boxes ───────────────────────────────────── */}
       {selectedLayers.map((layer) => {
-        const { w, h, left, top } = layerToScreen(layer, zoom, panX, panY);
+        const { w, h, left, top } = layerToScreen(layer, zoom, panX, panY, containerW, containerH);
         const isLocked = layer.locked;
         const isShaking = shakeLayerId === layer.id;
 
@@ -468,12 +488,13 @@ function MidHandle({ posX, posY, cursor, onPointerDown }) {
   );
 }
 
-function GuideRule({ guide, zoom, panX, panY }) {
+function GuideRule({ guide, zoom, panX, panY, containerW, containerH }) {
   const isDashed = guide.type === 'center';
   const color = isDashed ? 'rgba(249,115,22,0.40)' : 'rgba(249,115,22,0.60)';
 
   if (guide.axis === 'x') {
-    const screenX = guide.position * zoom + panX;
+    // guide.position is a world X coord; convert to container-relative screen X
+    const screenX = containerW / 2 + panX + (guide.position - CW / 2) * zoom;
     return (
       <div style={{
         position: 'absolute',
@@ -489,7 +510,8 @@ function GuideRule({ guide, zoom, panX, panY }) {
       }} />
     );
   } else {
-    const screenY = guide.position * zoom + panY;
+    // guide.position is a world Y coord; convert to container-relative screen Y
+    const screenY = containerH / 2 + panY + (guide.position - CH / 2) * zoom;
     return (
       <div style={{
         position: 'absolute',
