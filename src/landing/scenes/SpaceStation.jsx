@@ -98,31 +98,47 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
   return (
     <group ref={groupRef} position={position} scale={scale}>
 
-      {/* ═══ MAIN HULL — cylinder spine, warm-gray panel ═══ */}
+      {/* ═══ MAIN HULL — 4 panel sections with distinct color variation ═══ */}
+      {/* Mid hull — cool slate */}
       <mesh position={[0, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.45, 0.5, 3.2, 8]} />
-        <Toon color="#726a82" />
+        <cylinderGeometry args={[0.45, 0.5, 1.2, 8]} />
+        <Toon color="#5e5878" />
+      </mesh>
+      {/* Forward-mid hull — warmer gray */}
+      <mesh position={[0.7, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.47, 0.48, 0.9, 8]} />
+        <Toon color="#726a7e" />
+      </mesh>
+      {/* Aft hull — cooler, darker */}
+      <mesh position={[-0.7, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.48, 0.5, 1.1, 8]} />
+        <Toon color="#584e6a" />
       </mesh>
 
-      {/* Hull panel variation — ring segments with different tones */}
+      {/* Panel seam rings — visible breaks between sections */}
       <mesh position={[0.5, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.53, 0.53, 0.06, 8]} />
-        <Toon color="#6a6078" />
+        <Toon color="#4a4260" />
       </mesh>
-      <mesh position={[-0.4, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+      <mesh position={[-0.2, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.54, 0.54, 0.05, 8]} />
-        <Toon color="#685e6e" />
-      </mesh>
-      {/* Rust staining near engine end */}
-      <mesh position={[-1.0, -0.1, 0.3]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.48, 0.48, 0.15, 8]} />
-        <Toon color="#6a5550" />
+        <Toon color="#4a4260" />
       </mesh>
 
-      {/* ═══ FORWARD SECTION — slightly warmer tone ═══ */}
+      {/* Rust/weathering patch near engine */}
+      <mesh position={[-1.0, -0.1, 0.3]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.48, 0.48, 0.15, 8]} />
+        <Toon color="#6a5040" />
+      </mesh>
+      <mesh position={[-0.9, 0.15, -0.25]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.47, 0.47, 0.12, 8]} />
+        <Toon color="#5e4a42" />
+      </mesh>
+
+      {/* ═══ FORWARD SECTION — distinctly warmer ═══ */}
       <mesh position={[1.2, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.42, 0.48, 0.6, 8]} />
-        <Toon color="#7a7288" />
+        <Toon color="#7a7088" />
       </mesh>
 
       {/* ═══ BRIDGE — octagonal, offset, large amber windows ═══ */}
@@ -184,36 +200,53 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
         <mesh position={[0.35, 0, 0.1]}><boxGeometry args={[0.6, 0.02, 0.35]} /><Toon color="#3a5070" /></mesh>
       </group>
 
-      {/* ═══ ANTENNAE — thin, tall, warm tips ═══ */}
-      <group position={[0.2, 0.5, -0.15]}>
-        <mesh rotation={[0.12, 0, -0.08]}>
-          <cylinderGeometry args={[0.005, 0.01, 2.8, 4]} />
+      {/* ═══ ANTENNAE — thicker bases connecting to hull, thin shafts ═══ */}
+      {/* Antenna 1: tallest */}
+      <group position={[0.2, 0.48, -0.15]}>
+        {/* Base mount — thick, visibly connected to hull */}
+        <mesh>
+          <cylinderGeometry args={[0.04, 0.05, 0.12, 6]} />
+          <Toon color="#6a6280" />
+        </mesh>
+        {/* Shaft — thicker than before so it reads at distance */}
+        <mesh position={[0, 0.06, 0]} rotation={[0.12, 0, -0.08]}>
+          <cylinderGeometry args={[0.012, 0.02, 2.8, 4]} />
           <Toon color="#9090a8" />
         </mesh>
-        <mesh position={[0, 1.35, 0]} rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.003, 0.003, 0.25, 4]} />
+        <mesh position={[0, 1.42, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.006, 0.006, 0.25, 4]} />
           <Toon color="#a0a0b0" />
         </mesh>
-        <mesh position={[0, 1.42, 0]}>
+        <mesh position={[0, 1.48, 0]}>
+          <sphereGeometry args={[0.022, 6, 6]} /><Glow color="#f0c080" />
+        </mesh>
+      </group>
+      {/* Antenna 2: medium */}
+      <group position={[-0.4, 0.48, 0.2]}>
+        <mesh>
+          <cylinderGeometry args={[0.035, 0.045, 0.1, 6]} />
+          <Toon color="#6a6280" />
+        </mesh>
+        <mesh position={[0, 0.05, 0]} rotation={[0, 0, 0.2]}>
+          <cylinderGeometry args={[0.01, 0.018, 2.0, 4]} />
+          <Toon color="#9090a8" />
+        </mesh>
+        <mesh position={[-0.2, 1.0, 0]}>
           <sphereGeometry args={[0.018, 6, 6]} /><Glow color="#f0c080" />
         </mesh>
       </group>
-      <group position={[-0.4, 0.5, 0.2]}>
-        <mesh rotation={[0, 0, 0.2]}>
-          <cylinderGeometry args={[0.004, 0.009, 2.0, 4]} />
+      {/* Antenna 3: shorter, forward */}
+      <group position={[0.8, 0.44, -0.1]}>
+        <mesh>
+          <cylinderGeometry args={[0.03, 0.04, 0.08, 6]} />
+          <Toon color="#6a6280" />
+        </mesh>
+        <mesh position={[0, 0.04, 0]} rotation={[-0.15, 0, -0.25]}>
+          <cylinderGeometry args={[0.008, 0.015, 1.4, 4]} />
           <Toon color="#9090a8" />
         </mesh>
-        <mesh position={[-0.2, 0.95, 0]}>
+        <mesh position={[0.17, 0.72, 0]}>
           <sphereGeometry args={[0.015, 6, 6]} /><Glow color="#f0c080" />
-        </mesh>
-      </group>
-      <group position={[0.8, 0.45, -0.1]}>
-        <mesh rotation={[-0.15, 0, -0.25]}>
-          <cylinderGeometry args={[0.004, 0.007, 1.4, 4]} />
-          <Toon color="#9090a8" />
-        </mesh>
-        <mesh position={[0.17, 0.67, 0]}>
-          <sphereGeometry args={[0.012, 6, 6]} /><Glow color="#f0c080" />
         </mesh>
       </group>
 
@@ -274,7 +307,45 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
         );
       })}
 
-      {/* ═══ HULL WINDOWS — large panels ═══ */}
+      {/* ═══ REAR-FACING PORTHOLES (-Z side) — 7 upper, 5 lower ═══ */}
+      {Array.from({ length: 7 }, (_, i) => {
+        const x = -0.6 + i * 0.25;
+        const isDim = i === 2 || i === 4;
+        return (
+          <mesh key={`port-rear-top-${i}`} position={[x, 0.2, -0.48]}
+            rotation={[0, Math.PI, 0]}>
+            <planeGeometry args={[0.065, 0.04]} />
+            <meshBasicMaterial color={isDim ? '#405870' : '#d89030'} toneMapped={false} />
+          </mesh>
+        );
+      })}
+      {Array.from({ length: 5 }, (_, i) => {
+        const x = -0.4 + i * 0.28;
+        const isDim = i === 3;
+        return (
+          <mesh key={`port-rear-bot-${i}`} position={[x, -0.18, -0.48]}
+            rotation={[0, Math.PI, 0]}>
+            <planeGeometry args={[0.05, 0.035]} />
+            <meshBasicMaterial color={isDim ? '#405870' : '#c08028'} toneMapped={false} />
+          </mesh>
+        );
+      })}
+      {/* Rear side window strip */}
+      <mesh position={[0.5, 0.08, -0.48]} rotation={[0, Math.PI, 0]}>
+        <planeGeometry args={[0.4, 0.07]} /><Glow color="#c89030" />
+      </mesh>
+
+      {/* ═══ SIDE-FACING WINDOWS (+X and -X sides) ═══ */}
+      {/* Starboard side (+X) */}
+      <mesh position={[0.2, 0.15, 0.44]} rotation={[0, 0.5, 0]}>
+        <planeGeometry args={[0.3, 0.06]} /><Glow color="#d09038" />
+      </mesh>
+      {/* Port side (-X) — near engine, dimmer */}
+      <mesh position={[-0.5, 0.1, -0.44]} rotation={[0, Math.PI + 0.4, 0]}>
+        <planeGeometry args={[0.25, 0.05]} /><Glow color="#a07028" />
+      </mesh>
+
+      {/* ═══ HULL WINDOWS — large panels (front face, kept from before) ═══ */}
       <mesh position={[0.9, 0.1, 0.48]}>
         <planeGeometry args={[0.5, 0.08]} /><Glow color="#d89838" />
       </mesh>
