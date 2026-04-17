@@ -1,5 +1,7 @@
-// Engine plume — real geometry cone flame with noise displacement,
-// inner white-hot core cone, spark particles, dark metal nozzle bell.
+// Engine plume — 4 concentric noise-displaced shells for a clear temperature
+// gradient (white-hot core → amber → orange → deep red). Emissive nozzle disc
+// and rim ring prevent the "dark hole" at the ship/flame interface.
+// Spark particle system with large HDR points trailing behind the plume.
 
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -56,151 +58,204 @@ const simplexNoise = /* glsl */ `
   }
 `;
 
-// ── Outer flame cone — noise-displaced, turbulent silhouette ────────────────
+// ── Flame shell — one layer of the stacked volumetric flame ─────────────────
 
-const outerFlameVert = /* glsl */ `
+const shellVert = /* glsl */ `
   uniform float uTime;
+  uniform float uDisplace;
+  uniform float uFreq;
+  uniform float uSeed;
   varying float vProgress;
-  varying float vRadialDist;
   ${simplexNoise}
 
   void main() {
-    // progress: 0 at base (nozzle), 1 at tip
-    // ConeGeometry Y goes from -height/2 (base) to +height/2 (tip)
-    vProgress = (position.y + 1.25) / 2.5; // height=2.5, centered
+    // uv.y: 0 at base (wide end), 1 at tip (narrow end) on a cylinder side
+    vProgress = uv.y;
 
-    // Radial distance from cone axis (how far from center)
-    vRadialDist = length(position.xz);
+    float baseFactor = 1.0 - vProgress * 0.5; // displace mostly at base
+    float n1 = snoise(position * uFreq + vec3(uSeed, uTime * 3.5, 0.0));
+    float n2 = snoise(position * uFreq * 2.1 + vec3(uTime * 2.3, uSeed * 1.7, uTime * 1.9));
+    float disp = (n1 * 0.65 + n2 * 0.35) * uDisplace * baseFactor;
 
-    // Noise displacement — strongest at base, zero at tip
-    float baseFactor = 1.0 - vProgress;
-    float n1 = snoise(position * 2.0 + vec3(0.0, uTime * 4.0, 0.0));
-    float n2 = snoise(position * 4.0 + vec3(uTime * 3.0, 0.0, uTime * 2.0));
-    float displacement = (n1 * 0.6 + n2 * 0.4) * 0.3 * baseFactor;
+    vec3 radDir = vec3(position.x, 0.0, position.z);
+    float rl = length(radDir);
+    if (rl > 0.001) radDir /= rl;
 
-    // Push outward radially
-    vec3 radialDir = vec3(position.x, 0.0, position.z);
-    float radLen = length(radialDir);
-    if (radLen > 0.001) radialDir /= radLen;
+    vec3 displaced = position + radDir * disp;
 
-    vec3 displaced = position + radialDir * displacement;
-
-    // Also jitter the tip slightly
-    displaced.y += snoise(vec3(uTime * 5.0, position.x * 3.0, position.z * 3.0)) * 0.15 * vProgress;
+    // Jitter the tip elongation
+    displaced.y += snoise(vec3(uTime * 4.0 + uSeed, position.x * 3.0, position.z * 3.0))
+                   * 0.10 * vProgress;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
   }
 `;
 
-const outerFlameFrag = /* glsl */ `
+const shellFrag = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uIntensity;
+  uniform float uAlpha;
   uniform float uTime;
+  uniform float uSeed;
+  uniform float uTipFade;   // 0..1 — fraction of length over which alpha fades to 0
   varying float vProgress;
-  varying float vRadialDist;
   ${simplexNoise}
 
   void main() {
-    // Inner turbulence pattern
-    float turb = snoise(vec3(vProgress * 5.0, vRadialDist * 8.0, uTime * 3.0)) * 0.5 + 0.5;
+    // Alpha fades axially from base → tip
+    float fadeStart = 1.0 - uTipFade;
+    float axial = 1.0 - smoothstep(fadeStart, 1.0, vProgress);
+    axial = pow(axial, 1.3);
 
-    // Color ramp: tip → base
-    vec3 tipColor      = vec3(0.16, 0.03, 0.03); // #2a0808 nearly invisible
-    vec3 outerRed      = vec3(0.78, 0.13, 0.13); // #c82020
-    vec3 orangeMid     = vec3(0.98, 0.45, 0.09); // #f97316
-    vec3 hotAmber      = vec3(1.0, 0.85, 0.56);  // #ffd890
-    vec3 whiteHot      = vec3(1.0, 0.96, 0.88);  // #fff5e0
+    // Flicker (breaks uniform banding)
+    float flicker = 0.82 + 0.18 * snoise(vec3(vProgress * 3.5, uSeed * 2.1, uTime * 3.0));
 
-    float p = vProgress;
-    vec3 color;
-    if (p > 0.8) color = mix(outerRed, tipColor, (p - 0.8) / 0.2);
-    else if (p > 0.5) color = mix(orangeMid, outerRed, (p - 0.5) / 0.3);
-    else if (p > 0.2) color = mix(hotAmber, orangeMid, (p - 0.2) / 0.3);
-    else color = mix(whiteHot, hotAmber, p / 0.2);
-
-    // Radial falloff: center is hotter
-    float maxRadius = mix(0.4, 0.05, p); // cone radius at this height
-    float radialNorm = clamp(vRadialDist / max(maxRadius, 0.01), 0.0, 1.0);
-    color = mix(color, mix(color, whiteHot, 0.5), (1.0 - radialNorm) * (1.0 - p));
-
-    // Turbulence modulation
-    color *= 0.85 + turb * 0.3;
-
-    // Alpha: base opaque, tip transparent
-    float alpha = (1.0 - p) * 0.85;
-    alpha *= smoothstep(1.0, 0.5, radialNorm); // soft edges
+    vec3 color = uColor * uIntensity * flicker;
+    float alpha = uAlpha * axial;
 
     gl_FragColor = vec4(color, alpha);
   }
 `;
 
-function OuterFlame() {
-  const ref = useRef();
-  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
+function FlameShell({
+  baseRad, tipRad, length, color, intensity, alpha,
+  displace, freq, seed, tipFade,
+}) {
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uColor: { value: new THREE.Color(color) },
+    uIntensity: { value: intensity },
+    uAlpha: { value: alpha },
+    uDisplace: { value: displace },
+    uFreq: { value: freq },
+    uSeed: { value: seed },
+    uTipFade: { value: tipFade },
+  }), [color, intensity, alpha, displace, freq, seed, tipFade]);
+
   useFrame(({ clock }) => { uniforms.uTime.value = clock.elapsedTime; });
 
-  // Cone: base radius 0.4 (at nozzle), tip radius 0.05, length 2.5
-  // Points along +Y by default. We rotate so +Y = rearward (-X in world).
+  // Cylinder: Y-axis aligned, top=+Y=tipRad, bottom=-Y=baseRad.
+  // Rotate Z by +π/2 so +Y → -X (flame trails rearward).
+  // Shift by -length/2 so base sits at world x = 0.
   return (
-    <mesh ref={ref} rotation={[0, 0, Math.PI / 2]} position={[-1.25, 0, 0]}>
-      <coneGeometry args={[0.05, 2.5, 32, 16, true]} />
+    <mesh rotation={[0, 0, Math.PI / 2]} position={[-length / 2, 0, 0]}>
+      <cylinderGeometry args={[tipRad, baseRad, length, 32, 20, true]} />
       <shaderMaterial
-        vertexShader={outerFlameVert}
-        fragmentShader={outerFlameFrag}
+        vertexShader={shellVert}
+        fragmentShader={shellFrag}
         uniforms={uniforms}
         transparent
         depthWrite={false}
         side={THREE.DoubleSide}
+        toneMapped={false}
         blending={THREE.AdditiveBlending}
       />
     </mesh>
   );
 }
 
-// ── Inner white-hot core cone — smaller, brighter ───────────────────────────
+// ── Flame stack — 4 concentric shells give automatic radial gradient ────────
 
-const innerCoreVert = /* glsl */ `
-  uniform float uTime;
-  varying float vProgress;
-  ${simplexNoise}
+function FlameStack() {
+  return (
+    <>
+      {/* Outer shell — deep red #c82020 at the fringe */}
+      <FlameShell
+        baseRad={0.46} tipRad={0.08} length={2.8}
+        color="#c82020" intensity={1.0} alpha={0.35}
+        displace={0.38} freq={1.8} seed={0.3} tipFade={0.85}
+      />
+      {/* Mid shell — orange #f97316 body */}
+      <FlameShell
+        baseRad={0.34} tipRad={0.055} length={2.4}
+        color="#f97316" intensity={1.25} alpha={0.42}
+        displace={0.28} freq={2.4} seed={1.7} tipFade={0.75}
+      />
+      {/* Inner shell — bright amber #ffd890 */}
+      <FlameShell
+        baseRad={0.22} tipRad={0.04} length={1.95}
+        color="#ffd890" intensity={1.6} alpha={0.55}
+        displace={0.2} freq={2.9} seed={3.1} tipFade={0.65}
+      />
+      {/* Hot core — white-hot #fff5e0 emissive */}
+      <FlameShell
+        baseRad={0.11} tipRad={0.02} length={1.35}
+        color="#fff5e0" intensity={2.4} alpha={0.85}
+        displace={0.1} freq={3.6} seed={5.4} tipFade={0.55}
+      />
+    </>
+  );
+}
 
-  void main() {
-    vProgress = (position.y + 0.75) / 1.5;
-    float n = snoise(position * 3.0 + vec3(0.0, uTime * 5.0, 0.0));
-    vec3 radDir = vec3(position.x, 0.0, position.z);
-    float rl = length(radDir);
-    if (rl > 0.001) radDir /= rl;
-    vec3 displaced = position + radDir * n * 0.08 * (1.0 - vProgress);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
-  }
-`;
+// ── Nozzle — emissive disc + rim ring replaces the "dark hole" ──────────────
 
-const innerCoreFrag = /* glsl */ `
-  varying float vProgress;
-  void main() {
-    vec3 white = vec3(1.0, 0.98, 0.92);
-    vec3 amber = vec3(1.0, 0.85, 0.5);
-    vec3 color = mix(white, amber, vProgress);
-    float alpha = (1.0 - vProgress) * 0.9;
-    gl_FragColor = vec4(color, alpha);
-  }
-`;
+function Nozzle() {
+  // Pulse the rim slightly so heat looks alive
+  const discRef = useRef();
+  const ringRef = useRef();
+  const outerRef = useRef();
 
-function InnerCore() {
-  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
-  useFrame(({ clock }) => { uniforms.uTime.value = clock.elapsedTime; });
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    const pulse = 0.9 + 0.1 * Math.sin(t * 6.0);
+    if (discRef.current) discRef.current.material.opacity = 0.95 * pulse;
+    if (ringRef.current) ringRef.current.material.opacity = 0.95 * pulse;
+    if (outerRef.current) outerRef.current.material.opacity = 0.45 * pulse;
+  });
 
   return (
-    <mesh rotation={[0, 0, Math.PI / 2]} position={[-0.75, 0, 0]}>
-      <coneGeometry args={[0.02, 1.5, 16, 8, true]} />
-      <shaderMaterial
-        vertexShader={innerCoreVert}
-        fragmentShader={innerCoreFrag}
-        uniforms={uniforms}
-        transparent
-        depthWrite={false}
-        side={THREE.DoubleSide}
-        blending={THREE.AdditiveBlending}
-      />
-    </mesh>
+    <group>
+      {/* Emissive amber disc — the glowing opening */}
+      <mesh
+        ref={discRef}
+        position={[0.02, 0, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
+      >
+        <circleGeometry args={[0.42, 40]} />
+        <meshBasicMaterial
+          color="#ffb060"
+          toneMapped={false}
+          transparent
+          opacity={0.95}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* Bright rim ring around the opening */}
+      <mesh
+        ref={ringRef}
+        position={[0.025, 0, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
+      >
+        <ringGeometry args={[0.4, 0.5, 40]} />
+        <meshBasicMaterial
+          color="#ffe0a0"
+          toneMapped={false}
+          transparent
+          opacity={0.95}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* Softer outer heat bloom */}
+      <mesh
+        ref={outerRef}
+        position={[0.03, 0, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
+      >
+        <ringGeometry args={[0.48, 0.68, 40]} />
+        <meshBasicMaterial
+          color="#ff7020"
+          toneMapped={false}
+          transparent
+          opacity={0.45}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    </group>
   );
 }
 
@@ -208,48 +263,58 @@ function InnerCore() {
 
 const SPARK_COUNT = 60;
 
-function resetSpark(pos, vel, lt, age, sz, i) {
-  pos[i*3]   = 0;
-  pos[i*3+1] = (Math.random()-0.5)*0.15;
-  pos[i*3+2] = (Math.random()-0.5)*0.15;
-  const speed = 1.5 + Math.random()*2.5;
-  const spread = 0.35; // ~20° half-angle
-  vel[i] = [
-    -speed,
-    Math.sin((Math.random()-0.5)*spread)*speed*0.2,
-    Math.sin((Math.random()-0.5)*spread)*speed*0.2,
-  ];
-  lt[i] = 0.6 + Math.random()*0.4;
-  age[i] = 0;
-  sz[i] = 0.05 + Math.random()*0.07;
+function initSpark(pos, vel, i) {
+  // Spawn along the first ~30% of the flame trail, with small lateral scatter
+  const spawnX = -Math.random() * 0.8;
+  const scatter = 0.1 + Math.abs(spawnX) * 0.2;
+  pos[i * 3]     = spawnX;
+  pos[i * 3 + 1] = (Math.random() - 0.5) * scatter;
+  pos[i * 3 + 2] = (Math.random() - 0.5) * scatter;
+
+  const speed = 1.2 + Math.random() * 2.2;
+  const angle = Math.random() * Math.PI * 2;
+  const spread = 0.25 + Math.random() * 0.5; // radial component
+  vel[i * 3]     = -speed;                          // mostly rearward
+  vel[i * 3 + 1] = Math.cos(angle) * speed * spread * 0.35;
+  vel[i * 3 + 2] = Math.sin(angle) * speed * spread * 0.35;
 }
 
 function Sparks() {
   const pRef = useRef();
-  const { positions, velocities, lifetimes, ages, sizes } = useMemo(() => {
-    const p = new Float32Array(SPARK_COUNT*3);
-    const v = Array.from({length:SPARK_COUNT},()=>[0,0,0]);
-    const lt = new Float32Array(SPARK_COUNT);
-    const a = new Float32Array(SPARK_COUNT);
-    const s = new Float32Array(SPARK_COUNT);
-    for (let i=0;i<SPARK_COUNT;i++) { resetSpark(p,v,lt,a,s,i); a[i]=Math.random()*lt[i]; }
-    return {positions:p,velocities:v,lifetimes:lt,ages:a,sizes:s};
-  },[]);
 
-  useFrame((_,dt) => {
-    for (let i=0;i<SPARK_COUNT;i++) {
-      ages[i]+=dt;
-      if (ages[i]>=lifetimes[i]) resetSpark(positions,velocities,lifetimes,ages,sizes,i);
-      positions[i*3]  +=velocities[i][0]*dt;
-      positions[i*3+1]+=velocities[i][1]*dt;
-      positions[i*3+2]+=velocities[i][2]*dt;
-      velocities[i][0]*=0.97;
-      velocities[i][1]*=0.97;
-      velocities[i][2]*=0.97;
+  const { positions, velocities, ages, lifetimes, sizes } = useMemo(() => {
+    const positions = new Float32Array(SPARK_COUNT * 3);
+    const velocities = new Float32Array(SPARK_COUNT * 3);
+    const ages = new Float32Array(SPARK_COUNT);
+    const lifetimes = new Float32Array(SPARK_COUNT);
+    const sizes = new Float32Array(SPARK_COUNT);
+    for (let i = 0; i < SPARK_COUNT; i++) {
+      sizes[i] = 0.14 + Math.random() * 0.14;
+      lifetimes[i] = 0.65 + Math.random() * 0.25;
+      initSpark(positions, velocities, i);
+      ages[i] = Math.random() * lifetimes[i];
+    }
+    return { positions, velocities, ages, lifetimes, sizes };
+  }, []);
+
+  useFrame((_, dt) => {
+    const clampedDt = Math.min(dt, 0.05);
+    for (let i = 0; i < SPARK_COUNT; i++) {
+      ages[i] += clampedDt;
+      if (ages[i] >= lifetimes[i]) {
+        initSpark(positions, velocities, i);
+        ages[i] = 0;
+      }
+      positions[i * 3]     += velocities[i * 3]     * clampedDt;
+      positions[i * 3 + 1] += velocities[i * 3 + 1] * clampedDt;
+      positions[i * 3 + 2] += velocities[i * 3 + 2] * clampedDt;
+      velocities[i * 3]     *= 0.96;
+      velocities[i * 3 + 1] *= 0.96;
+      velocities[i * 3 + 2] *= 0.96;
     }
     if (pRef.current) {
-      pRef.current.geometry.attributes.position.needsUpdate=true;
-      pRef.current.geometry.attributes.aAge.needsUpdate=true;
+      pRef.current.geometry.attributes.position.needsUpdate = true;
+      pRef.current.geometry.attributes.aAge.needsUpdate = true;
     }
   });
 
@@ -259,20 +324,26 @@ function Sparks() {
     attribute float aLifetime;
     varying float vLife;
     void main(){
-      vLife=clamp(aAge/aLifetime,0.0,1.0);
-      vec4 mv=modelViewMatrix*vec4(position,1.0);
-      gl_PointSize=aSize*(1.0-vLife*0.4)*180.0/-mv.z;
-      gl_Position=projectionMatrix*mv;
+      vLife = clamp(aAge / aLifetime, 0.0, 1.0);
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      // Large, distance-scaled points so sparks actually read
+      gl_PointSize = aSize * 520.0 / max(-mv.z, 0.1);
+      gl_Position = projectionMatrix * mv;
     }
   `;
   const frag = /* glsl */ `
     varying float vLife;
     void main(){
-      float d=length(gl_PointCoord-vec2(0.5));
-      if(d>0.5)discard;
-      float soft=smoothstep(0.5,0.1,d);
-      vec3 col=mix(vec3(1.0,0.72,0.25),vec3(0.55,0.08,0.03),vLife);
-      gl_FragColor=vec4(col,soft*(1.0-vLife*0.9));
+      vec2 d = gl_PointCoord - vec2(0.5);
+      float dist = length(d);
+      if (dist > 0.5) discard;
+      float soft = smoothstep(0.5, 0.05, dist);
+      // Warm amber at birth → dark red at death
+      vec3 birth = vec3(1.5, 0.85, 0.32);
+      vec3 death = vec3(0.55, 0.08, 0.03);
+      vec3 col = mix(birth, death, vLife);
+      float alpha = soft * (1.0 - vLife * 0.92);
+      gl_FragColor = vec4(col, alpha);
     }
   `;
 
@@ -284,39 +355,26 @@ function Sparks() {
         <bufferAttribute attach="attributes-aAge" array={ages} count={SPARK_COUNT} itemSize={1} />
         <bufferAttribute attach="attributes-aLifetime" array={lifetimes} count={SPARK_COUNT} itemSize={1} />
       </bufferGeometry>
-      <shaderMaterial vertexShader={vert} fragmentShader={frag}
-        uniforms={{}} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
+      <shaderMaterial
+        vertexShader={vert}
+        fragmentShader={frag}
+        uniforms={{}}
+        transparent
+        depthWrite={false}
+        toneMapped={false}
+        blending={THREE.AdditiveBlending}
+      />
     </points>
   );
 }
 
-// ── Nozzle bell — dark metal + hot emissive ring ────────────────────────────
-
-function Nozzle() {
-  return (
-    <group>
-      {/* Bell shape — wide at exit, narrow at hull */}
-      <mesh rotation={[0, 0, -Math.PI / 2]}>
-        <coneGeometry args={[0.08, 0.35, 12]} />
-        <meshStandardMaterial color="#2a2040" roughness={0.9} metalness={0.4} />
-      </mesh>
-      {/* Hot emissive ring at exit */}
-      <mesh position={[0.175, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <torusGeometry args={[0.13, 0.02, 8, 16]} />
-        <meshBasicMaterial color="#ffe0a0" toneMapped={false} />
-      </mesh>
-    </group>
-  );
-}
-
-// ── Export ───────────────────────────────────────────────────────────────────
+// ── Export ──────────────────────────────────────────────────────────────────
 
 export default function EnginePlume({ position = [0, 0, 0] }) {
   return (
     <group position={position}>
       <Nozzle />
-      <OuterFlame />
-      <InnerCore />
+      <FlameStack />
       <Sparks />
     </group>
   );
