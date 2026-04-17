@@ -1,6 +1,6 @@
-import React, { useRef, Suspense, useEffect } from 'react';
+import React, { useRef, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { ScrollControls, useScroll, PerspectiveCamera } from '@react-three/drei';
+import { ScrollControls, useScroll } from '@react-three/drei';
 import { SheetProvider, PerspectiveCamera as TheatreCamera, useCurrentSheet } from '@theatre/r3f';
 import { val } from '@theatre/core';
 import { mainSheet } from './choreography/theatreProject';

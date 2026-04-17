@@ -18,9 +18,8 @@ function isLowEnd() {
   return false;
 }
 
-export default function LandingPageV2({ setPage }) {
+export default function LandingPageV2({ setPage }) { // eslint-disable-line no-unused-vars
   const lowEnd = isLowEnd();
-  const onNavigate = (page) => setPage?.(page);
 
   // Phase A: render the 3D experience. Static fallback comes in Phase J.
   // HTML overlays will layer on top in later phases.
