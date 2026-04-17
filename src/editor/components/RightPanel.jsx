@@ -4,6 +4,10 @@
 
 import React, { useState } from 'react';
 import useEditorStore from '../engine/Store';
+import {
+  ImagePlus, Type, Layers, Scissors, GitBranch,
+  Sparkles, LayoutTemplate, Package, Wand2, Target,
+} from 'lucide-react';
 
 import BrushSettingsPanel  from '../panels/BrushSettingsPanel';
 import { MagicWandPanel, LassoPanel } from '../panels/SelectionToolPanel';
@@ -19,6 +23,9 @@ import CTRScoreWidget      from '../ai/CTRScoreWidget';
 import FaceEnhancement     from '../ai/FaceEnhancement';
 import StyleTransfer       from '../ai/StyleTransfer';
 import TextSuggestions     from '../ai/TextSuggestions';
+
+const ICON_STYLE = { opacity: 0.55, flexShrink: 0 };
+const ICON_SIZE  = 13;
 
 const PAINT_TOOLS = new Set([
   'brush','eraser','clone_stamp','healing_brush','spot_healing',
@@ -200,39 +207,41 @@ export default function RightPanel({
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
               {[
-                { icon: '🖼', label: 'Add Image',    hint: 'Upload an image layer',    onClick: onFileUpload,                          id: null },
-                { icon: 'T',  label: 'Add Text',     hint: 'Switch to text tool',      onClick: () => setActiveTool('text'),            id: null },
-                { icon: '⛏️', label: 'Niche Presets', hint: 'Apply a niche style preset', onClick: () => setOpenPanel(p => p === 'niches' ? null : 'niches'), id: 'niches' },
-                { icon: '🌄', label: 'Background',   hint: 'Add a solid or gradient background', onClick: () => setOpenPanel(p => p === 'background' ? null : 'background'), id: 'background' },
-                { icon: '✂️', label: 'BG Remover',   hint: 'Remove background from an image', onClick: () => setShowBackgroundRemover(true), id: null },
-                { icon: '⚡', label: 'A/B Variants', hint: 'Apply a style variant to all image layers', onClick: () => setOpenPanel(p => p === 'variants' ? null : 'variants'), id: 'variants' },
-                { icon: '✦',  label: 'AI Generate', hint: 'Generate AI image',        onClick: () => setShowAIGeneratePanel(true),     id: null },
-                { icon: '📋', label: 'Templates',   hint: 'Browse templates',         onClick: () => setShowTemplateBrowser(true),     id: null },
-                { icon: '🖼', label: 'Assets',      hint: 'Browse stock photos and assets', onClick: () => setShowAssetLibrary(true), id: null },
-                { icon: '🤖', label: 'Auto Thumb',  hint: 'AI generates a full thumbnail layout', onClick: () => onShowAutoThumbnail?.(), id: null },
-              ].map(({ icon, label, hint, onClick, id }) => {
-                const isActive = id && openPanel === id;
+                { Icon: ImagePlus,      label: 'Add Image',     hint: 'Upload an image layer',                  onClick: onFileUpload,                                                                    panelId: null },
+                { Icon: Type,           label: 'Add Text',      hint: 'Switch to text tool',                    onClick: () => setActiveTool('text'),                                                     panelId: null },
+                { Icon: Target,         label: 'Niche Presets',  hint: 'Apply a niche style preset',             onClick: () => setOpenPanel(p => p === 'niches' ? null : 'niches'),                        panelId: 'niches' },
+                { Icon: Layers,         label: 'Background',     hint: 'Add a solid or gradient background',     onClick: () => setOpenPanel(p => p === 'background' ? null : 'background'),                panelId: 'background' },
+                { Icon: Scissors,       label: 'BG Remover',     hint: 'Remove background from an image',        onClick: () => setShowBackgroundRemover(true),                                            panelId: null },
+                { Icon: GitBranch,      label: 'A/B Variants',   hint: 'Apply a style variant to all layers',    onClick: () => setOpenPanel(p => p === 'variants' ? null : 'variants'),                    panelId: 'variants' },
+                { Icon: Sparkles,       label: 'AI Generate',    hint: 'Generate AI image',                      onClick: () => setShowAIGeneratePanel(true),                                              panelId: null },
+                { Icon: LayoutTemplate, label: 'Templates',      hint: 'Browse templates',                       onClick: () => setShowTemplateBrowser(true),                                              panelId: null },
+                { Icon: Package,        label: 'Assets',         hint: 'Browse stock photos and assets',         onClick: () => setShowAssetLibrary(true),                                                 panelId: null },
+                { Icon: Wand2,          label: 'Auto Thumb',     hint: 'AI generates a full thumbnail layout',   onClick: () => onShowAutoThumbnail?.(),                                                   panelId: null },
+              ].map(({ Icon, label, hint, onClick, panelId }) => {
+                const isActive = panelId && openPanel === panelId;
                 return (
                   <button
                     key={label}
                     title={hint}
                     onClick={onClick}
                     style={{
-                      height: 48, display: 'flex', flexDirection: 'column', alignItems: 'center',
-                      justifyContent: 'center', gap: 4,
-                      background: isActive ? 'rgba(249,115,22,0.10)' : 'var(--bg-3)',
-                      border: isActive ? '1px solid rgba(249,115,22,0.40)' : '1px solid var(--border-1)',
-                      borderRadius: 'var(--radius-lg)', cursor: 'pointer',
-                      color: isActive ? '#f97316' : 'var(--text-3)', fontSize: 11, fontWeight: 600,
-                      transition: 'background var(--dur-fast), color var(--dur-fast)',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '7px 10px',
+                      background: isActive ? 'rgba(249,115,22,0.10)' : 'rgba(255,255,255,0.04)',
+                      border: isActive ? '1px solid rgba(249,115,22,0.35)' : '1px solid rgba(255,255,255,0.06)',
+                      borderRadius: 6, cursor: 'pointer',
+                      color: isActive ? '#f97316' : 'rgba(245,245,247,0.70)',
+                      fontSize: 11, fontWeight: 500, textAlign: 'left',
+                      whiteSpace: 'nowrap', overflow: 'hidden',
+                      transition: 'all 0.15s ease',
                     }}
-                    onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'var(--bg-5)'; e.currentTarget.style.color = 'var(--text-2)'; } }}
-                    onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.color = 'var(--text-3)'; } }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
                   >
-                    <span style={{ fontSize: 18 }}>{icon}</span>
-                    <span>{label}</span>
+                    <Icon size={ICON_SIZE} style={isActive ? { ...ICON_STYLE, opacity: 0.9 } : ICON_STYLE} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
                   </button>
                 );
               })}

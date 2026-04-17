@@ -11,7 +11,7 @@ import { captureCanvasForAnalysis } from './canvasAnalyzer';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const CIRCUMFERENCE = 2 * Math.PI * 26; // r=26 → ≈ 163.36
+const CIRCUMFERENCE = 2 * Math.PI * 19; // r=19 → smaller badge
 
 const FACTOR_LABELS = {
   brightness:              'Brightness',
@@ -120,10 +120,6 @@ export default function CTRScoreWidget({ pixiApp }) {
       `}</style>
 
       <div style={{
-        background:   'var(--bg-3)',
-        border:       '1px solid var(--border-1)',
-        borderRadius: 'var(--radius-lg)',
-        padding:      12,
         width:        '100%',
         maxWidth:     260,
         boxSizing:    'border-box',
@@ -131,52 +127,45 @@ export default function CTRScoreWidget({ pixiApp }) {
       }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
-            CTR Score
-          </span>
-          {/* Info icon */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <span
             title="CTR Score is estimated from your thumbnail's visual properties. It is a relative benchmark, not an absolute prediction."
-            style={{ fontSize: 13, color: 'var(--text-4)', cursor: 'default', lineHeight: 1 }}
+            style={{ fontSize: 9, color: 'rgba(245,245,247,0.35)', cursor: 'default', lineHeight: 1 }}
           >
-            ⓘ
+            Relative benchmark — not a prediction
           </span>
         </div>
 
         {/* Score row: circular badge + label + footer */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
 
           {/* Circular badge */}
           <div style={{
             flexShrink: 0,
             animation: animating ? 'ctr-score-pop 0.6s ease' : 'none',
           }}>
-            <svg width={64} height={64} viewBox="0 0 64 64" style={{ display: 'block' }}>
-              {/* Background track */}
+            <svg width={48} height={48} viewBox="0 0 48 48" style={{ display: 'block' }}>
               <circle
-                cx={32} cy={32} r={26}
+                cx={24} cy={24} r={19}
                 fill="none"
-                stroke="var(--bg-5)"
-                strokeWidth={5}
+                stroke="rgba(255,255,255,0.06)"
+                strokeWidth={4}
               />
-              {/* Score arc */}
               <circle
-                cx={32} cy={32} r={26}
+                cx={24} cy={24} r={19}
                 fill="none"
                 stroke={color}
-                strokeWidth={5}
+                strokeWidth={4}
                 strokeLinecap="round"
                 strokeDasharray={`${dashFill} ${CIRCUMFERENCE}`}
-                transform="rotate(-90 32 32)"
+                transform="rotate(-90 24 24)"
                 style={{ transition: 'stroke-dasharray 0.5s ease, stroke 0.3s ease' }}
               />
-              {/* Center number */}
               <text
-                x={32} y={32}
+                x={24} y={24}
                 textAnchor="middle"
                 dominantBaseline="central"
-                style={{ fontSize: score !== null ? 15 : 12, fontWeight: 700, fill: color, fontFamily: 'inherit' }}
+                style={{ fontSize: score !== null ? 13 : 10, fontWeight: 700, fill: color, fontFamily: 'inherit' }}
               >
                 {displayNum}
               </text>
@@ -185,16 +174,16 @@ export default function CTRScoreWidget({ pixiApp }) {
 
           {/* Label + footer */}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: color, lineHeight: 1.2 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: color, lineHeight: 1.2 }}>
               {label}
             </div>
             {score !== null && (
-              <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 4, lineHeight: 1.4 }}>
+              <div style={{ fontSize: 9, color: 'var(--text-4)', marginTop: 3, lineHeight: 1.4 }}>
                 {footerText}
               </div>
             )}
             {score === null && (
-              <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 4 }}>
+              <div style={{ fontSize: 9, color: 'var(--text-4)', marginTop: 3 }}>
                 Calculating…
               </div>
             )}
@@ -203,8 +192,8 @@ export default function CTRScoreWidget({ pixiApp }) {
 
         {/* Breakdown bars — only show when we have data */}
         {Object.keys(breakdown).length > 0 && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-4)', marginBottom: 6 }}>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(245,245,247,0.25)', marginBottom: 5 }}>
               Breakdown
             </div>
             {Object.entries(FACTOR_LABELS).map(([key, label]) => {
@@ -212,23 +201,22 @@ export default function CTRScoreWidget({ pixiApp }) {
               if (val == null) return null;
               const rounded = Math.round(val);
               return (
-                <div key={key} style={{ marginBottom: 5 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                    <span style={{ fontSize: 10, color: 'var(--text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160 }}>
+                <div key={key} style={{ marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 1 }}>
+                    <span style={{ fontSize: 9, color: 'rgba(245,245,247,0.50)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>
                       {label}
                     </span>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: barColor(rounded), marginLeft: 6, flexShrink: 0 }}>
+                    <span style={{ fontSize: 9, fontWeight: 600, color: barColor(rounded), marginLeft: 6, flexShrink: 0 }}>
                       {rounded}
                     </span>
                   </div>
-                  {/* Bar track */}
-                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                  <div style={{ height: 3, borderRadius: 1.5, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
                     <div style={{
                       height: '100%',
                       width:  `${Math.min(100, Math.max(0, rounded))}%`,
                       minWidth: 2,
                       background: barColor(rounded),
-                      borderRadius: 2,
+                      borderRadius: 1.5,
                       transition: 'width 0.4s ease',
                     }} />
                   </div>
