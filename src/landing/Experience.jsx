@@ -1,11 +1,24 @@
-import React, { Suspense } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { ScrollControls, Stats } from '@react-three/drei';
+import React, { Suspense, useEffect } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { ScrollControls, Stats, useScroll } from '@react-three/drei';
 import PainterlyPost from './shaders/painterly/PainterlyPost';
 import Arrival from './scenes/Arrival';
 import Nebula from './scenes/Nebula';
+import { setScrollOffset, setScrollEl } from './lib/scrollBridge';
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
+
+// Writes the current scroll offset and container element to the bridge
+// each frame so HTML overlays can sync without re-rendering React.
+function ScrollReader() {
+  const scroll = useScroll();
+  useEffect(() => {
+    setScrollEl(scroll.el);
+    return () => setScrollEl(null);
+  }, [scroll.el]);
+  useFrame(() => setScrollOffset(scroll.offset));
+  return null;
+}
 
 function SceneGraph() {
   return (
@@ -32,6 +45,7 @@ export default function Experience() {
         <Suspense fallback={null}>
           <ScrollControls pages={7} damping={0.3}>
             <SceneGraph />
+            <ScrollReader />
           </ScrollControls>
         </Suspense>
       </Canvas>
