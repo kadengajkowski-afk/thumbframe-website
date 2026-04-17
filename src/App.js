@@ -11,7 +11,7 @@ import { useAuth } from './context/AuthContext';
 import { handleUpgrade } from './utils/checkout';
 
 // ── Code-split marketing pages ────────────────────────────────────────────────
-const Home      = lazy(() => import('./pages/Home'));
+const Home      = lazy(() => import('./landing/LandingPageV2'));
 const Features  = lazy(() => import('./pages/Features'));
 const PricingPage = lazy(() => import('./pages/Pricing'));
 const About     = lazy(() => import('./pages/About'));

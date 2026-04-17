@@ -1,0 +1,64 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/geist";
+
+@theme {
+  --color-space-0: #050510;
+  --color-space-1: #0a0a1e;
+  --color-space-2: #12122a;
+  --color-space-3: #1a1a2e;
+
+  --color-orange: #f97316;
+  --color-orange-glow: #f9731633;
+  --color-cyan: #00e5ff;
+  --color-lime: #76ff03;
+
+  --color-text-0: #ffffff;
+  --color-text-1: #a0a0b0;
+  --color-text-2: #6b6b7b;
+
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
+  --font-display: 'Geist Variable', 'Inter Variable', sans-serif;
+}
+
+/* Glows */
+.glow-orange { box-shadow: 0 0 40px -8px var(--color-orange-glow); }
+.glow-cyan   { box-shadow: 0 0 40px -8px #00e5ff33; }
+.glow-card   { box-shadow: 0 0 0 1px var(--color-space-3), 0 4px 20px rgba(0,0,0,0.4); }
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid var(--color-orange);
+  outline-offset: 2px;
+}
+
+/* Skip-to-main */
+.skip-to-main {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--color-orange);
+  color: #fff;
+  font-weight: 700;
+  border-radius: 0 0 8px 0;
+}
+.skip-to-main:focus {
+  left: 0;
+}
+
+/* Landing page root scope */
+.landing-root {
+  font-family: var(--font-sans);
+  color: var(--color-text-0);
+  background: var(--color-space-0);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.landing-root h1,
+.landing-root h2,
+.landing-root h3 {
+  font-family: var(--font-display);
+}

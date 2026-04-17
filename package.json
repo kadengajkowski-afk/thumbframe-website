@@ -7,8 +7,11 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",
+    "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource-variable/inter": "^5.2.8",
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "^2.100.0",
+    "@tailwindcss/postcss": "^4.2.2",
     "@tensorflow-models/blazeface": "^0.1.0",
     "@tensorflow-models/coco-ssd": "^2.2.3",
     "@tensorflow/tfjs": "^4.22.0",
@@ -42,6 +45,7 @@
     "resend": "^3.2.0",
     "sharp": "^0.33.2",
     "stripe": "^14.21.0",
+    "tailwindcss": "^4.2.2",
     "uuid": "^9.0.0",
     "web-vitals": "^2.1.4",
     "zustand": "^5.0.12"
