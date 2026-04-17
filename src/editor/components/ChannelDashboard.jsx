@@ -3,11 +3,7 @@
 // States: loading | not_configured | not_connected | connected | error
 
 import React, { useState, useEffect } from 'react';
-import supabase from '../../supabaseClient';
-
-const API_URL = (
-  process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app'
-).replace(/\/$/, '');
+import { apiFetch } from '../utils/apiClient';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -20,15 +16,6 @@ function formatSubscribers(n) {
 
 function toast(message, type = 'info') {
   window.dispatchEvent(new CustomEvent('tf:toast', { detail: { message, type } }));
-}
-
-async function getAuthToken() {
-  try {
-    const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token || null;
-  } catch {
-    return null;
-  }
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -91,10 +78,7 @@ export default function ChannelDashboard({ user, onClose }) {
 
     async function loadStatus() {
       try {
-        const token = await getAuthToken();
-        const res   = await fetch(`${API_URL}/api/youtube/status`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const res = await apiFetch('/api/youtube/status');
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -110,7 +94,7 @@ export default function ChannelDashboard({ user, onClose }) {
           setStatus('connected');
           setChannel(data.channel || null);
           // Fetch recent videos
-          fetchVideos(token);
+          fetchVideos();
         } else {
           setStatus('not_connected');
         }
@@ -124,11 +108,9 @@ export default function ChannelDashboard({ user, onClose }) {
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function fetchVideos(token) {
+  async function fetchVideos() {
     try {
-      const res  = await fetch(`${API_URL}/api/youtube/videos`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await apiFetch('/api/youtube/videos');
       if (!res.ok) return;
       const data = await res.json();
       setVideos(data.videos || []);
@@ -160,10 +142,7 @@ export default function ChannelDashboard({ user, onClose }) {
 
     setConnecting(true);
     try {
-      const token = await getAuthToken();
-      const res   = await fetch(`${API_URL}/api/youtube/auth-url`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await apiFetch('/api/youtube/auth-url');
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -185,11 +164,7 @@ export default function ChannelDashboard({ user, onClose }) {
 
   const handleDisconnect = async () => {
     try {
-      const token = await getAuthToken();
-      await fetch(`${API_URL}/api/youtube/disconnect`, {
-        method:  'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      await apiFetch('/api/youtube/disconnect', { method: 'POST' });
     } catch {
       // Ignore network errors — clear state anyway
     }

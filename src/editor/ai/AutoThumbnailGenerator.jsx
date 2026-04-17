@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import useEditorStore from '../engine/Store';
-
-const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
+import { apiFetch } from '../utils/apiClient';
 
 const NICHES = ['Gaming','Finance','Fitness','Cooking','Tech','Education','Entertainment','Travel','Beauty','Business'];
 
@@ -34,9 +33,8 @@ export default function AutoThumbnailGenerator({ user, onClose }) {
     }, 2000);
 
     try {
-      const res = await fetch(`${API_URL}/api/ai/auto-thumbnail`, {
+      const res = await apiFetch('/api/ai/auto-thumbnail', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description, niche }),
       });
       clearInterval(interval);

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-
-const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
+import { apiFetch } from '../utils/apiClient';
 
 export default function FaceEnhancement({ layer, user, supabaseSession }) {
   const [step, setStep] = useState('preview'); // preview | enhancing | result | error
@@ -30,10 +29,8 @@ export default function FaceEnhancement({ layer, user, supabaseSession }) {
       off.getContext('2d').drawImage(img, 0, 0);
       const base64 = off.toDataURL('image/jpeg', 0.9).split(',')[1];
 
-      const token = supabaseSession?.access_token;
-      const res = await fetch(`${API_URL}/api/ai/enhance-face`, {
+      const res = await apiFetch('/api/ai/enhance-face', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ imageBase64: base64 }),
       });
       const data = await res.json();

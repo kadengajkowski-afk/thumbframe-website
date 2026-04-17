@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import supabase from '../../supabaseClient';
 import { processImageFile } from '../utils/imageUpload';
-
-const API_URL = process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app';
+import { apiFetch, API_URL } from '../utils/apiClient';
 
 const PHOTO_CATEGORIES = ['All', 'YouTube', 'Gaming', 'Fitness', 'Tech', 'Nature', 'People', 'Abstract', 'Dark'];
 
@@ -197,8 +195,7 @@ export default function AssetLibraryPanel({ user, onClose }) {
 
     try {
       const q   = searchQuery.trim() || (cat !== 'All' ? cat : 'thumbnail');
-      const url = `${API_URL}/api/assets/photos?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&page=${pageNum}&per_page=20`;
-      const resp = await fetch(url);
+      const resp = await apiFetch(`/api/assets/photos?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&page=${pageNum}&per_page=20`);
 
       if (!resp.ok) {
         const json = await resp.json().catch(() => ({}));
@@ -239,12 +236,7 @@ export default function AssetLibraryPanel({ user, onClose }) {
   const fetchUploads = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) { setUploads([]); setLoading(false); return; }
-
-      const resp = await fetch(`${API_URL}/api/assets/my-uploads`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      const resp = await apiFetch('/api/assets/my-uploads');
       if (!resp.ok) { setUploads([]); setLoading(false); return; }
 
       const json = await resp.json();
@@ -261,7 +253,7 @@ export default function AssetLibraryPanel({ user, onClose }) {
   const fetchPngs = useCallback(async () => {
     setLoading(true);
     try {
-      const resp = await fetch(`${API_URL}/api/assets/png-library`);
+      const resp = await apiFetch('/api/assets/png-library');
       if (!resp.ok) { setPngs([]); setLoading(false); return; }
       const json = await resp.json();
       setPngs(json.assets || json.pngs || []);
@@ -336,9 +328,8 @@ export default function AssetLibraryPanel({ user, onClose }) {
 
     try {
       // Unsplash download tracking (best-effort)
-      fetch(`${API_URL}/api/assets/photos/download`, {
+      apiFetch('/api/assets/photos/download', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ downloadUrl: photo.links?.download }),
       }).catch(() => {});
 

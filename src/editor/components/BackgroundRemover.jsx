@@ -1,8 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
-import supabase from '../../supabaseClient';
 import { processImageFile } from '../utils/imageUpload';
-
-const API_URL = process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app';
+import { apiFetch } from '../utils/apiClient';
 
 // ── Spinner ───────────────────────────────────────────────────────────────────
 const spinnerKeyframes = `
@@ -85,14 +83,8 @@ export default function BackgroundRemover({ user, onClose }) {
 
       setProcessingStage('Removing background...');
 
-      const { data: { session } } = await supabase.auth.getSession();
-
-      const resp = await fetch(`${API_URL}/api/remove-bg`, {
+      const resp = await apiFetch('/api/remove-bg', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
         body: JSON.stringify({ imageBase64: rawBase64, fileName: file.name }),
       });
 

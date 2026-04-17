@@ -489,9 +489,9 @@ const useEditorStore = create(
           colorGrade: { name: style.grade, strength: 1.0 },
           adjustments: {
             ...(l.adjustments || {}),
-            brightness: style.brightness || 0,
-            contrast:   style.contrast   || 0,
-            saturation: style.saturation || 0,
+            brightness: Math.max(-100, Math.min(100, (l.adjustments?.brightness || 0) + (style.brightness || 0))),
+            contrast:   Math.max(-100, Math.min(100, (l.adjustments?.contrast   || 0) + (style.contrast   || 0))),
+            saturation: Math.max(-100, Math.min(100, (l.adjustments?.saturation || 0) + (style.saturation || 0))),
           },
         };
       });
