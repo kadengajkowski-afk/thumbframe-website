@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
-const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
+import { apiFetch } from '../utils/apiClient';
 
 const STRATEGY_COLORS = {
   'Curiosity Gap': '#f97316',
@@ -23,9 +22,8 @@ export default function TextSuggestions({ layer, onApply }) {
     setSuggestions([]);
     setApplied(null);
 
-    fetch(`${API_URL}/api/ai/suggest-text`, {
+    apiFetch('/api/ai/suggest-text', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentText: layer.textData.content }),
     })
       .then(r => r.json())

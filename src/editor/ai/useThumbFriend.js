@@ -8,7 +8,7 @@ import useEditorStore from '../engine/Store';
 import { checkProactiveAlerts } from './proactiveAlerts';
 import { captureCanvasForAnalysis } from './canvasAnalyzer';
 import { calculateCTRScore } from './ctrScore';
-import supabase from '../../supabaseClient';
+import { apiFetch } from '../utils/apiClient';
 
 const RAILWAY_URL = (
   process.env.REACT_APP_API_URL ||
@@ -194,23 +194,7 @@ export default function useThumbFriend({ user, supabaseSession }) {
     // Take history snapshot *before* appending the new user message
     const history      = serializeHistory(messages);
 
-    // Fetch token fresh at call time — supabaseSession prop is unreliable
-    // (NewEditor passes null). Try localStorage first (fastest), then live session.
-    let token = null;
-    try {
-      const lsKey = Object.keys(localStorage).find(k => k.includes('auth-token'));
-      if (lsKey) {
-        const stored = JSON.parse(localStorage.getItem(lsKey));
-        token = stored?.access_token || stored?.data?.session?.access_token || null;
-      }
-    } catch { /* ignore */ }
-    if (!token) {
-      try {
-        const { data } = await supabase.auth.getSession();
-        token = data?.session?.access_token || null;
-      } catch { /* ignore */ }
-    }
-    console.log('[ThumbFriend] token:', token ? 'present' : 'MISSING');
+    // Token is handled automatically by apiFetch
 
     // CTR score — run analysis + scoring, attach to payload so ThumbFriend
     // can reference the actual score in its response.
@@ -224,12 +208,8 @@ export default function useThumbFriend({ user, supabaseSession }) {
     let isOffline = false; // eslint-disable-line no-unused-vars
 
     try {
-      const res = await fetch(`${RAILWAY_URL}/api/thumbfriend/chat`, {
+      const res = await apiFetch('/api/thumbfriend/chat', {
         method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify({
           message:             text,
           image,

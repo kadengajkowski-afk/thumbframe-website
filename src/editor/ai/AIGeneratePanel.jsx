@@ -5,12 +5,10 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import useEditorStore from '../engine/Store';
-import supabase from '../../supabaseClient';
 import { processImageFile } from '../utils/imageUpload';
+import { apiFetch } from '../utils/apiClient';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-
-const API_URL = process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app';
 
 const MODES = [
   { id: 'background', label: 'Background' },
@@ -248,12 +246,7 @@ export default function AIGeneratePanel({ user, onClose, setPage }) {
     let cancelled = false;
     async function fetchCredits() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const resp = await fetch(`${API_URL}/api/ai/credits`, {
-          headers: session?.access_token
-            ? { Authorization: `Bearer ${session.access_token}` }
-            : {},
-        });
+        const resp = await apiFetch('/api/ai/credits');
         if (!resp.ok) throw new Error('credits fetch failed');
         const data = await resp.json();
         if (!cancelled) setCredits(data);
@@ -274,16 +267,8 @@ export default function AIGeneratePanel({ user, onClose, setPage }) {
     const effectivePrompt = prompt.trim() || PLACEHOLDER_PROMPTS[mode][placeholderIdx];
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      const resp = await fetch(`${API_URL}/api/ai/generate`, {
+      const resp = await apiFetch('/api/ai/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token
-            ? { Authorization: `Bearer ${session.access_token}` }
-            : {}),
-        },
         body: JSON.stringify({ mode, prompt: effectivePrompt, style, niche }),
       });
 
@@ -343,15 +328,8 @@ export default function AIGeneratePanel({ user, onClose, setPage }) {
     setError(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const resp = await fetch(`${API_URL}/api/ai/generate-variations`, {
+      const resp = await apiFetch('/api/ai/generate-variations', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token
-            ? { Authorization: `Bearer ${session.access_token}` }
-            : {}),
-        },
         body: JSON.stringify({ sourceImageUrl: result.imageUrl, mode, style, niche }),
       });
 
