@@ -5,6 +5,7 @@
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import EnginePlume from './EnginePlume';
 
 const toonVert = /* glsl */ `
   varying vec3 vNormal;
@@ -164,23 +165,8 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
           <Toon color="#4a4060" />
         </mesh>
       ))}
-      {/* Engine exhaust: orange core + violet bloom + fading trail */}
-      <mesh position={[-1.9, 0.12, 0]}>
-        <sphereGeometry args={[0.1, 8, 8]} />
-        <Glow color="#f09030" />
-      </mesh>
-      <mesh position={[-1.95, 0.12, 0]}>
-        <sphereGeometry args={[0.22, 8, 8]} />
-        <meshBasicMaterial color="#6a40c0" transparent opacity={0.2} toneMapped={false} />
-      </mesh>
-      <mesh position={[-2.4, 0.12, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <coneGeometry args={[0.1, 1.2, 6]} />
-        <meshBasicMaterial color="#c07030" transparent opacity={0.1} toneMapped={false} />
-      </mesh>
-      <mesh position={[-2.9, 0.12, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <coneGeometry args={[0.05, 0.7, 6]} />
-        <meshBasicMaterial color="#8050a0" transparent opacity={0.05} toneMapped={false} />
-      </mesh>
+      {/* Engine plume — animated flame, sparks, nozzle glow */}
+      <EnginePlume position={[-1.85, 0.12, 0]} />
 
       {/* ═══ DOCKING BAY — rectangular with dark recess + amber glow ═══ */}
       <group position={[1.5, -0.15, 0.2]}>
