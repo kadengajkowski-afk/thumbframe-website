@@ -1,5 +1,7 @@
 import React from 'react';
-import './landing.css';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/geist';
+import './landing.built.css';
 import StarField from './components/bg/StarField';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
