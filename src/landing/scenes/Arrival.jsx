@@ -87,8 +87,8 @@ export default function Arrival() {
 
   return (
     <group ref={groupRef}>
-      {/* Station right-of-center, scaled up 1.8x for visible detail */}
-      <SpaceStation position={[2, 0, 0]} scale={1.8} />
+      {/* Station right-of-center, scaled 2.5x for visible architecture */}
+      <SpaceStation position={[2, 0, 0]} scale={2.5} />
 
       <DistantPlanet />
       <Stardust />
