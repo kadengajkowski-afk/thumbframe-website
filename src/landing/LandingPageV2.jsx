@@ -1,38 +1,44 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import '@fontsource-variable/inter';
-import '@fontsource-variable/geist';
+import '@fontsource-variable/fraunces';
 import './landing.built.css';
-import StarField from './components/bg/StarField';
-import Navbar from './components/layout/Navbar';
-import Footer from './components/layout/Footer';
-import Hero from './components/sections/Hero';
-import Demo from './components/sections/Demo';
-import Problem from './components/sections/Problem';
-import Features from './components/sections/Features';
-import Comparison from './components/sections/Comparison';
-import Pricing from './components/sections/Pricing';
-import FAQ from './components/sections/FAQ';
-import FinalCTA from './components/sections/FinalCTA';
+
+const Experience = lazy(() => import('./Experience'));
+
+// Low-end device detection — route to static fallback
+function isLowEnd() {
+  if (typeof navigator === 'undefined') return false;
+  if (navigator.deviceMemory && navigator.deviceMemory < 4) return true;
+  if (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4) return true;
+  // Check for WebGL support
+  try {
+    const c = document.createElement('canvas');
+    if (!c.getContext('webgl2') && !c.getContext('webgl')) return true;
+  } catch { return true; }
+  return false;
+}
 
 export default function LandingPageV2({ setPage }) {
+  const lowEnd = isLowEnd();
   const onNavigate = (page) => setPage?.(page);
 
+  // Phase A: render the 3D experience. Static fallback comes in Phase J.
+  // HTML overlays will layer on top in later phases.
   return (
-    <div className="landing-root min-h-screen">
-      <a href="#main" className="skip-to-main">Skip to main content</a>
-      <StarField />
-      <Navbar onNavigate={onNavigate} />
-      <main id="main">
-        <Hero onNavigate={onNavigate} />
-        <Demo />
-        <Problem />
-        <Features />
-        <Comparison />
-        <Pricing onNavigate={onNavigate} />
-        <FAQ />
-        <FinalCTA onNavigate={onNavigate} />
-      </main>
-      <Footer />
+    <div style={{ background: '#0a0714', color: '#f0e4d0', minHeight: '100vh' }}>
+      {!lowEnd ? (
+        <Suspense fallback={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'Inter Variable, system-ui, sans-serif' }}>
+            <p style={{ color: '#a0a0b0', fontSize: 14 }}>Loading experience...</p>
+          </div>
+        }>
+          <Experience />
+        </Suspense>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'Inter Variable, system-ui, sans-serif' }}>
+          <p style={{ color: '#a0a0b0', fontSize: 14 }}>Static fallback — coming in Phase J</p>
+        </div>
+      )}
     </div>
   );
 }
