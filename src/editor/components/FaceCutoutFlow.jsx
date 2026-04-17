@@ -193,7 +193,7 @@ export default function FaceCutoutFlow({ onClose }) {
         // batched by React 18 so the layer is never visible without its texture.
         addLayerSilent({
           id:     layerId,
-          name:   'Face Cutout',
+          name:   'Background Remover',
           type:   'image',
           x, y,
           width:  targetW,
@@ -208,11 +208,11 @@ export default function FaceCutoutFlow({ onClose }) {
         });
 
         updateLayer(layerId, { texture });
-        commitChange('Add Face Cutout');
+        commitChange('Add Background Remover');
         window.__renderer?.markDirty();
 
         window.dispatchEvent(new CustomEvent('tf:toast', {
-          detail: { message: 'Face cutout added to canvas!' },
+          detail: { message: 'Background removed — layer added to canvas!' },
         }));
 
         onClose?.();
@@ -236,7 +236,7 @@ export default function FaceCutoutFlow({ onClose }) {
         padding: '10px 0 8px',
       }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-          Face Cutout
+          Background Remover
         </div>
         <button
           onClick={onClose}

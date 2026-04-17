@@ -186,7 +186,7 @@ export default function RightPanel({
               </div>
             )}
 
-            {/* Sub-panel: Face Cutout */}
+            {/* Sub-panel: Background Remover */}
             {openPanel === 'facecutout' && (
               <div style={{ marginBottom: 6, border: '1px solid var(--border-1)', borderRadius: 8, overflow: 'hidden' }}>
                 <FaceCutoutFlow onClose={() => setOpenPanel(null)} />
@@ -206,7 +206,7 @@ export default function RightPanel({
                 { icon: 'T',  label: 'Add Text',     hint: 'Switch to text tool',      onClick: () => setActiveTool('text'),            id: null },
                 { icon: '⛏️', label: 'Niche Presets', hint: 'Apply a niche style preset', onClick: () => setOpenPanel(p => p === 'niches' ? null : 'niches'), id: 'niches' },
                 { icon: '🌄', label: 'Background',   hint: 'Add a solid or gradient background', onClick: () => setOpenPanel(p => p === 'background' ? null : 'background'), id: 'background' },
-                { icon: '✂️', label: 'Face Cutout',  hint: 'Remove background from an image', onClick: () => setShowBackgroundRemover(true), id: null },
+                { icon: '✂️', label: 'BG Remover',   hint: 'Remove background from an image', onClick: () => setShowBackgroundRemover(true), id: null },
                 { icon: '⚡', label: 'A/B Variants', hint: 'Apply a style variant to all image layers', onClick: () => setOpenPanel(p => p === 'variants' ? null : 'variants'), id: 'variants' },
                 { icon: '✦',  label: 'AI Generate', hint: 'Generate AI image',        onClick: () => setShowAIGeneratePanel(true),     id: null },
                 { icon: '📋', label: 'Templates',   hint: 'Browse templates',         onClick: () => setShowTemplateBrowser(true),     id: null },
