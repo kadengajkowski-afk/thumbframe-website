@@ -9,7 +9,7 @@ import { ColorGradeEffect } from './ColorGradeEffect';
 
 function KuwaharaPass() {
   const { size, viewport } = useThree();
-  const effect = useMemo(() => new KuwaharaEffect({ kernelSize: 4.0 }), []);
+  const effect = useMemo(() => new KuwaharaEffect({ kernelSize: 12.0 }), []);
 
   useEffect(() => {
     const dpr = viewport.dpr || 1;
@@ -20,7 +20,7 @@ function KuwaharaPass() {
 }
 
 function PaperGrainPass() {
-  const effect = useMemo(() => new PaperGrainEffect({ strength: 0.12, scale: 800 }), []);
+  const effect = useMemo(() => new PaperGrainEffect({ strength: 0.20, scale: 600 }), []);
   return <primitive object={effect} dispose={null} />;
 }
 
