@@ -291,7 +291,7 @@ export default function CTRScoreWidget({ pixiApp }) {
                         flexShrink:   0,
                         marginTop:    3,
                       }} />
-                      <div style={{ minWidth: 0 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>
                           {text}
                         </div>

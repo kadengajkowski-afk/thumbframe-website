@@ -28,13 +28,30 @@ export default function StampTestPreview({ rendererRef }) {
   }, []);
 
   const updatePreview = useCallback(() => {
-    // captureForPreview renders the exact 1280×720 canvas content at 194×109
-    // by temporarily scaling the viewport — no zoom/pan artefacts possible.
+    // Try renderer.captureForPreview first (renders at reset viewport — no zoom/pan artefacts).
+    // Fall back to direct PixiJS canvas capture if that returns null.
+    let off = null;
     const renderer = window.__renderer;
-    if (!renderer?._mounted) return;
+    if (renderer?._mounted) {
+      off = renderer.captureForPreview(194, 109) || null;
+    }
 
-    const off = renderer.captureForPreview(194, 109);
-    if (!off) return;
+    if (!off) {
+      // Fallback: draw the live PixiJS canvas directly
+      const pixiCanvas = window.__pixiApp?.canvas || document.querySelector('canvas');
+      if (!pixiCanvas) return;
+      try {
+        off = document.createElement('canvas');
+        off.width  = 194;
+        off.height = 109;
+        const ctx2 = off.getContext('2d');
+        ctx2.fillStyle = '#1a1a1e';
+        ctx2.fillRect(0, 0, 194, 109);
+        ctx2.drawImage(pixiCanvas, 0, 0, 194, 109);
+      } catch {
+        return;
+      }
+    }
 
     // Skip solid-colour frames (PixiJS init / loading states).
     // Sample 9 columns × 3 rows; if all luma values are within 10 units

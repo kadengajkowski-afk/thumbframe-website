@@ -33,15 +33,27 @@ function buildMock() {
 // ── Canvas capture ─────────────────────────────────────────────────────────────
 // Returns raw base64 JPEG string (no data: prefix — Anthropic requirement).
 function captureCanvas() {
-  const pixiCanvas = document.querySelector('canvas');
+  const pixiCanvas = window.__pixiApp?.canvas || document.querySelector('canvas');
   if (!pixiCanvas) return null;
   try {
     const off = document.createElement('canvas');
     off.width  = 320;
     off.height = 180;
-    off.getContext('2d').drawImage(pixiCanvas, 0, 0, 320, 180);
+    const ctx = off.getContext('2d');
+
+    // Fill background first so JPEG has no transparent artifacts
+    ctx.fillStyle = '#1a1a1e';
+    ctx.fillRect(0, 0, 320, 180);
+
+    ctx.drawImage(pixiCanvas, 0, 0, 320, 180);
+
+    // Debug: log center pixel to verify we got real content
+    const px = ctx.getImageData(160, 90, 1, 1).data;
+    console.log('[ThumbFriend] capture center pixel:', px[0], px[1], px[2], px[3]);
+
     return off.toDataURL('image/jpeg', 0.6).split(',')[1];
-  } catch {
+  } catch (e) {
+    console.warn('[ThumbFriend] canvas capture failed:', e);
     return null;
   }
 }
