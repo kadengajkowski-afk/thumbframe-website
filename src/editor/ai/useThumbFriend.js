@@ -10,10 +10,7 @@ import { captureCanvasForAnalysis } from './canvasAnalyzer';
 import { calculateCTRScore } from './ctrScore';
 import { apiFetch } from '../utils/apiClient';
 
-const RAILWAY_URL = (
-  process.env.REACT_APP_API_URL ||
-  'https://thumbframe-api-production.up.railway.app'
-);
+
 
 // ── Mock response for when Railway is unreachable ─────────────────────────────
 // Honest about offline state — does NOT pretend to analyze the canvas.
