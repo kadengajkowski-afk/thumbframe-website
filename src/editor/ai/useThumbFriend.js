@@ -60,23 +60,16 @@ function captureCanvas() {
 
 // ── Canvas metadata ────────────────────────────────────────────────────────────
 function buildCanvasData(layers) {
-  const texts = layers.filter(l => l.type === 'text' && l.visible);
+  const images = layers.filter(l => l.type === 'image' && l.visible);
+  const texts  = layers.filter(l => l.type === 'text'  && l.visible);
   return {
-    layerCount:  layers.length,
-    hasText:     texts.length > 0,
-    textContent: texts.map(l => l.textData?.content || '').filter(Boolean).join(' | '),
-    canvasWidth: 1280,
-    canvasHeight: 720,
-    layers: layers.filter(l => l.visible !== false).map(l => ({
-      type:      l.type,
-      name:      l.name || l.id?.slice(0, 8),
-      width:     l.width,
-      height:    l.height,
-      opacity:   l.opacity ?? 100,
-      blendMode: l.blendMode || 'normal',
-      adjustments: l.adjustments || {},
-      text:       l.type === 'text' ? (l.textData?.content || '') : undefined,
-    })),
+    layerCount:   layers.length,
+    hasText:      texts.length > 0,
+    hasFace:      false,
+    textContent:  texts.map(l => l.textData?.content || '').filter(Boolean).join(' | '),
+    layerNames:   layers.filter(l => l.visible !== false).map(l => l.name || l.type).join(', '),
+    imageCount:   images.length,
+    textCount:    texts.length,
   };
 }
 
