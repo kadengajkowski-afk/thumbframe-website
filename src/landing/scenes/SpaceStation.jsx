@@ -28,16 +28,18 @@ const toonFrag = /* glsl */ `
     vec3 l = normalize(uLightDir);
     float NdotL = dot(n, l);
 
-    float shade;
-    if (NdotL > 0.45) shade = 1.0;
-    else if (NdotL > -0.05) shade = 0.62;
-    else shade = 0.32;
+    // 3-band ramp with warm highlight / deep violet shadow
+    vec3 warmHighlight = vec3(0.83, 0.78, 0.69); // ~#d4c8b0
+    vec3 deepShadow   = vec3(0.23, 0.18, 0.29); // ~#3a2d4a
 
-    vec3 color = uBaseColor * shade;
+    vec3 color;
+    if (NdotL > 0.4) color = mix(uBaseColor, warmHighlight, 0.45);
+    else if (NdotL > -0.05) color = uBaseColor * 0.6;
+    else color = mix(uBaseColor * 0.3, deepShadow, 0.6);
 
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
     float rim = pow(1.0 - max(dot(n, viewDir), 0.0), uRimPower);
-    color += vec3(0.35, 0.40, 0.55) * rim * 0.3;
+    color += vec3(0.40, 0.35, 0.55) * rim * 0.35;
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -63,7 +65,8 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
   const beacon2Ref = useRef();
 
   useFrame(({ clock }) => {
-    if (groupRef.current) groupRef.current.rotation.y += 0.0006;
+    // Full rotation in ~75 seconds: 2*PI / (75*60) ≈ 0.0014 rad/frame
+    if (groupRef.current) groupRef.current.rotation.y += 0.0014;
     if (dishRef.current) dishRef.current.rotation.y = clock.elapsedTime * 0.35;
 
     // Pulsing beacons at ~1Hz
@@ -133,10 +136,23 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
           <Toon color="#4a4a6a" />
         </mesh>
       ))}
-      {/* Engine glow */}
+      {/* Engine exhaust — warm orange core + violet outer bloom */}
+      <mesh position={[-1.9, 0.12, 0]}>
+        <sphereGeometry args={[0.1, 8, 8]} />
+        <Glow color="#f09030" />
+      </mesh>
       <mesh position={[-1.95, 0.12, 0]}>
-        <sphereGeometry args={[0.15, 8, 8]} />
-        <Glow color="#6a40c0" />
+        <sphereGeometry args={[0.2, 8, 8]} />
+        <meshBasicMaterial color="#6a40c0" transparent opacity={0.25} toneMapped={false} />
+      </mesh>
+      {/* Thrust trail — faint painterly streak extending left */}
+      <mesh position={[-2.4, 0.12, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <coneGeometry args={[0.08, 1.0, 6]} />
+        <meshBasicMaterial color="#c07030" transparent opacity={0.12} toneMapped={false} />
+      </mesh>
+      <mesh position={[-2.8, 0.12, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <coneGeometry args={[0.04, 0.6, 6]} />
+        <meshBasicMaterial color="#8050a0" transparent opacity={0.06} toneMapped={false} />
       </mesh>
 
       {/* ═══ DOCKING BAY — right side, rectangular inset with amber inner glow ═══ */}
@@ -186,29 +202,46 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
         </mesh>
       </group>
 
-      {/* ═══ ANTENNAE — 3 tall masts, varying heights and angles ═══ */}
+      {/* ═══ ANTENNAE — 3 tall thin masts, 3x longer, 50% thinner ═══ */}
       {/* Antenna 1: tallest, slight backward tilt */}
       <group position={[0.2, 0.5, -0.15]}>
         <mesh rotation={[0.12, 0, -0.08]}>
-          <cylinderGeometry args={[0.015, 0.02, 1.1, 4]} />
+          <cylinderGeometry args={[0.006, 0.012, 2.8, 4]} />
           <Toon color="#9090a8" />
         </mesh>
-        {/* Tip crossbar */}
-        <mesh position={[0, 0.55, 0]} rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.008, 0.008, 0.2, 4]} />
+        {/* Crossbar near tip */}
+        <mesh position={[0, 1.35, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.004, 0.004, 0.25, 4]} />
           <Toon color="#a0a0b0" />
+        </mesh>
+        {/* Warm tip highlight */}
+        <mesh position={[0, 1.42, 0]}>
+          <sphereGeometry args={[0.018, 6, 6]} />
+          <Glow color="#f0c080" />
         </mesh>
       </group>
       {/* Antenna 2: medium, tilted left */}
-      <mesh position={[-0.4, 0.5, 0.2]} rotation={[0, 0, 0.2]}>
-        <cylinderGeometry args={[0.012, 0.018, 0.75, 4]} />
-        <Toon color="#9090a8" />
-      </mesh>
-      {/* Antenna 3: short, tilted right-forward */}
-      <mesh position={[0.8, 0.45, -0.1]} rotation={[-0.15, 0, -0.25]}>
-        <cylinderGeometry args={[0.01, 0.015, 0.5, 4]} />
-        <Toon color="#9090a8" />
-      </mesh>
+      <group position={[-0.4, 0.5, 0.2]}>
+        <mesh rotation={[0, 0, 0.2]}>
+          <cylinderGeometry args={[0.005, 0.01, 2.0, 4]} />
+          <Toon color="#9090a8" />
+        </mesh>
+        <mesh position={[-0.2, 0.95, 0]}>
+          <sphereGeometry args={[0.015, 6, 6]} />
+          <Glow color="#f0c080" />
+        </mesh>
+      </group>
+      {/* Antenna 3: shorter, tilted right-forward */}
+      <group position={[0.8, 0.45, -0.1]}>
+        <mesh rotation={[-0.15, 0, -0.25]}>
+          <cylinderGeometry args={[0.005, 0.008, 1.4, 4]} />
+          <Toon color="#9090a8" />
+        </mesh>
+        <mesh position={[0.17, 0.67, 0]}>
+          <sphereGeometry args={[0.012, 6, 6]} />
+          <Glow color="#f0c080" />
+        </mesh>
+      </group>
 
       {/* ═══ COMMS ARRAY / RADAR DISH — rotating, on top ═══ */}
       <group ref={dishRef} position={[-0.1, 0.72, 0.05]}>

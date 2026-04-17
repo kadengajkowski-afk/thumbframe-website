@@ -75,11 +75,11 @@ export default function Arrival() {
     const drift = Math.sin(clock.elapsedTime * 0.3) * 0.2;
     const driftY = Math.sin(clock.elapsedTime * 0.2 + 1.0) * 0.1;
 
-    // Camera offset left so station reads right-of-center
-    camera.position.set(-1.5 + drift, driftY + 0.3, z);
+    // Camera offset left so station reads at ~68% horizontal
+    camera.position.set(-2.0 + drift, driftY + 0.3, z);
 
-    // Look: starts at station (x=2), gradually pans toward distant planet
-    const lookX = THREE.MathUtils.lerp(2, 5, sceneProgress);
+    // Look: starts at station (x=3), gradually pans toward distant planet
+    const lookX = THREE.MathUtils.lerp(3, 6, sceneProgress);
     const lookY = THREE.MathUtils.lerp(0, -0.8, sceneProgress);
     const lookZ = THREE.MathUtils.lerp(0, -12, sceneProgress);
     camera.lookAt(lookX, lookY, lookZ);
@@ -87,8 +87,8 @@ export default function Arrival() {
 
   return (
     <group ref={groupRef}>
-      {/* Station right-of-center, scaled 2.5x for visible architecture */}
-      <SpaceStation position={[2, 0, 0]} scale={2.5} />
+      {/* Station at ~68% horizontal, scaled 2.5x for visible architecture */}
+      <SpaceStation position={[3, 0, 0]} scale={2.5} />
 
       <DistantPlanet />
       <Stardust />
