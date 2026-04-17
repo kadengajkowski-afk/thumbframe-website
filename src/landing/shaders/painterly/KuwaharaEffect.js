@@ -9,8 +9,7 @@ const fragmentShader = /* glsl */ `
   uniform float uKernelSize;
   uniform vec2 uResolution;
 
-  #define PI 3.14159265
-  #define N 8
+  #define KUWAHARA_N 8
 
   float lum(vec3 c) {
     return dot(c, vec3(0.299, 0.587, 0.114));
@@ -72,12 +71,12 @@ const fragmentShader = /* glsl */ `
     float radius = uKernelSize;
     float stretch = 1.0 + aniso * 2.5;
 
-    vec3 means[N];
-    float lumMeans[N];
-    float lumVars[N];
-    float weights[N];
+    vec3 means[KUWAHARA_N];
+    float lumMeans[KUWAHARA_N];
+    float lumVars[KUWAHARA_N];
+    float weights[KUWAHARA_N];
 
-    for (int s = 0; s < N; s++) {
+    for (int s = 0; s < KUWAHARA_N; s++) {
       means[s] = vec3(0.0);
       lumMeans[s] = 0.0;
       lumVars[s] = 0.0;
@@ -100,8 +99,8 @@ const fragmentShader = /* glsl */ `
         float l = lum(col);
 
         float sAngle = atan(rotP.y, rotP.x) + PI;
-        int sector = int(floor(sAngle / (2.0*PI) * float(N)));
-        sector = clamp(sector, 0, N-1);
+        int sector = int(floor(sAngle / (2.0*PI) * float(KUWAHARA_N)));
+        sector = clamp(sector, 0, KUWAHARA_N-1);
 
         float w = exp(-dist * dist * 2.0);
         means[sector] += col * w;
@@ -114,7 +113,7 @@ const fragmentShader = /* glsl */ `
     vec3 result = inputColor.rgb;
     float minVar = 1e10;
 
-    for (int s = 0; s < N; s++) {
+    for (int s = 0; s < KUWAHARA_N; s++) {
       if (weights[s] < 0.01) continue;
       vec3 mean = means[s] / weights[s];
       float meanL = lumMeans[s] / weights[s];

@@ -1,7 +1,4 @@
-// PainterlyPost — full-screen post-processing using @react-three/postprocessing.
-// This properly takes over R3F's render loop (no double-render issue).
-//
-// Pipeline: Scene → Kuwahara → Paper Grain → Color Grade → Screen
+// PainterlyPost — Kuwahara → Paper Grain → Color Grade via @react-three/postprocessing
 
 import React, { useEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
@@ -12,7 +9,7 @@ import { ColorGradeEffect } from './ColorGradeEffect';
 
 function KuwaharaPass() {
   const { size, viewport } = useThree();
-  const effect = useMemo(() => new KuwaharaEffect({ kernelSize: 6.0 }), []);
+  const effect = useMemo(() => new KuwaharaEffect({ kernelSize: 4.0 }), []);
 
   useEffect(() => {
     const dpr = viewport.dpr || 1;
