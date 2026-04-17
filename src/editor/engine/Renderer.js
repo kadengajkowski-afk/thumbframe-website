@@ -88,8 +88,9 @@ export default class Renderer {
       height: h,
       background: 0x000000,
       backgroundAlpha: 0,      // transparent outside the 1280×720 canvasBg — lets starfield show through
+      preference: 'webgl',     // force WebGL — WebGPU ignores preserveDrawingBuffer
+      preserveDrawingBuffer: true,
       antialias: true,
-      preserveDrawingBuffer: true, // allows canvas capture (ThumbFriend, StampTest, export)
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
     });
