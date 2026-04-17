@@ -32,30 +32,53 @@ function buildMock() {
 
 // ── Canvas capture ─────────────────────────────────────────────────────────────
 // Returns raw base64 JPEG string (no data: prefix — Anthropic requirement).
+//
+// WHY captureForPreview instead of drawImage(pixiCanvas):
+// PixiJS uses a WebGL canvas with backgroundAlpha:0 and no preserveDrawingBuffer.
+// Reading a WebGL canvas with drawImage() outside the render loop returns
+// transparent/dark — the GPU buffer is cleared after compositing.
+// captureForPreview() forces app.renderer.render(stage) first, then reads the
+// buffer immediately while it still has content.
 function captureCanvas() {
-  const pixiCanvas = window.__pixiApp?.canvas || document.querySelector('canvas');
-  if (!pixiCanvas) return null;
-  try {
-    const off = document.createElement('canvas');
-    off.width  = 320;
-    off.height = 180;
-    const ctx = off.getContext('2d');
-
-    // Fill background first so JPEG has no transparent artifacts
-    ctx.fillStyle = '#1a1a1e';
-    ctx.fillRect(0, 0, 320, 180);
-
-    ctx.drawImage(pixiCanvas, 0, 0, 320, 180);
-
-    // Debug: log center pixel to verify we got real content
-    const px = ctx.getImageData(160, 90, 1, 1).data;
-    console.log('[ThumbFriend] capture center pixel:', px[0], px[1], px[2], px[3]);
-
-    return off.toDataURL('image/jpeg', 0.6).split(',')[1];
-  } catch (e) {
-    console.warn('[ThumbFriend] canvas capture failed:', e);
-    return null;
+  // Primary: use renderer.captureForPreview — only method that works for WebGL
+  const renderer = window.__renderer;
+  if (renderer?._mounted) {
+    try {
+      const off = renderer.captureForPreview(320, 180);
+      if (off) {
+        const px = off.getContext('2d').getImageData(160, 90, 1, 1).data;
+        console.log('[ThumbFriend] capture center pixel:', px[0], px[1], px[2], px[3]);
+        // If the frame has real content, use it
+        if (px[0] > 10 || px[1] > 10 || px[2] > 10 || px[3] > 10) {
+          return off.toDataURL('image/jpeg', 0.6).split(',')[1];
+        }
+        console.warn('[ThumbFriend] captureForPreview returned dark/empty frame');
+      }
+    } catch (e) {
+      console.warn('[ThumbFriend] captureForPreview failed:', e);
+    }
   }
+
+  // Fallback: search for a 2D canvas (non-WebGL) with visible content.
+  // getContext('2d') returns null for WebGL canvases so they are skipped.
+  const canvases = document.querySelectorAll('canvas');
+  console.log('[ThumbFriend] searching', canvases.length, 'canvas elements');
+  for (const canvas of canvases) {
+    if (canvas.width < 500 || canvas.height < 300) continue; // skip small utility canvases
+    const testCtx = canvas.getContext('2d');
+    if (!testCtx) continue; // WebGL canvas — skip
+    const px = testCtx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data;
+    console.log('[ThumbFriend] 2D canvas', canvas.width, 'x', canvas.height, 'center px:', px[0], px[1], px[2], px[3]);
+    if (px[0] > 10 || px[1] > 10 || px[2] > 10 || px[3] > 10) {
+      const off = document.createElement('canvas');
+      off.width = 320; off.height = 180;
+      off.getContext('2d').drawImage(canvas, 0, 0, 320, 180);
+      return off.toDataURL('image/jpeg', 0.6).split(',')[1];
+    }
+  }
+
+  console.warn('[ThumbFriend] no canvas with content found');
+  return null;
 }
 
 // ── Canvas metadata ────────────────────────────────────────────────────────────
