@@ -16,5 +16,5 @@ test-upload.*
 wormhole-*.png
 wormhole-sceneIdx-*.png
 
-# Unused midjourney texture source (kept in archive only)
-public/assets/videos/
+# Unused midjourney texture source (wrong-location spillover)
+public/assets/videos/textures/
