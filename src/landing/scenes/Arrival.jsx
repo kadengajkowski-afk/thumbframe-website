@@ -72,28 +72,80 @@ export default function Arrival() {
   const scroll = useScroll();
 
   useFrame(({ clock, camera }) => {
-    const t = scroll.offset;
-    const sceneProgress = Math.min(t / (1 / 7), 1);
+    const sceneIdx = scroll.offset * 7;
 
-    // Camera start: z=12, closer than before so station detail is visible.
-    // Station is right-of-center at x=2, so camera starts offset left
-    // to frame station on the right ~65% of viewport.
-    const startZ = 12;
-    const endZ = 2;
-    const z = THREE.MathUtils.lerp(startZ, endZ, sceneProgress * sceneProgress);
+    // Arrival owns the camera for sceneIdx 0 → 1.95. At 1.95, Wormhole's
+    // CameraRig takes over (matches this phase's end state exactly).
+    //
+    //   [0.00, 0.85]  station viewing (original Scene 1)
+    //   [0.85, 1.00]  arc left past the ship — ship swings from centre to +X side
+    //   [1.00, 1.95]  fly forward toward wormhole approach start
+    //
+    // Past 1.95 this block early-returns so Wormhole can take over cleanly.
+    if (sceneIdx >= 1.95) return;
 
-    // Breathing drift
-    const drift = Math.sin(clock.elapsedTime * 0.3) * 0.2;
-    const driftY = Math.sin(clock.elapsedTime * 0.2 + 1.0) * 0.1;
+    const t = clock.elapsedTime;
 
-    // Camera offset left so station reads at ~68% horizontal
-    camera.position.set(-2.0 + drift, driftY + 0.3, z);
+    if (sceneIdx < 0.85) {
+      // Phase A — station viewing.
+      const p = sceneIdx / 0.85; // 0..1
+      const startZ = 12;
+      const endZ = 2;
+      const z = THREE.MathUtils.lerp(startZ, endZ, p * p);
 
-    // Look: starts at station (x=3), gradually pans toward distant planet
-    const lookX = THREE.MathUtils.lerp(3, 6, sceneProgress);
-    const lookY = THREE.MathUtils.lerp(0, -0.8, sceneProgress);
-    const lookZ = THREE.MathUtils.lerp(0, -12, sceneProgress);
-    camera.lookAt(lookX, lookY, lookZ);
+      const drift  = Math.sin(t * 0.3) * 0.2;
+      const driftY = Math.sin(t * 0.2 + 1.0) * 0.1;
+
+      camera.position.set(-2.0 + drift, driftY + 0.3, z);
+
+      const lookX = THREE.MathUtils.lerp(3, 6, p);
+      const lookY = THREE.MathUtils.lerp(0, -0.8, p);
+      const lookZ = THREE.MathUtils.lerp(0, -12, p);
+      camera.lookAt(lookX, lookY, lookZ);
+      return;
+    }
+
+    if (sceneIdx < 1.0) {
+      // Phase B — arc past the ship. Camera swings left (ship is at x=+3)
+      // and forward past the ship's z extent (~[-2.5, 2.5] at scale 2.5).
+      // Start: (-2, 0.3, 2) looking at (6, -0.8, -12)   ← phase A end
+      // End:   (-4.2, 0.4, -8) looking at (0, 0, -30)  ← ship now off to the right
+      const p = (sceneIdx - 0.85) / 0.15;
+      const e = p * p * (3.0 - 2.0 * p); // smoothstep
+
+      const driftX = Math.sin(t * 0.3) * 0.15 * (1.0 - e);
+      const driftY = Math.sin(t * 0.2 + 1.0) * 0.08 * (1.0 - e);
+
+      camera.position.set(
+        THREE.MathUtils.lerp(-2.0, -4.2, e) + driftX,
+        THREE.MathUtils.lerp(0.3, 0.4, e) + driftY,
+        THREE.MathUtils.lerp(2.0, -8.0, e),
+      );
+
+      camera.lookAt(
+        THREE.MathUtils.lerp(6.0, 0.0, e),
+        THREE.MathUtils.lerp(-0.8, 0.0, e),
+        THREE.MathUtils.lerp(-12.0, -30.0, e),
+      );
+      return;
+    }
+
+    // Phase C — fly forward toward wormhole approach start.
+    // End state matches Wormhole Step 1 start: (0, 0.4, -17) looking at (0,0,-45).
+    const p = (sceneIdx - 1.0) / 0.95;
+    const e = p * p * (3.0 - 2.0 * p);
+
+    camera.position.set(
+      THREE.MathUtils.lerp(-4.2, 0.0, e),
+      0.4,
+      THREE.MathUtils.lerp(-8.0, -17.0, e),
+    );
+
+    camera.lookAt(
+      0.0,
+      THREE.MathUtils.lerp(0.0, 0.0, e),
+      THREE.MathUtils.lerp(-30.0, -45.0, e),
+    );
   });
 
   return (

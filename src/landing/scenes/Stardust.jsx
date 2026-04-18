@@ -1,5 +1,6 @@
-// Stardust — ~300 billboard motes drifting slowly with per-particle twinkle.
-// Occasional cosmic ray streak every 8-12s.
+// Stardust — ~300 billboard motes with per-particle twinkle.
+// Drift is computed in the vertex shader (sin-based oscillation around the
+// spawn position) so there's no per-frame JS loop or buffer re-upload.
 
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -10,7 +11,6 @@ const SPREAD = 30;
 
 export default function Stardust() {
   const pointsRef = useRef();
-  const phasesRef = useRef();
 
   const { positions, sizes, phases } = useMemo(() => {
     const pos = new Float32Array(PARTICLE_COUNT * 3);
@@ -26,8 +26,6 @@ export default function Stardust() {
     return { positions: pos, sizes: sz, phases: ph };
   }, []);
 
-  phasesRef.current = phases;
-
   const vertexShader = /* glsl */ `
     attribute float aSize;
     attribute float aPhase;
@@ -35,7 +33,12 @@ export default function Stardust() {
     varying float vAlpha;
 
     void main() {
-      vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+      // Oscillatory vertical drift — bounded, no integration, entirely GPU.
+      vec3 driftPos = position;
+      driftPos.y += sin(uTime * 0.22 + aPhase) * 0.35;
+      driftPos.x += cos(uTime * 0.17 + aPhase * 1.3) * 0.18;
+
+      vec4 mvPos = modelViewMatrix * vec4(driftPos, 1.0);
       float twinkle = sin(uTime * 0.8 + aPhase) * 0.3 + 0.7;
       vAlpha = twinkle * (0.3 + aSize * 5.0);
       gl_PointSize = aSize * 300.0 / -mvPos.z;
@@ -59,16 +62,7 @@ export default function Stardust() {
   }), []);
 
   useFrame(({ clock }) => {
-    if (uniforms.uTime) uniforms.uTime.value = clock.elapsedTime;
-
-    // Slow drift
-    if (pointsRef.current) {
-      const posAttr = pointsRef.current.geometry.attributes.position;
-      for (let i = 0; i < PARTICLE_COUNT; i++) {
-        posAttr.array[i * 3 + 1] += 0.001 * Math.sin(clock.elapsedTime * 0.2 + phases[i]);
-      }
-      posAttr.needsUpdate = true;
-    }
+    uniforms.uTime.value = clock.elapsedTime;
   });
 
   return (

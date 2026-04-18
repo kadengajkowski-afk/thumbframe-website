@@ -115,7 +115,7 @@ const discFrag = /* glsl */ `
   }
 `;
 
-function EventHorizonDisc() {
+function EventHorizonDisc({ meshRef }) {
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
     uRadius: { value: DISC_RADIUS },
@@ -123,7 +123,7 @@ function EventHorizonDisc() {
   useFrame(({ clock }) => { uniforms.uTime.value = clock.elapsedTime; });
 
   return (
-    <mesh renderOrder={1}>
+    <mesh ref={meshRef} renderOrder={1}>
       <circleGeometry args={[DISC_RADIUS, 128]} />
       <shaderMaterial
         vertexShader={discVert}
@@ -371,14 +371,39 @@ function HaloStack() {
 //                   2.7 → 3.1: travel from z -50 → z -100
 //   [ 3.1, 3.95]  Held at tunnel-mid; remaining steps not built yet.
 
-function CameraRig({ groupRef }) {
+function CameraRig({ groupRef, discRef }) {
   const scroll = useScroll();
 
   useFrame(({ camera, clock }) => {
     const sceneIdx = scroll.offset * 7;
 
+    // Visibility: render from scene index 0.85 onward so the user sees the
+    // wormhole while Arrival is still arcing past the ship. Avoid per-frame
+    // .visible assignment when it isn't changing.
+    const shouldBeVisible = sceneIdx >= 0.85 && sceneIdx <= 3.95;
+    if (groupRef.current && groupRef.current.visible !== shouldBeVisible) {
+      groupRef.current.visible = shouldBeVisible;
+    }
+
+    // Plunge transition — disc scales 1 → 2.8 across sceneIdx 2.4 → 2.67 so
+    // it fills the viewport right before the camera crosses the event horizon.
+    // This hides the "empty nebula frame" that was visible between Step 1 and
+    // Step 2 by making the disc dominate the view at the moment of entry.
+    if (discRef.current) {
+      let scale = 1.0;
+      if (sceneIdx >= 2.4 && sceneIdx < 2.67) {
+        const p = (sceneIdx - 2.4) / 0.27;
+        scale = THREE.MathUtils.lerp(1.0, 2.8, p);
+      } else if (sceneIdx >= 2.67) {
+        scale = 2.8; // hold — camera is past, so this only matters visually
+                     // during the short moment before frustum culls the disc.
+      }
+      if (discRef.current.scale.x !== scale) {
+        discRef.current.scale.setScalar(scale);
+      }
+    }
+
     const active = sceneIdx >= 1.95 && sceneIdx <= 3.95;
-    if (groupRef.current) groupRef.current.visible = active;
     if (!active) return;
 
     const t = clock.elapsedTime;
@@ -436,16 +461,17 @@ function CameraRig({ groupRef }) {
 
 export default function Wormhole() {
   const groupRef = useRef();
+  const discRef = useRef();
 
   return (
     <>
-      <CameraRig groupRef={groupRef} />
+      <CameraRig groupRef={groupRef} discRef={discRef} />
       <group ref={groupRef} position={WORMHOLE_POS} visible={false}>
         {/* Tunnel is behind the event horizon (renderOrder -1) so the disc
             still covers it during Step 1's exterior approach. */}
         <WormholeTunnel />
         <HaloStack />
-        <EventHorizonDisc />
+        <EventHorizonDisc meshRef={discRef} />
         <EinsteinRim />
       </group>
     </>

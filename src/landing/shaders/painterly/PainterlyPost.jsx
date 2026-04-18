@@ -10,11 +10,15 @@ import { ColorGradeEffect } from './ColorGradeEffect';
 
 function KuwaharaPass() {
   const { size, viewport } = useThree();
+  // Kuwahara is a smoothing filter, so dropping resolution from 0.5 → 0.4
+  // is visually fine and reduces per-pixel work by ~35%. This is a scroll-
+  // smoothness optimization — the Kuwahara pass was the largest per-frame
+  // cost besides the raw scene render.
   const effect = useMemo(() => new KuwaharaEffect({ kernelNear: 4.0, kernelFar: 10.0 }), []);
 
   useEffect(() => {
     const dpr = viewport.dpr || 1;
-    effect.setSize(size.width * dpr * 0.5, size.height * dpr * 0.5);
+    effect.setSize(size.width * dpr * 0.4, size.height * dpr * 0.4);
   }, [size, viewport, effect]);
 
   return <primitive object={effect} dispose={null} />;
