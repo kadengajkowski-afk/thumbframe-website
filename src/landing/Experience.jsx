@@ -4,6 +4,7 @@ import { ScrollControls, Stats, useScroll } from '@react-three/drei';
 import PainterlyPost from './shaders/painterly/PainterlyPost';
 import Arrival from './scenes/Arrival';
 import Nebula from './scenes/Nebula';
+import Wormhole from './scenes/Wormhole';
 import { setScrollOffset, setScrollEl } from './lib/scrollBridge';
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
@@ -27,6 +28,7 @@ function SceneGraph() {
 
       <Nebula radius={80} />
       <Arrival />
+      <Wormhole />
 
       <PainterlyPost />
 
