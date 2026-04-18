@@ -9,6 +9,11 @@ import { setScrollOffset, setScrollEl } from './lib/scrollBridge';
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
+// Debug: `?raw=1` disables the painterly post-process so raw shader output is
+// visible. Lets you compare what the 3D scene looks like before/after Kuwahara.
+const POST_DISABLED = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('raw') === '1';
+
 // Writes the current scroll offset and container element to the bridge
 // each frame so HTML overlays can sync without re-rendering React.
 function ScrollReader() {
@@ -30,7 +35,7 @@ function SceneGraph() {
       <Arrival />
       <Wormhole />
 
-      <PainterlyPost />
+      {!POST_DISABLED && <PainterlyPost />}
 
       {IS_DEV && <Stats />}
     </>

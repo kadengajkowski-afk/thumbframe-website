@@ -66,9 +66,12 @@ const simplexNoise = /* glsl */ `
   }
 `;
 
-// ── Wormhole world origin (avoid colliding with Scene 1 geometry) ───────────
+// ── Wormhole world origin ───────────────────────────────────────────────────
+// Must live INSIDE the Nebula sphere (radius 80 at origin, BackSide) — camera
+// positions that end up outside the sphere see pure black because BackSide
+// faces are culled from that side. z = -45 keeps us well inside.
 
-const WORMHOLE_POS = new THREE.Vector3(0, 0, -120);
+const WORMHOLE_POS = new THREE.Vector3(0, 0, -45);
 
 // ── Event horizon disc — swirling accretion-disc-like shader ────────────────
 
@@ -128,8 +131,10 @@ const discFrag = /* glsl */ `
     // Turbulence brightness modulation
     col *= 0.78 + noise * 0.45;
 
-    // Soft outer silhouette; nearly opaque in the body
-    float alpha = smoothstep(1.0, 0.45, r);
+    // Soft outer silhouette; nearly opaque in the body.
+    // NOTE: GLSL smoothstep is undefined when edge0 >= edge1, so invert rather
+    // than swap the args — earlier version silently broke alpha on some drivers.
+    float alpha = 1.0 - smoothstep(0.45, 1.0, r);
 
     gl_FragColor = vec4(col, alpha);
   }
@@ -143,7 +148,7 @@ function EventHorizonDisc() {
   useFrame(({ clock }) => { uniforms.uTime.value = clock.elapsedTime; });
 
   return (
-    <mesh>
+    <mesh renderOrder={1}>
       <circleGeometry args={[DISC_RADIUS, 128]} />
       <shaderMaterial
         vertexShader={discVert}
@@ -158,10 +163,14 @@ function EventHorizonDisc() {
   );
 }
 
-// ── Outer halo — violet accretion + gravitational lensing glow ──────────────
+// ── Outer halo — torus with violet accretion + gravitational lensing glow ──
+// Spec calls for a torus (3D ring with depth) — gives the lensed edge some
+// volume rather than a paper-flat annulus.
 
-const HALO_INNER = 5.0;
+const HALO_INNER = 5.1;
 const HALO_OUTER = 9.2;
+const TORUS_RADIUS = (HALO_INNER + HALO_OUTER) * 0.5;
+const TORUS_TUBE = (HALO_OUTER - HALO_INNER) * 0.5;
 
 const haloFrag = /* glsl */ `
   uniform float uTime;
@@ -211,9 +220,12 @@ function OuterHalo() {
   }), []);
   useFrame(({ clock }) => { uniforms.uTime.value = clock.elapsedTime; });
 
+  // Torus: face-on (axis = +Z), the tube bulges toward/away from camera.
+  // vLocalXY = position.xy gives distance from the axis in the plane,
+  // which ranges from (majorR - tube) = HALO_INNER to (majorR + tube) = HALO_OUTER.
   return (
-    <mesh>
-      <ringGeometry args={[HALO_INNER, HALO_OUTER, 128, 1]} />
+    <mesh renderOrder={0}>
+      <torusGeometry args={[TORUS_RADIUS, TORUS_TUBE, 24, 96]} />
       <shaderMaterial
         vertexShader={haloVert}
         fragmentShader={haloFrag}
@@ -231,13 +243,14 @@ function OuterHalo() {
 // ── Einstein-ring rim — thin bright edge at the horizon (light bending) ─────
 
 function EinsteinRim() {
+  // Thick enough (~0.35) to survive the half-resolution Kuwahara pass.
   return (
-    <mesh>
-      <ringGeometry args={[DISC_RADIUS - 0.05, DISC_RADIUS + 0.08, 128, 1]} />
+    <mesh renderOrder={2}>
+      <ringGeometry args={[DISC_RADIUS - 0.18, DISC_RADIUS + 0.22, 128, 1]} />
       <meshBasicMaterial
         color="#ffd890"
         transparent
-        opacity={0.85}
+        opacity={0.9}
         depthWrite={false}
         toneMapped={false}
         side={THREE.DoubleSide}
@@ -263,9 +276,10 @@ function CameraRig({ groupRef }) {
     // Map sceneIdx 2.0..2.5 → approach 0..1; hold at 1 past 2.5 until later steps land.
     const approach = THREE.MathUtils.clamp((sceneIdx - 2.0) / 0.5, 0, 1);
 
-    const startDist = 42;
-    const endDist = 16;
-    // Ease: cubic-out so the approach settles
+    // Distances tuned so the wormhole stays inside the nebula (r=80) AND
+    // reads at a meaningful size in the viewport.
+    const startDist = 28;
+    const endDist = 14;
     const ease = 1 - Math.pow(1 - approach, 3);
     const dist = THREE.MathUtils.lerp(startDist, endDist, ease);
 
