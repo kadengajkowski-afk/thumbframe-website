@@ -20,9 +20,11 @@ const KUWAHARA_SCALE = IS_MOBILE ? 0.25 : 0.40;
 function KuwaharaPass() {
   const { size, viewport } = useThree();
   // Mobile uses a smaller kernel too — less detail needs preserving.
+  // Desktop kernelNear dropped 4.0 → 3.0 so painted surface detail on
+  // mid-distance textured meshes (Scene-2 planet) survives the smoothing.
   const effect = useMemo(
     () => new KuwaharaEffect({
-      kernelNear: IS_MOBILE ? 3.0 : 4.0,
+      kernelNear: IS_MOBILE ? 2.0 : 3.0,
       kernelFar:  IS_MOBILE ? 7.0 : 10.0,
     }),
     []

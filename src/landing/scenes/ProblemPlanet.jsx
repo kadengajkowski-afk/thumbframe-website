@@ -69,22 +69,32 @@ const planetFrag = /* glsl */ `
     vec3 tex = texture2D(uMap, vUv).rgb;
     vec3 N = normalize(vNormal);
 
-    // Soft half-Lambert wrap — preserves painted detail, just gently shades
-    // the terminator. Lit hemisphere stays close to texture tone; shadow
-    // hemisphere dims to ~55% (planet never goes pitch black in space).
+    // Dramatic wrap — shadow hemisphere drops to ~18% of albedo, lit side
+    // goes up to ~1.2× for amber-key punch. Without this the planet read
+    // as flat navy and the painted crack detail had nothing to fight against.
+    // 0.18 + 1.05·NdotL · uLightIntensity gives the spec's "intensity 1.2"
+    // peak on full lit-facing normals while preserving base visibility on
+    // the dark side.
     float NdotL = max(dot(N, normalize(uLightDir)), 0.0);
-    vec3 shaded = tex * (0.55 + 0.45 * NdotL);
+    float lit = 0.18 + 1.05 * NdotL * uLightIntensity;
+    vec3 shaded = tex * lit;
 
-    // Warm amber tint on the lit side only — proportional to lightIntensity
-    // so 0.5 gives a hint of amber, not a saturated orange planet.
-    vec3 amberTint = vec3(1.08, 0.90, 0.68);
-    shaded = mix(shaded, shaded * amberTint, NdotL * uLightIntensity);
+    // Warm amber hue-shift on the lit side — stronger than before so the
+    // light-struck hemisphere reads amber, not neutral.
+    vec3 amberTint = vec3(1.18, 0.92, 0.62);
+    shaded = mix(shaded, shaded * amberTint, NdotL * 0.75);
 
-    // Fresnel rim — #4A2858 cold violet, narrow falloff, low mix strength.
-    // Just enough to read the silhouette against the nebula.
+    // Two-layer rim:
+    //   1. Wide violet fill — "rim fill at 0.3" per spec. Adds a halo of
+    //      cold violet into the silhouette and shadow terminator so the
+    //      dark side reads violet, not black.
+    //   2. Narrow crisp rim line — pops the planet against the nebula.
     vec3 V = normalize(uCameraPos - vWorldPos);
-    float rim = pow(1.0 - max(dot(N, V), 0.0), 3.8);
-    shaded += vec3(0.29, 0.157, 0.345) * rim * 0.28;
+    float facing = 1.0 - max(dot(N, V), 0.0);
+    float rimFill = pow(facing, 1.6);
+    float rimLine = pow(facing, 4.5);
+    shaded += vec3(0.22, 0.12, 0.34) * rimFill * 0.30;
+    shaded += vec3(0.36, 0.18, 0.42) * rimLine * 0.55;
 
     gl_FragColor = vec4(shaded, 1.0);
   }
@@ -103,7 +113,10 @@ function ProblemPlanetBody() {
   const uniforms = useMemo(() => ({
     uMap:            { value: texture },
     uLightDir:       { value: new THREE.Vector3(0.6, -0.7, 0.4).normalize() },
-    uLightIntensity: { value: 0.5 },
+    // Per spec revision: bumped 0.5 → 1.2 so the shading actually reads.
+    // Combined with the shader's (0.18 + 1.05·NdotL·I) wrap this pushes
+    // the lit peak to ~1.2× albedo and the shadow floor to ~18%.
+    uLightIntensity: { value: 1.2 },
     uCameraPos:      { value: new THREE.Vector3() },
   }), [texture]);
 
@@ -131,53 +144,72 @@ function ProblemPlanetBody() {
 // "evocative" of a category of tool — the reader gets the reference without
 // the logo.
 
-const RUST_DARK      = '#402820'; // cracked window body
-const RUST_TOOLBAR   = '#6a3828'; // toolbar strip
+const RUST_DARK      = '#5a3a30'; // cracked window body — warmer brown, less saturated
+const RUST_TOOLBAR   = '#4a2a22'; // toolbar strip (darker than body)
 const PAPER_OUTLINE  = '#f0e4d0'; // window outline highlight
+const WINDOW_ICON    = '#f0c090'; // tiny toolbar icons (paper-amber)
 const TEAL_FADED     = '#3f6864'; // canvas frame
 const SWATCH_A       = '#c87050'; // canvas swatch 1 (rust)
 const SWATCH_B       = '#4a7878'; // canvas swatch 2 (teal)
 const COLD_GRAY      = '#6a6e7a'; // wireframe cube
 
-// 1. Cracked photo-editor window — 1.2 × 0.8 frame, torn corner, toolbar,
-//    paper-highlight outline strips. Evokes Photoshop without being it.
+// 1. Cracked photo-editor window — a FLAT rectangular frame with a clear
+//    "application window" silhouette: thin toolbar strip across the top,
+//    broken upper-right corner, paper-highlight outline framing three sides.
+//    Evokes Photoshop without being it; reads as a torn UI window, not a
+//    chunk of industrial junk.
 function CrackedPhotoWindow() {
-  const W = 1.20;
-  const H = 0.80;
-  const T = 0.04; // outline thickness
-  const D = 0.06; // body depth
+  const W = 0.95;       // width (was 1.20)
+  const H = 0.62;       // height (was 0.80)
+  const D = 0.015;      // flat depth (was 0.06 — ~4× thinner now)
+  const T = 0.02;       // outline thickness
+  const TB_H = 0.10;    // toolbar strip height
+
+  // The main body is split into a large L-shape (left + bottom) plus a
+  // detached top-right fragment offset outward → reads as "torn corner."
   return (
     <group>
-      {/* Main window body — slightly offset so the torn corner shows. */}
-      <mesh position={[-0.10, 0, 0]}>
-        <boxGeometry args={[W - 0.28, H, D]} />
+      {/* Main body — left 70% of the window, full height, flat slab. */}
+      <mesh position={[-W * 0.15, 0, 0]}>
+        <boxGeometry args={[W * 0.70, H, D]} />
         <meshBasicMaterial color={RUST_DARK} toneMapped={false} />
       </mesh>
-      {/* Right body fragment — detached, rotated, showing tear. */}
-      <mesh position={[ 0.48, -0.06, 0.02]} rotation={[0, 0, -0.18]}>
-        <boxGeometry args={[0.36, H - 0.20, D]} />
+      {/* Bottom-right extension — finishes the "L." */}
+      <mesh position={[ W * 0.32, -H * 0.25, 0]}>
+        <boxGeometry args={[W * 0.36, H * 0.50, D]} />
         <meshBasicMaterial color={RUST_DARK} toneMapped={false} />
       </mesh>
+      {/* Torn top-right corner fragment — drifted out + slightly rotated. */}
+      <mesh position={[ W * 0.40, H * 0.28, D + 0.01]} rotation={[0, 0, -0.22]}>
+        <boxGeometry args={[W * 0.32, H * 0.28, D]} />
+        <meshBasicMaterial color={RUST_DARK} toneMapped={false} />
+      </mesh>
+
       {/* Toolbar strip along the top of the main body. */}
-      <mesh position={[-0.10, H * 0.42, D * 0.6]}>
-        <boxGeometry args={[W - 0.28, 0.14, D * 0.6]} />
+      <mesh position={[-W * 0.15, H * 0.5 - TB_H * 0.5, D * 0.55]}>
+        <boxGeometry args={[W * 0.70, TB_H, D * 0.5]} />
         <meshBasicMaterial color={RUST_TOOLBAR} toneMapped={false} />
       </mesh>
-      {/* Three dark tool-icon squares inside the toolbar. */}
-      {[-0.30, -0.12, 0.06].map((x, i) => (
-        <mesh key={i} position={[x, H * 0.42, D * 0.6 + 0.03]}>
-          <boxGeometry args={[0.06, 0.06, 0.02]} />
-          <meshBasicMaterial color={'#2a1815'} toneMapped={false} />
+      {/* Three tiny toolbar icons (paper-amber squares). */}
+      {[-0.28, -0.15, -0.02].map((x, i) => (
+        <mesh key={i} position={[x, H * 0.5 - TB_H * 0.5, D * 0.55 + 0.006]}>
+          <boxGeometry args={[0.045, 0.045, 0.004]} />
+          <meshBasicMaterial color={WINDOW_ICON} toneMapped={false} />
         </mesh>
       ))}
-      {/* Paper-highlight outline strips — top & bottom of main body only
-          (sides are left "torn" on purpose). */}
-      <mesh position={[-0.10,  H * 0.5, D * 0.5 + 0.005]}>
-        <boxGeometry args={[W - 0.28 + T, T, 0.005]} />
+
+      {/* Paper-highlight outline — left / bottom / partial top framing the
+          L-shape. Sides facing the torn corner left bare. */}
+      <mesh position={[-W * 0.50 + T * 0.5, 0, D * 0.5 + 0.002]}>
+        <boxGeometry args={[T, H, 0.004]} />
         <meshBasicMaterial color={PAPER_OUTLINE} toneMapped={false} />
       </mesh>
-      <mesh position={[-0.10, -H * 0.5, D * 0.5 + 0.005]}>
-        <boxGeometry args={[W - 0.28 + T, T, 0.005]} />
+      <mesh position={[-W * 0.15, -H * 0.5 + T * 0.5, D * 0.5 + 0.002]}>
+        <boxGeometry args={[W * 0.70, T, 0.004]} />
+        <meshBasicMaterial color={PAPER_OUTLINE} toneMapped={false} />
+      </mesh>
+      <mesh position={[-W * 0.35, H * 0.5 - T * 0.5, D * 0.5 + 0.002]}>
+        <boxGeometry args={[W * 0.30, T, 0.004]} />
         <meshBasicMaterial color={PAPER_OUTLINE} toneMapped={false} />
       </mesh>
     </group>
@@ -224,9 +256,11 @@ function DesignCanvas() {
 
 // 3. Wireframe cube fragment — 8 edges of a unit cube (12 − 4 removed).
 //    Reads as a broken hollow wireframe. Evokes Photopea's utilitarian look.
+//    Edge thickness ~2× vs. first pass so the bars actually survive
+//    Kuwahara smoothing at 0.4× effective resolution.
 function WireframeCube() {
   const H = 0.5; // unit cube half-length
-  const T = 0.035;
+  const T = 0.065;
   const edges = [
     // 4 of 4 bottom-face edges: keep 3.
     { pos: [ 0,   -H, -H ], size: [1.0, T, T] },
@@ -257,41 +291,47 @@ function WireframeCube() {
 // orbit uses a slightly elliptical XZ ellipse with a Y component driven by
 // tilt · sin(angle · 0.9), giving each artefact a different orbital plane.
 
+// All three start on the +X hemisphere (cos(θ₀) > 0) so that during the
+// Scene-2 viewing window — when the camera is always on the +X side of
+// the planet — all three are visible simultaneously. Speeds slow enough
+// that a typical 30 s traversal only drifts them ~1–2 rad (≤ 90°), so
+// none end up behind the planet during the scroll.
 const ARTIFACT_DEFS = [
-  // 1. Cracked photo-editor window. Slow orbit, angle 0 → starts on +X
-  //    hemisphere at approx ARTIFACT1_SHOWCASE. The camera push (1.7-2.0)
-  //    heads toward this area, so artefact 1 stays foreground.
+  // 1. Cracked photo-editor window — slowest orbit, starts at +X centre
+  //    so it matches ARTIFACT1_SHOWCASE for the camera push (1.7–2.0).
   {
     key: 'window',
     Shape: CrackedPhotoWindow,
     orbitRadius: 4.5,
-    orbitAngle:  0.00,
-    orbitSpeed:  0.040,           // slowest per spec range
-    tiltDeg:     20,              // 20° orbital plane tilt
+    orbitAngle:  0.00,        // +X centre
+    orbitSpeed:  0.040,
+    tiltDeg:     20,
     tumble:      [0.05, 0.03, 0.04],
-    scale:       1.25,
+    scale:       1.15,
   },
-  // 2. Abandoned design canvas — mid radius, medium speed, larger tilt.
+  // 2. Abandoned design canvas — larger radius, above + behind on +X.
   {
     key: 'canvas',
     Shape: DesignCanvas,
     orbitRadius: 6.0,
-    orbitAngle:  2.20,
-    orbitSpeed:  0.075,
+    orbitAngle:  0.85,        // +X upper-back (cos ≈ 0.66)
+    orbitSpeed:  0.055,
     tiltDeg:     35,
     tumble:      [0.04, 0.06, 0.03],
-    scale:       1.15,
+    scale:       1.10,
   },
-  // 3. Wireframe cube fragment — outer, fastest, steepest tilt.
+  // 3. Wireframe cube fragment — medium radius, below + forward on +X.
+  //    Slower than first pass so it doesn't swing behind the planet
+  //    within the scene's typical viewing time.
   {
     key: 'cube',
     Shape: WireframeCube,
-    orbitRadius: 5.5,
-    orbitAngle: -1.80,
-    orbitSpeed:  0.090,
-    tiltDeg:     42,
+    orbitRadius: 5.2,
+    orbitAngle: -0.75,        // +X lower-front (cos ≈ 0.73)
+    orbitSpeed:  0.060,
+    tiltDeg:     25,
     tumble:      [0.06, 0.04, 0.07],
-    scale:       1.10,
+    scale:       1.30,        // bumped so the hollow wireframe reads
   },
 ];
 

@@ -41,12 +41,23 @@ const fragmentShader = /* glsl */ `
   void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
     vec2 texel = 1.0 / uResolution;
 
-    // Depth-modulated kernel: read depth to decide kernel size.
-    // readDepth returns 0 (near) to 1 (far) in the depth buffer.
+    // Depth-modulated kernel. The raw depth-buffer value is non-linear —
+    // for a perspective camera with near=0.1 / far=200, everything in the
+    // visible scene maps to roughly [0.95, 1.0]. A direct smoothstep(0, 1)
+    // treated every visible pixel as "far" and applied the large kernel to
+    // all of it, which flattened painted texture detail on mid-distance
+    // meshes (the Scene-2 Problem Planet).
+    //
+    // Convert to world-space linear distance, then normalise over [0, 60]
+    // so near-ish (0–10 units) gets uKernelNear and far-only (>60 units)
+    // gets uKernelFar. Matches the Canvas camera near/far hard-coded here.
     float d = texture2D(depthBuffer, uv).r;
-    // Linearize roughly: objects near camera get small kernel, far get large
-    float depthLinear = smoothstep(0.0, 1.0, d);
-    float radius = mix(uKernelNear, uKernelFar, depthLinear);
+    float ndc = d * 2.0 - 1.0;
+    const float N = 0.1;
+    const float F = 200.0;
+    float linearDepth = (2.0 * N * F) / (F + N - ndc * (F - N));
+    float depthNorm = clamp(linearDepth / 60.0, 0.0, 1.0);
+    float radius = mix(uKernelNear, uKernelFar, depthNorm);
 
     vec2 st = getStructure(uv, texel);
     float cosA = cos(st.x);
