@@ -299,10 +299,12 @@ const tunnelFrag = /* glsl */ `
     vec3 col = mix(cVoid, base, bright * 0.85 + 0.15);
     col *= 0.75 + mid * 0.35;
 
-    // Subtle darkening near the event-horizon end so depth reads correctly
-    // as the camera flies deeper.
+    // Darken the tunnel wall as we approach the editor end so the bright
+    // rectangular plane has a high-contrast dark frame to sit against.
+    // Strong falloff on the far 35% of the wall (uv.y in [0.65, 1.0]).
     float darkenNear = 1.0 - smoothstep(0.75, 1.05, fract(vUv.y));
-    col *= 0.58 + 0.42 * darkenNear;
+    float darkenFar  = smoothstep(0.65, 1.00, fract(vUv.y));
+    col *= (0.58 + 0.42 * darkenNear) * (1.0 - darkenFar * 0.55);
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -391,29 +393,28 @@ const backdropFrag = /* glsl */ `
     float r = length(vLocalXY) / uRadius;
     if (r > 1.0) discard;
 
-    // Dim, diffuse fill — intentionally NOT focal. Purpose is to cover the
-    // open cylinder end with tunnel-coloured light; the editor plane in front
-    // is the thing the eye should read as the bright rectangle.
-    vec3 cCore = vec3(0.35, 0.22, 0.14); // muted warm
-    vec3 cMid  = vec3(0.22, 0.12, 0.18); // deeper warm-violet blend
-    vec3 cEdge = vec3(0.06, 0.04, 0.12); // tunnel void
+    // Warm amber fill only — drop the violet outer ring so the backdrop reads
+    // as light behind the editor, not a moon. The rectangular backlight in
+    // front handles the frame-glow.
+    vec3 cCore = vec3(0.80, 0.45, 0.18); // warm amber
+    vec3 cEdge = vec3(0.28, 0.12, 0.08); // dim warm
 
-    vec3 col;
-    if (r < 0.45) col = mix(cCore, cMid, r / 0.45);
-    else          col = mix(cMid, cEdge, (r - 0.45) / 0.55);
+    vec3 col = mix(cCore, cEdge, smoothstep(0.0, 1.0, r));
 
     float n = fbm2(vLocalXY * 1.1 + vec2(uTime * 0.06, 0.0));
-    col *= 0.8 + n * 0.35;
+    col *= 0.85 + n * 0.3;
 
-    float alpha = 1.0 - smoothstep(0.88, 1.0, r);
-    col *= 0.6 + 0.5 * uIntensity;
+    float alpha = (1.0 - smoothstep(0.80, 1.0, r)) * (0.4 + 0.6 * uIntensity);
 
     gl_FragColor = vec4(col, alpha);
   }
 `;
 
 const TUNNEL_FAR_END_LOCAL_Z = -88.5;
-const TUNNEL_FAR_END_RADIUS = 6.0;
+// Radius matches the plane height so the backdrop reads as a soft amber
+// aura tucked behind the editor rectangle, not a full-viewport circle
+// that drowns the plane once Kuwahara blurs it.
+const TUNNEL_FAR_END_RADIUS = 3.2;
 
 function TunnelFarEndBackdrop({ intensityRef }) {
   const uniforms = useMemo(() => ({
@@ -452,20 +453,18 @@ function TunnelFarEndBackdrop({ intensityRef }) {
 // actual ThumbFrame editor UI onto the plane.
 
 const EDITOR_LOCAL_Z = -85.0;
+// 16:9 plane, sized so it fills ~60% of viewport width at sceneIdx 3.8 and
+// ~40% at 3.6 with fov=50° camera. Camera path (below) tightened to match.
 const EDITOR_WIDTH   = 6.0;
-const EDITOR_HEIGHT  = 3.4;
+const EDITOR_HEIGHT  = 3.375;
 
+// Flat plane — no dome bend. A curved plane viewed head-on reads like a disc
+// once the painterly blur softens the silhouette; we want unambiguous 16:9.
 const editorPlaneVert = /* glsl */ `
-  uniform float uBend;
   varying vec2 vUv;
   void main() {
     vUv = uv;
-    // Gentle concave dome — edges pushed toward +Z so the plane cups slightly
-    // toward the camera (which sits on +Z side of the editor). 0.25 max offset.
-    vec2 n = uv * 2.0 - 1.0;
-    vec3 bent = position;
-    bent.z += uBend * (1.0 - n.x * n.x) * (1.0 - n.y * n.y);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(bent, 1.0);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
@@ -475,91 +474,90 @@ const editorPlaneFrag = /* glsl */ `
   varying vec2 vUv;
   ${noiseHelpers}
 
-  // Thin smoothstep step helper — sharp antialiased step.
+  // Thick smoothstep helper for UI strokes (stays readable after Kuwahara).
   float sstep(float lo, float hi, float x) { return smoothstep(lo, hi, x); }
+  // Binary box: 1.0 inside [a,b], 0.0 outside. Used for UI slabs that need to
+  // survive the painterly blur — soft edges get eaten by the 0.2x-res Kuwahara.
+  float box(float v, float a, float b) { return step(a, v) - step(b, v); }
 
   void main() {
     vec2 p = (vUv - 0.5) * 2.0; // -1..1
 
-    // SHARP rectangular silhouette — tiny 2% antialias band, no more.
-    float rectMask =
-      (1.0 - sstep(0.98, 1.00, abs(p.x))) *
-      (1.0 - sstep(0.98, 1.00, abs(p.y)));
-    if (rectMask < 0.001) discard;
+    // HARD rectangular silhouette — binary step, no antialias band.
+    // The painterly post-process already smooths edges; an in-shader AA band
+    // compounds with Kuwahara and turns the corners into a rounded blob.
+    float rectMask = step(abs(p.x), 1.0) * step(abs(p.y), 1.0);
+    if (rectMask < 0.5) discard;
 
-    // Palette — warm paper-highlight base with painted amber UI elements.
-    vec3 paper  = vec3(1.20, 1.00, 0.78); // warm paper-highlight (HDR)
-    vec3 amber  = vec3(1.25, 0.64, 0.20); // warm amber UI lines / bars
-    vec3 amberD = vec3(0.70, 0.34, 0.14); // darker amber (canvas / panels)
-    vec3 border = vec3(1.70, 1.05, 0.55); // bright rect frame highlight
+    // Palette — warm paper-highlight base with bold amber UI elements.
+    // HDR values cranked high so the plane stays visibly brighter than the
+    // surrounding tunnel even after Kuwahara 0.2x-res smoothing washes it out.
+    vec3 paper  = vec3(1.90, 1.55, 1.15); // warm paper-highlight
+    vec3 amber  = vec3(1.80, 0.95, 0.32); // warm amber UI lines / bars
+    vec3 amberD = vec3(0.78, 0.38, 0.14); // darker amber (canvas body)
+    vec3 border = vec3(2.60, 1.65, 0.82); // bright rect frame
 
     vec3 col = paper;
 
-    // ─── Top toolbar strip (uv.y 0.88 – 0.97) ────────────────────────────
-    float topBand = sstep(0.875, 0.89, vUv.y) * (1.0 - sstep(0.97, 0.98, vUv.y));
-    col = mix(col, amber * 0.85, topBand * 0.55);
-    // Toolbar icon-button pattern — 14 slots across the top band.
-    float slotX  = fract(vUv.x * 14.0);
-    float slotY  = fract((vUv.y - 0.88) / 0.09);
-    float iconHit =
-      sstep(0.18, 0.22, slotX) * (1.0 - sstep(0.78, 0.82, slotX)) *
-      sstep(0.20, 0.24, slotY) * (1.0 - sstep(0.76, 0.80, slotY));
-    col = mix(col, amber * 1.15, topBand * iconHit * 0.7);
+    // ─── Top toolbar strip (uv.y 0.86 – 0.97) — wider and solid ──────────
+    float topBand = box(vUv.y, 0.86, 0.97);
+    col = mix(col, amber * 0.90, topBand * 0.70);
+    // Toolbar icon-button pattern — 8 big slots so each survives the blur.
+    float slotX = fract(vUv.x * 8.0);
+    float iconHit = box(slotX, 0.22, 0.78);
+    col = mix(col, amber * 1.25, topBand * iconHit * 0.80);
 
-    // ─── Bottom status bar (uv.y 0.03 – 0.08) ────────────────────────────
-    float botBand = sstep(0.025, 0.035, vUv.y) * (1.0 - sstep(0.075, 0.085, vUv.y));
-    col = mix(col, amber * 0.7, botBand * 0.55);
+    // ─── Bottom status bar (uv.y 0.03 – 0.10) — solid amber band ─────────
+    float botBand = box(vUv.y, 0.03, 0.10);
+    col = mix(col, amber * 0.75, botBand * 0.75);
 
-    // ─── Left tool strip (uv.x 0.04 – 0.12, uv.y 0.12 – 0.86) ────────────
-    float leftStrip =
-      sstep(0.035, 0.045, vUv.x) * (1.0 - sstep(0.115, 0.125, vUv.x)) *
-      sstep(0.11, 0.12, vUv.y)   * (1.0 - sstep(0.86, 0.87, vUv.y));
-    col = mix(col, amber * 0.75, leftStrip * 0.45);
-    // Tool-button rows within the strip — 8 buttons vertically.
-    float rowY = fract((vUv.y - 0.12) / ((0.86 - 0.12) / 8.0));
-    float rowHit = sstep(0.25, 0.30, rowY) * (1.0 - sstep(0.70, 0.75, rowY));
-    col = mix(col, amber * 1.1, leftStrip * rowHit * 0.7);
+    // ─── Left tool strip (uv.x 0.03 – 0.14) ──────────────────────────────
+    float leftStrip = box(vUv.x, 0.03, 0.14) * box(vUv.y, 0.12, 0.84);
+    col = mix(col, amberD * 1.6, leftStrip * 0.65);
+    // 6 fat tool buttons — bigger than before so Kuwahara preserves them.
+    float rowY = fract((vUv.y - 0.12) / ((0.84 - 0.12) / 6.0));
+    float rowHit = box(rowY, 0.20, 0.80);
+    col = mix(col, amber * 1.20, leftStrip * rowHit * 0.80);
 
-    // ─── Right properties panel (uv.x 0.78 – 0.96, uv.y 0.12 – 0.86) ─────
-    float rightPanel =
-      sstep(0.775, 0.785, vUv.x) * (1.0 - sstep(0.96, 0.97, vUv.x)) *
-      sstep(0.11, 0.12, vUv.y)   * (1.0 - sstep(0.86, 0.87, vUv.y));
-    col = mix(col, amberD * 1.3, rightPanel * 0.4);
-    // Horizontal dividers — six panel sections.
-    float divRow = fract(vUv.y * 8.0);
-    float divider = sstep(0.44, 0.47, divRow) * (1.0 - sstep(0.53, 0.56, divRow));
-    col = mix(col, amber, rightPanel * divider * 0.75);
-    // Small amber "value bars" inside panel
-    float barX = sstep(0.80, 0.81, vUv.x) * (1.0 - sstep(0.93, 0.94, vUv.x));
-    float barY = sstep(0.05, 0.10, divRow) * (1.0 - sstep(0.20, 0.25, divRow));
-    col = mix(col, amber * 1.1, rightPanel * barX * barY * 0.6);
+    // ─── Right properties panel (uv.x 0.75 – 0.97) ───────────────────────
+    float rightPanel = box(vUv.x, 0.75, 0.97) * box(vUv.y, 0.12, 0.84);
+    col = mix(col, amberD * 1.4, rightPanel * 0.55);
+    // 4 panel sections with fat dividers.
+    float divRow = fract(vUv.y * 5.0);
+    float divider = box(divRow, 0.42, 0.58);
+    col = mix(col, amber * 1.05, rightPanel * divider * 0.85);
+    // Amber "value bars" — two fat horizontal bars per section.
+    float bar1 = box(divRow, 0.06, 0.18);
+    float bar2 = box(divRow, 0.72, 0.88);
+    float barX = box(vUv.x, 0.77, 0.90);
+    col = mix(col, amber * 1.15, rightPanel * (bar1 + bar2) * barX * 0.75);
 
-    // ─── Canvas area (uv.x 0.13 – 0.77, uv.y 0.12 – 0.86) ────────────────
-    float canvasX = sstep(0.13, 0.14, vUv.x) * (1.0 - sstep(0.77, 0.78, vUv.x));
-    float canvasY = sstep(0.12, 0.13, vUv.y) * (1.0 - sstep(0.86, 0.87, vUv.y));
-    float canvas  = canvasX * canvasY;
-    col = mix(col, amberD * 0.75, canvas * 0.55);
-    // Thumbnail image placeholder at canvas centre — broad amber rectangle.
-    float thX = sstep(0.22, 0.23, vUv.x) * (1.0 - sstep(0.68, 0.69, vUv.x));
-    float thY = sstep(0.23, 0.24, vUv.y) * (1.0 - sstep(0.78, 0.79, vUv.y));
-    col = mix(col, amber * 0.95, thX * thY * 0.55);
-    // Saliency indicator — small amber box in upper-right of thumbnail.
-    float salX = sstep(0.55, 0.56, vUv.x) * (1.0 - sstep(0.66, 0.67, vUv.x));
-    float salY = sstep(0.70, 0.71, vUv.y) * (1.0 - sstep(0.77, 0.78, vUv.y));
-    col = mix(col, amber * 1.4, salX * salY * 0.7);
+    // ─── Canvas area (uv.x 0.15 – 0.73, uv.y 0.14 – 0.84) — darker well ──
+    float canvas = box(vUv.x, 0.15, 0.73) * box(vUv.y, 0.14, 0.84);
+    col = mix(col, amberD * 0.85, canvas * 0.75);
+    // 16:9 thumbnail inside the canvas, solid amber glow.
+    float thumb = box(vUv.x, 0.22, 0.66) * box(vUv.y, 0.28, 0.72);
+    col = mix(col, amber * 1.05, thumb * 0.75);
+    // Bright saliency marker — upper-right of thumbnail.
+    float saliency = box(vUv.x, 0.56, 0.64) * box(vUv.y, 0.62, 0.70);
+    col = mix(col, amber * 1.60, saliency * 0.85);
 
-    // ─── Hard rectangular border highlight at ~98% of each axis ──────────
+    // ─── FAT bright rectangular frame at 93 – 99% — defines the silhouette
+    // Two-band frame so Kuwahara leaves behind a recognizable border even
+    // after smoothing. Thickness scales with plane size in viewport.
     float edgeDist = max(abs(p.x), abs(p.y));
-    float frame    = sstep(0.955, 0.965, edgeDist) * (1.0 - sstep(0.985, 0.995, edgeDist));
-    col = mix(col, border, frame * 0.85);
+    float outerFrame = step(0.94, edgeDist);
+    col = mix(col, border, outerFrame * 0.95);
 
     // ─── Painterly brush variation over the whole surface ────────────────
     float n = fbm2(vUv * 5.0 + vec2(uTime * 0.08, 0.0));
-    col *= 0.88 + n * 0.22;
+    col *= 0.92 + n * 0.14;
 
     // Intensity ramp — editor ignites across sceneIdx 2.8 → 3.8.
-    col *= 0.45 + 1.15 * uIntensity;
-    float alpha = rectMask * clamp(uIntensity * 1.8, 0.0, 1.0);
+    // Floor at 0.65 so the plane is already clearly visible the moment it
+    // registers, then scales up to 1x brightness at climax.
+    col *= 0.65 + 1.05 * uIntensity;
+    float alpha = rectMask * clamp(uIntensity * 2.2 + 0.15, 0.0, 1.0);
 
     gl_FragColor = vec4(col, alpha);
   }
@@ -569,7 +567,6 @@ function EditorPlane({ intensityRef }) {
   const uniforms = useMemo(() => ({
     uTime:      { value: 0 },
     uIntensity: { value: 0 },
-    uBend:      { value: 0.25 },
   }), []);
   useFrame(({ clock }) => {
     uniforms.uTime.value = clock.elapsedTime;
@@ -580,7 +577,7 @@ function EditorPlane({ intensityRef }) {
 
   return (
     <mesh position={[0, 0, EDITOR_LOCAL_Z]} renderOrder={3}>
-      <planeGeometry args={[EDITOR_WIDTH, EDITOR_HEIGHT, 32, 18]} />
+      <planeGeometry args={[EDITOR_WIDTH, EDITOR_HEIGHT, 1, 1]} />
       <shaderMaterial
         vertexShader={editorPlaneVert}
         fragmentShader={editorPlaneFrag}
@@ -600,8 +597,12 @@ function EditorPlane({ intensityRef }) {
 // editor, so warm amber light appears to escape around the rectangle's edges —
 // instead of the circular radial glow that made v1 read as a soft moon.
 
-const BACKLIGHT_WIDTH   = 8.4;
-const BACKLIGHT_HEIGHT  = 4.9;
+// Backlight plane is sized so the halo band extends ONLY ~20% beyond the
+// editor edge on each side. Wider halos bleed into a circular radial glow
+// once the painterly blur kicks in — the goal is clearly rectangular
+// "light escaping around the frame", not a lens-flare aura.
+const BACKLIGHT_WIDTH   = 7.2;   // EDITOR_WIDTH * 1.20
+const BACKLIGHT_HEIGHT  = 4.05;  // EDITOR_HEIGHT * 1.20
 const BACKLIGHT_LOCAL_Z = -86.0;
 
 const backlightFrag = /* glsl */ `
@@ -612,26 +613,30 @@ const backlightFrag = /* glsl */ `
   void main() {
     vec2 p = (vUv - 0.5) * 2.0; // -1..1 over backlight extent
 
-    // Editor plane occupies x in [-EW/BW, +EW/BW], y in [-EH/BH, +EH/BH].
-    // With BW=8.4, EW=6  → 0.714;  BH=4.9, EH=3.4 → 0.694.
-    float editorEdgeX = 0.714;
-    float editorEdgeY = 0.694;
+    // Editor edge in backlight-UV space: EW/BW = 6.0/7.2 = 0.833, EH/BH same.
+    float editorEdgeX = 0.833;
+    float editorEdgeY = 0.833;
 
-    // Rectangular distance past the editor edge, 0 at edge, 1 at backlight rim.
+    // Chebyshev rectangular distance past the editor edge, normalized to
+    // [0, 1] where 0 = right at the plane edge, 1 = outer backlight rim.
     float dx = (abs(p.x) - editorEdgeX) / (1.0 - editorEdgeX);
     float dy = (abs(p.y) - editorEdgeY) / (1.0 - editorEdgeY);
     float d  = max(dx, dy);
 
-    // Halo: peak just outside the editor edge, fade to 0 at the backlight rim.
-    // Inside the editor area (d < 0), clamp to 0 — we don't want the halo to
-    // overlay the plane itself (editor is opaque NormalBlending in front anyway).
-    float halo = clamp(d, 0.0, 1.0);
-    halo = (1.0 - halo) * step(0.0, d);
-    halo = pow(halo, 1.35);
+    // Halo only in the annulus outside the editor: 0 inside plane, bright
+    // right at the edge, fading to 0 at the backlight rim. Sharp falloff so
+    // the halo reads as a frame-glow, not a radial moon.
+    float halo = 1.0 - clamp(d, 0.0, 1.0);
+    halo *= step(0.0, d);
+    halo = pow(halo, 1.8);
 
-    vec3 col = vec3(1.25, 0.66, 0.24); // warm amber
-    float alpha = halo * uIntensity * 0.85;
-    col *= 0.6 + 1.0 * uIntensity;
+    // A tiny glow boost right at the inner edge of the halo (d ~ 0..0.15)
+    // to accentuate light spilling from behind the rectangle.
+    float lip = (1.0 - smoothstep(0.0, 0.25, d)) * step(0.0, d);
+
+    vec3 col = vec3(2.20, 1.10, 0.38); // warm amber backlight (HDR)
+    float alpha = (halo * 1.00 + lip * 0.70) * uIntensity;
+    col *= 0.8 + 1.4 * uIntensity;
 
     gl_FragColor = vec4(col, alpha);
   }
@@ -707,17 +712,25 @@ function CameraRig({ groupRef, discRef, editorIntensityRef }) {
     // it fills the viewport right before the camera crosses the event horizon.
     // This hides the "empty nebula frame" that was visible between Step 1 and
     // Step 2 by making the disc dominate the view at the moment of entry.
+    // After sceneIdx >= 2.75 the camera is fully past the disc, so force it
+    // hidden — frustum culling alone was leaking the scaled bounding sphere
+    // into the tunnel/editor shots as a purple halo.
     if (discRef.current) {
-      let scale = 1.0;
-      if (sceneIdx >= 2.4 && sceneIdx < 2.67) {
-        const p = (sceneIdx - 2.4) / 0.27;
-        scale = THREE.MathUtils.lerp(1.0, 2.8, p);
-      } else if (sceneIdx >= 2.67) {
-        scale = 2.8; // hold — camera is past, so this only matters visually
-                     // during the short moment before frustum culls the disc.
-      }
-      if (discRef.current.scale.x !== scale) {
-        discRef.current.scale.setScalar(scale);
+      const hideAfter = 2.75;
+      if (sceneIdx >= hideAfter) {
+        if (discRef.current.visible) discRef.current.visible = false;
+      } else {
+        if (!discRef.current.visible) discRef.current.visible = true;
+        let scale = 1.0;
+        if (sceneIdx >= 2.4 && sceneIdx < 2.67) {
+          const p = (sceneIdx - 2.4) / 0.27;
+          scale = THREE.MathUtils.lerp(1.0, 2.8, p);
+        } else if (sceneIdx >= 2.67) {
+          scale = 2.8;
+        }
+        if (discRef.current.scale.x !== scale) {
+          discRef.current.scale.setScalar(scale);
+        }
       }
     }
 
@@ -745,8 +758,8 @@ function CameraRig({ groupRef, discRef, editorIntensityRef }) {
       const travel = (sceneIdx - 2.5) / 0.6; // 0..1 across step 2
       const ease = travel * travel * (3.0 - 2.0 * travel);
 
-      // +14 (Step 1 end) → -55 (deep inside the tunnel).
-      const offsetZ = THREE.MathUtils.lerp(14, -55, ease);
+      // +14 (Step 1 end) → -62 (deep inside the tunnel, matching step-4 start).
+      const offsetZ = THREE.MathUtils.lerp(14, -62, ease);
       camZ = WORMHOLE_POS.z + offsetZ;
 
       // Lateral drift shrinks as we dive in — camera locks to the axis.
@@ -758,14 +771,15 @@ function CameraRig({ groupRef, discRef, editorIntensityRef }) {
       lookZ = WORMHOLE_POS.z + lookOffsetZ;
     } else if (sceneIdx < 3.8) {
       // Step 4 — final approach to the editor plane.
-      // Editor plane sits at local z = EDITOR_LOCAL_Z (-85). We want the plane
-      // (6 × 3.4) to fill ~60% of the viewport at sceneIdx 3.8, which at
-      // fov=50° / aspect=1.78 puts the camera ~6 units in front of it
-      //   → world z = EDITOR world z + 6 = -130 + 6 = -124
-      //   → offsetZ = -124 - WORMHOLE_POS.z = -79.
+      // Plane sits at local z = EDITOR_LOCAL_Z (-85); 6 × 3.375 (16:9).
+      // Targets (fov=50°, aspect=1.78):
+      //   sceneIdx 3.6 → ~40% viewport width → d ≈ 9.05
+      //   sceneIdx 3.8 → ~60% viewport width → d ≈ 6.03
+      // offsetZ start = -62 (d=23 at sceneIdx 3.1, smoothstep ease),
+      //           end = -79 (d=6). Solves sceneIdx 3.6 to d ≈ 9.4.
       const travel = (sceneIdx - 3.1) / 0.7;
       const ease = travel * travel * (3.0 - 2.0 * travel);
-      const offsetZ = THREE.MathUtils.lerp(-55, -79, ease);
+      const offsetZ = THREE.MathUtils.lerp(-62, -79, ease);
 
       camX = WORMHOLE_POS.x;
       camY = WORMHOLE_POS.y;

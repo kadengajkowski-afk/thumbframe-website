@@ -29,8 +29,6 @@ function ScrollReader() {
 function SceneGraph() {
   return (
     <>
-      <perspectiveCamera makeDefault position={[0, 0, 15]} fov={50} near={0.1} far={200} />
-
       <Nebula radius={80} />
       <Arrival />
       <Wormhole />
@@ -46,6 +44,7 @@ export default function Experience() {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 0 }}>
       <Canvas
+        camera={{ fov: 50, near: 0.1, far: 200, position: [0, 0, 15] }}
         gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
         dpr={[1, 2]}
       >
