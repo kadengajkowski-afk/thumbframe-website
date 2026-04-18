@@ -70,10 +70,11 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    // Subtle ±2° wobble instead of full rotation — keeps the engine plume
-    // pointing away from the camera so the flame never blocks the scene.
+    // ±30° Y rocking on a ~10s cycle (period = 2π / 0.628). Gives the station
+    // life without ever pointing the engine nozzle at the camera — at the
+    // extremes the plume is ~60° off the camera axis, well clear of the frame.
     if (groupRef.current) {
-      groupRef.current.rotation.y = Math.sin(t * 0.22) * (2 * Math.PI / 180);
+      groupRef.current.rotation.y = Math.sin(t * 0.628) * (30 * Math.PI / 180);
     }
     if (dishRef.current) dishRef.current.rotation.y = t * 0.35;
 
