@@ -74,6 +74,17 @@ export default function Arrival() {
   useFrame(({ clock, camera }) => {
     const sceneIdx = scroll.offset * 7;
 
+    // Arrival owns the frame up to sceneIdx 1.95. Past that the wormhole takes
+    // over exclusively — hide the entire Arrival group so leftover Station /
+    // DistantPlanet / Stardust geometry can't leak into wormhole shots (the
+    // "purple planet to the right" regression).
+    if (groupRef.current) {
+      const shouldShow = sceneIdx < 1.95;
+      if (groupRef.current.visible !== shouldShow) {
+        groupRef.current.visible = shouldShow;
+      }
+    }
+
     // Arrival owns the camera for sceneIdx 0 → 1.95. At 1.95, Wormhole's
     // CameraRig takes over (matches this phase's end state exactly).
     //

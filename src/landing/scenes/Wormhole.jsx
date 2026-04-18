@@ -19,6 +19,7 @@ import { useFrame } from '@react-three/fiber';
 import { useScroll } from '@react-three/drei';
 import * as THREE from 'three';
 import WormholeTags from './WormholeTags';
+import WormholeDebris from './WormholeDebris';
 
 // Module-level device check (Step-5 perf) — skip parallax cylinders on
 // small viewports where the main tunnel wall carries enough spiral read on
@@ -1007,6 +1008,10 @@ export default function Wormhole() {
         <EditorBacklight intensityRef={editorIntensityRef} />
         <EditorPlane intensityRef={editorIntensityRef} />
         <WormholeTags />
+        {/* Ambient vortex debris — 11 staggered decorative objects streaming
+            into the singularity (stickers + painterly creator items). Fade
+            out before sceneIdx 3.65 so the editor reveal is clean. */}
+        <WormholeDebris />
       </group>
     </>
   );
