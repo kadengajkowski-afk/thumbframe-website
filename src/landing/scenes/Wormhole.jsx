@@ -1,79 +1,57 @@
 // Scene 3 — Wormhole / singularity.
 // Step 1 scope: exterior view only.
-//   - Event horizon disc: swirling noise-distorted UV shader,
-//     amber hot core → orange → deep red → violet → void.
-//   - Outer halo ring: violet gradient with slow swirl (suggests accretion +
-//     gravitational lensing at the edge).
-//   - Thin Einstein-ring rim at the inner edge of the halo (light bending).
-//   - CameraRig pulls the camera to an exterior approach during scene 3
-//     local progress 0.0–0.3 (global scroll offsets ~2.0/7 → 2.5/7).
 //
-// Later steps add: tunnel interior, feature tags, editor reveal, satellites, exit.
+// Structure (front-to-back):
+//   EinsteinRim         — thin bright amber ring at the horizon (light bending)
+//   EventHorizonDisc    — swirling amber core disc (NormalBlending, solid body)
+//   InnerTorusHalo      — hot amber-to-violet ring just outside the rim
+//   MidTorusHalo        — violet, fainter
+//   OuterTorusHalo      — deep violet, faintest, outermost
+//
+// Uses a simple 2D value-noise (inline) rather than 3D simplex — fewer surface
+// quirks across drivers, and the motion is all in UV rotation anyway.
+//
+// Camera rig: active scene index 1.95–3.95. Step 1 runs the exterior approach
+// from distance 28 → 14 across sceneIdx 2.0 → 2.5 and holds.
 
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useScroll } from '@react-three/drei';
 import * as THREE from 'three';
 
-// ── Shared simplex noise ────────────────────────────────────────────────────
+// ── Shared value-noise + fbm helpers (GLSL) ─────────────────────────────────
 
-const simplexNoise = /* glsl */ `
-  vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
-  vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
-  vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
-  vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
-  float snoise(vec3 v){
-    const vec2 C=vec2(1.0/6.0,1.0/3.0);
-    const vec4 D=vec4(0.0,0.5,1.0,2.0);
-    vec3 i=floor(v+dot(v,C.yyy));
-    vec3 x0=v-i+dot(i,C.xxx);
-    vec3 g=step(x0.yzx,x0.xyz);
-    vec3 l=1.0-g;
-    vec3 i1=min(g,l.zxy);
-    vec3 i2=max(g,l.zxy);
-    vec3 x1=x0-i1+C.xxx;
-    vec3 x2=x0-i2+C.yyy;
-    vec3 x3=x0-D.yyy;
-    i=mod289(i);
-    vec4 p=permute(permute(permute(
-      i.z+vec4(0.0,i1.z,i2.z,1.0))
-      +i.y+vec4(0.0,i1.y,i2.y,1.0))
-      +i.x+vec4(0.0,i1.x,i2.x,1.0));
-    float n_=0.142857142857;
-    vec3 ns=n_*D.wyz-D.xzx;
-    vec4 j=p-49.0*floor(p*ns.z*ns.z);
-    vec4 x_=floor(j*ns.z);
-    vec4 y_=floor(j-7.0*x_);
-    vec4 x=x_*ns.x+ns.yyyy;
-    vec4 y=y_*ns.x+ns.yyyy;
-    vec4 h=1.0-abs(x)-abs(y);
-    vec4 b0=vec4(x.xy,y.xy);
-    vec4 b1=vec4(x.zw,y.zw);
-    vec4 s0=floor(b0)*2.0+1.0;
-    vec4 s1=floor(b1)*2.0+1.0;
-    vec4 sh=-step(h,vec4(0.0));
-    vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;
-    vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
-    vec3 p0=vec3(a0.xy,h.x);
-    vec3 p1=vec3(a0.zw,h.y);
-    vec3 p2=vec3(a1.xy,h.z);
-    vec3 p3=vec3(a1.zw,h.w);
-    vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
-    p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;
-    vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0);
-    m=m*m;
-    return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+const noiseHelpers = /* glsl */ `
+  float hash21(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+  }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+  }
+  float fbm2(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 4; i++) {
+      v += a * vnoise(p);
+      p *= 2.02;
+      a *= 0.5;
+    }
+    return v;
   }
 `;
 
-// ── Wormhole world origin ───────────────────────────────────────────────────
-// Must live INSIDE the Nebula sphere (radius 80 at origin, BackSide) — camera
-// positions that end up outside the sphere see pure black because BackSide
-// faces are culled from that side. z = -45 keeps us well inside.
+// ── Wormhole world origin (inside Nebula sphere r=80) ───────────────────────
 
 const WORMHOLE_POS = new THREE.Vector3(0, 0, -45);
 
-// ── Event horizon disc — swirling accretion-disc-like shader ────────────────
+// ── Event horizon disc ──────────────────────────────────────────────────────
 
 const DISC_RADIUS = 5.0;
 
@@ -85,56 +63,53 @@ const discVert = /* glsl */ `
   }
 `;
 
+// Spec: color-ramp deep violet at outer edge → warm amber mid → bright
+// white-amber hot center. Alpha = 1.0 inside 0.95, smoothstep fade 0.95-1.0.
 const discFrag = /* glsl */ `
   uniform float uTime;
   uniform float uRadius;
   varying vec2 vLocalXY;
-  ${simplexNoise}
+  ${noiseHelpers}
 
   void main() {
-    float r = length(vLocalXY) / uRadius; // 0 center → 1 edge
+    vec2 p = vLocalXY / uRadius; // -1..1
+    float r = length(p);
     if (r > 1.0) discard;
 
-    float theta = atan(vLocalXY.y, vLocalXY.x);
+    // Polar coords + differential rotation (inner faster)
+    float theta = atan(p.y, p.x);
+    float swirlAdd = uTime * (0.6 + 1.4 / (r + 0.22));
+    float a = theta + swirlAdd;
 
-    // Differential rotation — inner spins much faster (Keplerian feel).
-    float swirlSpeed = 0.7 / (r * 1.8 + 0.22);
-    float a = theta + uTime * swirlSpeed;
-
-    // Sample noise in swirled coords → spiral streaks
+    // Swirled UV for noise sampling — creates spiral streaks
     vec2 sUV = vec2(cos(a), sin(a)) * r;
-    float n1 = snoise(vec3(sUV * 3.2, uTime * 0.22)) * 0.5 + 0.5;
-    float n2 = snoise(vec3(sUV * 9.5 + vec3(1.7, 3.3, 0.0), uTime * 0.45)) * 0.5 + 0.5;
-    float noise = n1 * 0.68 + n2 * 0.32;
 
-    // Radial ramp perturbed by noise → streakiness
-    float ramp = clamp(r + (noise - 0.5) * 0.22, 0.0, 1.0);
+    float n1 = fbm2(sUV * 3.2 + vec2(uTime * 0.25, -uTime * 0.18));
+    float n2 = fbm2(sUV * 8.0 + vec2(-uTime * 0.35, uTime * 0.28));
+    float n  = n1 * 0.65 + n2 * 0.35; // 0..~1
 
-    // Temperature palette: core → violet → void
-    vec3 cHot    = vec3(1.5, 1.15, 0.75); // white-hot core (HDR)
-    vec3 cAmber  = vec3(1.0, 0.70, 0.28); // #ffb347-ish
-    vec3 cOrange = vec3(0.96, 0.42, 0.09); // #f56e16
-    vec3 cRed    = vec3(0.62, 0.13, 0.13); // #a02020
-    vec3 cViolet = vec3(0.42, 0.16, 0.55); // deep violet
-    vec3 cVoid   = vec3(0.05, 0.03, 0.12);
+    // Radial position warped by noise → streaky bands
+    float t = clamp(r + (n - 0.5) * 0.30, 0.0, 1.0);
+
+    // Temperature palette (HDR in the core)
+    vec3 cHot    = vec3(1.7, 1.35, 0.90); // white-hot
+    vec3 cAmber  = vec3(1.0, 0.72, 0.28); // warm amber
+    vec3 cOrange = vec3(0.95, 0.42, 0.10);
+    vec3 cRed    = vec3(0.55, 0.14, 0.12);
+    vec3 cViolet = vec3(0.40, 0.18, 0.58);
 
     vec3 col;
-    if (ramp < 0.14)       col = mix(cHot,    cAmber,  ramp / 0.14);
-    else if (ramp < 0.36)  col = mix(cAmber,  cOrange, (ramp - 0.14) / 0.22);
-    else if (ramp < 0.58)  col = mix(cOrange, cRed,    (ramp - 0.36) / 0.22);
-    else if (ramp < 0.82)  col = mix(cRed,    cViolet, (ramp - 0.58) / 0.24);
-    else                   col = mix(cViolet, cVoid,   (ramp - 0.82) / 0.18);
+    if      (t < 0.20) col = mix(cHot,    cAmber,  t / 0.20);
+    else if (t < 0.45) col = mix(cAmber,  cOrange, (t - 0.20) / 0.25);
+    else if (t < 0.72) col = mix(cOrange, cRed,    (t - 0.45) / 0.27);
+    else               col = mix(cRed,    cViolet, (t - 0.72) / 0.28);
 
-    // Hot core amplification
-    col *= 1.0 + (1.0 - r) * 1.4;
+    // Brighten the hot core, modulate with turbulence
+    col *= 1.0 + (1.0 - r) * 1.3;
+    col *= 0.82 + n * 0.40;
 
-    // Turbulence brightness modulation
-    col *= 0.78 + noise * 0.45;
-
-    // Soft outer silhouette; nearly opaque in the body.
-    // NOTE: GLSL smoothstep is undefined when edge0 >= edge1, so invert rather
-    // than swap the args — earlier version silently broke alpha on some drivers.
-    float alpha = 1.0 - smoothstep(0.45, 1.0, r);
+    // Per spec: opaque inside 0.95, smoothstep fade to the edge.
+    float alpha = 1.0 - smoothstep(0.95, 1.0, r);
 
     gl_FragColor = vec4(col, alpha);
   }
@@ -163,69 +138,92 @@ function EventHorizonDisc() {
   );
 }
 
-// ── Outer halo — torus with violet accretion + gravitational lensing glow ──
-// Spec calls for a torus (3D ring with depth) — gives the lensed edge some
-// volume rather than a paper-flat annulus.
+// ── Einstein rim — thin bright amber at the horizon (light bending) ─────────
 
-const HALO_INNER = 5.1;
-const HALO_OUTER = 9.2;
-const TORUS_RADIUS = (HALO_INNER + HALO_OUTER) * 0.5;
-const TORUS_TUBE = (HALO_OUTER - HALO_INNER) * 0.5;
+function EinsteinRim() {
+  return (
+    <mesh renderOrder={2}>
+      <ringGeometry args={[DISC_RADIUS - 0.12, DISC_RADIUS + 0.28, 128, 1]} />
+      <meshBasicMaterial
+        color="#ffd890"
+        transparent
+        opacity={0.95}
+        depthWrite={false}
+        toneMapped={false}
+        side={THREE.DoubleSide}
+        blending={THREE.AdditiveBlending}
+      />
+    </mesh>
+  );
+}
+
+// ── Torus halo — reusable violet/amber ring ─────────────────────────────────
+
+const haloVert = /* glsl */ `
+  varying vec2 vLocalXY;
+  void main() {
+    vLocalXY = position.xy;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
 
 const haloFrag = /* glsl */ `
   uniform float uTime;
   uniform float uInner;
   uniform float uOuter;
+  uniform vec3  uColorInner;
+  uniform vec3  uColorOuter;
+  uniform float uAlphaScale;
+  uniform float uSwirlRate;
+  uniform float uSeed;
   varying vec2 vLocalXY;
-  ${simplexNoise}
+  ${noiseHelpers}
 
   void main() {
     float r = length(vLocalXY);
     float rn = clamp((r - uInner) / (uOuter - uInner), 0.0, 1.0);
 
+    // Angular swirl for wispiness
     float theta = atan(vLocalXY.y, vLocalXY.x);
-    float swirl = theta + uTime * 0.12;
-    vec2 sUV = vec2(cos(swirl), sin(swirl)) * (r * 0.12);
+    float a = theta + uTime * uSwirlRate + uSeed;
+    vec2 sUV = vec2(cos(a), sin(a)) * (0.3 + rn * 0.6);
+    float n = fbm2(sUV * 2.5 + vec2(uSeed, uTime * 0.1));
 
-    float n1 = snoise(vec3(sUV * 1.4, uTime * 0.15)) * 0.5 + 0.5;
-    float n2 = snoise(vec3(sUV * 4.0 + vec3(5.0, 2.0, 0.0), uTime * 0.3)) * 0.5 + 0.5;
-    float n = n1 * 0.6 + n2 * 0.4;
+    vec3 col = mix(uColorInner, uColorOuter, rn);
+    col *= 0.7 + n * 0.6;
 
-    // Inner edge glows orange (hot rim), fades to violet, fades to transparent
-    vec3 cRim    = vec3(1.05, 0.55, 0.18);
-    vec3 cMid    = vec3(0.65, 0.22, 0.55);
-    vec3 cOuter  = vec3(0.22, 0.08, 0.32);
-
-    vec3 col;
-    if (rn < 0.25) col = mix(cRim, cMid, rn / 0.25);
-    else           col = mix(cMid, cOuter, (rn - 0.25) / 0.75);
-    col *= 0.75 + n * 0.5;
-
-    // Alpha: bright rim, fades out; modulated by swirl noise for wispiness
-    float rim = 1.0 - smoothstep(0.0, 0.15, rn);
-    float fade = 1.0 - smoothstep(0.5, 1.0, rn);
-    float alpha = (rim * 0.7 + fade * 0.55) * (0.55 + n * 0.45);
+    // Bright at the inner edge, fade out toward the outer
+    float rim  = 1.0 - smoothstep(0.0, 0.22, rn);
+    float fade = 1.0 - smoothstep(0.35, 1.0, rn);
+    float alpha = (rim * 0.85 + fade * 0.65) * (0.55 + n * 0.55) * uAlphaScale;
 
     gl_FragColor = vec4(col, alpha);
   }
 `;
 
-const haloVert = discVert; // reuse — local-xy varying is all we need
+function TorusHalo({
+  inner, outer, colorInner, colorOuter,
+  alphaScale = 1.0, swirlRate = 0.15, seed = 0.0, renderOrder = 0,
+}) {
+  const majorR = (inner + outer) * 0.5;
+  const tubeR  = (outer - inner) * 0.5;
 
-function OuterHalo() {
   const uniforms = useMemo(() => ({
-    uTime: { value: 0 },
-    uInner: { value: HALO_INNER },
-    uOuter: { value: HALO_OUTER },
-  }), []);
+    uTime:        { value: 0 },
+    uInner:       { value: inner },
+    uOuter:       { value: outer },
+    uColorInner:  { value: new THREE.Color(colorInner) },
+    uColorOuter:  { value: new THREE.Color(colorOuter) },
+    uAlphaScale:  { value: alphaScale },
+    uSwirlRate:   { value: swirlRate },
+    uSeed:        { value: seed },
+  }), [inner, outer, colorInner, colorOuter, alphaScale, swirlRate, seed]);
+
   useFrame(({ clock }) => { uniforms.uTime.value = clock.elapsedTime; });
 
-  // Torus: face-on (axis = +Z), the tube bulges toward/away from camera.
-  // vLocalXY = position.xy gives distance from the axis in the plane,
-  // which ranges from (majorR - tube) = HALO_INNER to (majorR + tube) = HALO_OUTER.
   return (
-    <mesh renderOrder={0}>
-      <torusGeometry args={[TORUS_RADIUS, TORUS_TUBE, 24, 96]} />
+    <mesh renderOrder={renderOrder}>
+      <torusGeometry args={[majorR, tubeR, 20, 96]} />
       <shaderMaterial
         vertexShader={haloVert}
         fragmentShader={haloFrag}
@@ -240,52 +238,58 @@ function OuterHalo() {
   );
 }
 
-// ── Einstein-ring rim — thin bright edge at the horizon (light bending) ─────
+// ── Three concentric violet halo rings ──────────────────────────────────────
 
-function EinsteinRim() {
-  // Thick enough (~0.35) to survive the half-resolution Kuwahara pass.
+function HaloStack() {
   return (
-    <mesh renderOrder={2}>
-      <ringGeometry args={[DISC_RADIUS - 0.18, DISC_RADIUS + 0.22, 128, 1]} />
-      <meshBasicMaterial
-        color="#ffd890"
-        transparent
-        opacity={0.9}
-        depthWrite={false}
-        toneMapped={false}
-        side={THREE.DoubleSide}
-        blending={THREE.AdditiveBlending}
+    <>
+      {/* Inner — hot amber/orange ring just outside the rim */}
+      <TorusHalo
+        inner={5.2} outer={7.6}
+        colorInner="#ff9c48" colorOuter="#7a2e6a"
+        alphaScale={1.0} swirlRate={0.18} seed={0.3}
+        renderOrder={0}
       />
-    </mesh>
+      {/* Mid — violet */}
+      <TorusHalo
+        inner={7.7} outer={11.0}
+        colorInner="#7a2e6a" colorOuter="#3a1560"
+        alphaScale={0.75} swirlRate={0.12} seed={1.9}
+        renderOrder={0}
+      />
+      {/* Outer — deep violet, very faint */}
+      <TorusHalo
+        inner={11.1} outer={15.5}
+        colorInner="#3a1560" colorOuter="#140a2a"
+        alphaScale={0.5} swirlRate={0.08} seed={3.4}
+        renderOrder={0}
+      />
+    </>
   );
 }
 
-// ── Camera rig — active during scene 3 (scroll scene index ≥ ~1.95) ─────────
+// ── Camera rig — active during scene index 1.95–3.95 ────────────────────────
 
 function CameraRig({ groupRef }) {
   const scroll = useScroll();
 
   useFrame(({ camera, clock }) => {
-    const sceneIdx = scroll.offset * 7; // global page index (drei pages=7)
+    const sceneIdx = scroll.offset * 7;
 
     const active = sceneIdx >= 1.95 && sceneIdx <= 3.95;
     if (groupRef.current) groupRef.current.visible = active;
     if (!active) return;
 
-    // Step 1: exterior approach only (scene index 2.2 → 2.5 → hold).
-    // Map sceneIdx 2.0..2.5 → approach 0..1; hold at 1 past 2.5 until later steps land.
+    // Step 1: exterior approach only (scene index 2.0 → 2.5 → hold).
     const approach = THREE.MathUtils.clamp((sceneIdx - 2.0) / 0.5, 0, 1);
-
-    // Distances tuned so the wormhole stays inside the nebula (r=80) AND
-    // reads at a meaningful size in the viewport.
     const startDist = 28;
     const endDist = 14;
     const ease = 1 - Math.pow(1 - approach, 3);
     const dist = THREE.MathUtils.lerp(startDist, endDist, ease);
 
     const t = clock.elapsedTime;
-    const driftX = Math.sin(t * 0.25) * 0.4;
-    const driftY = 0.6 + Math.cos(t * 0.22) * 0.25;
+    const driftX = Math.sin(t * 0.25) * 0.35;
+    const driftY = 0.4 + Math.cos(t * 0.22) * 0.25;
 
     camera.position.set(
       WORMHOLE_POS.x + driftX,
@@ -307,7 +311,7 @@ export default function Wormhole() {
     <>
       <CameraRig groupRef={groupRef} />
       <group ref={groupRef} position={WORMHOLE_POS} visible={false}>
-        <OuterHalo />
+        <HaloStack />
         <EventHorizonDisc />
         <EinsteinRim />
       </group>

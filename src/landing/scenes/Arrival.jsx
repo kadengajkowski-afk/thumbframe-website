@@ -44,8 +44,19 @@ const distantPlanetFrag = /* glsl */ `
 
 function DistantPlanet() {
   const uniforms = useMemo(() => ({}), []);
+  const meshRef = useRef();
+  const scroll = useScroll();
+
+  // Only render during Scene 1 (and a short lead-in to Scene 2). Hidden once
+  // the camera moves into the wormhole region so it doesn't clip the frame.
+  useFrame(() => {
+    if (!meshRef.current) return;
+    const sceneIdx = scroll.offset * 7;
+    meshRef.current.visible = sceneIdx < 1.5;
+  });
+
   return (
-    <mesh position={[18, -4, -45]}>
+    <mesh ref={meshRef} position={[18, -4, -45]}>
       <sphereGeometry args={[5, 24, 24]} />
       <shaderMaterial
         vertexShader={distantPlanetVert}
