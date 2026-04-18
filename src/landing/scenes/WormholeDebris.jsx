@@ -1,11 +1,11 @@
 // Decorative vortex debris — feature-label stickers and painterly creator
 // objects caught in the singularity's spiral. Staggered entry across
-// sceneIdx 2.7 → 3.4 so there's a continuous stream of matter being
+// sceneIdx 2.95 → 3.65 so there's a continuous stream of matter being
 // devoured (not all arriving at once). Each object follows the same polar
 // vortex math as WormholeTags' FeatureTag (Phase 1 outer orbit, Phase 2
 // spiral inward with 1/(r+ε) angular-momentum kick), but without a final
 // satellite — debris shrinks to zero and vanishes before the editor reveal
-// at sceneIdx 3.5+.
+// at sceneIdx 3.75+.
 
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -163,25 +163,25 @@ const SHAPE_MAP = {
 
 const DEBRIS_CONFIGS = [
   // 6 sticker labels — feature-name callouts.
-  { type: 'sticker', tint: FILL,  entry: 2.72, orbit: 10.8, angSpeed: 0.85, tight: 0.30, a0: 0.20, tumble: [1.2, 0.8, 0.6], z0: -6,  z1: -58 },
-  { type: 'sticker', tint: '#ff9040', entry: 2.84, orbit:  9.6, angSpeed: 1.10, tight: 0.26, a0: 1.15, tumble: [0.9, 1.4, 0.7], z0: -10, z1: -62 },
-  { type: 'sticker', tint: '#e88060', entry: 2.96, orbit: 11.4, angSpeed: 0.72, tight: 0.34, a0: 2.35, tumble: [1.5, 0.6, 1.1], z0: -4,  z1: -55 },
-  { type: 'sticker', tint: '#ffa050', entry: 3.08, orbit:  9.2, angSpeed: 1.25, tight: 0.28, a0: 3.50, tumble: [0.7, 1.2, 0.9], z0: -8,  z1: -68 },
-  { type: 'sticker', tint: '#f09070', entry: 3.18, orbit: 10.4, angSpeed: 0.95, tight: 0.32, a0: 4.60, tumble: [1.3, 0.9, 1.4], z0: -12, z1: -65 },
-  { type: 'sticker', tint: FILL,      entry: 3.32, orbit:  9.8, angSpeed: 1.05, tight: 0.30, a0: 5.70, tumble: [1.0, 1.1, 0.8], z0: -6,  z1: -60 },
+  { type: 'sticker', tint: FILL,      entry: 2.97, orbit: 10.8, angSpeed: 0.85, tight: 0.30, a0: 0.20, tumble: [1.2, 0.8, 0.6], z0: -6,  z1: -58 },
+  { type: 'sticker', tint: '#ff9040', entry: 3.09, orbit:  9.6, angSpeed: 1.10, tight: 0.26, a0: 1.15, tumble: [0.9, 1.4, 0.7], z0: -10, z1: -62 },
+  { type: 'sticker', tint: '#e88060', entry: 3.21, orbit: 11.4, angSpeed: 0.72, tight: 0.34, a0: 2.35, tumble: [1.5, 0.6, 1.1], z0: -4,  z1: -55 },
+  { type: 'sticker', tint: '#ffa050', entry: 3.33, orbit:  9.2, angSpeed: 1.25, tight: 0.28, a0: 3.50, tumble: [0.7, 1.2, 0.9], z0: -8,  z1: -68 },
+  { type: 'sticker', tint: '#f09070', entry: 3.43, orbit: 10.4, angSpeed: 0.95, tight: 0.32, a0: 4.60, tumble: [1.3, 0.9, 1.4], z0: -12, z1: -65 },
+  { type: 'sticker', tint: FILL,      entry: 3.57, orbit:  9.8, angSpeed: 1.05, tight: 0.30, a0: 5.70, tumble: [1.0, 1.1, 0.8], z0: -6,  z1: -60 },
   // 5 painterly creator objects — staggered between the stickers.
-  { type: 'camera',  entry: 2.78, orbit: 10.2, angSpeed: 0.80, tight: 0.36, a0: 0.80, tumble: [1.6, 1.0, 0.5], z0: -14, z1: -70 },
-  { type: 'brush',   entry: 2.90, orbit: 11.0, angSpeed: 0.65, tight: 0.38, a0: 2.00, tumble: [2.1, 0.5, 1.3], z0:  -8, z1: -58 },
-  { type: 'palette', entry: 3.02, orbit:  9.4, angSpeed: 1.15, tight: 0.24, a0: 3.15, tumble: [0.6, 1.7, 1.0], z0: -10, z1: -63 },
-  { type: 'play',    entry: 3.14, orbit: 10.6, angSpeed: 0.90, tight: 0.32, a0: 4.25, tumble: [1.1, 1.2, 0.9], z0:  -5, z1: -56 },
-  { type: 'upload',  entry: 3.26, orbit:  9.7, angSpeed: 1.00, tight: 0.30, a0: 5.40, tumble: [1.4, 0.7, 1.6], z0:  -7, z1: -60 },
+  { type: 'camera',  entry: 3.03, orbit: 10.2, angSpeed: 0.80, tight: 0.36, a0: 0.80, tumble: [1.6, 1.0, 0.5], z0: -14, z1: -70 },
+  { type: 'brush',   entry: 3.15, orbit: 11.0, angSpeed: 0.65, tight: 0.38, a0: 2.00, tumble: [2.1, 0.5, 1.3], z0:  -8, z1: -58 },
+  { type: 'palette', entry: 3.27, orbit:  9.4, angSpeed: 1.15, tight: 0.24, a0: 3.15, tumble: [0.6, 1.7, 1.0], z0: -10, z1: -63 },
+  { type: 'play',    entry: 3.39, orbit: 10.6, angSpeed: 0.90, tight: 0.32, a0: 4.25, tumble: [1.1, 1.2, 0.9], z0:  -5, z1: -56 },
+  { type: 'upload',  entry: 3.51, orbit:  9.7, angSpeed: 1.00, tight: 0.30, a0: 5.40, tumble: [1.4, 0.7, 1.6], z0:  -7, z1: -60 },
 ];
 
 // Per-item lifetime windows:
 //   [entry,          entry + 0.4]        Phase 1 — outer orbit + z-drop.
 //   [entry + 0.4,    entry + 0.8]        Phase 2 — spiral inward, radius collapses toward 0.
-//   [3.50, 3.65]                         Global fade-out (shrink-to-zero scale).
-// Past 3.65 the debris mesh is hidden entirely.
+//   [3.75, 3.90]                         Global fade-out (shrink-to-zero scale).
+// Past 3.90 the debris mesh is hidden entirely.
 //
 // The singularity "consumes" debris by collapsing its radius to a tiny core
 // value + shrinking the object scale simultaneously.
@@ -199,7 +199,7 @@ function DebrisMesh({ config }) {
     const { entry, orbit, angSpeed, tight, a0, tumble, z0, z1 } = config;
 
     // Global fade window.
-    const fadeP = Math.max(0, Math.min(1, (3.65 - sceneIdx) / 0.15));
+    const fadeP = Math.max(0, Math.min(1, (3.90 - sceneIdx) / 0.15));
 
     // Not yet arrived.
     if (sceneIdx < entry) {
@@ -207,7 +207,7 @@ function DebrisMesh({ config }) {
       return;
     }
     // Fully consumed.
-    if (sceneIdx >= 3.65) {
+    if (sceneIdx >= 3.90) {
       if (g.visible) g.visible = false;
       return;
     }

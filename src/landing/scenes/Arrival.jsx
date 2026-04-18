@@ -74,26 +74,24 @@ export default function Arrival() {
   useFrame(({ clock, camera }) => {
     const sceneIdx = scroll.offset * 7;
 
-    // Arrival owns the frame up to sceneIdx 1.95. Past that the wormhole takes
-    // over exclusively — hide the entire Arrival group so leftover Station /
-    // DistantPlanet / Stardust geometry can't leak into wormhole shots (the
-    // "purple planet to the right" regression).
+    // Arrival owns the frame up to sceneIdx 1.00. Past that ProblemPlanet
+    // takes over — hide the entire Arrival group so leftover Station /
+    // DistantPlanet / Stardust geometry can't leak into Scene 2 / 3 shots.
     if (groupRef.current) {
-      const shouldShow = sceneIdx < 1.95;
+      const shouldShow = sceneIdx < 1.00;
       if (groupRef.current.visible !== shouldShow) {
         groupRef.current.visible = shouldShow;
       }
     }
 
-    // Arrival owns the camera for sceneIdx 0 → 1.95. At 1.95, Wormhole's
+    // Arrival owns the camera for sceneIdx 0 → 1.0. At 1.0, ProblemPlanet's
     // CameraRig takes over (matches this phase's end state exactly).
     //
     //   [0.00, 0.85]  station viewing (original Scene 1)
     //   [0.85, 1.00]  arc left past the ship — ship swings from centre to +X side
-    //   [1.00, 1.95]  fly forward toward wormhole approach start
     //
-    // Past 1.95 this block early-returns so Wormhole can take over cleanly.
-    if (sceneIdx >= 1.95) return;
+    // Past 1.00 this block early-returns so ProblemPlanet can take over.
+    if (sceneIdx >= 1.00) return;
 
     const t = clock.elapsedTime;
 
@@ -141,22 +139,7 @@ export default function Arrival() {
       return;
     }
 
-    // Phase C — fly forward toward wormhole approach start.
-    // End state matches Wormhole Step 1 start: (0, 0.4, -17) looking at (0,0,-45).
-    const p = (sceneIdx - 1.0) / 0.95;
-    const e = p * p * (3.0 - 2.0 * p);
-
-    camera.position.set(
-      THREE.MathUtils.lerp(-4.2, 0.0, e),
-      0.4,
-      THREE.MathUtils.lerp(-8.0, -17.0, e),
-    );
-
-    camera.lookAt(
-      0.0,
-      THREE.MathUtils.lerp(0.0, 0.0, e),
-      THREE.MathUtils.lerp(-30.0, -45.0, e),
-    );
+    // Past sceneIdx 1.0 is ProblemPlanet territory — we already returned.
   });
 
   return (

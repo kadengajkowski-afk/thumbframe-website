@@ -851,38 +851,38 @@ function CameraRig({ groupRef, discRef, editorIntensityRef }) {
   useFrame(({ camera, clock }) => {
     const sceneIdx = scroll.offset * 7;
 
-    // Visibility: render from scene index 0.85 onward so the user sees the
-    // wormhole while Arrival is still arcing past the ship. Avoid per-frame
-    // .visible assignment when it isn't changing.
-    const shouldBeVisible = sceneIdx >= 0.85 && sceneIdx <= 3.95;
+    // Visibility: Wormhole becomes visible slightly before its own camera rig
+    // takes over at 2.20, so there's a short crossfade window where the
+    // ProblemPlanet end-of-peel and the Wormhole approach co-exist in-frame.
+    const shouldBeVisible = sceneIdx >= 2.00 && sceneIdx <= 4.20;
     if (groupRef.current && groupRef.current.visible !== shouldBeVisible) {
       groupRef.current.visible = shouldBeVisible;
     }
 
-    // Editor silhouette intensity — brightens 2.8 → 3.8 (squared ease).
+    // Editor silhouette intensity — brightens 3.05 → 4.05 (squared ease).
     if (editorIntensityRef) {
-      const raw = THREE.MathUtils.clamp((sceneIdx - 2.8) / 1.0, 0, 1);
+      const raw = THREE.MathUtils.clamp((sceneIdx - 3.05) / 1.0, 0, 1);
       editorIntensityRef.current = raw * raw;
     }
 
-    // Plunge transition — disc scales 1 → 2.8 across sceneIdx 2.4 → 2.67 so
+    // Plunge transition — disc scales 1 → 2.8 across sceneIdx 2.65 → 2.92 so
     // it fills the viewport right before the camera crosses the event horizon.
     // This hides the "empty nebula frame" that was visible between Step 1 and
     // Step 2 by making the disc dominate the view at the moment of entry.
-    // After sceneIdx >= 2.75 the camera is fully past the disc, so force it
+    // After sceneIdx >= 3.00 the camera is fully past the disc, so force it
     // hidden — frustum culling alone was leaking the scaled bounding sphere
     // into the tunnel/editor shots as a purple halo.
     if (discRef.current) {
-      const hideAfter = 2.75;
+      const hideAfter = 3.00;
       if (sceneIdx >= hideAfter) {
         if (discRef.current.visible) discRef.current.visible = false;
       } else {
         if (!discRef.current.visible) discRef.current.visible = true;
         let scale = 1.0;
-        if (sceneIdx >= 2.4 && sceneIdx < 2.67) {
-          const p = (sceneIdx - 2.4) / 0.27;
+        if (sceneIdx >= 2.65 && sceneIdx < 2.92) {
+          const p = (sceneIdx - 2.65) / 0.27;
           scale = THREE.MathUtils.lerp(1.0, 2.8, p);
-        } else if (sceneIdx >= 2.67) {
+        } else if (sceneIdx >= 2.92) {
           scale = 2.8;
         }
         if (discRef.current.scale.x !== scale) {
@@ -891,7 +891,7 @@ function CameraRig({ groupRef, discRef, editorIntensityRef }) {
       }
     }
 
-    const active = sceneIdx >= 1.95 && sceneIdx <= 3.95;
+    const active = sceneIdx >= 2.20 && sceneIdx <= 4.20;
     if (!active) return;
 
     const t = clock.elapsedTime;
@@ -901,23 +901,22 @@ function CameraRig({ groupRef, discRef, editorIntensityRef }) {
     let lookY = WORMHOLE_POS.y;
     let lookZ = WORMHOLE_POS.z;
 
-    if (sceneIdx < 2.5) {
+    if (sceneIdx < 2.75) {
       // Step 1: exterior approach.
-      const approach = THREE.MathUtils.clamp((sceneIdx - 2.0) / 0.5, 0, 1);
+      const approach = THREE.MathUtils.clamp((sceneIdx - 2.25) / 0.5, 0, 1);
       const ease = 1 - Math.pow(1 - approach, 3);
       const dist = THREE.MathUtils.lerp(28, 14, ease);
 
       camX = WORMHOLE_POS.x + Math.sin(t * 0.25) * 0.35;
       camY = WORMHOLE_POS.y + 0.4 + Math.cos(t * 0.22) * 0.25;
       camZ = WORMHOLE_POS.z + dist;
-    } else if (sceneIdx < 3.1) {
+    } else if (sceneIdx < 3.35) {
       // Step 2: fall-in + tunnel travel.
-      const travel = (sceneIdx - 2.5) / 0.6; // 0..1 across step 2
+      const travel = (sceneIdx - 2.75) / 0.6; // 0..1 across step 2
       const ease = travel * travel * (3.0 - 2.0 * travel);
 
       // +14 (Step 1 end) → -55 (deep inside the tunnel). Disc-crossing
-      // (offsetZ = 0) lands at sceneIdx ≈ 2.669 with this endpoint — moving
-      // it to -62 pushed the crossing to 2.662, leaving 2.667 empty.
+      // (offsetZ = 0) lands at sceneIdx ≈ 2.919 with this endpoint.
       const offsetZ = THREE.MathUtils.lerp(14, -55, ease);
       camZ = WORMHOLE_POS.z + offsetZ;
 
@@ -928,14 +927,13 @@ function CameraRig({ groupRef, discRef, editorIntensityRef }) {
 
       const lookOffsetZ = THREE.MathUtils.lerp(0, -TUNNEL_LENGTH * 0.9, ease);
       lookZ = WORMHOLE_POS.z + lookOffsetZ;
-    } else if (sceneIdx < 3.8) {
+    } else if (sceneIdx < 4.05) {
       // Step 4 — final approach to the editor plane (6 × 3.375, 16:9 at
       // local z = -85 → world z = -130). Ease-out quadratic (front-loaded)
       // so the camera closes distance quickly then settles, hitting:
-      //   sceneIdx 3.6 → d ≈ 8.0  → ~45% viewport width
-      //   sceneIdx 3.8 → d = 6.0  → ~60% viewport width
-      // With plain smoothstep + start at -55 we only reached ~34% at 3.6.
-      const travel = (sceneIdx - 3.1) / 0.7;
+      //   sceneIdx 3.85 → d ≈ 8.0  → ~45% viewport width
+      //   sceneIdx 4.05 → d = 6.0  → ~60% viewport width
+      const travel = (sceneIdx - 3.35) / 0.7;
       const invT = 1.0 - travel;
       const ease = 1.0 - invT * invT;
       const offsetZ = THREE.MathUtils.lerp(-55, -79, ease);
@@ -1010,7 +1008,7 @@ export default function Wormhole() {
         <WormholeTags />
         {/* Ambient vortex debris — 11 staggered decorative objects streaming
             into the singularity (stickers + painterly creator items). Fade
-            out before sceneIdx 3.65 so the editor reveal is clean. */}
+            out before sceneIdx 3.90 so the editor reveal is clean. */}
         <WormholeDebris />
       </group>
     </>

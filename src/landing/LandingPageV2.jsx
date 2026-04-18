@@ -3,6 +3,7 @@ import '@fontsource-variable/inter';
 import '@fontsource-variable/fraunces';
 import './landing.built.css';
 import HeroCopy from './overlays/HeroCopy';
+import ProblemCopy from './overlays/ProblemCopy';
 import ScrollDebug from './overlays/ScrollDebug';
 
 const Experience = lazy(() => import('./Experience'));
@@ -42,6 +43,7 @@ export default function LandingPageV2({ setPage }) {
       )}
 
       <HeroCopy setPage={setPage} />
+      <ProblemCopy />
       <ScrollDebug />
     </div>
   );

@@ -237,12 +237,12 @@ const ICON_MAP = {
 
 // ── Tag configs ─────────────────────────────────────────────────────────────
 // Six tags caught in the singularity's spiral. Each icon:
-//   Phase 1 (2.9-3.2): enters from behind the camera at orbitOuter radius,
+//   Phase 1 (3.15-3.45): enters from behind the camera at orbitOuter radius,
 //     revolving slowly, translating from phase1ZStart → phase1ZEnd.
-//   Phase 2 (3.2-3.5): radius collapses orbitOuter → satRadius, angular
+//   Phase 2 (3.45-3.75): radius collapses orbitOuter → satRadius, angular
 //     velocity spikes (conservation-of-angular-momentum term: the 1/(r+ε)
 //     kick), icon is sucked inward toward the editor plane.
-//   Phase 3 (3.5-3.95): decelerates to rest at the satellite position
+//   Phase 3 (3.75-4.20): decelerates to rest at the satellite position
 //     (derived from the final satRadius + satAngle). Labels fade in.
 //
 // Satellites still sit at local z=-83, framing the 6 × 3.375 editor plane.
@@ -336,7 +336,7 @@ function FeatureTag({ config }) {
     const sceneIdx = scroll.offset * 7;
 
     // Hide when outside the tag lifetime.
-    if (sceneIdx < 2.9 || sceneIdx > 3.95) {
+    if (sceneIdx < 3.15 || sceneIdx > 4.20) {
       if (g.visible) g.visible = false;
       if (labelRef.current) labelRef.current.style.opacity = '0';
       return;
@@ -351,22 +351,22 @@ function FeatureTag({ config }) {
     let labelAlpha = 0;
     let tumbleDamp = 1.0;
 
-    if (sceneIdx < 3.2) {
+    if (sceneIdx < 3.45) {
       // Phase 1 — icon enters from behind the camera on an outer orbit.
       //   radius = orbitOuter (held constant — tag is just orbiting).
       //   angle  = satAngle + angularSpeed·t (slow revolution).
       //   z      = phase1ZStart → phase1ZEnd (dropping into tunnel).
-      const p = (sceneIdx - 2.9) / 0.3;
+      const p = (sceneIdx - 3.15) / 0.3;
       const e = p * p * (3 - 2 * p);
       const angle = satAngle + angularSpeed * t;
       x = Math.cos(angle) * orbitOuter;
       y = Math.sin(angle) * orbitOuter;
       z = THREE.MathUtils.lerp(config.phase1ZStart, config.phase1ZEnd, e);
-    } else if (sceneIdx < 3.5) {
+    } else if (sceneIdx < 3.75) {
       // Phase 2 — spiral inward. Radius collapses orbitOuter → satRadius;
       // angular velocity spikes via a 1/(r+ε) kick (conservation-of-angular-
       // momentum analogue). Z eases from phase1ZEnd to satellite.z.
-      const p = (sceneIdx - 3.2) / 0.3;
+      const p = (sceneIdx - 3.45) / 0.3;
       const e = p * p * (3 - 2 * p);
       const radius = THREE.MathUtils.lerp(orbitOuter, satRadius, e);
       const spiralKick = spiralTightness * (orbitOuter - radius) / (radius + EPS);
@@ -378,7 +378,7 @@ function FeatureTag({ config }) {
       // Phase 3 — ease out of the spiral to rest at the satellite. Blend
       // from the *current* spiral position (continuity with phase-2 end)
       // to the fixed satellite (x, y). Tumble damps to zero.
-      const p = Math.min(1, (sceneIdx - 3.5) / 0.25);
+      const p = Math.min(1, (sceneIdx - 3.75) / 0.25);
       const e = p * p * (3 - 2 * p);
 
       const spiralKick = spiralTightness * (orbitOuter - satRadius) / (satRadius + EPS);

@@ -4,6 +4,7 @@ import { ScrollControls, Stats, useScroll } from '@react-three/drei';
 import PainterlyPost from './shaders/painterly/PainterlyPost';
 import Arrival from './scenes/Arrival';
 import Nebula from './scenes/Nebula';
+import ProblemPlanet from './scenes/ProblemPlanet';
 import Wormhole from './scenes/Wormhole';
 import { setScrollOffset, setScrollEl } from './lib/scrollBridge';
 
@@ -31,6 +32,7 @@ function SceneGraph() {
     <>
       <Nebula radius={80} />
       <Arrival />
+      <ProblemPlanet />
       <Wormhole />
 
       {!POST_DISABLED && <PainterlyPost />}
