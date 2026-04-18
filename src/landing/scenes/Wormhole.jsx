@@ -18,6 +18,7 @@ import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useScroll } from '@react-three/drei';
 import * as THREE from 'three';
+import WormholeTags from './WormholeTags';
 
 // ── Shared value-noise + fbm helpers (GLSL) ─────────────────────────────────
 
@@ -268,37 +269,40 @@ const tunnelFrag = /* glsl */ `
   void main() {
     vec2 uv = vUv;
 
-    // Scroll along cylinder length — feels like walls rushing past the camera
-    // as it advances through the wormhole.
+    // Scroll along cylinder length — walls rush past the camera as it advances.
     uv.y += uTime * uScrollSpeed;
 
-    // Stretched noise: high frequency around circumference, low along length
-    // → longitudinal brush-stroke streaks.
-    float n1    = fbm2(vec2(uv.x * 22.0, uv.y * 2.5));
-    float n2    = fbm2(vec2(uv.x *  8.0, uv.y * 1.3) + vec2(3.0, 1.2));
-    float fine  = fbm2(vec2(uv.x * 48.0, uv.y * 6.5));
-    float broad = fbm2(vec2(uv.x *  4.0, uv.y * 0.8) + vec2(7.1, 2.3));
+    // Noise channels. Still stretched (low freq along length, higher around
+    // the circumference) for brushstroke streaks, but toned down vs. v1 —
+    // the old angular frequency of 22 made the streaks read as a 2D sunburst.
+    float broad = fbm2(vec2(uv.x *  3.2, uv.y * 0.7) + vec2(7.1, 2.3));
+    float mid   = fbm2(vec2(uv.x *  7.0, uv.y * 1.5) + vec2(3.0, 1.2));
+    float streak = fbm2(vec2(uv.x * 14.0, uv.y * 4.5));
 
-    // Three-tone painterly palette: teal / amber / violet, selected by n2.
-    vec3 cAmber  = vec3(0.98, 0.60, 0.18);
-    vec3 cTeal   = vec3(0.18, 0.55, 0.52);
-    vec3 cViolet = vec3(0.46, 0.18, 0.62);
-    vec3 cVoid   = vec3(0.06, 0.03, 0.12);
+    // Painterly muted palette — matches the warm-amber / deep-violet / teal-mist
+    // brief, well away from the saturated "candy" tones of v1.
+    vec3 cAmber     = vec3(0.78, 0.38, 0.12); // #c86020
+    vec3 cAmberDeep = vec3(0.54, 0.25, 0.12); // #8a4020
+    vec3 cTeal      = vec3(0.23, 0.40, 0.38); // #3a6660
+    vec3 cViolet    = vec3(0.16, 0.10, 0.31); // #2a1850
+    vec3 cVoid      = vec3(0.04, 0.03, 0.09);
 
-    vec3 base;
-    if      (n2 < 0.36) base = cTeal;
-    else if (n2 < 0.68) base = cAmber;
-    else                base = cViolet;
+    // Smoothly blend across the palette using noise channels — no hard bands.
+    vec3 base = cViolet;
+    base = mix(base, cTeal,      smoothstep(0.15, 0.55, mid * 0.75 + broad * 0.25));
+    base = mix(base, cAmber,     smoothstep(0.45, 0.80, mid * 0.55 + streak * 0.45));
+    base = mix(base, cAmberDeep, smoothstep(0.35, 0.70, broad) * 0.6);
 
-    // Fine streak → brightness, broad noise → macro shading
-    float brightness = pow(fine, 1.3);
-    vec3 col = mix(cVoid, base, brightness * 0.88 + 0.18);
-    col *= 0.68 + n1 * 0.55 + broad * 0.25;
+    // Brushstroke brightness — stronger weighting on streak noise gives the
+    // "painted swipe" feel, broader noise handles macro shading.
+    float bright = pow(streak, 1.6) * 0.9 + broad * 0.3;
+    vec3 col = mix(cVoid, base, bright * 0.85 + 0.15);
+    col *= 0.75 + mid * 0.35;
 
-    // Slight darkening at the event-horizon end (uv.y near 1 after scroll) so
-    // the tunnel has implied depth rather than uniform brightness.
+    // Subtle darkening near the event-horizon end so depth reads correctly
+    // as the camera flies deeper.
     float darkenNear = 1.0 - smoothstep(0.75, 1.05, fract(vUv.y));
-    col *= 0.55 + 0.45 * darkenNear;
+    col *= 0.58 + 0.42 * darkenNear;
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -362,6 +366,72 @@ function HaloStack() {
   );
 }
 
+// ── Editor silhouette — placeholder for Step 4 ──────────────────────────────
+// Soft glowing rectangle at the tunnel far end. Brightens as the camera
+// approaches (sceneIdx 2.8 → 3.8). Replaces the "black hole at tunnel centre"
+// read with "portal destination".
+
+const EDITOR_SILHOUETTE_LOCAL_Z = -85.0;
+
+const editorSilhouetteVert = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const editorSilhouetteFrag = /* glsl */ `
+  uniform float uTime;
+  uniform float uIntensity;
+  varying vec2 vUv;
+
+  void main() {
+    vec2 p = (vUv - 0.5) * vec2(1.0, 1.8); // elongated for rect aspect
+    float r = length(p);
+    // Soft rectangular glow
+    float core = 1.0 - smoothstep(0.00, 0.25, r);
+    float halo = 1.0 - smoothstep(0.10, 0.95, r);
+
+    vec3 coreCol = vec3(1.55, 1.25, 0.95); // soft white-amber core (HDR)
+    vec3 haloCol = vec3(0.95, 0.52, 0.18); // warm amber halo
+    vec3 col = mix(haloCol, coreCol, core);
+
+    float flicker = 0.92 + 0.08 * sin(uTime * 1.6);
+    float alpha = (core * 1.0 + halo * 0.55) * uIntensity * flicker;
+
+    gl_FragColor = vec4(col, alpha);
+  }
+`;
+
+function EditorSilhouette({ intensityRef }) {
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uIntensity: { value: 0 },
+  }), []);
+  useFrame(({ clock }) => {
+    uniforms.uTime.value = clock.elapsedTime;
+    if (intensityRef.current !== undefined) {
+      uniforms.uIntensity.value = intensityRef.current;
+    }
+  });
+
+  return (
+    <mesh position={[0, 0, EDITOR_SILHOUETTE_LOCAL_Z]} renderOrder={2}>
+      <planeGeometry args={[2.4, 1.35]} />
+      <shaderMaterial
+        vertexShader={editorSilhouetteVert}
+        fragmentShader={editorSilhouetteFrag}
+        uniforms={uniforms}
+        transparent
+        depthWrite={false}
+        toneMapped={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </mesh>
+  );
+}
+
 // ── Camera rig — active during scene index 1.95–3.95 ────────────────────────
 //
 // Phases:
@@ -371,7 +441,7 @@ function HaloStack() {
 //                   2.7 → 3.1: travel from z -50 → z -100
 //   [ 3.1, 3.95]  Held at tunnel-mid; remaining steps not built yet.
 
-function CameraRig({ groupRef, discRef }) {
+function CameraRig({ groupRef, discRef, editorIntensityRef }) {
   const scroll = useScroll();
 
   useFrame(({ camera, clock }) => {
@@ -383,6 +453,12 @@ function CameraRig({ groupRef, discRef }) {
     const shouldBeVisible = sceneIdx >= 0.85 && sceneIdx <= 3.95;
     if (groupRef.current && groupRef.current.visible !== shouldBeVisible) {
       groupRef.current.visible = shouldBeVisible;
+    }
+
+    // Editor silhouette intensity — brightens 2.8 → 3.8 (squared ease).
+    if (editorIntensityRef) {
+      const raw = THREE.MathUtils.clamp((sceneIdx - 2.8) / 1.0, 0, 1);
+      editorIntensityRef.current = raw * raw;
     }
 
     // Plunge transition — disc scales 1 → 2.8 across sceneIdx 2.4 → 2.67 so
@@ -462,10 +538,15 @@ function CameraRig({ groupRef, discRef }) {
 export default function Wormhole() {
   const groupRef = useRef();
   const discRef = useRef();
+  const editorIntensityRef = useRef(0);
 
   return (
     <>
-      <CameraRig groupRef={groupRef} discRef={discRef} />
+      <CameraRig
+        groupRef={groupRef}
+        discRef={discRef}
+        editorIntensityRef={editorIntensityRef}
+      />
       <group ref={groupRef} position={WORMHOLE_POS} visible={false}>
         {/* Tunnel is behind the event horizon (renderOrder -1) so the disc
             still covers it during Step 1's exterior approach. */}
@@ -473,6 +554,8 @@ export default function Wormhole() {
         <HaloStack />
         <EventHorizonDisc meshRef={discRef} />
         <EinsteinRim />
+        <EditorSilhouette intensityRef={editorIntensityRef} />
+        <WormholeTags />
       </group>
     </>
   );

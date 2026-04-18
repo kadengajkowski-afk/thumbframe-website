@@ -70,11 +70,17 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    // ±30° Y rocking on a ~10s cycle (period = 2π / 0.628). Gives the station
-    // life without ever pointing the engine nozzle at the camera — at the
-    // extremes the plume is ~60° off the camera axis, well clear of the frame.
+    // Zero-g swimming motion — three independent sine waves with different
+    // periods so the ship feels alive and weightless, not rocking in sync.
+    //   yaw   ±15° on ~10.0s period  (ω = 2π/10)
+    //   pitch ±3°  on ~8.0s period   (ω = 2π/8)  — nose up/down
+    //   bob   ±0.3 on ~6.0s period   (ω = 2π/6)  — vertical drift around base Y
+    // Phase offsets keep the three from ever crossing zero together.
+    // ±15° yaw keeps the engine plume ≤45° off its local -X, never at camera.
     if (groupRef.current) {
-      groupRef.current.rotation.y = Math.sin(t * 0.628) * (30 * Math.PI / 180);
+      groupRef.current.rotation.y = Math.sin(t * 0.628) * (15 * Math.PI / 180);
+      groupRef.current.rotation.x = Math.sin(t * 0.785 + 0.7) * (3 * Math.PI / 180);
+      groupRef.current.position.y = Math.sin(t * 1.047 + 2.1) * 0.3;
     }
     if (dishRef.current) dishRef.current.rotation.y = t * 0.35;
 
