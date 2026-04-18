@@ -1,45 +1,32 @@
-// Scene 2 — Problem Planet (sceneIdx 1.00 – 2.20).
+// Planet 2 — The Dead World. Refactored for v3 galaxy-hub model:
+//   • Scene is a pure visual package with no camera rig and no scroll gating.
+//   • Caller sets the world position via Galaxy.jsx; the root group uses
+//     local (0,0,0) origin internally so artefact orbits work from here.
 //
-// Texture-based dead world. The painted albedo is generated externally
-// (public/assets/textures/problem-planet.png, 1024×1024) and already carries
-// the "painterly cracked surface" look — we do NOT mix in a procedural
-// crack shader here; the two always fight.
+// Texture-based planet — painterly albedo already carries the cracked-
+// surface look (no procedural crack shader). Minimal surface shader:
+// texture sample + warm-amber key from below-right + wide violet rim
+// fill + narrow rim line. Painterly post-process (scene-wide) handles
+// the rest.
 //
-// Shader work is minimal: texture sample + gentle warm-amber directional
-// key from below-right (intensity 0.5) + subtle cold-violet Fresnel rim
-// for silhouette against the nebula. Painterly post-process (scene-wide
-// Kuwahara → Outline → PaperGrain → ColorGrade) handles refinement.
-//
-// Camera choreography — per Scene 2 spec rework:
-//   1.00 – 1.30  wide establishing — planet in LEFT third, right 2/3 clear
-//                for overlay text.
-//   1.30 – 1.70  arc — camera swings right, planet sweeps toward the LEFT
-//                edge, artefacts drift into the right of frame.
-//   1.70 – 2.00  push — camera pushes toward artefact #1 (cracked window),
-//                planet falls out-of-frame left. Overlay text fades out.
-//   2.00 – 2.20  peel — camera rotates back onto the tunnel axis, ending
-//                exactly at Wormhole Step-1 start (0, 0, -17) → (0, 0, -45).
+// Three broken-tool artefacts orbit the planet — cracked photo-editor
+// window, abandoned design canvas, wireframe cube fragment. Evocative
+// (not branded). All orbits seeded on the +X hemisphere so they remain
+// visible from any approach angle.
 
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useScroll, useTexture } from '@react-three/drei';
+import { useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const PLANET_POS = new THREE.Vector3(-6, 1, -18);
+// Planet centre is the root group origin; Galaxy.jsx sets the world-space
+// position via the `position` prop on <Planet2DeadMesh/>.
+const PLANET_POS = new THREE.Vector3(0, 0, 0);
 const PLANET_RADIUS = 2.5;
-// Target: one full revolution every 120 s  → ω = 2π / 120 ≈ 0.0524 rad/s.
+// One full revolution every 120 s  → ω = 2π / 120 ≈ 0.0524 rad/s.
 const PLANET_SPIN = 0.05236;
-
-// Artefact-1 "showcase" position — approximate world location of the cracked
-// photo-editor window at the start of the scene (angle 0 on its orbit).
-// The camera push (1.7–2.0) aims here so artefact 1 is foregrounded.
-const ARTIFACT1_SHOWCASE = new THREE.Vector3(
-  PLANET_POS.x + 4.5,        // +X offset (on the camera-facing hemisphere)
-  PLANET_POS.y + 0.0,
-  PLANET_POS.z + 0.0,
-);
 
 // ── Planet shader ───────────────────────────────────────────────────────────
 
@@ -364,99 +351,19 @@ function Artefact({ def }) {
   );
 }
 
-// ── Camera rig ──────────────────────────────────────────────────────────────
-
-function ProblemCameraRig({ groupRef }) {
-  const scroll = useScroll();
-
-  useFrame(({ camera }) => {
-    const sceneIdx = scroll.offset * 7;
-
-    // Scene-2 group visibility window.
-    if (groupRef.current) {
-      const shouldShow = sceneIdx >= 0.95 && sceneIdx <= 2.20;
-      if (groupRef.current.visible !== shouldShow) {
-        groupRef.current.visible = shouldShow;
-      }
-    }
-
-    // Only drive camera within Scene 2.
-    if (sceneIdx < 1.00 || sceneIdx >= 2.20) return;
-
-    // Keyframes (world-space pairs of [cam, look]):
-    //   K0 (1.00)  Arrival phase-B end — cam (-4.2, 0.4, -8), look (0,0,-30)
-    //   K1 (1.30)  wide-shot end — cam drift, look targets RIGHT-of-planet
-    //              so planet sits in the LEFT third of the frame.
-    //   K2 (1.70)  arc end — cam (+8, 0.5, -22), look even further right
-    //              so the planet has swept to the LEFT edge.
-    //   K3 (2.00)  push end — cam close to artefact 1, look on artefact 1;
-    //              planet falls out-of-frame to the left.
-    //   K4 (2.20)  handoff — cam (0, 0, -17), look (0, 0, -45) (wormhole).
-
-    const ART1 = ARTIFACT1_SHOWCASE;
-    const P = PLANET_POS;
-
-    const K0 = { cam: [-4.2, 0.4, -8.0], look: [ 0.0,  0.0, -30.0] };
-    const K1 = { cam: [-3.0, 0.4, -10.0], look: [P.x + 5.0, P.y - 0.5, P.z - 2.0] };
-    const K2 = { cam: [ 8.0, 0.5, -22.0], look: [ 1.5, -0.2, -22.0] };
-    const K3 = { cam: [ ART1.x + 2.0, ART1.y - 0.5, ART1.z + 3.5],
-                 look: [ ART1.x,       ART1.y,       ART1.z      ] };
-    const K4 = { cam: [ 0.0, 0.0, -17.0], look: [ 0.0,  0.0, -45.0] };
-
-    const lerpV = (a, b, e) => [
-      THREE.MathUtils.lerp(a[0], b[0], e),
-      THREE.MathUtils.lerp(a[1], b[1], e),
-      THREE.MathUtils.lerp(a[2], b[2], e),
-    ];
-    const sstep = (x) => x * x * (3.0 - 2.0 * x);
-
-    let camP, lookP;
-    if (sceneIdx < 1.30) {
-      // 1.00 – 1.30  wide establishing.
-      const p = (sceneIdx - 1.00) / 0.30;
-      const e = sstep(p);
-      camP  = lerpV(K0.cam,  K1.cam,  e);
-      lookP = lerpV(K0.look, K1.look, e);
-    } else if (sceneIdx < 1.70) {
-      // 1.30 – 1.70  arc right.
-      const p = (sceneIdx - 1.30) / 0.40;
-      const e = sstep(p);
-      camP  = lerpV(K1.cam,  K2.cam,  e);
-      lookP = lerpV(K1.look, K2.look, e);
-    } else if (sceneIdx < 2.00) {
-      // 1.70 – 2.00  push toward artefact #1.
-      const p = (sceneIdx - 1.70) / 0.30;
-      const e = sstep(p);
-      camP  = lerpV(K2.cam,  K3.cam,  e);
-      lookP = lerpV(K2.look, K3.look, e);
-    } else {
-      // 2.00 – 2.20  peel to wormhole entry.
-      const p = (sceneIdx - 2.00) / 0.20;
-      const e = sstep(p);
-      camP  = lerpV(K3.cam,  K4.cam,  e);
-      lookP = lerpV(K3.look, K4.look, e);
-    }
-
-    camera.position.set(camP[0], camP[1], camP[2]);
-    camera.lookAt(lookP[0], lookP[1], lookP[2]);
-  });
-
-  return null;
-}
-
 // ── Export ──────────────────────────────────────────────────────────────────
+// Pure visual package — planet body + three broken-tool artefacts orbiting
+// its origin. Galaxy.jsx positions this in world space via the `position`
+// prop. No camera rig, no visibility gating — the galaxy-state machine
+// handles those concerns externally.
 
-export default function ProblemPlanet() {
-  const groupRef = useRef();
+export default function ProblemPlanet({ position = [0, 0, 0] }) {
   return (
-    <>
-      <ProblemCameraRig groupRef={groupRef} />
-      <group ref={groupRef} visible={false}>
-        <ProblemPlanetBody />
-        {ARTIFACT_DEFS.map((def) => (
-          <Artefact key={def.key} def={def} />
-        ))}
-      </group>
-    </>
+    <group position={position}>
+      <ProblemPlanetBody />
+      {ARTIFACT_DEFS.map((def) => (
+        <Artefact key={def.key} def={def} />
+      ))}
+    </group>
   );
 }
