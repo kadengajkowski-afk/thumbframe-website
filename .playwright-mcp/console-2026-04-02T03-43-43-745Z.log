@@ -1,7 +1,0 @@
-[    7015ms] [LOG] --- SYSTEM BOOT V2.1 --- @ https://www.thumbframe.com/static/js/main.30076d51.js:1
-[    9270ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://thumbframe-api-production.up.railway.app/auth/me:0
-[   53634ms] [LOG] [DEBUG] Sending token to backend: eyJhbGciOi... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
-[   53634ms] [LOG] [DEBUG] user_id: 8c71d474-23dd-43ef-b256-8eebad0233eb @ https://www.thumbframe.com/static/js/main.30076d51.js:1
-[   53640ms] [LOG] [THUMBNAIL] Generated OK, length: 2875 @ https://www.thumbframe.com/static/js/main.30076d51.js:1
-[   53640ms] [LOG] [SAVE] thumbnail result: data URL (2875 chars) @ https://www.thumbframe.com/static/js/main.30076d51.js:1
-[   55328ms] [LOG] [STORAGE] Save succeeded. ID: b9810c5a-defd-4e3d-9dc7-d5baedfba44f | Name: My Design | Platform: youtube @ https://www.thumbframe.com/static/js/main.30076d51.js:1

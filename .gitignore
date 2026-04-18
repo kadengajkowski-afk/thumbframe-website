@@ -3,3 +3,18 @@ node_modules
 build
 .claude
 
+
+# Playwright test artifacts
+.playwright-mcp/
+
+# MCP config (machine-specific)
+.mcp.json
+
+# Debug screenshots (root-level)
+ss-fabric-*.png
+test-upload.*
+wormhole-*.png
+wormhole-sceneIdx-*.png
+
+# Unused midjourney texture source (kept in archive only)
+public/assets/videos/
