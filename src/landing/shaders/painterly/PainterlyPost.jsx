@@ -8,17 +8,32 @@ import { OutlineEffect } from './OutlineEffect';
 import { PaperGrainEffect } from './PaperGrainEffect';
 import { ColorGradeEffect } from './ColorGradeEffect';
 
+// Evaluated once at import — viewport class is not expected to change
+// mid-session on the landing.
+const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768;
+// Kuwahara internal buffer as a fraction of canvas pixels. Kuwahara smooths
+// regardless of input resolution, so dropping this is almost free visually
+// but large wins in pixel work. Mobile is further throttled because the
+// wormhole scene carries more overdraw.
+const KUWAHARA_SCALE = IS_MOBILE ? 0.25 : 0.40;
+
 function KuwaharaPass() {
   const { size, viewport } = useThree();
-  // Kuwahara is a smoothing filter, so dropping resolution from 0.5 → 0.4
-  // is visually fine and reduces per-pixel work by ~35%. This is a scroll-
-  // smoothness optimization — the Kuwahara pass was the largest per-frame
-  // cost besides the raw scene render.
-  const effect = useMemo(() => new KuwaharaEffect({ kernelNear: 4.0, kernelFar: 10.0 }), []);
+  // Mobile uses a smaller kernel too — less detail needs preserving.
+  const effect = useMemo(
+    () => new KuwaharaEffect({
+      kernelNear: IS_MOBILE ? 3.0 : 4.0,
+      kernelFar:  IS_MOBILE ? 7.0 : 10.0,
+    }),
+    []
+  );
 
   useEffect(() => {
     const dpr = viewport.dpr || 1;
-    effect.setSize(size.width * dpr * 0.4, size.height * dpr * 0.4);
+    effect.setSize(
+      size.width  * dpr * KUWAHARA_SCALE,
+      size.height * dpr * KUWAHARA_SCALE,
+    );
   }, [size, viewport, effect]);
 
   return <primitive object={effect} dispose={null} />;

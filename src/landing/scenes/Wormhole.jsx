@@ -20,6 +20,12 @@ import { useScroll } from '@react-three/drei';
 import * as THREE from 'three';
 import WormholeTags from './WormholeTags';
 
+// Module-level device check (Step-5 perf) — skip parallax cylinders on
+// small viewports where the main tunnel wall carries enough spiral read on
+// its own. Evaluated once at import time; the landing is not expected to
+// change viewport class mid-session.
+const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768;
+
 // ── Shared value-noise + fbm helpers (GLSL) ─────────────────────────────────
 
 const noiseHelpers = /* glsl */ `
@@ -322,6 +328,28 @@ const tunnelFrag = /* glsl */ `
     float hotStreak = pow(max(streak, 0.0), 2.0) * coreGlow * 0.95;
     col += hotStreak * vec3(1.60, 1.05, 0.55);
 
+    // ─── Gravitational-lens band (radius > 0.80) ────────────────────────
+    // Near the tunnel perimeter, sample fbm with UVs pulled radially inward
+    // and swept backward along the spiral. This smears ambient tone along
+    // curved arcs — faking light bending into the singularity without a
+    // real background texture sample.
+    float lensBand = smoothstep(0.78, 0.98, radius);
+    if (lensBand > 0.001) {
+      float pull       = lensBand * 1.2;
+      float lensAngle  = swirl - pull * 3.0;        // arced inward
+      float lensRadius = radius - pull * 0.18;      // pulled toward core
+      vec2  lensUV     = vec2(lensAngle * 0.4, lensRadius * 9.0 + uTime * 0.18);
+      float lensN      = fbm2(lensUV);
+      vec3  lensTint   = mix(
+        vec3(0.09, 0.04, 0.16),  // deep void violet
+        vec3(0.38, 0.16, 0.32),  // bent amber-violet
+        lensN
+      );
+      // Mild emissive on the bent arcs.
+      lensTint *= 0.55 + lensN * 1.15;
+      col = mix(col, lensTint, lensBand * 0.72);
+    }
+
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -347,6 +375,99 @@ function WormholeTunnel() {
         uniforms={uniforms}
         side={THREE.BackSide}
         depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
+  );
+}
+
+// ── Depth parallax layers (Step 2) ──────────────────────────────────────────
+// Two additional concentric BackSide cylinders inside the main tunnel wall
+// (radii 3.8, 5.0). Each renders only the bright streak ridges of the same
+// singularity spiral, with different rotation + streak speeds. Additive
+// blending layers them over the opaque main wall → near layer streaks
+// rush past faster than far walls, giving genuine Z-parallax depth.
+//
+// A mobile fast-path skips these layers (see IS_MOBILE below) to stay
+// within frame budget on small GPUs — walls still read spiral on their own.
+
+const tunnelLayerFrag = /* glsl */ `
+  uniform float uTime;
+  uniform float uRotationMul;
+  uniform float uStreakSpeedMul;
+  uniform float uIntensityMul;
+  uniform float uOpacity;
+  uniform float uSeed;
+  varying vec2 vUv;
+  ${noiseHelpers}
+
+  #define PI 3.14159265359
+
+  void main() {
+    float radius = vUv.y;
+    float angle  = vUv.x * 2.0 * PI;
+
+    float swirl = angle
+                + radius * 6.5
+                + uTime * 0.32 * uRotationMul
+                + uSeed;
+
+    vec2 streakUV = vec2(
+      swirl * 0.45,
+      radius * 14.0 - uTime * 0.85 * uStreakSpeedMul
+    );
+    float n1 = fbm2(streakUV);
+    float n2 = fbm2(streakUV * 2.2 + vec2(7.0, 3.2));
+    float streak = n1 * 0.65 + n2 * 0.35;
+
+    // Bright ridges only — this layer is highlight accent, not base wall.
+    float ridge = pow(max(streak, 0.15), 2.2) * (1.0 - radius);
+
+    // Warm highlight tint — same palette as the main wall's hot band.
+    vec3 col = vec3(1.60, 1.05, 0.55) * ridge * uIntensityMul;
+
+    // Fade out at the far rim (radius → 1) so the layer doesn't compete
+    // with the main wall's dark edge band.
+    float rimFade = 1.0 - smoothstep(0.80, 1.00, radius);
+
+    gl_FragColor = vec4(col, ridge * uOpacity * rimFade);
+  }
+`;
+
+function TunnelDepthLayer({
+  radius,
+  rotationMul,
+  streakSpeedMul,
+  intensityMul,
+  opacity,
+  seed = 0.0,
+  renderOrder = -1,
+}) {
+  const uniforms = useMemo(() => ({
+    uTime:          { value: 0 },
+    uRotationMul:   { value: rotationMul },
+    uStreakSpeedMul:{ value: streakSpeedMul },
+    uIntensityMul:  { value: intensityMul },
+    uOpacity:       { value: opacity },
+    uSeed:          { value: seed },
+  }), [rotationMul, streakSpeedMul, intensityMul, opacity, seed]);
+  useFrame(({ clock }) => { uniforms.uTime.value = clock.elapsedTime; });
+
+  return (
+    <mesh
+      rotation={[Math.PI / 2, 0, 0]}
+      position={[0, 0, TUNNEL_Z_OFFSET]}
+      renderOrder={renderOrder}
+    >
+      <cylinderGeometry args={[radius, radius, TUNNEL_LENGTH, 32, 1, true]} />
+      <shaderMaterial
+        vertexShader={tunnelVert}
+        fragmentShader={tunnelLayerFrag}
+        uniforms={uniforms}
+        transparent
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+        side={THREE.BackSide}
         toneMapped={false}
       />
     </mesh>
@@ -860,6 +981,21 @@ export default function Wormhole() {
         {/* Tunnel is behind the event horizon (renderOrder -1) so the disc
             still covers it during Step 1's exterior approach. */}
         <WormholeTunnel />
+        {/* Depth parallax — inner layers render bright streak-ridge highlights
+            on additive blending, with different rotation/streak speeds to
+            produce layered Z-motion. Skipped on mobile for frame budget. */}
+        {!IS_MOBILE && (
+          <>
+            <TunnelDepthLayer
+              radius={5.0} rotationMul={1.30} streakSpeedMul={1.50}
+              intensityMul={1.00} opacity={0.55} seed={1.5}
+            />
+            <TunnelDepthLayer
+              radius={3.8} rotationMul={1.90} streakSpeedMul={2.40}
+              intensityMul={1.35} opacity={0.50} seed={0.7}
+            />
+          </>
+        )}
         <HaloStack />
         <EventHorizonDisc meshRef={discRef} />
         <EinsteinRim />

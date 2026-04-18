@@ -236,56 +236,75 @@ const ICON_MAP = {
 };
 
 // ── Tag configs ─────────────────────────────────────────────────────────────
-// Six tags with staggered fall paths and six satellite positions around the
-// editor plane perimeter. Editor plane is 6 wide × 3.4 tall at local z=-85;
-// satellites sit at local z=-83, on a 7 × 4 rectangle so they frame the plane.
+// Six tags caught in the singularity's spiral. Each icon:
+//   Phase 1 (2.9-3.2): enters from behind the camera at orbitOuter radius,
+//     revolving slowly, translating from phase1ZStart → phase1ZEnd.
+//   Phase 2 (3.2-3.5): radius collapses orbitOuter → satRadius, angular
+//     velocity spikes (conservation-of-angular-momentum term: the 1/(r+ε)
+//     kick), icon is sucked inward toward the editor plane.
+//   Phase 3 (3.5-3.95): decelerates to rest at the satellite position
+//     (derived from the final satRadius + satAngle). Labels fade in.
+//
+// Satellites still sit at local z=-83, framing the 6 × 3.375 editor plane.
 
 const TAG_CONFIGS = [
   {
     type: 'scissors', label: 'Cut & Edit',
-    phase1Start: { x:  2.0, y:  1.2, z: -20 },
-    phase1End:   { x:  1.3, y:  0.7, z: -55 },
-    satellite:   { x: -3.5, y:  1.9, z: -83 },
+    satellite: { x: -3.5, y:  1.9, z: -83 },
+    orbitOuter: 9.5,
+    angularSpeed: 0.95,
+    spiralTightness: 0.32,
+    phase1ZStart: -10, phase1ZEnd: -55,
     labelOffset: { x: -0.55, y: 0 },
     rotX: 1.4, rotY: 1.1, rotZ: 0.7,
   },
   {
     type: 'target', label: 'CTR Score',
-    phase1Start: { x: -2.2, y:  1.1, z: -24 },
-    phase1End:   { x: -1.6, y:  0.6, z: -59 },
-    satellite:   { x:  3.5, y:  1.9, z: -83 },
+    satellite: { x:  3.5, y:  1.9, z: -83 },
+    orbitOuter: 9.0,
+    angularSpeed: 0.85,
+    spiralTightness: 0.28,
+    phase1ZStart: -14, phase1ZEnd: -58,
     labelOffset: { x:  0.55, y: 0 },
     rotX: 0.8, rotY: 1.6, rotZ: 1.2,
   },
   {
     type: 'dice', label: 'A/B Test',
-    phase1Start: { x:  0.6, y: -1.8, z: -28 },
-    phase1End:   { x:  0.8, y: -1.0, z: -63 },
-    satellite:   { x: -3.8, y:  0.0, z: -83 },
+    satellite: { x: -3.8, y:  0.0, z: -83 },
+    orbitOuter: 10.2,
+    angularSpeed: 1.10,
+    spiralTightness: 0.36,
+    phase1ZStart: -18, phase1ZEnd: -62,
     labelOffset: { x: -0.6, y: 0 },
     rotX: 1.1, rotY: 0.9, rotZ: 1.5,
   },
   {
     type: 'sparkles', label: 'AI Generate',
-    phase1Start: { x: -1.5, y: -1.2, z: -32 },
-    phase1End:   { x: -1.1, y: -0.7, z: -67 },
-    satellite:   { x:  3.8, y:  0.0, z: -83 },
+    satellite: { x:  3.8, y:  0.0, z: -83 },
+    orbitOuter: 9.8,
+    angularSpeed: 1.00,
+    spiralTightness: 0.30,
+    phase1ZStart: -22, phase1ZEnd: -65,
     labelOffset: { x:  0.6, y: 0 },
     rotX: 1.8, rotY: 1.3, rotZ: 0.9,
   },
   {
     type: 'face', label: 'Face Detect',
-    phase1Start: { x:  2.3, y:  0.2, z: -36 },
-    phase1End:   { x:  1.8, y:  0.1, z: -71 },
-    satellite:   { x: -3.5, y: -1.9, z: -83 },
+    satellite: { x: -3.5, y: -1.9, z: -83 },
+    orbitOuter: 9.3,
+    angularSpeed: 0.80,
+    spiralTightness: 0.34,
+    phase1ZStart: -26, phase1ZEnd: -70,
     labelOffset: { x: -0.55, y: 0 },
     rotX: 0.9, rotY: 1.1, rotZ: 1.3,
   },
   {
     type: 'grid', label: 'Safe Zone',
-    phase1Start: { x: -0.8, y: -0.2, z: -40 },
-    phase1End:   { x: -0.5, y: -0.1, z: -75 },
-    satellite:   { x:  3.5, y: -1.9, z: -83 },
+    satellite: { x:  3.5, y: -1.9, z: -83 },
+    orbitOuter: 10.0,
+    angularSpeed: 1.20,
+    spiralTightness: 0.26,
+    phase1ZStart: -30, phase1ZEnd: -74,
     labelOffset: { x:  0.55, y: 0 },
     rotX: 1.2, rotY: 0.7, rotZ: 1.6,
   },
@@ -298,6 +317,17 @@ function FeatureTag({ config }) {
   const labelRef = useRef();
   const scroll = useScroll();
   const Icon = ICON_MAP[config.type];
+
+  // Precompute polar of the final satellite — spiral trajectories land
+  // precisely here at sceneIdx 3.5 so phase-3 can ease out without snap.
+  const satAngle = useMemo(
+    () => Math.atan2(config.satellite.y, config.satellite.x),
+    [config.satellite.x, config.satellite.y]
+  );
+  const satRadius = useMemo(
+    () => Math.hypot(config.satellite.x, config.satellite.y),
+    [config.satellite.x, config.satellite.y]
+  );
 
   useFrame(({ clock }) => {
     const g = groupRef.current;
@@ -313,38 +343,58 @@ function FeatureTag({ config }) {
     }
     if (!g.visible) g.visible = true;
 
+    const t = clock.elapsedTime;
+    const { orbitOuter, angularSpeed, spiralTightness } = config;
+    const EPS = 0.1;
+
     let x, y, z;
     let labelAlpha = 0;
+    let tumbleDamp = 1.0;
 
     if (sceneIdx < 3.2) {
-      // Phase 1 — fall past the camera from behind to ahead.
+      // Phase 1 — icon enters from behind the camera on an outer orbit.
+      //   radius = orbitOuter (held constant — tag is just orbiting).
+      //   angle  = satAngle + angularSpeed·t (slow revolution).
+      //   z      = phase1ZStart → phase1ZEnd (dropping into tunnel).
       const p = (sceneIdx - 2.9) / 0.3;
       const e = p * p * (3 - 2 * p);
-      x = THREE.MathUtils.lerp(config.phase1Start.x, config.phase1End.x, e);
-      y = THREE.MathUtils.lerp(config.phase1Start.y, config.phase1End.y, e);
-      z = THREE.MathUtils.lerp(config.phase1Start.z, config.phase1End.z, e);
+      const angle = satAngle + angularSpeed * t;
+      x = Math.cos(angle) * orbitOuter;
+      y = Math.sin(angle) * orbitOuter;
+      z = THREE.MathUtils.lerp(config.phase1ZStart, config.phase1ZEnd, e);
     } else if (sceneIdx < 3.5) {
-      // Phase 2 — warp toward satellite position.
+      // Phase 2 — spiral inward. Radius collapses orbitOuter → satRadius;
+      // angular velocity spikes via a 1/(r+ε) kick (conservation-of-angular-
+      // momentum analogue). Z eases from phase1ZEnd to satellite.z.
       const p = (sceneIdx - 3.2) / 0.3;
       const e = p * p * (3 - 2 * p);
-      x = THREE.MathUtils.lerp(config.phase1End.x, config.satellite.x, e);
-      y = THREE.MathUtils.lerp(config.phase1End.y, config.satellite.y, e);
-      z = THREE.MathUtils.lerp(config.phase1End.z, config.satellite.z, e);
+      const radius = THREE.MathUtils.lerp(orbitOuter, satRadius, e);
+      const spiralKick = spiralTightness * (orbitOuter - radius) / (radius + EPS);
+      const angle = satAngle + angularSpeed * t + spiralKick;
+      x = Math.cos(angle) * radius;
+      y = Math.sin(angle) * radius;
+      z = THREE.MathUtils.lerp(config.phase1ZEnd, config.satellite.z, e);
     } else {
-      // Phase 3 — locked at satellite; label fades in.
-      x = config.satellite.x;
-      y = config.satellite.y;
+      // Phase 3 — ease out of the spiral to rest at the satellite. Blend
+      // from the *current* spiral position (continuity with phase-2 end)
+      // to the fixed satellite (x, y). Tumble damps to zero.
+      const p = Math.min(1, (sceneIdx - 3.5) / 0.25);
+      const e = p * p * (3 - 2 * p);
+
+      const spiralKick = spiralTightness * (orbitOuter - satRadius) / (satRadius + EPS);
+      const spinAngle  = satAngle + angularSpeed * t + spiralKick;
+      const spinX = Math.cos(spinAngle) * satRadius;
+      const spinY = Math.sin(spinAngle) * satRadius;
+
+      x = THREE.MathUtils.lerp(spinX, config.satellite.x, e);
+      y = THREE.MathUtils.lerp(spinY, config.satellite.y, e);
       z = config.satellite.z;
-      labelAlpha = THREE.MathUtils.clamp((sceneIdx - 3.5) / 0.25, 0, 1);
+      tumbleDamp = Math.max(0, 1 - e);
+      labelAlpha = e;
     }
 
     g.position.set(x, y, z);
 
-    // Tumble during phases 1-2, damp to a resting orientation in phase 3.
-    const t = clock.elapsedTime;
-    const tumbleDamp = sceneIdx < 3.5
-      ? 1.0
-      : Math.max(0, 1.0 - (sceneIdx - 3.5) / 0.25);
     g.rotation.x = t * config.rotX * tumbleDamp;
     g.rotation.y = t * config.rotY * tumbleDamp;
     g.rotation.z = t * config.rotZ * tumbleDamp;
