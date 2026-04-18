@@ -366,48 +366,154 @@ function HaloStack() {
   );
 }
 
-// ── Editor silhouette — placeholder for Step 4 ──────────────────────────────
-// Soft glowing rectangle at the tunnel far end. Brightens as the camera
-// approaches (sceneIdx 2.8 → 3.8). Replaces the "black hole at tunnel centre"
-// read with "portal destination".
+// ── Tunnel far-end backdrop ─────────────────────────────────────────────────
+// Circle capping the open far end of the tunnel. Radial amber gradient that
+// reads as "warm light behind the exit". Without this, the open cylinder end
+// shows pure black (camera is outside the nebula sphere), which was the
+// "black hole at the centre" you were seeing.
 
-const EDITOR_SILHOUETTE_LOCAL_Z = -85.0;
-
-const editorSilhouetteVert = /* glsl */ `
-  varying vec2 vUv;
+const backdropVert = /* glsl */ `
+  varying vec2 vLocalXY;
   void main() {
-    vUv = uv;
+    vLocalXY = position.xy;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
-const editorSilhouetteFrag = /* glsl */ `
+const backdropFrag = /* glsl */ `
   uniform float uTime;
   uniform float uIntensity;
-  varying vec2 vUv;
+  uniform float uRadius;
+  varying vec2 vLocalXY;
+  ${noiseHelpers}
 
   void main() {
-    vec2 p = (vUv - 0.5) * vec2(1.0, 1.8); // elongated for rect aspect
-    float r = length(p);
-    // Soft rectangular glow
-    float core = 1.0 - smoothstep(0.00, 0.25, r);
-    float halo = 1.0 - smoothstep(0.10, 0.95, r);
+    float r = length(vLocalXY) / uRadius;
+    if (r > 1.0) discard;
 
-    vec3 coreCol = vec3(1.55, 1.25, 0.95); // soft white-amber core (HDR)
-    vec3 haloCol = vec3(0.95, 0.52, 0.18); // warm amber halo
-    vec3 col = mix(haloCol, coreCol, core);
+    // Radial gradient — warm amber core fading to deep violet tunnel color.
+    vec3 cCore  = vec3(1.15, 0.78, 0.40); // warm amber glow
+    vec3 cMid   = vec3(0.42, 0.18, 0.22); // dim amber/violet blend
+    vec3 cEdge  = vec3(0.08, 0.05, 0.14); // deep violet / tunnel void
 
-    float flicker = 0.92 + 0.08 * sin(uTime * 1.6);
-    float alpha = (core * 1.0 + halo * 0.55) * uIntensity * flicker;
+    vec3 col;
+    if (r < 0.35) col = mix(cCore, cMid, r / 0.35);
+    else          col = mix(cMid, cEdge, (r - 0.35) / 0.65);
+
+    // Painterly brush flecks
+    float n = fbm2(vLocalXY * 1.2 + vec2(uTime * 0.06, 0.0));
+    col *= 0.78 + n * 0.45;
+
+    // Soft falloff at the circle edge
+    float alpha = 1.0 - smoothstep(0.88, 1.0, r);
+    // Intensity ramps with scroll so the backdrop brightens as the camera closes.
+    col *= 0.55 + 0.6 * uIntensity;
 
     gl_FragColor = vec4(col, alpha);
   }
 `;
 
-function EditorSilhouette({ intensityRef }) {
+const TUNNEL_FAR_END_LOCAL_Z = -88.5;
+const TUNNEL_FAR_END_RADIUS = 6.0;
+
+function TunnelFarEndBackdrop({ intensityRef }) {
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
     uIntensity: { value: 0 },
+    uRadius: { value: TUNNEL_FAR_END_RADIUS },
+  }), []);
+  useFrame(({ clock }) => {
+    uniforms.uTime.value = clock.elapsedTime;
+    if (intensityRef.current !== undefined) {
+      uniforms.uIntensity.value = intensityRef.current;
+    }
+  });
+  return (
+    <mesh position={[0, 0, TUNNEL_FAR_END_LOCAL_Z]} renderOrder={-2}>
+      <circleGeometry args={[TUNNEL_FAR_END_RADIUS, 64]} />
+      <shaderMaterial
+        vertexShader={backdropVert}
+        fragmentShader={backdropFrag}
+        uniforms={uniforms}
+        transparent
+        depthWrite={false}
+        side={THREE.DoubleSide}
+        toneMapped={false}
+      />
+    </mesh>
+  );
+}
+
+// ── Editor plane ────────────────────────────────────────────────────────────
+// 16:9 curved plane at the tunnel far end. Emissive amber glow that reads as
+// "the editor emerging from inside the wormhole". Size/shader designed so the
+// plane fills ~60% of the viewport when the camera reaches sceneIdx 3.8.
+//
+// Step 5 will swap this shader for a drei <Html transform occlude> mapping the
+// actual ThumbFrame editor UI onto the plane.
+
+const EDITOR_LOCAL_Z = -85.0;
+const EDITOR_WIDTH   = 6.0;
+const EDITOR_HEIGHT  = 3.4;
+
+const editorPlaneVert = /* glsl */ `
+  uniform float uBend;
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    // Gentle concave dome — edges pushed toward +Z so the plane cups slightly
+    // toward the camera (which sits on +Z side of the editor). 0.25 max offset.
+    vec2 n = uv * 2.0 - 1.0;
+    vec3 bent = position;
+    bent.z += uBend * (1.0 - n.x * n.x) * (1.0 - n.y * n.y);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(bent, 1.0);
+  }
+`;
+
+const editorPlaneFrag = /* glsl */ `
+  uniform float uTime;
+  uniform float uIntensity;
+  varying vec2 vUv;
+  ${noiseHelpers}
+
+  void main() {
+    vec2 p = (vUv - 0.5) * 2.0;
+    float r = length(p);
+
+    // Gradient: white-hot near the centre, warm amber toward the edge.
+    vec3 cCore  = vec3(1.85, 1.55, 1.10); // HDR white-amber core
+    vec3 cWarm  = vec3(1.25, 0.78, 0.32); // amber body
+    vec3 cEdge  = vec3(0.95, 0.50, 0.18); // warm amber edge
+    vec3 col;
+    if (r < 0.35) col = mix(cCore, cWarm, r / 0.35);
+    else          col = mix(cWarm, cEdge, clamp((r - 0.35) / 0.8, 0.0, 1.0));
+
+    // Painterly brush noise for texture — low-freq so Kuwahara doesn't wipe it.
+    float n = fbm2(vUv * 5.5 + vec2(uTime * 0.08, 0.0));
+    col *= 0.85 + n * 0.30;
+
+    // Soft rectangular edge falloff — plane feels like light through an aperture.
+    float fx = 1.0 - smoothstep(0.85, 1.0, abs(p.x));
+    float fy = 1.0 - smoothstep(0.80, 1.0, abs(p.y));
+    float edge = fx * fy;
+
+    // Slight horizontal "scan" highlight — hints at a UI surface animating.
+    float scan = 0.88 + 0.12 * sin(vUv.y * 42.0 + uTime * 1.4);
+    col *= scan;
+
+    // Alpha/intensity ramp — editor ignites across sceneIdx 2.8 → 3.8.
+    float alpha = edge * clamp(uIntensity * 1.6, 0.0, 1.0);
+    col *= 0.6 + 1.2 * uIntensity;
+
+    gl_FragColor = vec4(col, alpha);
+  }
+`;
+
+function EditorPlane({ intensityRef }) {
+  const uniforms = useMemo(() => ({
+    uTime:      { value: 0 },
+    uIntensity: { value: 0 },
+    uBend:      { value: 0.35 },
   }), []);
   useFrame(({ clock }) => {
     uniforms.uTime.value = clock.elapsedTime;
@@ -417,14 +523,15 @@ function EditorSilhouette({ intensityRef }) {
   });
 
   return (
-    <mesh position={[0, 0, EDITOR_SILHOUETTE_LOCAL_Z]} renderOrder={2}>
-      <planeGeometry args={[2.4, 1.35]} />
+    <mesh position={[0, 0, EDITOR_LOCAL_Z]} renderOrder={3}>
+      <planeGeometry args={[EDITOR_WIDTH, EDITOR_HEIGHT, 32, 18]} />
       <shaderMaterial
-        vertexShader={editorSilhouetteVert}
-        fragmentShader={editorSilhouetteFrag}
+        vertexShader={editorPlaneVert}
+        fragmentShader={editorPlaneFrag}
         uniforms={uniforms}
         transparent
         depthWrite={false}
+        side={THREE.DoubleSide}
         toneMapped={false}
         blending={THREE.AdditiveBlending}
       />
@@ -501,29 +608,45 @@ function CameraRig({ groupRef, discRef, editorIntensityRef }) {
     } else if (sceneIdx < 3.1) {
       // Step 2: fall-in + tunnel travel.
       const travel = (sceneIdx - 2.5) / 0.6; // 0..1 across step 2
-      // Smoothstep so entry has a bit of anticipation before the rush.
       const ease = travel * travel * (3.0 - 2.0 * travel);
 
-      // Distance in front of the event horizon (+ = in front, - = past it).
-      // Start at +14 (Step 1 end), end at -55 (deep inside the tunnel).
+      // +14 (Step 1 end) → -55 (deep inside the tunnel).
       const offsetZ = THREE.MathUtils.lerp(14, -55, ease);
       camZ = WORMHOLE_POS.z + offsetZ;
 
-      // Lateral drift shrinks as we dive in — camera stabilizes on the axis.
+      // Lateral drift shrinks as we dive in — camera locks to the axis.
       const axisLockin = 1.0 - ease;
       camX = WORMHOLE_POS.x + Math.sin(t * 0.25) * 0.3 * axisLockin;
       camY = WORMHOLE_POS.y + (0.4 + Math.cos(t * 0.22) * 0.22) * axisLockin;
 
-      // Look target: starts at event horizon centre, shifts toward tunnel
-      // far end as we plunge in — creates the "falling forward" feel.
       const lookOffsetZ = THREE.MathUtils.lerp(0, -TUNNEL_LENGTH * 0.9, ease);
       lookZ = WORMHOLE_POS.z + lookOffsetZ;
-    } else {
-      // Holding state for later steps.
+    } else if (sceneIdx < 3.8) {
+      // Step 4 — final approach to the editor plane.
+      // Editor plane sits at local z = EDITOR_LOCAL_Z (-85). We want the plane
+      // (6 × 3.4) to fill ~60% of the viewport at sceneIdx 3.8, which at
+      // fov=50° / aspect=1.78 puts the camera ~6 units in front of it
+      //   → world z = EDITOR world z + 6 = -130 + 6 = -124
+      //   → offsetZ = -124 - WORMHOLE_POS.z = -79.
+      const travel = (sceneIdx - 3.1) / 0.7;
+      const ease = travel * travel * (3.0 - 2.0 * travel);
+      const offsetZ = THREE.MathUtils.lerp(-55, -79, ease);
+
       camX = WORMHOLE_POS.x;
       camY = WORMHOLE_POS.y;
-      camZ = WORMHOLE_POS.z - 55;
-      lookZ = WORMHOLE_POS.z - TUNNEL_LENGTH * 0.9;
+      camZ = WORMHOLE_POS.z + offsetZ;
+
+      // Look target sits AT the editor plane centre so the camera faces it
+      // square-on. Interpolate from tunnel-look to editor-look.
+      const lookZStart = WORMHOLE_POS.z - TUNNEL_LENGTH * 0.9; // -126
+      const lookZEnd   = WORMHOLE_POS.z + EDITOR_LOCAL_Z;      // -130
+      lookZ = THREE.MathUtils.lerp(lookZStart, lookZEnd, ease);
+    } else {
+      // Hold — editor fills the frame, waiting for the Step-5/6 exit.
+      camX = WORMHOLE_POS.x;
+      camY = WORMHOLE_POS.y;
+      camZ = WORMHOLE_POS.z - 79;
+      lookZ = WORMHOLE_POS.z + EDITOR_LOCAL_Z;
     }
 
     camera.position.set(camX, camY, camZ);
@@ -554,7 +677,11 @@ export default function Wormhole() {
         <HaloStack />
         <EventHorizonDisc meshRef={discRef} />
         <EinsteinRim />
-        <EditorSilhouette intensityRef={editorIntensityRef} />
+        {/* Tunnel far-end: warm amber backdrop circle + bright curved editor
+            plane in front of it. Backdrop kills the "black hole" read; the
+            editor plane is the destination the camera flies toward. */}
+        <TunnelFarEndBackdrop intensityRef={editorIntensityRef} />
+        <EditorPlane intensityRef={editorIntensityRef} />
         <WormholeTags />
       </group>
     </>

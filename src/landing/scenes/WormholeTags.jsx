@@ -1,132 +1,226 @@
-// Scene 3 Step 3 — six feature tag icons fall past the camera during
-// sceneIdx 2.80 → 3.20. Each tag has a unique trajectory (offset x/y,
-// spawn/end z in Wormhole-local coords), tumble rates, and color.
-// Past the tunnel midpoint (local z < midZ), a vector-field pull warps
-// x/y toward the tunnel axis so tags converge on the far-end point.
+// Scene 3 Steps 3-5 — six feature tags that:
+//   (1) fall past the camera from behind to ahead during sceneIdx 2.9 → 3.2
+//   (2) warp toward satellite positions around the editor plane during 3.2 → 3.5
+//   (3) lock into those positions with HTML labels from 3.5 onward
 //
-// All positions are LOCAL to the Wormhole group (anchored at (0, 0, -45)
-// in world). Tunnel runs local z = 0 (event horizon) → -90 (far end).
+// All positions are LOCAL to the Wormhole group (anchored at world (0, 0, -45)).
+// Editor plane sits at local z = -85. Satellites sit just in front of it at
+// local z = -83, arranged around a 7 × 4 rectangle so they frame the editor
+// without overlapping it.
 
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useScroll } from '@react-three/drei';
+import { useScroll, Html } from '@react-three/drei';
 import * as THREE from 'three';
 
-// ── Icon geometries — simple, distinctive, one color each ───────────────────
+// ── Colour tokens (match the spec: paper-highlight outline, warm amber fill) ─
 
-function IconScissors({ color }) {
-  // Two crossed thin bars → X silhouette
+const LINE_COLOR = '#f0e4d0'; // paper-highlight — outlines, accents
+const FILL_COLOR = '#ffb060'; // warm amber — fill shapes
+const DARK_COLOR = '#2a1a30'; // deep plum — pips, eyes, mouths
+
+// ── Icon geometries — each reads as the named shape, not an abstract blob ───
+
+function IconScissors() {
   return (
     <group>
-      <mesh rotation={[0, 0, 0.45]}>
-        <boxGeometry args={[0.08, 0.6, 0.08]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+      {/* Two crossed blades */}
+      <mesh rotation={[0, 0, Math.PI / 7]} position={[0, 0.10, 0]}>
+        <boxGeometry args={[0.07, 0.44, 0.02]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
       </mesh>
-      <mesh rotation={[0, 0, -0.45]}>
-        <boxGeometry args={[0.08, 0.6, 0.08]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+      <mesh rotation={[0, 0, -Math.PI / 7]} position={[0, 0.10, 0]}>
+        <boxGeometry args={[0.07, 0.44, 0.02]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
+      </mesh>
+      {/* Pivot */}
+      <mesh position={[0, -0.05, 0]}>
+        <sphereGeometry args={[0.055, 16, 16]} />
+        <meshBasicMaterial color={FILL_COLOR} toneMapped={false} />
+      </mesh>
+      {/* Handle loops */}
+      <mesh position={[-0.11, -0.18, 0]}>
+        <torusGeometry args={[0.07, 0.015, 8, 16]} />
+        <meshBasicMaterial color={FILL_COLOR} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.11, -0.18, 0]}>
+        <torusGeometry args={[0.07, 0.015, 8, 16]} />
+        <meshBasicMaterial color={FILL_COLOR} toneMapped={false} />
       </mesh>
     </group>
   );
 }
 
-function IconTarget({ color }) {
+function IconTarget() {
   return (
     <group>
+      {/* Concentric rings */}
       <mesh>
-        <torusGeometry args={[0.28, 0.04, 8, 24]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+        <torusGeometry args={[0.20, 0.018, 8, 32]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
       </mesh>
       <mesh>
-        <torusGeometry args={[0.16, 0.03, 8, 24]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+        <torusGeometry args={[0.12, 0.018, 8, 32]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
       </mesh>
       <mesh>
-        <sphereGeometry args={[0.055, 10, 10]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+        <sphereGeometry args={[0.045, 12, 12]} />
+        <meshBasicMaterial color={FILL_COLOR} toneMapped={false} />
+      </mesh>
+      {/* Crosshair — four short segments instead of one long line so the
+          rings aren't bisected through the centre */}
+      <mesh position={[0, 0.22, 0]}>
+        <boxGeometry args={[0.015, 0.10, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, -0.22, 0]}>
+        <boxGeometry args={[0.015, 0.10, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.22, 0, 0]}>
+        <boxGeometry args={[0.10, 0.015, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.22, 0, 0]}>
+        <boxGeometry args={[0.10, 0.015, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
       </mesh>
     </group>
   );
 }
 
-function IconDice({ color }) {
-  // Cube plus a few pip dots on visible faces for a 'die' feel
+function IconDice() {
+  const o = 0.10; // pip offset from face centre
   return (
     <group>
       <mesh>
-        <boxGeometry args={[0.42, 0.42, 0.42]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+        <boxGeometry args={[0.32, 0.32, 0.32]} />
+        <meshBasicMaterial color={FILL_COLOR} toneMapped={false} />
       </mesh>
-      <mesh position={[0.215, 0, 0]}>
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshBasicMaterial color="#0b0a14" toneMapped={false} />
+      {/* 1 pip on +Z face */}
+      <mesh position={[0, 0, 0.162]}>
+        <sphereGeometry args={[0.032, 10, 10]} />
+        <meshBasicMaterial color={DARK_COLOR} toneMapped={false} />
       </mesh>
-      <mesh position={[0, 0.215, 0]}>
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshBasicMaterial color="#0b0a14" toneMapped={false} />
+      {/* 2 pips on +X face */}
+      <mesh position={[0.162, o, o]}>
+        <sphereGeometry args={[0.027, 10, 10]} />
+        <meshBasicMaterial color={DARK_COLOR} toneMapped={false} />
       </mesh>
-      <mesh position={[0, 0, 0.215]}>
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshBasicMaterial color="#0b0a14" toneMapped={false} />
+      <mesh position={[0.162, -o, -o]}>
+        <sphereGeometry args={[0.027, 10, 10]} />
+        <meshBasicMaterial color={DARK_COLOR} toneMapped={false} />
+      </mesh>
+      {/* 3 pips on +Y face */}
+      <mesh position={[0, 0.162, 0]}>
+        <sphereGeometry args={[0.027, 10, 10]} />
+        <meshBasicMaterial color={DARK_COLOR} toneMapped={false} />
+      </mesh>
+      <mesh position={[o, 0.162, o]}>
+        <sphereGeometry args={[0.027, 10, 10]} />
+        <meshBasicMaterial color={DARK_COLOR} toneMapped={false} />
+      </mesh>
+      <mesh position={[-o, 0.162, -o]}>
+        <sphereGeometry args={[0.027, 10, 10]} />
+        <meshBasicMaterial color={DARK_COLOR} toneMapped={false} />
       </mesh>
     </group>
   );
 }
 
-function IconSparkles({ color }) {
-  // Two overlapping octahedra — spiky, stands apart
+function IconSparkles() {
+  // 4-point burst with a small diagonal secondary burst
   return (
     <group>
+      {/* Primary 4-point */}
       <mesh>
-        <octahedronGeometry args={[0.28, 0]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+        <boxGeometry args={[0.06, 0.48, 0.02]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
       </mesh>
-      <mesh rotation={[Math.PI / 4, Math.PI / 4, 0]} scale={0.7}>
-        <octahedronGeometry args={[0.28, 0]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+      <mesh>
+        <boxGeometry args={[0.48, 0.06, 0.02]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
+      </mesh>
+      {/* Diagonal secondary */}
+      <mesh rotation={[0, 0, Math.PI / 4]} scale={[1, 0.6, 1]}>
+        <boxGeometry args={[0.035, 0.48, 0.02]} />
+        <meshBasicMaterial color={FILL_COLOR} toneMapped={false} />
+      </mesh>
+      <mesh rotation={[0, 0, -Math.PI / 4]} scale={[1, 0.6, 1]}>
+        <boxGeometry args={[0.035, 0.48, 0.02]} />
+        <meshBasicMaterial color={FILL_COLOR} toneMapped={false} />
+      </mesh>
+      {/* Centre node */}
+      <mesh>
+        <sphereGeometry args={[0.05, 12, 12]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
       </mesh>
     </group>
   );
 }
 
-function IconFace({ color }) {
+function IconFace() {
   return (
     <group>
       <mesh>
-        <sphereGeometry args={[0.26, 16, 16]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+        <sphereGeometry args={[0.20, 20, 20]} />
+        <meshBasicMaterial color={FILL_COLOR} toneMapped={false} />
       </mesh>
-      <mesh position={[-0.09, 0.06, 0.22]}>
-        <sphereGeometry args={[0.03, 8, 8]} />
-        <meshBasicMaterial color="#0b0a14" toneMapped={false} />
+      {/* Eyes */}
+      <mesh position={[-0.07, 0.05, 0.17]}>
+        <sphereGeometry args={[0.028, 10, 10]} />
+        <meshBasicMaterial color={DARK_COLOR} toneMapped={false} />
       </mesh>
-      <mesh position={[0.09, 0.06, 0.22]}>
-        <sphereGeometry args={[0.03, 8, 8]} />
-        <meshBasicMaterial color="#0b0a14" toneMapped={false} />
+      <mesh position={[0.07, 0.05, 0.17]}>
+        <sphereGeometry args={[0.028, 10, 10]} />
+        <meshBasicMaterial color={DARK_COLOR} toneMapped={false} />
+      </mesh>
+      {/* Smile arc — half-torus */}
+      <mesh position={[0, -0.05, 0.17]} rotation={[0, 0, Math.PI]}>
+        <torusGeometry args={[0.06, 0.013, 6, 16, Math.PI]} />
+        <meshBasicMaterial color={DARK_COLOR} toneMapped={false} />
       </mesh>
     </group>
   );
 }
 
-function IconGrid({ color }) {
-  // + with a secondary crossbar — reads as a layout guide
+function IconGrid() {
+  // 3×3 grid — outer frame + two horizontals + two verticals
   return (
     <group>
-      <mesh>
-        <boxGeometry args={[0.5, 0.06, 0.06]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+      {/* Outer frame */}
+      <mesh position={[0, 0.20, 0]}>
+        <boxGeometry args={[0.42, 0.022, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
       </mesh>
-      <mesh>
-        <boxGeometry args={[0.06, 0.5, 0.06]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+      <mesh position={[0, -0.20, 0]}>
+        <boxGeometry args={[0.42, 0.022, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
       </mesh>
-      <mesh position={[0, 0.12, 0]}>
-        <boxGeometry args={[0.36, 0.04, 0.04]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+      <mesh position={[0.21, 0, 0]}>
+        <boxGeometry args={[0.022, 0.42, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
       </mesh>
-      <mesh position={[0, -0.12, 0]}>
-        <boxGeometry args={[0.36, 0.04, 0.04]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+      <mesh position={[-0.21, 0, 0]}>
+        <boxGeometry args={[0.022, 0.42, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
+      </mesh>
+      {/* Internal dividers */}
+      <mesh position={[0, 0.067, 0]}>
+        <boxGeometry args={[0.42, 0.016, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, -0.067, 0]}>
+        <boxGeometry args={[0.42, 0.016, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.070, 0, 0]}>
+        <boxGeometry args={[0.016, 0.42, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.070, 0, 0]}>
+        <boxGeometry args={[0.016, 0.42, 0.01]} />
+        <meshBasicMaterial color={LINE_COLOR} toneMapped={false} />
       </mesh>
     </group>
   );
@@ -134,76 +228,75 @@ function IconGrid({ color }) {
 
 const ICON_MAP = {
   scissors: IconScissors,
-  target: IconTarget,
-  dice: IconDice,
+  target:   IconTarget,
+  dice:     IconDice,
   sparkles: IconSparkles,
-  face: IconFace,
-  grid: IconGrid,
+  face:     IconFace,
+  grid:     IconGrid,
 };
 
 // ── Tag configs ─────────────────────────────────────────────────────────────
+// Six tags with staggered fall paths and six satellite positions around the
+// editor plane perimeter. Editor plane is 6 wide × 3.4 tall at local z=-85;
+// satellites sit at local z=-83, on a 7 × 4 rectangle so they frame the plane.
 
-// Local coords (Wormhole group origin is at world (0, 0, -45)).
-// Tunnel runs local z = 0 (event horizon) → -90 (far end / editor point).
-// midZ is the warp threshold — z values past it (more negative) get pulled
-// toward the tunnel axis.
 const TAG_CONFIGS = [
   {
-    type: 'scissors',  color: '#ff9040',
-    x:  1.9, y:  0.9,
-    spawnZ: -20, endZ: -92, midZ: -50,
-    spawnAt: 2.80, lifetime: 0.40,
+    type: 'scissors', label: 'Cut & Edit',
+    phase1Start: { x:  2.0, y:  1.2, z: -20 },
+    phase1End:   { x:  1.3, y:  0.7, z: -55 },
+    satellite:   { x: -3.5, y:  1.9, z: -83 },
+    labelOffset: { x: -0.55, y: 0 },
     rotX: 1.4, rotY: 1.1, rotZ: 0.7,
-    scale: 1.0,
   },
   {
-    type: 'target',    color: '#40d8c0',
-    x: -2.2, y: -0.5,
-    spawnZ: -25, endZ: -95, midZ: -52,
-    spawnAt: 2.84, lifetime: 0.40,
+    type: 'target', label: 'CTR Score',
+    phase1Start: { x: -2.2, y:  1.1, z: -24 },
+    phase1End:   { x: -1.6, y:  0.6, z: -59 },
+    satellite:   { x:  3.5, y:  1.9, z: -83 },
+    labelOffset: { x:  0.55, y: 0 },
     rotX: 0.8, rotY: 1.6, rotZ: 1.2,
-    scale: 1.0,
   },
   {
-    type: 'dice',      color: '#f0b848',
-    x:  0.7, y:  1.8,
-    spawnZ: -30, endZ: -100, midZ: -55,
-    spawnAt: 2.88, lifetime: 0.40,
+    type: 'dice', label: 'A/B Test',
+    phase1Start: { x:  0.6, y: -1.8, z: -28 },
+    phase1End:   { x:  0.8, y: -1.0, z: -63 },
+    satellite:   { x: -3.8, y:  0.0, z: -83 },
+    labelOffset: { x: -0.6, y: 0 },
     rotX: 1.1, rotY: 0.9, rotZ: 1.5,
-    scale: 1.0,
   },
   {
-    type: 'sparkles',  color: '#c880f0',
-    x: -1.5, y:  1.2,
-    spawnZ: -35, endZ: -105, midZ: -57,
-    spawnAt: 2.92, lifetime: 0.40,
+    type: 'sparkles', label: 'AI Generate',
+    phase1Start: { x: -1.5, y: -1.2, z: -32 },
+    phase1End:   { x: -1.1, y: -0.7, z: -67 },
+    satellite:   { x:  3.8, y:  0.0, z: -83 },
+    labelOffset: { x:  0.6, y: 0 },
     rotX: 1.8, rotY: 1.3, rotZ: 0.9,
-    scale: 1.0,
   },
   {
-    type: 'face',      color: '#f0a060',
-    x:  2.3, y: -0.4,
-    spawnZ: -40, endZ: -110, midZ: -60,
-    spawnAt: 2.96, lifetime: 0.40,
+    type: 'face', label: 'Face Detect',
+    phase1Start: { x:  2.3, y:  0.2, z: -36 },
+    phase1End:   { x:  1.8, y:  0.1, z: -71 },
+    satellite:   { x: -3.5, y: -1.9, z: -83 },
+    labelOffset: { x: -0.55, y: 0 },
     rotX: 0.9, rotY: 1.1, rotZ: 1.3,
-    scale: 1.0,
   },
   {
-    type: 'grid',      color: '#80d0ff',
-    x: -0.8, y: -1.4,
-    spawnZ: -45, endZ: -115, midZ: -62,
-    spawnAt: 3.00, lifetime: 0.40,
+    type: 'grid', label: 'Safe Zone',
+    phase1Start: { x: -0.8, y: -0.2, z: -40 },
+    phase1End:   { x: -0.5, y: -0.1, z: -75 },
+    satellite:   { x:  3.5, y: -1.9, z: -83 },
+    labelOffset: { x:  0.55, y: 0 },
     rotX: 1.2, rotY: 0.7, rotZ: 1.6,
-    scale: 1.0,
   },
 ];
 
-// ── One tag ─────────────────────────────────────────────────────────────────
+// ── One feature tag ─────────────────────────────────────────────────────────
 
 function FeatureTag({ config }) {
   const groupRef = useRef();
+  const labelRef = useRef();
   const scroll = useScroll();
-
   const Icon = ICON_MAP[config.type];
 
   useFrame(({ clock }) => {
@@ -211,59 +304,97 @@ function FeatureTag({ config }) {
     if (!g) return;
 
     const sceneIdx = scroll.offset * 7;
-    const localT = sceneIdx - config.spawnAt;
-    const inLife = localT >= 0 && localT <= config.lifetime;
 
-    if (g.visible !== inLife) g.visible = inLife;
-    if (!inLife) return;
+    // Hide when outside the tag lifetime.
+    if (sceneIdx < 2.9 || sceneIdx > 3.95) {
+      if (g.visible) g.visible = false;
+      if (labelRef.current) labelRef.current.style.opacity = '0';
+      return;
+    }
+    if (!g.visible) g.visible = true;
 
-    const p = localT / config.lifetime;
+    let x, y, z;
+    let labelAlpha = 0;
 
-    // Straight-line descent from spawnZ to endZ.
-    const z = THREE.MathUtils.lerp(config.spawnZ, config.endZ, p);
-
-    let x = config.x;
-    let y = config.y;
-
-    // Vector-field pull — past midpoint, x/y converge toward tunnel axis
-    // (0, 0). Strength grows quadratically with distance past the midpoint
-    // so tags hook inward more aggressively as they approach the far end.
-    if (z < config.midZ) {
-      const warpP = THREE.MathUtils.clamp(
-        (config.midZ - z) / (config.midZ - config.endZ),
-        0, 1,
-      );
-      const warp = warpP * warpP;
-      x = THREE.MathUtils.lerp(x, 0, warp);
-      y = THREE.MathUtils.lerp(y, 0, warp);
+    if (sceneIdx < 3.2) {
+      // Phase 1 — fall past the camera from behind to ahead.
+      const p = (sceneIdx - 2.9) / 0.3;
+      const e = p * p * (3 - 2 * p);
+      x = THREE.MathUtils.lerp(config.phase1Start.x, config.phase1End.x, e);
+      y = THREE.MathUtils.lerp(config.phase1Start.y, config.phase1End.y, e);
+      z = THREE.MathUtils.lerp(config.phase1Start.z, config.phase1End.z, e);
+    } else if (sceneIdx < 3.5) {
+      // Phase 2 — warp toward satellite position.
+      const p = (sceneIdx - 3.2) / 0.3;
+      const e = p * p * (3 - 2 * p);
+      x = THREE.MathUtils.lerp(config.phase1End.x, config.satellite.x, e);
+      y = THREE.MathUtils.lerp(config.phase1End.y, config.satellite.y, e);
+      z = THREE.MathUtils.lerp(config.phase1End.z, config.satellite.z, e);
+    } else {
+      // Phase 3 — locked at satellite; label fades in.
+      x = config.satellite.x;
+      y = config.satellite.y;
+      z = config.satellite.z;
+      labelAlpha = THREE.MathUtils.clamp((sceneIdx - 3.5) / 0.25, 0, 1);
     }
 
     g.position.set(x, y, z);
 
-    // Fade in at spawn / fade out at death so tags don't pop.
-    const fadeIn  = THREE.MathUtils.clamp(p / 0.12, 0, 1);
-    const fadeOut = THREE.MathUtils.clamp((1 - p) / 0.12, 0, 1);
-    const s = config.scale * Math.min(fadeIn, fadeOut);
-    g.scale.setScalar(s);
-
-    // Rotational tumble — unique axis per tag.
+    // Tumble during phases 1-2, damp to a resting orientation in phase 3.
     const t = clock.elapsedTime;
-    g.rotation.x = t * config.rotX;
-    g.rotation.y = t * config.rotY;
-    g.rotation.z = t * config.rotZ;
+    const tumbleDamp = sceneIdx < 3.5
+      ? 1.0
+      : Math.max(0, 1.0 - (sceneIdx - 3.5) / 0.25);
+    g.rotation.x = t * config.rotX * tumbleDamp;
+    g.rotation.y = t * config.rotY * tumbleDamp;
+    g.rotation.z = t * config.rotZ * tumbleDamp;
+
+    if (labelRef.current) {
+      labelRef.current.style.opacity = String(labelAlpha);
+    }
   });
 
   return (
-    <group ref={groupRef} visible={false}>
-      <Icon color={config.color} />
-    </group>
+    <>
+      <group ref={groupRef} visible={false}>
+        <Icon />
+      </group>
+      {/* HTML label — fixed at satellite position, fades in post-snap. */}
+      <Html
+        position={[
+          config.satellite.x + (config.labelOffset?.x ?? 0),
+          config.satellite.y + (config.labelOffset?.y ?? 0) - 0.48,
+          config.satellite.z,
+        ]}
+        center
+        distanceFactor={8}
+        style={{ pointerEvents: 'none' }}
+      >
+        <div
+          ref={labelRef}
+          style={{
+            color: '#f0e4d0',
+            fontFamily: "'Inter Variable', 'Inter', system-ui, sans-serif",
+            fontSize: 11,
+            fontWeight: 500,
+            letterSpacing: '0.12em',
+            whiteSpace: 'nowrap',
+            textTransform: 'uppercase',
+            opacity: 0,
+            transition: 'opacity 320ms ease',
+            textShadow: '0 2px 10px rgba(10, 7, 20, 0.95)',
+          }}
+        >
+          {config.label}
+        </div>
+      </Html>
+    </>
   );
 }
 
 // ── Export ──────────────────────────────────────────────────────────────────
 
 export default function WormholeTags() {
-  // Memoize the tag list so identity is stable and React never remounts them.
   const tags = useMemo(() => TAG_CONFIGS, []);
   return (
     <group>
