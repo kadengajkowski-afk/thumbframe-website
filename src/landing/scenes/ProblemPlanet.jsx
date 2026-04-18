@@ -26,8 +26,15 @@ import { useFrame } from '@react-three/fiber';
 import { useScroll } from '@react-three/drei';
 import * as THREE from 'three';
 
-const PLANET_POS = new THREE.Vector3(-5, 2, -20);
-const PLANET_RADIUS = 4.0;
+// Moved further left (x -5 → -8) and scaled down 40% so the planet:
+//   (1) stays in the LEFT portion of the frame while the right-half overlay
+//       text is up (sceneIdx 1.15–1.85) — doesn't occlude the paragraph.
+//   (2) no longer reads as "full-moon close-up" — sits in frame as a
+//       distant dead world, not a dominant sphere.
+const PLANET_POS = new THREE.Vector3(-8, 1, -20);
+const PLANET_RADIUS = 2.4;
+// Self-rotation (rad/s) around Y. Slow enough to be subliminal but present.
+const PLANET_SPIN = 0.08;
 
 // ── Shared GLSL noise helpers ───────────────────────────────────────────────
 
@@ -81,12 +88,13 @@ const planetVert = /* glsl */ `
 
   float crackMask(vec3 n) {
     float c = dot(n, normalize(CRACK_N));
-    // Add a tear noise along the band coordinate so the crack wobbles.
+    // Tear noise along the band coordinate so the crack wobbles — no
+    // machined edge. Higher amplitude (0.14) so the groove looks torn.
     float tear = noise3(n * 3.2) - 0.5;
-    float offset = tear * 0.10;
+    float offset = tear * 0.14;
     float dist = abs(c - offset);
-    // 1.0 right at the crack centre, 0 outside a half-width of ~0.09.
-    return 1.0 - smoothstep(0.02, 0.10, dist);
+    // Wide, readable band — core is solid to ~0.05, fade out by 0.22.
+    return 1.0 - smoothstep(0.05, 0.22, dist);
   }
 
   void main() {
@@ -98,9 +106,10 @@ const planetVert = /* glsl */ `
     float height = fbm6(n * 2.1);
     float displaced = 0.35 * (height - 0.5);
 
-    // Crack groove — deep negative displacement inside the crack band.
+    // Crack groove — deep negative displacement inside the crack band so the
+    // surface is clearly split, not just tinted.
     float crack = crackMask(n);
-    displaced -= crack * 0.55;
+    displaced -= crack * 1.15;
 
     vec3 bent = p + n * displaced;
 
@@ -130,39 +139,42 @@ const planetFrag = /* glsl */ `
     vec3 N = normalize(vWorldNormal);
     float NdotL = dot(N, normalize(uKeyDir));
 
-    // Dead-planet gray-violet palette — no vibrant tones.
-    vec3 cShadow = vec3(0.18, 0.15, 0.22);  // #2E2638
-    vec3 cMid    = vec3(0.36, 0.32, 0.42);  // #5C526A
-    vec3 cLit    = vec3(0.56, 0.52, 0.62);  // #8E849E
+    // Dead-planet gray-violet palette — darkened across all bands so the lit
+    // side caps at the MID tone (per spec revision), not the highlight, and
+    // the planet reads as a dead world, not a moon lit by a close star.
+    vec3 cShadow = vec3(0.10, 0.075, 0.13);  // ~#1B1322
+    vec3 cMid    = vec3(0.30, 0.26, 0.34);   // ~#4D4257
+    vec3 cLit    = vec3(0.42, 0.38, 0.47);   // #6A6278 — spec mid; used as cap
 
-    // 3-band toon ramp — harsh key from below reads as ominous.
-    vec3 base;
-    if (NdotL > 0.25)       base = mix(cMid, cLit, 0.55);
-    else if (NdotL > -0.10) base = cMid * 0.80;
-    else                    base = cShadow;
+    // Smooth ramp from shadow to the lit cap based on key-light incidence.
+    // smoothstep keeps bands soft (no hard toon line) and guarantees the
+    // brightest pixel tops at cLit.
+    float litness = smoothstep(-0.20, 0.35, NdotL);
+    vec3 base = mix(cShadow, cLit, litness);
 
-    // Surface height stipple — darker recesses, lighter tips. Very subtle.
-    base *= 0.78 + vSurfaceHeight * 0.35;
+    // Height stipple — very subtle. Recesses a touch darker, peaks a touch
+    // lighter, but not enough to push past the lit cap.
+    base *= 0.88 + vSurfaceHeight * 0.16;
 
-    // Cold violet fill (replaces a global ambient light).
-    base += vec3(0.06, 0.04, 0.10);
-
-    // Fresnel rim — cold silhouette glow (against nebula).
+    // Fresnel rim — cold violet silhouette against the nebula, toned down
+    // so the planet's silhouette is crisp but not glowing.
     vec3 V = normalize(uCameraPos - vWorldPos);
-    float rim = pow(1.0 - max(dot(N, V), 0.0), 2.8);
-    base += vec3(0.28, 0.14, 0.36) * rim * 0.55;
+    float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+    base += vec3(0.16, 0.08, 0.22) * rim * 0.30;
 
-    // Crack — dim amber "heat" glow along the groove; a faint flicker noise
-    // makes it feel alive without over-selling it.
+    // Crack — amber "heat" glow along the groove. Stronger mix strength and
+    // a more saturated amber so the crack clearly reads as "this planet is
+    // broken," not just a tonal shift.
     float flicker = 0.82 + 0.18 * sin(uTime * 1.3 + vSurfaceHeight * 11.0);
-    vec3 crackEmissive = vec3(1.00, 0.48, 0.18) * 0.85 * flicker;
-    base = mix(base, crackEmissive, vCrackMask * 0.80);
+    vec3 crackEmissive = vec3(1.20, 0.55, 0.18) * 1.05 * flicker;
+    base = mix(base, crackEmissive, vCrackMask * 0.95);
 
     gl_FragColor = vec4(base, 1.0);
   }
 `;
 
 function ProblemPlanetBody() {
+  const meshRef = useRef();
   const uniforms = useMemo(() => ({
     uTime:       { value: 0 },
     uKeyDir:     { value: new THREE.Vector3(0.2, -0.8, 0.3).normalize() },
@@ -172,10 +184,15 @@ function ProblemPlanetBody() {
   useFrame(({ clock, camera }) => {
     uniforms.uTime.value = clock.elapsedTime;
     uniforms.uCameraPos.value.copy(camera.position);
+    // Slow self-rotation — carries the crack across the lit hemisphere
+    // during the arc phase.
+    if (meshRef.current) {
+      meshRef.current.rotation.y = clock.elapsedTime * PLANET_SPIN;
+    }
   });
 
   return (
-    <mesh position={PLANET_POS.toArray()}>
+    <mesh ref={meshRef} position={PLANET_POS.toArray()}>
       <icosahedronGeometry args={[PLANET_RADIUS, 5]} />
       <shaderMaterial
         vertexShader={planetVert}
@@ -311,12 +328,15 @@ function WireframeCubeFragment() {
   );
 }
 
+// All three artefacts orbit in the +X hemisphere so the camera (which
+// stays on the +X side of the planet throughout scene 2) always has line
+// of sight to all three. Scales bumped ~1.6× since the planet shrunk.
 const ARTIFACT_DEFS = [
-  // Orbit radius is in world units around PLANET_POS. Angle 0 = +X from
-  // planet centre. tilt rotates the orbit plane off the horizontal.
-  { Shape: CrackedBitmapSlab,     orbitRadius: 5.6, orbitAngle: 0.30, orbitSpeed: 0.070, tilt:  0.25, tumble: [0.32, 0.18, 0.25], scale: 1.35 },
-  { Shape: LeaningCanvasFrame,    orbitRadius: 6.4, orbitAngle: 2.10, orbitSpeed: 0.055, tilt: -0.18, tumble: [0.22, 0.30, 0.14], scale: 1.20 },
-  { Shape: WireframeCubeFragment, orbitRadius: 5.2, orbitAngle: 4.20, orbitSpeed: 0.085, tilt:  0.12, tumble: [0.26, 0.14, 0.28], scale: 1.15 },
+  // Orbit radius is in world units around PLANET_POS. Angle 0 = +X.
+  // tilt rotates the orbit plane off the horizontal.
+  { Shape: CrackedBitmapSlab,     orbitRadius: 4.0, orbitAngle:  0.00, orbitSpeed: 0.060, tilt:  0.50, tumble: [0.32, 0.18, 0.25], scale: 2.10 },
+  { Shape: LeaningCanvasFrame,    orbitRadius: 4.6, orbitAngle:  1.10, orbitSpeed: 0.050, tilt: -0.40, tumble: [0.22, 0.30, 0.14], scale: 1.85 },
+  { Shape: WireframeCubeFragment, orbitRadius: 3.8, orbitAngle: -1.00, orbitSpeed: 0.075, tilt:  0.30, tumble: [0.26, 0.14, 0.28], scale: 1.80 },
 ];
 
 function Artifact({ def }) {
@@ -367,21 +387,24 @@ function ProblemCameraRig({ groupRef }) {
 
     // Pose keyframes (world space):
     //   K0  (1.00)  from Arrival phase-B end — cam (-4.2, 0.4, -8), look (0, 0, -30)
-    //   K1  (1.10)  look pivots to planet — cam hold, look = PLANET_POS
-    //   K2  (1.45)  arc end — cam (+8, 0.5, -22), look = PLANET_POS
-    //   K3  (1.75)  artefact close-up — cam (+4, -0.5, -16), look = artefact focus
+    //   K1  (1.10)  look pivots near planet but offset +X / −Y so the planet
+    //               sits in the UPPER-LEFT of the frame, not dead centre.
+    //   K2  (1.45)  arc end — cam (+8, 0.5, -22), look held off-right so
+    //               planet stays in LEFT third; right-half overlay is clear.
+    //   K3  (1.75)  artefact close-up — cam (+4, -0.5, -16), look at the
+    //               slab orbit position around +X from planet centre.
     //   K4  (2.20)  handoff to Wormhole Step-1 — cam (0, 0, -17), look (0,0,-45)
     //
-    // Each segment uses smoothstep easing. The artefact focus point at K3
-    // matches the Cracked-Bitmap-Slab orbit pose at that moment (approx).
+    // K1/K2 look offsets deliberately keep the planet in the left portion of
+    // the frame so the right-half ProblemCopy overlay isn't occluded.
 
     const PLANET = PLANET_POS;
     const K0 = { cam: [-4.2, 0.4, -8.0], look: [0.0, 0.0, -30.0] };
-    const K1 = { cam: [-4.2, 0.4, -8.0], look: [PLANET.x, PLANET.y, PLANET.z] };
-    const K2 = { cam: [ 8.0, 0.5, -22.0], look: [PLANET.x, PLANET.y, PLANET.z] };
-    // Artefact 1 (slab) orbit at an avg clock time — camera looks vaguely
-    // at the +X side of the planet where the slab lives at sceneIdx 1.6.
-    const K3 = { cam: [ 4.0, -0.5, -16.0], look: [-1.5, 0.5, -18.0] };
+    const K1 = { cam: [-4.2, 0.4, -8.0], look: [PLANET.x + 3.0, PLANET.y - 1.0, PLANET.z - 2.0] };
+    const K2 = { cam: [ 8.0, 0.5, -22.0], look: [0.0, 0.0, -22.0] };
+    // K3 artefact focus — roughly the CrackedBitmapSlab's +X orbit position
+    // at the midpoint of scene 2.
+    const K3 = { cam: [ 4.0, -0.5, -16.0], look: [-4.0, 1.0, -18.0] };
     const K4 = { cam: [ 0.0, 0.0, -17.0], look: [0.0, 0.0, -45.0] };
 
     const lerpV = (a, b, e) => [
