@@ -41,22 +41,20 @@ const fragmentShader = /* glsl */ `
   void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
     vec2 texel = 1.0 / uResolution;
 
-    // Depth-modulated kernel. The raw depth-buffer value is non-linear —
-    // for a perspective camera with near=0.1 / far=200, everything in the
-    // visible scene maps to roughly [0.95, 1.0]. A direct smoothstep(0, 1)
-    // treated every visible pixel as "far" and applied the large kernel to
-    // all of it, which flattened painted texture detail on mid-distance
-    // meshes (the Scene-2 Problem Planet).
+    // Per-object Kuwahara intensity by depth-buffer value:
+    //   Nebula has depthWrite=false, so its pixels leave the depth buffer
+    //   at the clear value (~1.0). Planet meshes write sub-unity depth
+    //   values (typical range 0.996–0.999 for the galaxy overview). We
+    //   map that directly — anything with a "real" depth-buffer write
+    //   (i.e., actual 3D geometry) gets the near kernel; anything still
+    //   at clear depth (nebula + empty space) gets the far kernel.
     //
-    // Convert to world-space linear distance, then normalise over [0, 60]
-    // so near-ish (0–10 units) gets uKernelNear and far-only (>60 units)
-    // gets uKernelFar. Matches the Canvas camera near/far hard-coded here.
+    //   smoothstep(0.9985, 0.99995) gives a clean near→far transition
+    //   across the very narrow band between "farthest written geometry"
+    //   and "clear depth." Planets land solidly in near; nebula lands
+    //   solidly in far. No mid-range smearing.
     float d = texture2D(depthBuffer, uv).r;
-    float ndc = d * 2.0 - 1.0;
-    const float N = 0.1;
-    const float F = 200.0;
-    float linearDepth = (2.0 * N * F) / (F + N - ndc * (F - N));
-    float depthNorm = clamp(linearDepth / 60.0, 0.0, 1.0);
+    float depthNorm = smoothstep(0.9985, 0.99995, d);
     float radius = mix(uKernelNear, uKernelFar, depthNorm);
 
     vec2 st = getStructure(uv, texel);

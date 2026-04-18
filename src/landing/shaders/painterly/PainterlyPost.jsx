@@ -43,7 +43,13 @@ function KuwaharaPass() {
 
 function OutlinePass() {
   const { size, viewport } = useThree();
-  const effect = useMemo(() => new OutlineEffect({ strength: 0.55 }), []);
+  // Strength bumped 0.55 → 0.85 for the Moebius ink-over-watercolor look.
+  // sampleStride 1.4 gives ~2px lines at 1× scale (widens slightly at
+  // high-DPR screens since the pass runs at full viewport resolution).
+  const effect = useMemo(() => new OutlineEffect({
+    strength: 0.85,
+    sampleStride: 1.4,
+  }), []);
 
   useEffect(() => {
     const dpr = viewport.dpr || 1;
