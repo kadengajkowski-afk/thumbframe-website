@@ -19,13 +19,12 @@ const KUWAHARA_SCALE = IS_MOBILE ? 0.25 : 0.40;
 
 function KuwaharaPass() {
   const { size, viewport } = useThree();
-  // Mobile uses a smaller kernel too — less detail needs preserving.
-  // Desktop kernelNear dropped 4.0 → 3.0 so painted surface detail on
-  // mid-distance textured meshes (Scene-2 planet) survives the smoothing.
+  // Widened near/far gap for the ink-over-watercolor contrast —
+  // planets at kernelNear=2 (barely smoothed), nebula at kernelFar=12.
   const effect = useMemo(
     () => new KuwaharaEffect({
-      kernelNear: IS_MOBILE ? 2.0 : 3.0,
-      kernelFar:  IS_MOBILE ? 7.0 : 10.0,
+      kernelNear: IS_MOBILE ? 2.0 : 2.0,
+      kernelFar:  IS_MOBILE ? 8.0 : 12.0,
     }),
     []
   );
@@ -43,12 +42,12 @@ function KuwaharaPass() {
 
 function OutlinePass() {
   const { size, viewport } = useThree();
-  // Strength bumped 0.55 → 0.85 for the Moebius ink-over-watercolor look.
-  // sampleStride 1.4 gives ~2px lines at 1× scale (widens slightly at
-  // high-DPR screens since the pass runs at full viewport resolution).
+  // Cranked for explicit ink-illustration read: strength 1.4 (was 0.85;
+  // values >1 fully saturate the line at strong edges), sampleStride 2.2
+  // (was 1.4) for ~3–4px thick contour lines.
   const effect = useMemo(() => new OutlineEffect({
-    strength: 0.85,
-    sampleStride: 1.4,
+    strength: 1.4,
+    sampleStride: 2.2,
   }), []);
 
   useEffect(() => {

@@ -14,6 +14,7 @@ import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGalaxyStore, OVERVIEW_POSE } from '../state/galaxyStore';
+import { getMouseOffset, stepMouseOffset } from './MouseParallax';
 
 // Scope v3.1: overview camera rotation removed. The 0.02 rad/s Y-orbit
 // was cycling planets off-frame during idle. Only the breathing radial
@@ -43,11 +44,18 @@ export default function CameraController() {
     const s = useGalaxyStore.getState();
     const elapsed = clock.elapsedTime;
 
+    // Update damped mouse-parallax offset once per frame. We step it even
+    // when not idle so it carries its damp state forward across travel
+    // transitions (prevents a snap when idle resumes).
+    stepMouseOffset();
+
     // Determine current pose based on transition state.
     if (s.transitionState === 'idle') {
       // Galaxy overview — held at OVERVIEW_POSE, breathing along the
       // camera-to-origin radial (in-out, never sideways) so planets stay
-      // in frame. No Y-axis rotation.
+      // in frame. No Y-axis rotation. Mouse parallax applies on top of
+      // the breathing — foreground planets shift more, background less
+      // (natural perspective behaviour, not per-object weighting).
       const baseX = OVERVIEW_POSE.cam[0];
       const baseY = OVERVIEW_POSE.cam[1];
       const baseZ = OVERVIEW_POSE.cam[2];
@@ -56,9 +64,10 @@ export default function CameraController() {
       const breatheMul = 1 + Math.sin(elapsed * (2 * Math.PI / OVERVIEW_BREATHE_PERIOD)) *
                             (OVERVIEW_BREATHE_AMPLITUDE / baseRadius);
 
+      const off = getMouseOffset();
       camera.position.set(
-        baseX * breatheMul,
-        baseY,
+        baseX * breatheMul + off.x,
+        baseY + off.y,
         baseZ * breatheMul,
       );
       camera.lookAt(OVERVIEW_POSE.look[0], OVERVIEW_POSE.look[1], OVERVIEW_POSE.look[2]);

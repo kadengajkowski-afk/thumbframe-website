@@ -10,6 +10,7 @@ import ScrollDebug from './overlays/ScrollDebug';
 import KeyboardNav from './system/KeyboardNav';
 import HashRouter from './system/HashRouter';
 import ScrollTour from './system/ScrollTour';
+import MouseParallax from './system/MouseParallax';
 
 const Experience = lazy(() => import('./Experience'));
 
@@ -53,6 +54,7 @@ export default function LandingPageV2({ setPage }) {
       <KeyboardNav />
       <HashRouter />
       <ScrollTour />
+      <MouseParallax />
 
       <ScrollDebug />
     </div>

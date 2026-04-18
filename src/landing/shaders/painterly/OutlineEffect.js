@@ -38,7 +38,9 @@ const fragmentShader = /* glsl */ `
     // by ~0.003. Sobel-combined gradient sits in roughly [0, 0.02] at
     // silhouettes. Threshold chosen to reject noise from within a single
     // continuous mesh (where adjacent pixels differ by <0.0005 typically).
-    float edge = smoothstep(0.0010, 0.0060, depthGrad);
+    // Low end lowered 0.0010 → 0.0007 so fainter silhouette edges
+    // (distant planets like the background Singularity) still register.
+    float edge = smoothstep(0.0007, 0.0060, depthGrad);
 
     vec3 result = mix(inputColor.rgb, uLineColor, edge * uStrength);
     outputColor = vec4(result, inputColor.a);
