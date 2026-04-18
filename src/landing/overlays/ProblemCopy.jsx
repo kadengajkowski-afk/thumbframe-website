@@ -2,8 +2,8 @@
 //
 // Lifecycle (sceneIdx = scrollOffset * 7):
 //   1.10 – 1.15   fade-in + 20px Y translate
-//   1.15 – 1.85   hold
-//   1.85 – 2.00   fade-out + reverse translate
+//   1.15 – 1.80   hold
+//   1.80 – 1.95   fade-out + reverse translate  (done before 2.00 peel)
 //
 // Rendered synchronously so markup is present in static HTML for SEO.
 
@@ -13,8 +13,8 @@ import { getScrollOffset } from '../lib/scrollBridge';
 const TOTAL_PAGES = 7;
 const FADE_IN_START  = 1.10;
 const FADE_IN_END    = 1.15;
-const FADE_OUT_START = 1.85;
-const FADE_OUT_END   = 2.00;
+const FADE_OUT_START = 1.80;
+const FADE_OUT_END   = 1.95;
 const Y_TRAVEL_PX    = 20;
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
