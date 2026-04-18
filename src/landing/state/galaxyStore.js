@@ -17,21 +17,21 @@ import { create } from 'zustand';
 // longer mounted). CTR scoring content moved into a Singularity feature.
 export const PLANET_IDS = ['signal', 'singularity', 'docking'];
 
-// World-space positions — 3-planet composition. Open upper-left for hero
-// overlay breathing room. Signal anchors the bottom, Singularity sits
-// upper-right as the swirling focal point, Docking lower-left.
+// World-space positions — 3-planet composition, spread wide. Signal
+// anchors the bottom, Singularity sits far upper-right, Docking far
+// lower-left. Upper-left open for the GalaxyHero overlay.
 export const PLANET_POSITIONS = {
-  signal:      [  0, -1,  -6],   // centre-bottom
-  singularity: [  6,  3, -12],   // upper-right
-  docking:     [ -6, -2, -10],   // lower-left
+  signal:      [  0, -2,  -6],   // centre-bottom (slightly lower)
+  singularity: [ 13,  4, -14],   // far upper-right (was 6, 3, -12)
+  docking:     [-13, -3, -11],   // far lower-left  (was -6, -2, -10)
 };
 
 // Close-approach camera poses per planet. Planet fills ~50–70% of frame,
 // right half kept clear for the content overlay.
 export const PLANET_ORBIT_POSES = {
-  signal:      { cam: [  0, -0.8, -1],  look: [  0, -1,  -6] },
-  singularity: { cam: [  6,  3,   -7], look: [  6,  3, -12] },
-  docking:     { cam: [ -6, -1,   -5], look: [ -6, -2, -10] },
+  signal:      { cam: [  0, -1.6, -1.5], look: [  0, -2,  -6] },
+  singularity: { cam: [ 13,  4,   -8], look: [ 13,  4, -14] },
+  docking:     { cam: [-13, -2,   -5.5], look: [-13, -3, -11] },
 };
 
 // Galaxy-overview default camera pose.
