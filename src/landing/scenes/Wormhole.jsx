@@ -391,23 +391,22 @@ const backdropFrag = /* glsl */ `
     float r = length(vLocalXY) / uRadius;
     if (r > 1.0) discard;
 
-    // Radial gradient — warm amber core fading to deep violet tunnel color.
-    vec3 cCore  = vec3(1.15, 0.78, 0.40); // warm amber glow
-    vec3 cMid   = vec3(0.42, 0.18, 0.22); // dim amber/violet blend
-    vec3 cEdge  = vec3(0.08, 0.05, 0.14); // deep violet / tunnel void
+    // Dim, diffuse fill — intentionally NOT focal. Purpose is to cover the
+    // open cylinder end with tunnel-coloured light; the editor plane in front
+    // is the thing the eye should read as the bright rectangle.
+    vec3 cCore = vec3(0.35, 0.22, 0.14); // muted warm
+    vec3 cMid  = vec3(0.22, 0.12, 0.18); // deeper warm-violet blend
+    vec3 cEdge = vec3(0.06, 0.04, 0.12); // tunnel void
 
     vec3 col;
-    if (r < 0.35) col = mix(cCore, cMid, r / 0.35);
-    else          col = mix(cMid, cEdge, (r - 0.35) / 0.65);
+    if (r < 0.45) col = mix(cCore, cMid, r / 0.45);
+    else          col = mix(cMid, cEdge, (r - 0.45) / 0.55);
 
-    // Painterly brush flecks
-    float n = fbm2(vLocalXY * 1.2 + vec2(uTime * 0.06, 0.0));
-    col *= 0.78 + n * 0.45;
+    float n = fbm2(vLocalXY * 1.1 + vec2(uTime * 0.06, 0.0));
+    col *= 0.8 + n * 0.35;
 
-    // Soft falloff at the circle edge
     float alpha = 1.0 - smoothstep(0.88, 1.0, r);
-    // Intensity ramps with scroll so the backdrop brightens as the camera closes.
-    col *= 0.55 + 0.6 * uIntensity;
+    col *= 0.6 + 0.5 * uIntensity;
 
     gl_FragColor = vec4(col, alpha);
   }
@@ -476,34 +475,91 @@ const editorPlaneFrag = /* glsl */ `
   varying vec2 vUv;
   ${noiseHelpers}
 
+  // Thin smoothstep step helper — sharp antialiased step.
+  float sstep(float lo, float hi, float x) { return smoothstep(lo, hi, x); }
+
   void main() {
-    vec2 p = (vUv - 0.5) * 2.0;
-    float r = length(p);
+    vec2 p = (vUv - 0.5) * 2.0; // -1..1
 
-    // Gradient: white-hot near the centre, warm amber toward the edge.
-    vec3 cCore  = vec3(1.85, 1.55, 1.10); // HDR white-amber core
-    vec3 cWarm  = vec3(1.25, 0.78, 0.32); // amber body
-    vec3 cEdge  = vec3(0.95, 0.50, 0.18); // warm amber edge
-    vec3 col;
-    if (r < 0.35) col = mix(cCore, cWarm, r / 0.35);
-    else          col = mix(cWarm, cEdge, clamp((r - 0.35) / 0.8, 0.0, 1.0));
+    // SHARP rectangular silhouette — tiny 2% antialias band, no more.
+    float rectMask =
+      (1.0 - sstep(0.98, 1.00, abs(p.x))) *
+      (1.0 - sstep(0.98, 1.00, abs(p.y)));
+    if (rectMask < 0.001) discard;
 
-    // Painterly brush noise for texture — low-freq so Kuwahara doesn't wipe it.
-    float n = fbm2(vUv * 5.5 + vec2(uTime * 0.08, 0.0));
-    col *= 0.85 + n * 0.30;
+    // Palette — warm paper-highlight base with painted amber UI elements.
+    vec3 paper  = vec3(1.20, 1.00, 0.78); // warm paper-highlight (HDR)
+    vec3 amber  = vec3(1.25, 0.64, 0.20); // warm amber UI lines / bars
+    vec3 amberD = vec3(0.70, 0.34, 0.14); // darker amber (canvas / panels)
+    vec3 border = vec3(1.70, 1.05, 0.55); // bright rect frame highlight
 
-    // Soft rectangular edge falloff — plane feels like light through an aperture.
-    float fx = 1.0 - smoothstep(0.85, 1.0, abs(p.x));
-    float fy = 1.0 - smoothstep(0.80, 1.0, abs(p.y));
-    float edge = fx * fy;
+    vec3 col = paper;
 
-    // Slight horizontal "scan" highlight — hints at a UI surface animating.
-    float scan = 0.88 + 0.12 * sin(vUv.y * 42.0 + uTime * 1.4);
-    col *= scan;
+    // ─── Top toolbar strip (uv.y 0.88 – 0.97) ────────────────────────────
+    float topBand = sstep(0.875, 0.89, vUv.y) * (1.0 - sstep(0.97, 0.98, vUv.y));
+    col = mix(col, amber * 0.85, topBand * 0.55);
+    // Toolbar icon-button pattern — 14 slots across the top band.
+    float slotX  = fract(vUv.x * 14.0);
+    float slotY  = fract((vUv.y - 0.88) / 0.09);
+    float iconHit =
+      sstep(0.18, 0.22, slotX) * (1.0 - sstep(0.78, 0.82, slotX)) *
+      sstep(0.20, 0.24, slotY) * (1.0 - sstep(0.76, 0.80, slotY));
+    col = mix(col, amber * 1.15, topBand * iconHit * 0.7);
 
-    // Alpha/intensity ramp — editor ignites across sceneIdx 2.8 → 3.8.
-    float alpha = edge * clamp(uIntensity * 1.6, 0.0, 1.0);
-    col *= 0.6 + 1.2 * uIntensity;
+    // ─── Bottom status bar (uv.y 0.03 – 0.08) ────────────────────────────
+    float botBand = sstep(0.025, 0.035, vUv.y) * (1.0 - sstep(0.075, 0.085, vUv.y));
+    col = mix(col, amber * 0.7, botBand * 0.55);
+
+    // ─── Left tool strip (uv.x 0.04 – 0.12, uv.y 0.12 – 0.86) ────────────
+    float leftStrip =
+      sstep(0.035, 0.045, vUv.x) * (1.0 - sstep(0.115, 0.125, vUv.x)) *
+      sstep(0.11, 0.12, vUv.y)   * (1.0 - sstep(0.86, 0.87, vUv.y));
+    col = mix(col, amber * 0.75, leftStrip * 0.45);
+    // Tool-button rows within the strip — 8 buttons vertically.
+    float rowY = fract((vUv.y - 0.12) / ((0.86 - 0.12) / 8.0));
+    float rowHit = sstep(0.25, 0.30, rowY) * (1.0 - sstep(0.70, 0.75, rowY));
+    col = mix(col, amber * 1.1, leftStrip * rowHit * 0.7);
+
+    // ─── Right properties panel (uv.x 0.78 – 0.96, uv.y 0.12 – 0.86) ─────
+    float rightPanel =
+      sstep(0.775, 0.785, vUv.x) * (1.0 - sstep(0.96, 0.97, vUv.x)) *
+      sstep(0.11, 0.12, vUv.y)   * (1.0 - sstep(0.86, 0.87, vUv.y));
+    col = mix(col, amberD * 1.3, rightPanel * 0.4);
+    // Horizontal dividers — six panel sections.
+    float divRow = fract(vUv.y * 8.0);
+    float divider = sstep(0.44, 0.47, divRow) * (1.0 - sstep(0.53, 0.56, divRow));
+    col = mix(col, amber, rightPanel * divider * 0.75);
+    // Small amber "value bars" inside panel
+    float barX = sstep(0.80, 0.81, vUv.x) * (1.0 - sstep(0.93, 0.94, vUv.x));
+    float barY = sstep(0.05, 0.10, divRow) * (1.0 - sstep(0.20, 0.25, divRow));
+    col = mix(col, amber * 1.1, rightPanel * barX * barY * 0.6);
+
+    // ─── Canvas area (uv.x 0.13 – 0.77, uv.y 0.12 – 0.86) ────────────────
+    float canvasX = sstep(0.13, 0.14, vUv.x) * (1.0 - sstep(0.77, 0.78, vUv.x));
+    float canvasY = sstep(0.12, 0.13, vUv.y) * (1.0 - sstep(0.86, 0.87, vUv.y));
+    float canvas  = canvasX * canvasY;
+    col = mix(col, amberD * 0.75, canvas * 0.55);
+    // Thumbnail image placeholder at canvas centre — broad amber rectangle.
+    float thX = sstep(0.22, 0.23, vUv.x) * (1.0 - sstep(0.68, 0.69, vUv.x));
+    float thY = sstep(0.23, 0.24, vUv.y) * (1.0 - sstep(0.78, 0.79, vUv.y));
+    col = mix(col, amber * 0.95, thX * thY * 0.55);
+    // Saliency indicator — small amber box in upper-right of thumbnail.
+    float salX = sstep(0.55, 0.56, vUv.x) * (1.0 - sstep(0.66, 0.67, vUv.x));
+    float salY = sstep(0.70, 0.71, vUv.y) * (1.0 - sstep(0.77, 0.78, vUv.y));
+    col = mix(col, amber * 1.4, salX * salY * 0.7);
+
+    // ─── Hard rectangular border highlight at ~98% of each axis ──────────
+    float edgeDist = max(abs(p.x), abs(p.y));
+    float frame    = sstep(0.955, 0.965, edgeDist) * (1.0 - sstep(0.985, 0.995, edgeDist));
+    col = mix(col, border, frame * 0.85);
+
+    // ─── Painterly brush variation over the whole surface ────────────────
+    float n = fbm2(vUv * 5.0 + vec2(uTime * 0.08, 0.0));
+    col *= 0.88 + n * 0.22;
+
+    // Intensity ramp — editor ignites across sceneIdx 2.8 → 3.8.
+    col *= 0.45 + 1.15 * uIntensity;
+    float alpha = rectMask * clamp(uIntensity * 1.8, 0.0, 1.0);
 
     gl_FragColor = vec4(col, alpha);
   }
@@ -513,7 +569,7 @@ function EditorPlane({ intensityRef }) {
   const uniforms = useMemo(() => ({
     uTime:      { value: 0 },
     uIntensity: { value: 0 },
-    uBend:      { value: 0.35 },
+    uBend:      { value: 0.25 },
   }), []);
   useFrame(({ clock }) => {
     uniforms.uTime.value = clock.elapsedTime;
@@ -528,6 +584,85 @@ function EditorPlane({ intensityRef }) {
       <shaderMaterial
         vertexShader={editorPlaneVert}
         fragmentShader={editorPlaneFrag}
+        uniforms={uniforms}
+        transparent
+        depthWrite={false}
+        side={THREE.DoubleSide}
+        toneMapped={false}
+        blending={THREE.NormalBlending}
+      />
+    </mesh>
+  );
+}
+
+// ── Editor backlight ────────────────────────────────────────────────────────
+// Rectangular halo BEHIND the editor plane. Additive, slightly larger than the
+// editor, so warm amber light appears to escape around the rectangle's edges —
+// instead of the circular radial glow that made v1 read as a soft moon.
+
+const BACKLIGHT_WIDTH   = 8.4;
+const BACKLIGHT_HEIGHT  = 4.9;
+const BACKLIGHT_LOCAL_Z = -86.0;
+
+const backlightFrag = /* glsl */ `
+  uniform float uTime;
+  uniform float uIntensity;
+  varying vec2 vUv;
+
+  void main() {
+    vec2 p = (vUv - 0.5) * 2.0; // -1..1 over backlight extent
+
+    // Editor plane occupies x in [-EW/BW, +EW/BW], y in [-EH/BH, +EH/BH].
+    // With BW=8.4, EW=6  → 0.714;  BH=4.9, EH=3.4 → 0.694.
+    float editorEdgeX = 0.714;
+    float editorEdgeY = 0.694;
+
+    // Rectangular distance past the editor edge, 0 at edge, 1 at backlight rim.
+    float dx = (abs(p.x) - editorEdgeX) / (1.0 - editorEdgeX);
+    float dy = (abs(p.y) - editorEdgeY) / (1.0 - editorEdgeY);
+    float d  = max(dx, dy);
+
+    // Halo: peak just outside the editor edge, fade to 0 at the backlight rim.
+    // Inside the editor area (d < 0), clamp to 0 — we don't want the halo to
+    // overlay the plane itself (editor is opaque NormalBlending in front anyway).
+    float halo = clamp(d, 0.0, 1.0);
+    halo = (1.0 - halo) * step(0.0, d);
+    halo = pow(halo, 1.35);
+
+    vec3 col = vec3(1.25, 0.66, 0.24); // warm amber
+    float alpha = halo * uIntensity * 0.85;
+    col *= 0.6 + 1.0 * uIntensity;
+
+    gl_FragColor = vec4(col, alpha);
+  }
+`;
+
+const backlightVert = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+function EditorBacklight({ intensityRef }) {
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uIntensity: { value: 0 },
+  }), []);
+  useFrame(({ clock }) => {
+    uniforms.uTime.value = clock.elapsedTime;
+    if (intensityRef.current !== undefined) {
+      uniforms.uIntensity.value = intensityRef.current;
+    }
+  });
+
+  return (
+    <mesh position={[0, 0, BACKLIGHT_LOCAL_Z]} renderOrder={2}>
+      <planeGeometry args={[BACKLIGHT_WIDTH, BACKLIGHT_HEIGHT]} />
+      <shaderMaterial
+        vertexShader={backlightVert}
+        fragmentShader={backlightFrag}
         uniforms={uniforms}
         transparent
         depthWrite={false}
@@ -677,10 +812,12 @@ export default function Wormhole() {
         <HaloStack />
         <EventHorizonDisc meshRef={discRef} />
         <EinsteinRim />
-        {/* Tunnel far-end: warm amber backdrop circle + bright curved editor
-            plane in front of it. Backdrop kills the "black hole" read; the
-            editor plane is the destination the camera flies toward. */}
+        {/* Tunnel far-end stack, back to front:
+              backdrop  — dim circle, kills the "black hole at centre" read
+              backlight — rectangular amber halo that leaks around the plane
+              plane     — sharp rectangular editor UI surface (NormalBlending) */}
         <TunnelFarEndBackdrop intensityRef={editorIntensityRef} />
+        <EditorBacklight intensityRef={editorIntensityRef} />
         <EditorPlane intensityRef={editorIntensityRef} />
         <WormholeTags />
       </group>
