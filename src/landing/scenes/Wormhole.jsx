@@ -238,6 +238,100 @@ function TorusHalo({
   );
 }
 
+// ── Wormhole tunnel — interior of a cylinder with scrolling painterly noise ──
+// BackSide render (only inner faces visible). Noise stretched along travel
+// axis gives longitudinal brushstroke streaks; scrolling UV.y over time makes
+// the walls feel like they're rushing past as the camera travels in.
+
+const TUNNEL_RADIUS = 6.0;
+const TUNNEL_LENGTH = 90.0;
+// Local Z (relative to WORMHOLE_POS). Cylinder centered so its top (after
+// X-rotation of π/2 maps +Y → +Z) sits at local z = +LENGTH/2 = +45, aligning
+// with the event horizon plane (local z=0). With mesh.position.z = -LENGTH/2,
+// top (event-horizon-adjacent) is at local z=0 and bottom at local z=-LENGTH.
+const TUNNEL_Z_OFFSET = -TUNNEL_LENGTH / 2;
+
+const tunnelVert = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const tunnelFrag = /* glsl */ `
+  uniform float uTime;
+  uniform float uScrollSpeed;
+  varying vec2 vUv;
+  ${noiseHelpers}
+
+  void main() {
+    vec2 uv = vUv;
+
+    // Scroll along cylinder length — feels like walls rushing past the camera
+    // as it advances through the wormhole.
+    uv.y += uTime * uScrollSpeed;
+
+    // Stretched noise: high frequency around circumference, low along length
+    // → longitudinal brush-stroke streaks.
+    float n1    = fbm2(vec2(uv.x * 22.0, uv.y * 2.5));
+    float n2    = fbm2(vec2(uv.x *  8.0, uv.y * 1.3) + vec2(3.0, 1.2));
+    float fine  = fbm2(vec2(uv.x * 48.0, uv.y * 6.5));
+    float broad = fbm2(vec2(uv.x *  4.0, uv.y * 0.8) + vec2(7.1, 2.3));
+
+    // Three-tone painterly palette: teal / amber / violet, selected by n2.
+    vec3 cAmber  = vec3(0.98, 0.60, 0.18);
+    vec3 cTeal   = vec3(0.18, 0.55, 0.52);
+    vec3 cViolet = vec3(0.46, 0.18, 0.62);
+    vec3 cVoid   = vec3(0.06, 0.03, 0.12);
+
+    vec3 base;
+    if      (n2 < 0.36) base = cTeal;
+    else if (n2 < 0.68) base = cAmber;
+    else                base = cViolet;
+
+    // Fine streak → brightness, broad noise → macro shading
+    float brightness = pow(fine, 1.3);
+    vec3 col = mix(cVoid, base, brightness * 0.88 + 0.18);
+    col *= 0.68 + n1 * 0.55 + broad * 0.25;
+
+    // Slight darkening at the event-horizon end (uv.y near 1 after scroll) so
+    // the tunnel has implied depth rather than uniform brightness.
+    float darkenNear = 1.0 - smoothstep(0.75, 1.05, fract(vUv.y));
+    col *= 0.55 + 0.45 * darkenNear;
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+function WormholeTunnel() {
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uScrollSpeed: { value: 0.32 },
+  }), []);
+  useFrame(({ clock }) => { uniforms.uTime.value = clock.elapsedTime; });
+
+  // Cylinder's natural axis is +Y; rotate X by π/2 so +Y → +Z → tunnel lies
+  // along the world Z axis (matching camera travel direction).
+  return (
+    <mesh
+      rotation={[Math.PI / 2, 0, 0]}
+      position={[0, 0, TUNNEL_Z_OFFSET]}
+      renderOrder={-1}
+    >
+      <cylinderGeometry args={[TUNNEL_RADIUS, TUNNEL_RADIUS, TUNNEL_LENGTH, 48, 1, true]} />
+      <shaderMaterial
+        vertexShader={tunnelVert}
+        fragmentShader={tunnelFrag}
+        uniforms={uniforms}
+        side={THREE.BackSide}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
+  );
+}
+
 // ── Three concentric violet halo rings ──────────────────────────────────────
 
 function HaloStack() {
@@ -269,6 +363,13 @@ function HaloStack() {
 }
 
 // ── Camera rig — active during scene index 1.95–3.95 ────────────────────────
+//
+// Phases:
+//   [ 2.0, 2.5 ]  Step 1 — exterior approach (dist 28 → 14)
+//   [ 2.5, 3.1 ]  Step 2 — tilt + fall-in, then travel through the tunnel
+//                   2.5 → 2.7: camera crosses event horizon (z -31 → z -50)
+//                   2.7 → 3.1: travel from z -50 → z -100
+//   [ 3.1, 3.95]  Held at tunnel-mid; remaining steps not built yet.
 
 function CameraRig({ groupRef }) {
   const scroll = useScroll();
@@ -280,23 +381,52 @@ function CameraRig({ groupRef }) {
     if (groupRef.current) groupRef.current.visible = active;
     if (!active) return;
 
-    // Step 1: exterior approach only (scene index 2.0 → 2.5 → hold).
-    const approach = THREE.MathUtils.clamp((sceneIdx - 2.0) / 0.5, 0, 1);
-    const startDist = 28;
-    const endDist = 14;
-    const ease = 1 - Math.pow(1 - approach, 3);
-    const dist = THREE.MathUtils.lerp(startDist, endDist, ease);
-
     const t = clock.elapsedTime;
-    const driftX = Math.sin(t * 0.25) * 0.35;
-    const driftY = 0.4 + Math.cos(t * 0.22) * 0.25;
 
-    camera.position.set(
-      WORMHOLE_POS.x + driftX,
-      WORMHOLE_POS.y + driftY,
-      WORMHOLE_POS.z + dist,
-    );
-    camera.lookAt(WORMHOLE_POS);
+    let camX, camY, camZ;
+    let lookX = WORMHOLE_POS.x;
+    let lookY = WORMHOLE_POS.y;
+    let lookZ = WORMHOLE_POS.z;
+
+    if (sceneIdx < 2.5) {
+      // Step 1: exterior approach.
+      const approach = THREE.MathUtils.clamp((sceneIdx - 2.0) / 0.5, 0, 1);
+      const ease = 1 - Math.pow(1 - approach, 3);
+      const dist = THREE.MathUtils.lerp(28, 14, ease);
+
+      camX = WORMHOLE_POS.x + Math.sin(t * 0.25) * 0.35;
+      camY = WORMHOLE_POS.y + 0.4 + Math.cos(t * 0.22) * 0.25;
+      camZ = WORMHOLE_POS.z + dist;
+    } else if (sceneIdx < 3.1) {
+      // Step 2: fall-in + tunnel travel.
+      const travel = (sceneIdx - 2.5) / 0.6; // 0..1 across step 2
+      // Smoothstep so entry has a bit of anticipation before the rush.
+      const ease = travel * travel * (3.0 - 2.0 * travel);
+
+      // Distance in front of the event horizon (+ = in front, - = past it).
+      // Start at +14 (Step 1 end), end at -55 (deep inside the tunnel).
+      const offsetZ = THREE.MathUtils.lerp(14, -55, ease);
+      camZ = WORMHOLE_POS.z + offsetZ;
+
+      // Lateral drift shrinks as we dive in — camera stabilizes on the axis.
+      const axisLockin = 1.0 - ease;
+      camX = WORMHOLE_POS.x + Math.sin(t * 0.25) * 0.3 * axisLockin;
+      camY = WORMHOLE_POS.y + (0.4 + Math.cos(t * 0.22) * 0.22) * axisLockin;
+
+      // Look target: starts at event horizon centre, shifts toward tunnel
+      // far end as we plunge in — creates the "falling forward" feel.
+      const lookOffsetZ = THREE.MathUtils.lerp(0, -TUNNEL_LENGTH * 0.9, ease);
+      lookZ = WORMHOLE_POS.z + lookOffsetZ;
+    } else {
+      // Holding state for later steps.
+      camX = WORMHOLE_POS.x;
+      camY = WORMHOLE_POS.y;
+      camZ = WORMHOLE_POS.z - 55;
+      lookZ = WORMHOLE_POS.z - TUNNEL_LENGTH * 0.9;
+    }
+
+    camera.position.set(camX, camY, camZ);
+    camera.lookAt(lookX, lookY, lookZ);
   });
 
   return null;
@@ -311,6 +441,9 @@ export default function Wormhole() {
     <>
       <CameraRig groupRef={groupRef} />
       <group ref={groupRef} position={WORMHOLE_POS} visible={false}>
+        {/* Tunnel is behind the event horizon (renderOrder -1) so the disc
+            still covers it during Step 1's exterior approach. */}
+        <WormholeTunnel />
         <HaloStack />
         <EventHorizonDisc />
         <EinsteinRim />

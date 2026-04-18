@@ -70,8 +70,11 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    // ~75s full rotation
-    if (groupRef.current) groupRef.current.rotation.y += 0.0014;
+    // Subtle ±2° wobble instead of full rotation — keeps the engine plume
+    // pointing away from the camera so the flame never blocks the scene.
+    if (groupRef.current) {
+      groupRef.current.rotation.y = Math.sin(t * 0.22) * (2 * Math.PI / 180);
+    }
     if (dishRef.current) dishRef.current.rotation.y = t * 0.35;
 
     // Pulsing beacons ~1Hz
