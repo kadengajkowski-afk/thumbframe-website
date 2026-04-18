@@ -11,7 +11,10 @@ import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-const DISC_RADIUS = 1.8;
+// Bumped 1.8 → 2.8 so the swirling amber disc reads clearly from the
+// galaxy-overview distance (~35 units). Without this the disc was
+// projecting to ~6% viewport width — too small to carry focal weight.
+const DISC_RADIUS = 2.8;
 
 const noiseHelpers = /* glsl */ `
   float hash21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }

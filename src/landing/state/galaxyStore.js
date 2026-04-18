@@ -11,27 +11,27 @@
 
 import { create } from 'zustand';
 
-export const PLANET_IDS = ['signal', 'dead', 'singularity', 'docking', 'science'];
+// Scope v3.1: landing reduced to 3 planets — Signal / Singularity / Docking.
+// Dead and Science removed from the galaxy layout (their scenes stay in
+// the repo under ProblemPlanet.jsx / Planet5ScienceMesh.jsx but are no
+// longer mounted). CTR scoring content moved into a Singularity feature.
+export const PLANET_IDS = ['signal', 'singularity', 'docking'];
 
-// World-space positions per v3 §3. These are the visual positions of the
-// planet MESHES on the galaxy overview.
+// World-space positions — 3-planet composition. Open upper-left for hero
+// overlay breathing room. Signal anchors the bottom, Singularity sits
+// upper-right as the swirling focal point, Docking lower-left.
 export const PLANET_POSITIONS = {
-  signal:      [ 0,  0,  -6],
-  dead:        [-8,  3, -14],
-  singularity: [10,  1, -12],
-  docking:     [-3, -4, -10],
-  science:     [ 8, -3,  -8],
+  signal:      [  0, -1,  -6],   // centre-bottom
+  singularity: [  6,  3, -12],   // upper-right
+  docking:     [ -6, -2, -10],   // lower-left
 };
 
-// Where the camera ends up when a planet becomes active. Pair of
-// [camera position, look target]. Chosen so the planet fills ~50–70% of
-// the viewport without obscuring the content overlay panel on the right.
+// Close-approach camera poses per planet. Planet fills ~50–70% of frame,
+// right half kept clear for the content overlay.
 export const PLANET_ORBIT_POSES = {
-  signal:      { cam: [ 0,  0.2, -1],  look: [ 0,  0,  -6] },
-  dead:        { cam: [-5,  3,  -9],   look: [-8,  3, -14] },
-  singularity: { cam: [10,  1,  -7],   look: [10,  1, -12] },
-  docking:     { cam: [-3, -3,  -5],   look: [-3, -4, -10] },
-  science:     { cam: [ 8, -2,  -4],   look: [ 8, -3,  -8] },
+  signal:      { cam: [  0, -0.8, -1],  look: [  0, -1,  -6] },
+  singularity: { cam: [  6,  3,   -7], look: [  6,  3, -12] },
+  docking:     { cam: [ -6, -1,   -5], look: [ -6, -2, -10] },
 };
 
 // Galaxy-overview default camera pose.

@@ -15,7 +15,9 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGalaxyStore, OVERVIEW_POSE } from '../state/galaxyStore';
 
-const OVERVIEW_ORBIT_SPEED      = 0.02;   // rad/s around world Y
+// Scope v3.1: overview camera rotation removed. The 0.02 rad/s Y-orbit
+// was cycling planets off-frame during idle. Only the breathing radial
+// zoom remains — composed framing, gentle life, planets always in view.
 const OVERVIEW_BREATHE_PERIOD   = 8.0;    // seconds for one breath cycle
 const OVERVIEW_BREATHE_AMPLITUDE = 0.5;   // ±units in world-Z radial
 
@@ -43,21 +45,21 @@ export default function CameraController() {
 
     // Determine current pose based on transition state.
     if (s.transitionState === 'idle') {
-      // Galaxy overview — slow Y orbit + breathing radial zoom.
-      const angle = elapsed * OVERVIEW_ORBIT_SPEED;
+      // Galaxy overview — held at OVERVIEW_POSE, breathing along the
+      // camera-to-origin radial (in-out, never sideways) so planets stay
+      // in frame. No Y-axis rotation.
       const baseX = OVERVIEW_POSE.cam[0];
       const baseY = OVERVIEW_POSE.cam[1];
       const baseZ = OVERVIEW_POSE.cam[2];
-      const baseRadius = Math.hypot(baseX, baseZ);
+      const baseRadius = Math.hypot(baseX, baseZ) || 1;
 
       const breatheMul = 1 + Math.sin(elapsed * (2 * Math.PI / OVERVIEW_BREATHE_PERIOD)) *
                             (OVERVIEW_BREATHE_AMPLITUDE / baseRadius);
-      const r = baseRadius * breatheMul;
 
       camera.position.set(
-        Math.sin(angle) * r,
+        baseX * breatheMul,
         baseY,
-        Math.cos(angle) * r,
+        baseZ * breatheMul,
       );
       camera.lookAt(OVERVIEW_POSE.look[0], OVERVIEW_POSE.look[1], OVERVIEW_POSE.look[2]);
       return;

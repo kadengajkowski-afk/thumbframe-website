@@ -65,10 +65,13 @@ export default function GalaxyHero({ setPage }) {
           letterSpacing: '-0.02em',
           color: '#f0e4d0',
           margin: 0,
-          marginBottom: 22,
+          marginBottom: 18,
         }}>
           An out-of-this-world<br />thumbnail editor.
         </h1>
+        <p style={{ fontSize: 15, lineHeight: 1.45, color: '#9ab0ad', margin: 0, marginBottom: 16, maxWidth: 560, fontStyle: 'italic' }}>
+          Every thumbnail tool was built for something else. This one isn't.
+        </p>
         <p style={{ fontSize: 18, lineHeight: 1.55, color: '#b8d4d0', margin: 0, marginBottom: 34, maxWidth: 560 }}>
           Click any planet to explore. Or scroll to take the tour.<br />
           AI generation, CTR scoring, A/B variants — built for YouTubers.

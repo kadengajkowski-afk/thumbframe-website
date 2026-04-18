@@ -6,6 +6,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import Galaxy from './Galaxy';
 import CameraController from './system/CameraController';
+import Rocket from './system/Rocket';
 import PainterlyPost from './shaders/painterly/PainterlyPost';
 import { registerOverviewCamera } from './overlays/PlanetHoverLabel';
 
@@ -26,6 +27,7 @@ function SceneGraph() {
     <>
       <CameraController />
       <Galaxy />
+      <Rocket />
       {!POST_DISABLED && <PainterlyPost />}
       {IS_DEV && <Stats />}
       <CameraBridge />
