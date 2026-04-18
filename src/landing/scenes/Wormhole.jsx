@@ -260,51 +260,67 @@ const tunnelVert = /* glsl */ `
   }
 `;
 
+// Tunnel shader — rebuilt. Treats the cylinder's UVs as polar coordinates of
+// the singularity: vUv.x (0..1 around the axis) → angle, vUv.y (0..1 along
+// length, 0 at the far end) → radius from the core. When viewed from inside
+// looking along the axis, the far-end walls project near the viewport
+// centre, so a radius=0 white-hot core sits at the centre of the frame and
+// cold dark edges wrap the camera. Spiral twist (angle += radius*k + time*w)
+// + fbm streak noise sampled in (angular, radial-inward) UV sell a swirling
+// pull toward the core — not radial rays fanning outward.
 const tunnelFrag = /* glsl */ `
   uniform float uTime;
-  uniform float uScrollSpeed;
   varying vec2 vUv;
   ${noiseHelpers}
 
+  #define PI 3.14159265359
+
   void main() {
-    vec2 uv = vUv;
+    // Polar reinterpretation — 0 at core (far end), 1 at edge (near rim).
+    float radius = vUv.y;
+    float angle  = vUv.x * 2.0 * PI;
 
-    // Scroll along cylinder length — walls rush past the camera as it advances.
-    uv.y += uTime * uScrollSpeed;
+    // Spiral twist. Each radial shell rotates, and shells closer to the core
+    // twist harder — exactly the "water down a drain" pull. Time term spins
+    // the whole field.
+    float spiralStrength = 6.5;
+    float rotationSpeed  = 0.32;
+    float swirl = angle + radius * spiralStrength + uTime * rotationSpeed;
 
-    // Noise channels. Still stretched (low freq along length, higher around
-    // the circumference) for brushstroke streaks, but toned down vs. v1 —
-    // the old angular frequency of 22 made the streaks read as a 2D sunburst.
-    float broad = fbm2(vec2(uv.x *  3.2, uv.y * 0.7) + vec2(7.1, 2.3));
-    float mid   = fbm2(vec2(uv.x *  7.0, uv.y * 1.5) + vec2(3.0, 1.2));
-    float streak = fbm2(vec2(uv.x * 14.0, uv.y * 4.5));
+    // Streak noise — UV is (angular-along-swirl, radial-sweeping-inward) so
+    // noise bands stretch radially and rush toward the core as uTime grows.
+    vec2 streakUV = vec2(
+      swirl * 0.45,
+      radius * 14.0 - uTime * 0.85
+    );
+    float n1 = fbm2(streakUV);
+    float n2 = fbm2(streakUV * 2.2 + vec2(7.0, 3.2));
+    float streak = n1 * 0.65 + n2 * 0.35;
 
-    // Painterly muted palette — matches the warm-amber / deep-violet / teal-mist
-    // brief, well away from the saturated "candy" tones of v1.
-    vec3 cAmber     = vec3(0.78, 0.38, 0.12); // #c86020
-    vec3 cAmberDeep = vec3(0.54, 0.25, 0.12); // #8a4020
-    vec3 cTeal      = vec3(0.23, 0.40, 0.38); // #3a6660
-    vec3 cViolet    = vec3(0.16, 0.10, 0.31); // #2a1850
-    vec3 cVoid      = vec3(0.04, 0.03, 0.09);
+    // Temperature ramp — hot bright core → cold dark edges. No blue-grey.
+    vec3 cCore  = vec3(1.00, 0.96, 0.82);  // #fff5d0 white-hot
+    vec3 cInner = vec3(1.00, 0.78, 0.44);  // #ffc870 warm amber
+    vec3 cMid   = vec3(0.78, 0.38, 0.12);  // #c86020 rust
+    vec3 cOuter = vec3(0.29, 0.12, 0.25);  // #4a2040 deep rose-violet
+    vec3 cEdge  = vec3(0.04, 0.03, 0.08);  // #0a0714 near-black
 
-    // Smoothly blend across the palette using noise channels — no hard bands.
-    vec3 base = cViolet;
-    base = mix(base, cTeal,      smoothstep(0.15, 0.55, mid * 0.75 + broad * 0.25));
-    base = mix(base, cAmber,     smoothstep(0.45, 0.80, mid * 0.55 + streak * 0.45));
-    base = mix(base, cAmberDeep, smoothstep(0.35, 0.70, broad) * 0.6);
+    vec3 col = cCore;
+    col = mix(col, cInner, smoothstep(0.05, 0.18, radius));
+    col = mix(col, cMid,   smoothstep(0.18, 0.48, radius));
+    col = mix(col, cOuter, smoothstep(0.48, 0.78, radius));
+    col = mix(col, cEdge,  smoothstep(0.80, 0.96, radius));
 
-    // Brushstroke brightness — stronger weighting on streak noise gives the
-    // "painted swipe" feel, broader noise handles macro shading.
-    float bright = pow(streak, 1.6) * 0.9 + broad * 0.3;
-    vec3 col = mix(cVoid, base, bright * 0.85 + 0.15);
-    col *= 0.75 + mid * 0.35;
+    // Emissive glow — quadratic toward the core so the centre truly blazes.
+    float coreGlow = 1.0 - radius;
+    col *= 1.0 + coreGlow * coreGlow * 2.4;
 
-    // Darken the tunnel wall as we approach the editor end so the bright
-    // rectangular plane has a high-contrast dark frame to sit against.
-    // Strong falloff on the far 35% of the wall (uv.y in [0.65, 1.0]).
-    float darkenNear = 1.0 - smoothstep(0.75, 1.05, fract(vUv.y));
-    float darkenFar  = smoothstep(0.65, 1.00, fract(vUv.y));
-    col *= (0.58 + 0.42 * darkenNear) * (1.0 - darkenFar * 0.55);
+    // Streak modulation — brighten on streak ridges, darken in voids.
+    col *= 0.45 + streak * 1.10;
+
+    // Hot additive highlights layered on bright streak ridges, strongest
+    // near the core — pulls the eye along the spiral inward.
+    float hotStreak = pow(max(streak, 0.0), 2.0) * coreGlow * 0.95;
+    col += hotStreak * vec3(1.60, 1.05, 0.55);
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -313,7 +329,6 @@ const tunnelFrag = /* glsl */ `
 function WormholeTunnel() {
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
-    uScrollSpeed: { value: 0.32 },
   }), []);
   useFrame(({ clock }) => { uniforms.uTime.value = clock.elapsedTime; });
 
@@ -382,6 +397,10 @@ const backdropVert = /* glsl */ `
   }
 `;
 
+// Far-end disc — paints the white-hot SINGULARITY CORE itself so the centre
+// of the viewport (which the open cylinder reveals) is continuous with the
+// hot-core colours on the surrounding tunnel walls. Same spiral logic as the
+// tunnel shader, but evaluated in true 2D polar coords of the disc.
 const backdropFrag = /* glsl */ `
   uniform float uTime;
   uniform float uIntensity;
@@ -389,23 +408,39 @@ const backdropFrag = /* glsl */ `
   varying vec2 vLocalXY;
   ${noiseHelpers}
 
+  #define PI 3.14159265359
+
   void main() {
-    float r = length(vLocalXY) / uRadius;
+    vec2 p = vLocalXY / uRadius;
+    float r = length(p);
     if (r > 1.0) discard;
 
-    // Warm amber fill only — drop the violet outer ring so the backdrop reads
-    // as light behind the editor, not a moon. The rectangular backlight in
-    // front handles the frame-glow.
-    vec3 cCore = vec3(0.80, 0.45, 0.18); // warm amber
-    vec3 cEdge = vec3(0.28, 0.12, 0.08); // dim warm
+    float angle = atan(p.y, p.x);
+    float swirl = angle + r * 4.0 + uTime * 0.55;
 
-    vec3 col = mix(cCore, cEdge, smoothstep(0.0, 1.0, r));
+    vec2 streakUV = vec2(swirl * 0.50, r * 8.0 - uTime * 0.95);
+    float n1 = fbm2(streakUV);
+    float n2 = fbm2(streakUV * 2.1 + vec2(3.7, 9.1));
+    float streak = n1 * 0.65 + n2 * 0.35;
 
-    float n = fbm2(vLocalXY * 1.1 + vec2(uTime * 0.06, 0.0));
-    col *= 0.85 + n * 0.3;
+    vec3 cCore  = vec3(1.00, 0.96, 0.82);
+    vec3 cInner = vec3(1.00, 0.78, 0.44);
+    vec3 cMid   = vec3(0.78, 0.38, 0.12);
+    vec3 cEdge  = vec3(0.29, 0.12, 0.25);
 
-    float alpha = (1.0 - smoothstep(0.80, 1.0, r)) * (0.4 + 0.6 * uIntensity);
+    vec3 col = cCore;
+    col = mix(col, cInner, smoothstep(0.00, 0.30, r));
+    col = mix(col, cMid,   smoothstep(0.30, 0.65, r));
+    col = mix(col, cEdge,  smoothstep(0.65, 0.95, r));
 
+    float coreGlow = 1.0 - r;
+    col *= 1.0 + coreGlow * coreGlow * 3.0;
+    col *= 0.45 + streak * 1.10;
+
+    float hotStreak = pow(max(streak, 0.0), 2.0) * coreGlow * 1.1;
+    col += hotStreak * vec3(1.80, 1.20, 0.60);
+
+    float alpha = (1.0 - smoothstep(0.90, 1.00, r)) * (0.55 + 0.45 * uIntensity);
     gl_FragColor = vec4(col, alpha);
   }
 `;
@@ -758,8 +793,10 @@ function CameraRig({ groupRef, discRef, editorIntensityRef }) {
       const travel = (sceneIdx - 2.5) / 0.6; // 0..1 across step 2
       const ease = travel * travel * (3.0 - 2.0 * travel);
 
-      // +14 (Step 1 end) → -62 (deep inside the tunnel, matching step-4 start).
-      const offsetZ = THREE.MathUtils.lerp(14, -62, ease);
+      // +14 (Step 1 end) → -55 (deep inside the tunnel). Disc-crossing
+      // (offsetZ = 0) lands at sceneIdx ≈ 2.669 with this endpoint — moving
+      // it to -62 pushed the crossing to 2.662, leaving 2.667 empty.
+      const offsetZ = THREE.MathUtils.lerp(14, -55, ease);
       camZ = WORMHOLE_POS.z + offsetZ;
 
       // Lateral drift shrinks as we dive in — camera locks to the axis.
@@ -770,16 +807,16 @@ function CameraRig({ groupRef, discRef, editorIntensityRef }) {
       const lookOffsetZ = THREE.MathUtils.lerp(0, -TUNNEL_LENGTH * 0.9, ease);
       lookZ = WORMHOLE_POS.z + lookOffsetZ;
     } else if (sceneIdx < 3.8) {
-      // Step 4 — final approach to the editor plane.
-      // Plane sits at local z = EDITOR_LOCAL_Z (-85); 6 × 3.375 (16:9).
-      // Targets (fov=50°, aspect=1.78):
-      //   sceneIdx 3.6 → ~40% viewport width → d ≈ 9.05
-      //   sceneIdx 3.8 → ~60% viewport width → d ≈ 6.03
-      // offsetZ start = -62 (d=23 at sceneIdx 3.1, smoothstep ease),
-      //           end = -79 (d=6). Solves sceneIdx 3.6 to d ≈ 9.4.
+      // Step 4 — final approach to the editor plane (6 × 3.375, 16:9 at
+      // local z = -85 → world z = -130). Ease-out quadratic (front-loaded)
+      // so the camera closes distance quickly then settles, hitting:
+      //   sceneIdx 3.6 → d ≈ 8.0  → ~45% viewport width
+      //   sceneIdx 3.8 → d = 6.0  → ~60% viewport width
+      // With plain smoothstep + start at -55 we only reached ~34% at 3.6.
       const travel = (sceneIdx - 3.1) / 0.7;
-      const ease = travel * travel * (3.0 - 2.0 * travel);
-      const offsetZ = THREE.MathUtils.lerp(-62, -79, ease);
+      const invT = 1.0 - travel;
+      const ease = 1.0 - invT * invT;
+      const offsetZ = THREE.MathUtils.lerp(-55, -79, ease);
 
       camX = WORMHOLE_POS.x;
       camY = WORMHOLE_POS.y;

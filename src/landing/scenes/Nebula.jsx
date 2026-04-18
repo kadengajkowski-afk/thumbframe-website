@@ -77,7 +77,12 @@ const fragmentShader = /* glsl */ `
 
 export default function Nebula({ radius = 80 }) {
   return (
-    <mesh>
+    // renderOrder=-10 makes this the background layer. Both Nebula and the
+    // wormhole tunnel are opaque with depthWrite=false, so whichever draws
+    // LAST wins the pixel. Without this, while the camera is inside the
+    // sphere (|cam.z| < 80, i.e. sceneIdx ≲ 2.87) Nebula at default order 0
+    // was painting over the tunnel (order -1) and blanking it.
+    <mesh renderOrder={-10}>
       <sphereGeometry args={[radius, 32, 32]} />
       <shaderMaterial
         vertexShader={vertexShader}
