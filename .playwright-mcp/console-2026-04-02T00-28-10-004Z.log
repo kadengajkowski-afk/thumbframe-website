@@ -1,0 +1,47 @@
+[     104ms] [LOG] --- SYSTEM BOOT V2.1 --- @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[   20041ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ https://www.thumbframe.com/login:0
+[  197881ms] [LOG] No brand kit yet @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[  198060ms] [LOG] --- SYSTEM BOOT V2.1 --- @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[  198667ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://thumbframe-api-production.up.railway.app/auth/me:0
+[  211111ms] [LOG] [BOOTSTRAP] URL has project ID: 2b3bca0b-c263-4437-bdfc-c32864d78a40 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[  211111ms] [LOG] [BOOTSTRAP] URL has project ID: 2b3bca0b-c263-4437-bdfc-c32864d78a40 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[  211637ms] [ERROR] Failed to load resource: the server responded with a status of 406 () @ https://igiklpyvbhyeyxvcavtz.supabase.co/rest/v1/thumbnails?select=*&id=eq.2b3bca0b-c263-4437-bdfc-c32864d78a40:0
+[  211714ms] [ERROR] [BOOTSTRAP] Failed to load remote design: Cannot coerce the result to a single JSON object @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[  211794ms] [ERROR] Failed to load resource: the server responded with a status of 406 () @ https://igiklpyvbhyeyxvcavtz.supabase.co/rest/v1/thumbnails?select=*&id=eq.2b3bca0b-c263-4437-bdfc-c32864d78a40:0
+[  211794ms] [ERROR] [BOOTSTRAP] Failed to load remote design: Cannot coerce the result to a single JSON object @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 2125578ms] [LOG] [DEBUG] Sending token to backend: eyJhbGciOi... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 2125578ms] [LOG] [DEBUG] user_id: 8c71d474-23dd-43ef-b256-8eebad0233eb @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 2125681ms] [LOG] [THUMBNAIL] Generated OK, length: 53863 @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 2125682ms] [LOG] [SAVE] thumbnail result: data URL (53863 chars) @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 2194077ms] [LOG] [STORAGE] Save succeeded. ID: bade8052-2019-4d97-b629-1fd416cc9a15 | Name: My Design | Platform: youtube @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 3709543ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://thumbframe-api-production.up.railway.app/auth/me:0
+[ 3726406ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 3726406ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 3732133ms] [LOG] [BOOTSTRAP] Remote design loaded: My Design @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 3733400ms] [LOG] [BOOTSTRAP] Remote design loaded: My Design @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 6459698ms] [LOG] 🖱️ Layer clicked: image id: 2 z-index: 2 @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 6459699ms] [LOG] ✅ Layer selected: 2 canDrag: true activeTool: lasso @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 6461869ms] [LOG] [DEBUG] Sending token to backend: eyJhbGciOi... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 6461869ms] [LOG] [DEBUG] user_id: 8c71d474-23dd-43ef-b256-8eebad0233eb @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 6461912ms] [LOG] [THUMBNAIL] Generated OK, length: 53747 @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 6461912ms] [LOG] [SAVE] thumbnail result: data URL (53747 chars) @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 6495192ms] [LOG] [STORAGE] Save succeeded. ID: bade8052-2019-4d97-b629-1fd416cc9a15 | Name: My Design | Platform: youtube @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 7219504ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://thumbframe-api-production.up.railway.app/auth/me:0
+[ 7286215ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 7286215ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 7299289ms] [LOG] [BOOTSTRAP] Remote design loaded: My Design @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[ 7301196ms] [LOG] [BOOTSTRAP] Remote design loaded: My Design @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[10732849ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://thumbframe-api-production.up.railway.app/auth/me:0
+[10736371ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[10739437ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[10783465ms] [LOG] [BOOTSTRAP] Remote design loaded: My Design @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[10786411ms] [LOG] [BOOTSTRAP] Remote design loaded: My Design @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[11701127ms] [LOG] --- SYSTEM BOOT V2.1 --- @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[11702126ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://thumbframe-api-production.up.railway.app/auth/me:0
+[11705656ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[11707804ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[11709596ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[11710951ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[11742008ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://thumbframe-api-production.up.railway.app/auth/me:0
+[11745968ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1
+[11748908ms] [LOG] [BOOTSTRAP] URL has project ID: bade8052-2019-4d97-b629-1fd416cc9a15 — fetching from Supabase... @ https://www.thumbframe.com/static/js/main.30076d51.js:1

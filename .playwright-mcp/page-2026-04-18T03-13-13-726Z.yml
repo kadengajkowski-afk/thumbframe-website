@@ -1,0 +1,43 @@
+- generic [ref=e7]:
+  - generic [ref=e8]:
+    - generic [ref=e13]:
+      - generic:
+        - generic:
+          - generic: Cut & Edit
+      - generic:
+        - generic:
+          - generic: CTR Score
+      - generic:
+        - generic:
+          - generic: A/B Test
+      - generic:
+        - generic:
+          - generic: AI Generate
+      - generic:
+        - generic:
+          - generic: Face Detect
+      - generic:
+        - generic:
+          - generic: Safe Zone
+    - generic "ThumbFrame hero":
+      - generic:
+        - generic: You are here.
+        - heading "Every thumbnail is a universe. Most editors are the wrong map." [level=1]:
+          - text: Every thumbnail is a universe.
+          - text: Most editors are the wrong map.
+        - paragraph: ThumbFrame is the editor built for the one image that decides whether anyone clicks play. AI generation. CTR scoring. Painted with care.
+        - generic:
+          - button "Start free — no credit card" [ref=e15] [cursor=pointer]
+          - button "See the galaxy ↓" [ref=e16] [cursor=pointer]
+    - generic:
+      - generic: offset0.0000
+      - generic: sceneIdx0.000
+      - generic: arrival · station
+  - region "Cookie consent" [ref=e17]:
+    - paragraph [ref=e18]:
+      - text: We use cookies to improve your experience and analyze site traffic.
+      - link "Learn more" [ref=e19] [cursor=pointer]:
+        - /url: /privacy
+    - generic [ref=e20]:
+      - button "Decline" [ref=e21] [cursor=pointer]
+      - button "Accept" [ref=e22] [cursor=pointer]

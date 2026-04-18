@@ -1,0 +1,2 @@
+[     661ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/static/js/bundle.js:82220
+[    1242ms] [WARNING] THREE.Clock: This module has been deprecated. Please use THREE.Timer instead. @ http://localhost:3000/static/js/vendors-node_modules_react-three_drei_core_Stats_js-node_modules_react-three_drei_web_Html_js-e7bb2e.chunk.js:46176

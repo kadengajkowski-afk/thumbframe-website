@@ -158,6 +158,7 @@ function ScienceBlock({ setPage }) {
     <>
       <Eyebrow>Chapter 4 — The science</Eyebrow>
       <H2>Score every thumbnail before you upload.</H2>
+      <CTRTicker />
       <Body>
         Our CTR model predicts click-through probability from 10,000+
         labeled YouTube thumbnails. The score updates in real-time as you
@@ -167,6 +168,61 @@ function ScienceBlock({ setPage }) {
         <CTAPrimary onClick={() => setPage && setPage('signup')}>Start free — no credit card</CTAPrimary>
       </CTARow>
     </>
+  );
+}
+
+// Animated CTR ticker — counts 0 → 87 while the Science planet is on-screen,
+// colour-shifting from neutral → warm amber → saturated orange as it climbs.
+function CTRTicker() {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    let raf = 0;
+    let startTime = 0;
+    const DURATION = 1600;   // ms to reach 87
+    const TARGET   = 87;
+    const tick = (now) => {
+      const s = useGalaxyStore.getState();
+      // Reset when Science becomes active; freeze when not.
+      if (s.activePlanet !== 'science' || s.transitionState !== 'on-planet') {
+        if (ref.current) ref.current.textContent = '—';
+        startTime = 0;
+      } else {
+        if (!startTime) startTime = now;
+        const t = Math.min(1, (now - startTime) / DURATION);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const n = Math.round(eased * TARGET);
+        if (ref.current) {
+          ref.current.textContent = String(n);
+          // Colour-shift: neutral at 0 → amber at ~50 → hot orange at 87.
+          const hue = 48 - (n / TARGET) * 28;     // 48°(cream) → 20°(orange)
+          const sat = 20 + (n / TARGET) * 72;     // 20% → 92%
+          const lit = 55 + (n / TARGET) * 5;
+          ref.current.style.color = `hsl(${hue.toFixed(1)}, ${sat.toFixed(1)}%, ${lit.toFixed(1)}%)`;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return (
+    <div style={{ margin: '0 0 22px 0', display: 'flex', alignItems: 'baseline', gap: 14 }}>
+      <span
+        ref={ref}
+        style={{
+          fontFamily: "'Fraunces Variable', 'Fraunces', Georgia, serif",
+          fontWeight: 450,
+          fontSize: 64,
+          lineHeight: 1,
+          fontVariantNumeric: 'tabular-nums',
+          color: '#f0e4d0',
+          letterSpacing: '-0.02em',
+        }}
+      >—</span>
+      <span style={{ fontSize: 14, color: '#8090a0', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+        predicted CTR
+      </span>
+    </div>
   );
 }
 

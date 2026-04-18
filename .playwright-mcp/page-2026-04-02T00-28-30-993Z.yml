@@ -1,0 +1,95 @@
+- generic [ref=e3]:
+  - generic [ref=e377]:
+    - generic [ref=e378]:
+      - generic [ref=e379]:
+        - generic [ref=e381]: S
+        - generic [ref=e382]: ThumbFrame
+      - button "×" [ref=e383] [cursor=pointer]
+    - button "✦ Open editor" [ref=e385] [cursor=pointer]
+    - generic [ref=e386]:
+      - generic [ref=e387]:
+        - generic [ref=e388]: Projects
+        - button "✦ New design" [ref=e389] [cursor=pointer]:
+          - generic [ref=e390]: ✦
+          - text: New design
+        - button "⊡ Saved designs" [ref=e391] [cursor=pointer]:
+          - generic [ref=e392]: ⊡
+          - text: Saved designs
+        - button "↑ Import image" [ref=e393] [cursor=pointer]:
+          - generic [ref=e394]: ↑
+          - text: Import image
+        - button "↓ Export / Download" [ref=e395] [cursor=pointer]:
+          - generic [ref=e396]: ↓
+          - text: Export / Download
+      - generic [ref=e397]:
+        - generic [ref=e398]: Account
+        - button "◎ Log in" [ref=e399] [cursor=pointer]:
+          - generic [ref=e400]: ◎
+          - text: Log in
+        - button "✚ Sign up" [ref=e401] [cursor=pointer]:
+          - generic [ref=e402]: ✚
+          - text: Sign up
+        - button "⚡ Go Pro — $15/mo PRO" [ref=e403] [cursor=pointer]:
+          - generic [ref=e404]: ⚡
+          - text: Go Pro — $15/mo
+          - generic [ref=e405]: PRO
+        - button "⚙️ Settings" [ref=e406] [cursor=pointer]:
+          - generic [ref=e407]: ⚙️
+          - text: Settings
+      - generic [ref=e408]:
+        - generic [ref=e409]: Help & info
+        - button "? How it works" [ref=e410] [cursor=pointer]:
+          - generic [ref=e411]: "?"
+          - text: How it works
+        - button "✉ Contact support" [ref=e412] [cursor=pointer]:
+          - generic [ref=e413]: ✉
+          - text: Contact support
+        - button "★ Examples" [ref=e414] [cursor=pointer]:
+          - generic [ref=e415]: ★
+          - text: Examples
+        - button "$ Pricing" [ref=e416] [cursor=pointer]:
+          - generic [ref=e417]: $
+          - text: Pricing
+      - generic [ref=e418]:
+        - generic [ref=e419]: Tools
+        - button "⬜ Safe zones overlay" [ref=e420] [cursor=pointer]:
+          - generic [ref=e421]: ⬜
+          - text: Safe zones overlay
+        - button "📱 Mobile stamp test" [ref=e422] [cursor=pointer]:
+          - generic [ref=e423]: 📱
+          - text: Mobile stamp test
+        - button "✂️ Background remover" [ref=e424] [cursor=pointer]:
+          - generic [ref=e425]: ✂️
+          - text: Background remover
+    - generic [ref=e426]: Built for YouTubers who care about their craft.
+  - navigation [ref=e427]:
+    - generic [ref=e428]:
+      - button [ref=e429] [cursor=pointer]
+      - generic [ref=e433] [cursor=pointer]:
+        - img "ThumbFrame" [ref=e434]
+        - generic [ref=e435]: ThumbFrame
+      - generic [ref=e436]:
+        - button "How it works" [ref=e437] [cursor=pointer]
+        - button "Examples" [ref=e438] [cursor=pointer]
+        - button "Pricing" [ref=e439] [cursor=pointer]
+      - generic [ref=e440]:
+        - button "Log in" [ref=e441] [cursor=pointer]
+        - button "Sign up" [ref=e442] [cursor=pointer]
+        - button "Open editor →" [ref=e443] [cursor=pointer]
+  - generic [ref=e445]:
+    - button "← Back to home" [ref=e446] [cursor=pointer]
+    - generic [ref=e447]:
+      - generic [ref=e449]: S
+      - generic [ref=e450]: ThumbFrame
+    - heading "Welcome back" [level=1] [ref=e451]
+    - paragraph [ref=e452]: Log in to access your saved thumbnails.
+    - generic [ref=e453]:
+      - generic [ref=e454]:
+        - generic [ref=e455]: Email
+        - textbox "you@gmail.com" [ref=e456]
+      - generic [ref=e457]:
+        - generic [ref=e458]: Password
+        - textbox "Your password" [ref=e459]
+      - button "Log in →" [ref=e460] [cursor=pointer]
+    - paragraph [ref=e461]: Forgot password?
+    - generic [ref=e462]: Don't have an account? Sign up free

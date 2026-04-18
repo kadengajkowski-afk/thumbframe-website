@@ -1,0 +1,327 @@
+- generic [ref=e4]:
+  - navigation [ref=e5]:
+    - generic [ref=e6]:
+      - button "ThumbFrame ThumbFrame" [ref=e7] [cursor=pointer]:
+        - img "ThumbFrame" [ref=e8]
+        - generic [ref=e9]: ThumbFrame
+      - generic [ref=e10]:
+        - button "Home" [ref=e11] [cursor=pointer]
+        - button "Features" [ref=e12] [cursor=pointer]
+        - button "Templates" [ref=e13] [cursor=pointer]
+        - button "Pricing" [ref=e14] [cursor=pointer]
+        - button "Blog" [ref=e15]
+        - button "About" [ref=e16]
+        - button "Support" [ref=e17]
+      - generic [ref=e18]:
+        - button "Log In" [ref=e19] [cursor=pointer]
+        - button "Sign Up" [ref=e20] [cursor=pointer]
+  - generic [ref=e23]:
+    - generic [ref=e24]:
+      - generic [ref=e26]: Now in Beta — Free to start
+      - heading "Make thumbnails that stop the scroll" [level=1] [ref=e28]:
+        - text: Make thumbnails
+        - text: that stop
+        - text: the scroll
+      - paragraph [ref=e29]: AI-powered editor with A/B testing, brand kits, and smart templates. Create click-worthy thumbnails in minutes — not hours.
+      - generic [ref=e30]:
+        - button "Sign Up Free" [ref=e31] [cursor=pointer]
+        - button "See how it works →" [ref=e32] [cursor=pointer]
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - generic [ref=e35]: ⚡
+          - generic [ref=e36]: Optimized for CTR
+        - generic [ref=e37]:
+          - generic [ref=e38]: 🔀
+          - generic [ref=e39]: Instant A/B Testing
+        - generic [ref=e40]:
+          - generic [ref=e41]: ☁️
+          - generic [ref=e42]: Cloud-Powered Assets
+    - generic [ref=e44]:
+      - generic [ref=e45]:
+        - generic [ref=e50]: thumbframe.com/editor
+        - generic [ref=e51]: LIVE
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - generic [ref=e54]: Templates
+          - generic [ref=e56] [cursor=pointer]: 5 SECRETS
+          - generic [ref=e58] [cursor=pointer]: I QUIT
+          - generic [ref=e60] [cursor=pointer]: $10K MONTH
+        - generic [ref=e61]:
+          - generic [ref=e64]:
+            - generic [ref=e65]: 5 SECRETS
+            - generic [ref=e66]: YouTube Won't Tell You
+          - generic [ref=e67]:
+            - generic [ref=e68]: Text
+            - generic [ref=e69]: Image
+            - generic [ref=e70]: Shape
+            - generic [ref=e71]: Brand Kit
+            - generic [ref=e72]: Export
+      - generic [ref=e73]:
+        - generic [ref=e74]: A/B Test active — comparing variants
+        - generic [ref=e75] [cursor=pointer]: Publish
+  - generic [ref=e77]:
+    - generic [ref=e78]:
+      - generic [ref=e79]: 🎯
+      - generic [ref=e80]: Optimized for CTR
+    - generic [ref=e81]:
+      - generic [ref=e82]: 🔀
+      - generic [ref=e83]: Instant A/B Testing
+    - generic [ref=e84]:
+      - generic [ref=e85]: ☁️
+      - generic [ref=e86]: Cloud-Powered Assets
+    - generic [ref=e87]:
+      - generic [ref=e88]: 🎨
+      - generic [ref=e89]: Full Brand Kit
+  - generic [ref=e91]:
+    - generic [ref=e92]:
+      - generic [ref=e93]: Everything you need
+      - heading "Built for creators who take clicks seriously" [level=2] [ref=e94]:
+        - text: Built for creators who
+        - text: take clicks seriously
+    - generic [ref=e95]:
+      - generic [ref=e96]:
+        - generic [ref=e97]: ⚡
+        - heading "A/B Variant Engine" [level=3] [ref=e98]
+        - paragraph [ref=e99]: Upload two thumbnail variants and compare performance side by side. See which version drives more clicks on your videos.
+        - generic [ref=e100]:
+          - generic [ref=e101]: Compare variants
+          - generic [ref=e102]: Track performance
+          - generic [ref=e103]: Pick winners
+      - generic [ref=e104]:
+        - generic [ref=e105]: A/B Variant Engine
+        - generic [ref=e107]:
+          - generic [ref=e108]: Variant A
+          - generic [ref=e109]: LEADING
+        - generic [ref=e114]: Variant B
+        - generic [ref=e118]: Compare two thumbnails and see which one performs better.
+    - generic [ref=e119]:
+      - generic [ref=e120]:
+        - generic [ref=e122]: Tech Tutorial
+        - generic [ref=e124]: Reaction
+        - generic [ref=e126]: Finance
+        - generic [ref=e128]: Gaming
+      - generic [ref=e129]:
+        - generic [ref=e130]: 🎨
+        - heading "Smart Templates" [level=3] [ref=e131]
+        - paragraph [ref=e132]: Ready-made templates designed for YouTube thumbnails. Apply a style in one click, then customize text, colors, and layout.
+        - generic [ref=e133]:
+          - generic [ref=e134]: Multiple styles
+          - generic [ref=e135]: Quick customization
+          - generic [ref=e136]: YouTube-optimized
+    - generic [ref=e137]:
+      - generic [ref=e138]:
+        - generic [ref=e139]: 🔖
+        - heading "Brand Kit" [level=3] [ref=e140]
+        - paragraph [ref=e141]: Save your colors, fonts, and logo once. Every thumbnail you create stays on-brand automatically.
+        - generic [ref=e142]:
+          - generic [ref=e143]: Custom fonts
+          - generic [ref=e144]: Color palette
+          - generic [ref=e145]: Logo placement
+      - generic [ref=e146]:
+        - generic [ref=e147]: Brand Kit
+        - generic [ref=e153]: "Fonts: Syne Bold + Plus Jakarta Sans"
+        - generic [ref=e154]: YourChannel
+    - generic [ref=e155]:
+      - generic [ref=e156]:
+        - generic [ref=e157]:
+          - generic [ref=e158]:
+            - generic [ref=e159]: CTR
+            - generic [ref=e160]: Track click-through rate
+          - generic [ref=e161]: Real-time data
+        - generic [ref=e170]:
+          - generic [ref=e171]: M
+          - generic [ref=e172]: T
+          - generic [ref=e173]: W
+          - generic [ref=e174]: T
+          - generic [ref=e175]: F
+          - generic [ref=e176]: S
+          - generic [ref=e177]: S
+      - generic [ref=e178]:
+        - generic [ref=e179]: 📊
+        - heading "Analytics Dashboard" [level=3] [ref=e180]
+        - paragraph [ref=e181]: Track impressions and CTR across your thumbnails. See what works and iterate on your best-performing designs.
+        - generic [ref=e182]:
+          - generic [ref=e183]: CTR tracking
+          - generic [ref=e184]: Performance overview
+          - generic [ref=e185]: Data-driven decisions
+  - generic [ref=e186]:
+    - generic [ref=e188]:
+      - generic [ref=e189]:
+        - generic [ref=e190]: Template library
+        - heading "Pick a template. Make it yours in 60 seconds." [level=2] [ref=e191]:
+          - text: Pick a template.
+          - text: Make it yours in 60 seconds.
+      - button "Browse all templates →" [ref=e192] [cursor=pointer]
+    - generic [ref=e193]:
+      - generic [ref=e194] [cursor=pointer]:
+        - generic [ref=e196]:
+          - generic [ref=e197]: 5 SECRETS
+          - generic [ref=e198]: YouTube Won't Tell You
+        - generic [ref=e199]: Tutorial
+      - generic [ref=e200] [cursor=pointer]:
+        - generic [ref=e202]:
+          - generic [ref=e203]: I QUIT My Job
+          - generic [ref=e204]: At 28 Years Old
+        - generic [ref=e205]: Vlog
+      - generic [ref=e206] [cursor=pointer]:
+        - generic [ref=e208]:
+          - generic [ref=e209]: $10K MONTH
+          - generic [ref=e210]: Passive Income Breakdown
+        - generic [ref=e211]: Finance
+      - generic [ref=e212] [cursor=pointer]:
+        - generic [ref=e214]:
+          - generic [ref=e215]: SPEEDRUN
+          - generic [ref=e216]: World Record Attempt
+        - generic [ref=e217]: Gaming
+      - generic [ref=e218] [cursor=pointer]:
+        - generic [ref=e220]:
+          - generic [ref=e221]: HONEST REVIEW
+          - generic [ref=e222]: After 90 Days
+        - generic [ref=e223]: Review
+      - generic [ref=e224] [cursor=pointer]:
+        - generic [ref=e226]:
+          - generic [ref=e227]: HOW I ACTUALLY
+          - generic [ref=e228]: Learned to Code in 30 Days
+        - generic [ref=e229]: Dev
+      - generic [ref=e230] [cursor=pointer]:
+        - generic [ref=e232]:
+          - generic [ref=e233]: TIER LIST
+          - generic [ref=e234]: Every VS Code Extension
+        - generic [ref=e235]: Dev
+      - generic [ref=e236] [cursor=pointer]:
+        - generic [ref=e238]:
+          - generic [ref=e239]: REACTING TO
+          - generic [ref=e240]: Your Setups 2024
+        - generic [ref=e241]: Reaction
+      - generic [ref=e242] [cursor=pointer]:
+        - generic [ref=e244]:
+          - generic [ref=e245]: FREE TOOLS
+          - generic [ref=e246]: Pros Use Daily
+        - generic [ref=e247]: Productivity
+      - generic [ref=e248] [cursor=pointer]:
+        - generic [ref=e250]:
+          - generic [ref=e251]: MINIMALIST
+          - generic [ref=e252]: Productivity System
+        - generic [ref=e253]: Lifestyle
+  - generic [ref=e255]:
+    - generic [ref=e256]:
+      - generic [ref=e257]: Simple pricing
+      - heading "Start free. Upgrade when you're ready to scale." [level=2] [ref=e258]:
+        - text: Start free. Upgrade when
+        - text: you're ready to scale.
+    - generic [ref=e259]:
+      - generic [ref=e260]:
+        - generic [ref=e261]:
+          - generic [ref=e262]: Starter
+          - generic [ref=e263]:
+            - generic [ref=e264]: Free
+            - generic [ref=e265]: forever
+          - generic [ref=e266]: Basic canvas to get started.
+        - button "Get started free" [ref=e267] [cursor=pointer]
+        - generic [ref=e268]:
+          - generic [ref=e269]:
+            - generic [ref=e270]: ✓
+            - generic [ref=e271]: Basic thumbnail canvas
+          - generic [ref=e272]:
+            - generic [ref=e273]: ✓
+            - generic [ref=e274]: Standard export quality
+          - generic [ref=e275]:
+            - generic [ref=e276]: ✓
+            - generic [ref=e277]: Community support
+      - generic [ref=e278]:
+        - generic [ref=e279]: Most popular
+        - generic [ref=e280]:
+          - generic [ref=e281]: Pro Creator
+          - generic [ref=e282]:
+            - generic [ref=e283]: $15
+            - generic [ref=e284]: /month
+          - generic [ref=e285]: Everything you need to grow your channel.
+        - button "Upgrade to Pro Creator" [ref=e286] [cursor=pointer]
+        - generic [ref=e287]:
+          - generic [ref=e288]:
+            - generic [ref=e289]: ✓
+            - generic [ref=e290]: A/B Variant Engine
+          - generic [ref=e291]:
+            - generic [ref=e292]: ✓
+            - generic [ref=e293]: Full Brand Kit (fonts, colors, logo)
+          - generic [ref=e294]:
+            - generic [ref=e295]: ✓
+            - generic [ref=e296]: Unlimited exports
+          - generic [ref=e297]:
+            - generic [ref=e298]: ✓
+            - generic [ref=e299]: All templates
+          - generic [ref=e300]:
+            - generic [ref=e301]: ✓
+            - generic [ref=e302]: No watermarks
+          - generic [ref=e303]:
+            - generic [ref=e304]: ✓
+            - generic [ref=e305]: Priority support
+  - generic [ref=e307]:
+    - heading "Frequently asked questions" [level=2] [ref=e309]
+    - generic [ref=e310]:
+      - button "Is ThumbFrame free to use? +" [ref=e311] [cursor=pointer]:
+        - generic [ref=e312]: Is ThumbFrame free to use?
+        - generic [ref=e313]: +
+      - generic [ref=e314]: Yes — the Starter plan gives you a basic canvas at no cost. Sign up and start creating right away, no credit card needed.
+    - generic [ref=e315]:
+      - button "Can I use my own fonts and colors? +" [ref=e316] [cursor=pointer]:
+        - generic [ref=e317]: Can I use my own fonts and colors?
+        - generic [ref=e318]: +
+      - generic [ref=e319]: With Pro Creator, you get a full Brand Kit — upload custom fonts, set your color palette, and add your logo.
+    - generic [ref=e320]:
+      - button "How does A/B testing work? +" [ref=e321] [cursor=pointer]:
+        - generic [ref=e322]: How does A/B testing work?
+        - generic [ref=e323]: +
+      - generic [ref=e324]: Upload two thumbnail variants for the same video. ThumbFrame tracks which one gets more clicks so you can pick the winner.
+    - generic [ref=e325]:
+      - button "What can I export? +" [ref=e326] [cursor=pointer]:
+        - generic [ref=e327]: What can I export?
+        - generic [ref=e328]: +
+      - generic [ref=e329]: You can export your thumbnails as PNG images, sized for YouTube (1280×720).
+    - generic [ref=e330]:
+      - button "Can I cancel anytime? +" [ref=e331] [cursor=pointer]:
+        - generic [ref=e332]: Can I cancel anytime?
+        - generic [ref=e333]: +
+      - generic [ref=e334]: Yes. No contracts, no cancellation fees. Cancel from your dashboard anytime.
+    - generic [ref=e335]:
+      - button "How much is Pro Creator? +" [ref=e336] [cursor=pointer]:
+        - generic [ref=e337]: How much is Pro Creator?
+        - generic [ref=e338]: +
+      - generic [ref=e339]: $15/month. Includes the A/B Variant Engine, full Brand Kit, unlimited exports, and no watermarks.
+  - contentinfo [ref=e340]:
+    - generic [ref=e341]:
+      - generic [ref=e342]:
+        - generic [ref=e343]:
+          - generic [ref=e344]:
+            - img "ThumbFrame" [ref=e345]
+            - generic [ref=e346]: ThumbFrame
+          - paragraph [ref=e347]: The professional thumbnail editor for creators who take their channel seriously.
+          - generic [ref=e348]: support@thumbframe.com
+          - generic [ref=e349]:
+            - generic [ref=e350] [cursor=pointer]: 𝕏
+            - generic [ref=e351] [cursor=pointer]: ▶
+            - generic [ref=e352] [cursor=pointer]: in
+        - generic [ref=e353]:
+          - generic [ref=e354]: Product
+          - generic [ref=e355]:
+            - button "Features" [ref=e356] [cursor=pointer]
+            - button "Templates" [ref=e357] [cursor=pointer]
+            - button "Pricing" [ref=e358] [cursor=pointer]
+            - button "Changelog" [ref=e359]
+        - generic [ref=e360]:
+          - generic [ref=e361]: Company
+          - generic [ref=e362]:
+            - button "About" [ref=e363]
+            - button "Blog" [ref=e364]
+            - button "Careers" [ref=e365]
+            - button "Contact" [ref=e366]
+        - generic [ref=e367]:
+          - generic [ref=e368]: Support
+          - generic [ref=e369]:
+            - button "Help Center" [ref=e370]
+            - button "Terms" [ref=e371]
+            - button "Privacy" [ref=e372]
+            - button "Status" [ref=e373]
+      - generic [ref=e374]:
+        - generic [ref=e375]: © 2024 ThumbFrame. All rights reserved.
+        - generic [ref=e376]: Made with ♥ for creators

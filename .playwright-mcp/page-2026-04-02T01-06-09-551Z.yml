@@ -1,0 +1,246 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - button "←" [ref=e6] [cursor=pointer]
+      - generic [ref=e7]: ThumbFrame
+      - button "📁 File" [ref=e8] [cursor=pointer]
+    - button "⌘ Command palette... Ctrl+K" [ref=e9] [cursor=pointer]:
+      - generic [ref=e10]: ⌘
+      - generic [ref=e11]: Command palette...
+      - generic [ref=e12]: Ctrl+K
+    - button "⚡ AI BETA Ctrl+I" [ref=e13] [cursor=pointer]:
+      - text: ⚡ AI
+      - generic [ref=e14]: BETA
+      - generic [ref=e15]: Ctrl+I
+    - button "⚡ AI Generate PRO" [ref=e16] [cursor=pointer]:
+      - text: ⚡ AI Generate
+      - generic [ref=e17]: PRO
+    - generic [ref=e18]:
+      - generic [ref=e19]: Saved
+      - button "↩" [ref=e20] [cursor=pointer]
+      - button "↪" [disabled] [ref=e21] [cursor=pointer]
+      - button "💾 Save" [ref=e22] [cursor=pointer]
+      - button "⧉ Duplicate" [ref=e23] [cursor=pointer]
+      - generic [ref=e25]:
+        - button "−" [ref=e26] [cursor=pointer]
+        - spinbutton [ref=e27]: "100"
+        - generic [ref=e28]: "%"
+        - button "+" [ref=e29] [cursor=pointer]
+        - button "fit" [ref=e30] [cursor=pointer]
+      - button "⊞" [ref=e31] [cursor=pointer]
+      - button "⊢" [ref=e32] [cursor=pointer]
+      - button "⊡" [ref=e33] [cursor=pointer]
+      - button "⊠" [ref=e34] [cursor=pointer]
+      - button "⬜ Zones" [ref=e35] [cursor=pointer]
+      - button "📱 Mobile" [ref=e36] [cursor=pointer]
+      - button "○" [ref=e37] [cursor=pointer]
+      - generic [ref=e39] [cursor=pointer]: ↑ Upload
+      - button "↓ Download" [ref=e40] [cursor=pointer]
+      - button "⚡ Pro — $15/mo" [ref=e41] [cursor=pointer]
+  - generic [ref=e42]:
+    - generic [ref=e43]:
+      - generic [ref=e44] [cursor=pointer]:
+        - generic [ref=e45]: Tools
+        - generic [ref=e46]: ›
+      - button "↖ Select" [ref=e47] [cursor=pointer]:
+        - generic [ref=e48]: ↖
+        - generic [ref=e49]: Select
+      - button "✋ Move" [ref=e50] [cursor=pointer]:
+        - generic [ref=e51]: ✋
+        - generic [ref=e52]: Move
+      - button "⊡ Crop" [ref=e53] [cursor=pointer]:
+        - generic [ref=e54]: ⊡
+        - generic [ref=e55]: Crop
+      - button "🔍 Zoom" [ref=e56] [cursor=pointer]:
+        - generic [ref=e57]: 🔍
+        - generic [ref=e58]: Zoom
+      - generic [ref=e59] [cursor=pointer]:
+        - generic [ref=e60]: Create
+        - generic [ref=e61]: ›
+      - button "T Text" [ref=e62] [cursor=pointer]:
+        - generic [ref=e63]: T
+        - generic [ref=e64]: Text
+      - button "○ Shapes" [ref=e65] [cursor=pointer]:
+        - generic [ref=e66]: ○
+        - generic [ref=e67]: Shapes
+      - button "◆ Elements" [ref=e68] [cursor=pointer]:
+        - generic [ref=e69]: ◆
+        - generic [ref=e70]: Elements
+      - button "▣ Memes & GIFs" [ref=e71] [cursor=pointer]:
+        - generic [ref=e72]: ▣
+        - generic [ref=e73]: Memes & GIFs
+      - generic [ref=e74] [cursor=pointer]:
+        - generic [ref=e75]: Paint
+        - generic [ref=e76]: ›
+      - button "⌀ Brush" [active] [ref=e77] [cursor=pointer]:
+        - generic [ref=e78]: ⌀
+        - generic [ref=e79]: Brush
+      - button "☀ Rim Light" [ref=e80] [cursor=pointer]:
+        - generic [ref=e81]: ☀
+        - generic [ref=e82]: Rim Light
+      - button "✂ Remove BG" [ref=e83] [cursor=pointer]:
+        - generic [ref=e84]: ✂
+        - generic [ref=e85]: Remove BG
+      - button "✂️ Lasso Mask" [ref=e86] [cursor=pointer]:
+        - generic [ref=e87]: ✂️
+        - generic [ref=e88]: Lasso Mask
+      - generic [ref=e89] [cursor=pointer]:
+        - generic [ref=e90]: Design
+        - generic [ref=e91]: ›
+      - button "▨ Background" [ref=e92] [cursor=pointer]:
+        - generic [ref=e93]: ▨
+        - generic [ref=e94]: Background
+      - button "✦ Effects" [ref=e95] [cursor=pointer]:
+        - generic [ref=e96]: ✦
+        - generic [ref=e97]: Effects
+      - button "◐ Brand Kit" [ref=e98] [cursor=pointer]:
+        - generic [ref=e99]: ◐
+        - generic [ref=e100]: Brand Kit
+      - generic [ref=e101] [cursor=pointer]:
+        - generic [ref=e102]: Analyze
+        - generic [ref=e103]: ›
+      - button "⊞ Templates" [ref=e104] [cursor=pointer]:
+        - generic [ref=e105]: ⊞
+        - generic [ref=e106]: Templates
+      - button "◈ CTR Score" [ref=e107] [cursor=pointer]:
+        - generic [ref=e108]: ◈
+        - generic [ref=e109]: CTR Score
+      - button "◉ Face Score" [ref=e110] [cursor=pointer]:
+        - generic [ref=e111]: ◉
+        - generic [ref=e112]: Face Score
+      - button "⊟ A/B Variants" [ref=e113] [cursor=pointer]:
+        - generic [ref=e114]: ⊟
+        - generic [ref=e115]: A/B Variants
+      - button "▶ YouTube Test" [ref=e116] [cursor=pointer]:
+        - generic [ref=e117]: ▶
+        - generic [ref=e118]: YouTube Test
+      - button "⊠ All Sizes" [ref=e119] [cursor=pointer]:
+        - generic [ref=e120]: ⊠
+        - generic [ref=e121]: All Sizes
+      - generic [ref=e122] [cursor=pointer]:
+        - generic [ref=e123]: File
+        - generic [ref=e124]: ›
+      - button "↑ Upload" [ref=e125] [cursor=pointer]:
+        - generic [ref=e126]: ↑
+        - generic [ref=e127]: Upload
+      - generic [ref=e128] [cursor=pointer]:
+        - generic [ref=e129]: Canvas size
+        - generic [ref=e130]: ›
+      - button "YouTube 1280×720" [ref=e131] [cursor=pointer]:
+        - generic [ref=e132]: YouTube
+        - generic [ref=e133]: 1280×720
+      - button "TikTok 1080×1920" [ref=e134] [cursor=pointer]:
+        - generic [ref=e135]: TikTok
+        - generic [ref=e136]: 1080×1920
+      - button "Instagram 1080×1080" [ref=e137] [cursor=pointer]:
+        - generic [ref=e138]: Instagram
+        - generic [ref=e139]: 1080×1080
+      - button "Twitter 1600×900" [ref=e140] [cursor=pointer]:
+        - generic [ref=e141]: Twitter
+        - generic [ref=e142]: 1600×900
+      - button "LinkedIn 1200×627" [ref=e143] [cursor=pointer]:
+        - generic [ref=e144]: LinkedIn
+        - generic [ref=e145]: 1200×627
+    - generic [ref=e147]:
+      - generic [ref=e150]:
+        - generic:
+          - generic:
+            - generic: ×
+      - generic [ref=e153]: YouTube · 1280×720px · 2 layers · 100%
+    - generic [ref=e154]:
+      - generic [ref=e1053]:
+        - generic [ref=e1054]: Brush tools
+        - generic [ref=e1055]: ✓ Image selected — paint on the canvas
+        - generic [ref=e1056]:
+          - generic [ref=e1057]: ✓ Image selected — paint on the canvas
+          - generic [ref=e1058]: Brush type
+          - generic [ref=e1059]:
+            - button "◎ Blur" [ref=e1060] [cursor=pointer]:
+              - generic [ref=e1061]: ◎
+              - generic [ref=e1062]: Blur
+            - button "≋ Smear" [ref=e1063] [cursor=pointer]:
+              - generic [ref=e1064]: ≋
+              - generic [ref=e1065]: Smear
+            - button "◈ Sharpen" [ref=e1066] [cursor=pointer]:
+              - generic [ref=e1067]: ◈
+              - generic [ref=e1068]: Sharpen
+            - button "∴ Air" [ref=e1069] [cursor=pointer]:
+              - generic [ref=e1070]: ∴
+              - generic [ref=e1071]: Air
+            - button "☀ Dodge" [ref=e1072] [cursor=pointer]:
+              - generic [ref=e1073]: ☀
+              - generic [ref=e1074]: Dodge
+            - button "◑ Burn" [ref=e1075] [cursor=pointer]:
+              - generic [ref=e1076]: ◑
+              - generic [ref=e1077]: Burn
+            - button "✚ Heal" [ref=e1078] [cursor=pointer]:
+              - generic [ref=e1079]: ✚
+              - generic [ref=e1080]: Heal
+            - button "≈ Wet" [ref=e1081] [cursor=pointer]:
+              - generic [ref=e1082]: ≈
+              - generic [ref=e1083]: Wet
+            - button "○ Erase" [ref=e1084] [cursor=pointer]:
+              - generic [ref=e1085]: ○
+              - generic [ref=e1086]: Erase
+            - button "⊕ Clone" [ref=e1087] [cursor=pointer]:
+              - generic [ref=e1088]: ⊕
+              - generic [ref=e1089]: Clone
+            - button "✏ Paint" [ref=e1090] [cursor=pointer]:
+              - generic [ref=e1091]: ✏
+              - generic [ref=e1092]: Paint
+            - button "⬛ Fill" [ref=e1093] [cursor=pointer]:
+              - generic [ref=e1094]: ⬛
+              - generic [ref=e1095]: Fill
+          - generic [ref=e1096]: Size — 20px
+          - generic [ref=e1097]:
+            - slider [ref=e1098]: "20"
+            - generic [ref=e1099]: 20px
+          - generic [ref=e1100]: Opacity — 50%
+          - generic [ref=e1101]:
+            - slider [ref=e1102]: "50"
+            - generic [ref=e1103]: 50%
+          - generic [ref=e1104]: Flow — 100%
+          - generic [ref=e1105]:
+            - slider [ref=e1106]: "100"
+            - generic [ref=e1107]: 100%
+          - generic [ref=e1108]: Opacity = max effect. Flow = buildup per stroke.
+          - generic [ref=e1109]: Stabilizer — 0%
+          - generic [ref=e1110]:
+            - slider [ref=e1111]: "0"
+            - generic [ref=e1112]: 0%
+          - generic [ref=e1113]: Smooths wobbly lines. High = very smooth curves.
+          - generic [ref=e1114]: Edge
+          - generic [ref=e1115]:
+            - button "soft" [ref=e1116] [cursor=pointer]
+            - button "hard" [ref=e1117] [cursor=pointer]
+          - button "↩ Undo stroke" [ref=e1118] [cursor=pointer]
+          - generic [ref=e1119]: Preview
+          - generic [ref=e1122]: Softens — good for skin and backgrounds
+        - generic [ref=e1123]:
+          - generic [ref=e1124]: Layer mask
+          - generic [ref=e1125]: Coming soon — paint to hide/reveal parts of an image
+      - generic [ref=e179]:
+        - generic [ref=e180]:
+          - generic [ref=e181]:
+            - generic [ref=e182]: Layers
+            - generic [ref=e183]: "2"
+          - generic [ref=e184]:
+            - button "↑" [ref=e185] [cursor=pointer]
+            - button "↓" [ref=e186] [cursor=pointer]
+            - button "⧉" [ref=e187] [cursor=pointer]
+            - button "×" [ref=e188] [cursor=pointer]
+        - generic [ref=e189]:
+          - generic [ref=e943] [cursor=pointer]:
+            - generic [ref=e944]: ⠿
+            - generic [ref=e946]: ▤
+            - generic [ref=e948]: Image
+            - generic [ref=e949]:
+              - button "●" [ref=e950]
+              - button "⊡" [ref=e951]
+          - generic [ref=e190] [cursor=pointer]:
+            - generic [ref=e191]: ⠿
+            - generic [ref=e193]: ▣
+            - generic [ref=e194]:
+              - generic [ref=e195]: Background
+              - generic [ref=e197]: 🔒
+            - button "●" [ref=e199]
