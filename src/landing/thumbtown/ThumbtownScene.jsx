@@ -107,7 +107,7 @@ export default function ThumbtownScene() {
 
       {/* Floating islands composite — upper-left-of-centre band. */}
       <img
-        src={`${ASSETS}/floating-islands/islands.png`}
+        src={`${ASSETS}/floating-islands/floating-islands.png`}
         alt=""
         draggable={false}
         className="absolute pointer-events-none hidden sm:block"
