@@ -723,9 +723,22 @@ export default class Renderer {
   }
 
   // ── Export canvas as data URL ─────────────────────────────────────────────
+  // PNG exports preserve transparency where no layers are drawn. The dark
+  // #1a1a1e editor canvasBg is hidden during the render so it is not baked
+  // into the file. JPEG has no alpha channel, so the offscreen composite
+  // pre-fills white before blitting the PixiJS canvas.
   exportToDataURL(format = 'image/png', quality = 0.92) {
     if (!this.app) return null;
+
+    const isJpeg = format === 'image/jpeg' || format === 'image/jpg';
+
+    // Hide both the overlay layer and the dark 1280x720 canvas
+    // background sprite. Preserve their visibility for restoration.
+    const hadOverlay  = this.overlayContainer.visible;
+    const hadCanvasBg = this.canvasBg.visible;
     this.overlayContainer.visible = false;
+    this.canvasBg.visible = false;
+
     const savedX = this.viewport.x;
     const savedY = this.viewport.y;
     const savedS = this.viewport.scale.x;
@@ -734,12 +747,27 @@ export default class Renderer {
     this.viewport.scale.set(1);
 
     this.app.renderer.render(this.app.stage);
-    const dataUrl = this.app.canvas.toDataURL(format, quality);
+
+    // Route through an offscreen canvas sized to the Pixi canvas so we can
+    // pre-fill a white bg for JPEG exports (alpha would otherwise read as
+    // black in the encoded file).
+    const oc = document.createElement('canvas');
+    oc.width  = this.app.canvas.width;
+    oc.height = this.app.canvas.height;
+    const ctx = oc.getContext('2d');
+    if (isJpeg) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, oc.width, oc.height);
+    }
+    ctx.drawImage(this.app.canvas, 0, 0);
+
+    const dataUrl = oc.toDataURL(format, quality);
 
     this.viewport.x = savedX;
     this.viewport.y = savedY;
     this.viewport.scale.set(savedS);
-    this.overlayContainer.visible = true;
+    this.overlayContainer.visible = hadOverlay;
+    this.canvasBg.visible = hadCanvasBg;
     this.app.renderer.render(this.app.stage);
 
     return dataUrl;
@@ -801,7 +829,15 @@ export default class Renderer {
   exportFullRes(format = 'image/png', quality = 0.92) {
     if (!this._mounted) return null;
 
+    const isJpeg = format === 'image/jpeg' || format === 'image/jpg';
+
+    // Hide UI overlay + the dark 1280x720 canvasBg so the export contains
+    // only layer content (transparent where no layer covers the pixel).
+    const hadOverlay  = this.overlayContainer.visible;
+    const hadCanvasBg = this.canvasBg.visible;
     this.overlayContainer.visible = false;
+    this.canvasBg.visible = false;
+
     const savedX = this.viewport.x;
     const savedY = this.viewport.y;
     const savedS = this.viewport.scale.x;
@@ -819,20 +855,28 @@ export default class Renderer {
     const srcW = Math.round(CW * scale);
     const srcH = Math.round(CH * scale);
 
-    // Draw into a 1280×720 output (scales up if needed, preserving sharpness)
+    // Draw into a 1280×720 output (scales up if needed, preserving sharpness).
+    // JPEG requires a solid background because its encoding has no alpha
+    // channel; PNG leaves the offscreen transparent so unfilled pixels stay
+    // transparent in the file.
     const oc  = document.createElement('canvas');
     oc.width  = CW;
     oc.height = CH;
     const ctx = oc.getContext('2d');
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
+    if (isJpeg) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, CW, CH);
+    }
     ctx.drawImage(this.app.canvas, 0, 0, srcW, srcH, 0, 0, CW, CH);
 
     // Restore viewport
     this.viewport.x = savedX;
     this.viewport.y = savedY;
     this.viewport.scale.set(savedS);
-    this.overlayContainer.visible = true;
+    this.overlayContainer.visible = hadOverlay;
+    this.canvasBg.visible = hadCanvasBg;
     this.app.renderer.render(this.app.stage);
 
     return oc.toDataURL(format, quality);
