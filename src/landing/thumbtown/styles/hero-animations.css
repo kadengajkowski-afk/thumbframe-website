@@ -1,0 +1,197 @@
+/* ──────────────────────────────────────────────────────────────────
+   Thumbtown hero animations.
+
+   Default state (when prefers-reduced-motion is "reduce" or unset):
+     - Ken Burns image locked at scale(1.05) — still slightly upscaled
+       so sampling artefacts are invisible — but no motion
+     - Cloud wisps hidden (opacity 0) so reduced-motion doesn't see
+       static paint pasted into the sky
+     - Birds hidden
+     - Sun glow visible but not pulsing
+
+   Animations only enable inside
+     @media (prefers-reduced-motion: no-preference) { ... }
+   per the spec's "scope the ENABLING query" rule.
+
+   All animated elements carry the `ambient-animated` class so the
+   scene's visibility + intersection handlers can pause
+   animation-play-state in bulk.
+   ────────────────────────────────────────────────────────────── */
+
+
+/* ── Scene wrapper — contain layout + paint so any recalculation
+      inside the hero never cascades up the tree. ─────────────── */
+.thumbtown-hero {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  contain: layout paint;
+  user-select: none;
+}
+
+
+/* ── Ken Burns base image ────────────────────────────────────── */
+.ken-burns-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  will-change: transform;
+  /* Static fallback — slightly upscaled so GPU texture sampling can't
+     show blur at corners, no motion until the media query enables it. */
+  transform: scale(1.05);
+  transform-origin: 55% 45%;
+}
+
+
+/* ── SVG overlay — full viewport, click-through. ────────────── */
+.thumbtown-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+
+/* ── Cloud wisps ─────────────────────────────────────────────── */
+.cloud-wisp {
+  /* Hidden by default (so reduced-motion doesn't see static wisps
+     pasted to fixed sky positions). Opacity re-enables under the
+     no-preference media query below. */
+  opacity: 0;
+  will-change: transform;
+  mix-blend-mode: multiply;
+}
+
+
+/* ── Birds ────────────────────────────────────────────────────── */
+.bird {
+  /* Hidden static — motion-path + opacity bring them back under
+     no-preference. */
+  opacity: 0;
+  will-change: offset-distance;
+}
+
+
+/* ── Sun glow ────────────────────────────────────────────────── */
+.sun-pulse {
+  position: absolute;
+  top: 12%;
+  right: 18%;
+  width: 280px;
+  height: 280px;
+  pointer-events: none;
+  z-index: 4;
+  background: radial-gradient(circle,
+    rgba(255, 220, 160, 0.5) 0%,
+    transparent 70%);
+  mix-blend-mode: screen;
+  opacity: 0.6;
+  will-change: transform, opacity;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   MOTION — enabled only when the OS hasn't requested reduction.
+   ════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: no-preference) {
+
+  /* Ken Burns — scale 1.05 → 1.15 + translate. alternates both dir
+     so the image drifts back and forth without a hard reset. */
+  @keyframes ken-burns {
+    from { transform: scale(1.05) translate(0%, 0%); }
+    to   { transform: scale(1.15) translate(-1.5%, -2%); }
+  }
+  .ken-burns-image {
+    animation: ken-burns 36s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
+  }
+
+  /* Cloud wisps — three individual drifters with prime-number periods
+     so they never re-align. Each has its own vertical-bob so wisps
+     don't read as perfectly horizontal. */
+  @keyframes wisp-a {
+    0%   { transform: translate( 110%, -4px); }
+    50%  { transform: translate(  40%,  6px); }
+    100% { transform: translate( -30%, -2px); }
+  }
+  @keyframes wisp-b {
+    0%   { transform: translate( 115%,  8px); }
+    50%  { transform: translate(  45%, -8px); }
+    100% { transform: translate( -25%,  4px); }
+  }
+  @keyframes wisp-c {
+    0%   { transform: translate( 120%,  0px); }
+    50%  { transform: translate(  50%, 10px); }
+    100% { transform: translate( -35%, -6px); }
+  }
+  .cloud-wisp.wisp-a {
+    opacity: 0.55;
+    animation: wisp-a 37s linear infinite;
+    animation-delay: -11s;
+  }
+  .cloud-wisp.wisp-b {
+    opacity: 0.45;
+    animation: wisp-b 53s linear infinite;
+    animation-delay: -26s;
+  }
+  .cloud-wisp.wisp-c {
+    opacity: 0.35;
+    animation: wisp-c 71s linear infinite;
+    animation-delay: -48s;
+  }
+
+  /* Birds — GPU-composited motion-path flights. offset-rotate: auto
+     aligns each bird's silhouette to its path tangent. */
+  @keyframes fly {
+    from { offset-distance: 0%; }
+    to   { offset-distance: 100%; }
+  }
+
+  .bird {
+    opacity: 0.9;
+    offset-rotate: auto;
+  }
+  .bird.bird-a {
+    offset-path: path("M 2100 280 C 1650 240, 1260 310, 900 235 C 560 170, 200 170, -120 100");
+    animation: fly 47s linear infinite;
+    animation-delay: -4s;
+    transform: scale(1.05);
+  }
+  .bird.bird-b {
+    offset-path: path("M 2100 420 C 1700 380, 1320 470, 1020 390 C 680 300, 340 290, -120 230");
+    animation: fly 59s linear infinite;
+    animation-delay: -22s;
+    transform: scale(0.85);
+  }
+  .bird.bird-c {
+    offset-path: path("M 2100 340 C 1780 300, 1400 400, 1080 300 C 780 220, 400 190, -120 170");
+    animation: fly 43s linear infinite;
+    animation-delay: -37s;
+    transform: scale(0.95);
+  }
+
+  /* Sun glow breathe — slow ease-in-out alternate, 6 s round trip. */
+  @keyframes sun-breathe {
+    from { opacity: 0.6; transform: scale(1);    }
+    to   { opacity: 0.9; transform: scale(1.04); }
+  }
+  .sun-pulse {
+    animation: sun-breathe 6s ease-in-out infinite alternate;
+  }
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   Mobile — disable Ken Burns to save battery on touch devices.
+   SVG overlay animations still run (they're lightweight).
+   ────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+  .ken-burns-image {
+    animation: none;
+    transform: scale(1.06);
+  }
+}

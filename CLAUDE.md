@@ -175,6 +175,16 @@ const YOUTUBE_SPECS = {
 2. **Brush string mismatches** — tool names in sidebar don't match conditionals in src/Brush.js. Audit and fix all mismatches.
 3. **Missing brush implementations** — airbrush, heal, wetmix, fill are listed as tools but not implemented in src/Brush.js.
 
+## Thumbtown Landing
+- Active landing scene: `src/landing/thumbtown/`
+- Dev server runs at http://localhost:3000 (react-scripts default; host/port via CRA, not Vite)
+- Design reference: `./design/hero-target.png` (Midjourney panorama used as visual diff target)
+- Always use **Context7 MCP** for Motion, React 19, and Tailwind v4 documentation — do not trust pre-training data for these versions
+- Never use `tailwindcss-animate` or `tw-animate-css` — both deprecated in Tailwind v4
+- Verify at viewports **375px, 768px, 1440px**
+- When using Playwright `toHaveScreenshot()` for animation tests, always pass `animations: 'disabled'` — otherwise snapshots are non-deterministic
+- v3 galaxy-hub + v2 scroll-cinematic code preserved under `src/landing/_legacy_galaxy/` and tags `v2-scroll-final` / `v3-galaxy-hub-final`
+
 ## Performance
 - Start every session with `/fast` (2.5x faster, same quality)
 - Use `/compact` before starting a new feature in long sessions

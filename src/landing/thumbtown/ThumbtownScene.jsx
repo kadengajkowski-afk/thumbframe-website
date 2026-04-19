@@ -1,72 +1,77 @@
-// Thumbtown scene — simplified hero.
+// Thumbtown scene — simplified hybrid-animated hero.
 //
-// Replaces the prior multi-layer compositor. One painted panorama fills
-// the viewport as an object-cover hero image with a slow Ken Burns
-// transform, and a transparent SVG overlay animates three accent
-// elements on top (clouds, birds, sun glow). Everything else — Frame
-// placeholder, sprite characters, floating islands, mountain-main
-// stack, gradient stubs — is gone from the render tree. Files remain
-// in the repo but no longer load.
+// Layers (back to front):
+//   1. panorama.png as an <img> filling the viewport, object-cover,
+//      Ken Burns animation via CSS.
+//   2. <SceneOverlay/> — SVG cloud wisps + birds + DIV sun glow.
 //
-// Children mounted:
-//   panorama.png       single full-viewport image
-//   SceneOverlay       SVG with 3 animated elements
+// Nav + WorldHero are mounted separately by LandingPageV2.jsx.
 //
-// Nav + WorldHero are mounted by LandingPageV2.jsx, not here.
+// Performance hooks:
+//   • Page Visibility API pauses all animations when the tab hides
+//     (avoids mobile battery drain in background tabs).
+//   • IntersectionObserver pauses all animations when the hero
+//     scrolls off-screen (Phase 7 will add scroll content below).
+//
+// Both hooks target every element carrying the `ambient-animated`
+// class (panorama image, all SVG wisps + birds, sun-glow div).
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import SceneOverlay from './SceneOverlay';
+import './styles/hero-animations.css';
 
 const PANORAMA_SRC = '/assets/thumbtown/panorama.png';
 
 export default function ThumbtownScene() {
+  const heroRef = useRef(null);
+
+  // ── Page Visibility: pause animations when the tab is hidden ──
+  useEffect(() => {
+    const setPlayState = (state) => {
+      const els = document.querySelectorAll('.ambient-animated');
+      els.forEach((el) => {
+        el.style.animationPlayState = state;
+      });
+    };
+    const onVisibility = () => {
+      setPlayState(document.hidden ? 'paused' : 'running');
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  // ── IntersectionObserver: pause when hero scrolls off-screen ──
+  useEffect(() => {
+    const hero = heroRef.current;
+    if (!hero || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const state = entry.isIntersecting ? 'running' : 'paused';
+        document.querySelectorAll('.ambient-animated').forEach((el) => {
+          el.style.animationPlayState = state;
+        });
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <>
-      <style>{kenBurnsCSS}</style>
-      <div
-        className="absolute inset-0 overflow-hidden select-none"
-        style={{ background: '#18101c' }}
-        aria-hidden
-      >
-        <img
-          src={PANORAMA_SRC}
-          alt=""
-          draggable={false}
-          className="tt-panorama"
-        />
-        <SceneOverlay />
-      </div>
-    </>
+    <div
+      ref={heroRef}
+      className="thumbtown-hero"
+      aria-hidden
+      style={{ background: '#18101c' }}
+    >
+      <img
+        src={PANORAMA_SRC}
+        alt=""
+        draggable={false}
+        className="ken-burns-image ambient-animated"
+      />
+      <SceneOverlay />
+    </div>
   );
 }
-
-// Ken Burns — subtle 40s scale + pan, alternating so the image drifts
-// back and forth without a hard reset. Disabled under
-// prefers-reduced-motion and below 768 px (touch devices — save battery).
-const kenBurnsCSS = `
-.tt-panorama {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center center;
-  transform-origin: 50% 50%;
-  will-change: transform;
-  animation: tt-kb 40s ease-in-out infinite alternate;
-  user-select: none;
-}
-
-@keyframes tt-kb {
-  from { transform: scale(1.00) translate(0%, 0%); }
-  to   { transform: scale(1.05) translate(-1%, -0.5%); }
-}
-
-@media (max-width: 767px) {
-  .tt-panorama { animation: none; transform: scale(1.02); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tt-panorama { animation: none; transform: scale(1.02); }
-}
-`;
