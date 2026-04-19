@@ -12,7 +12,8 @@
 
 import React, { forwardRef } from 'react';
 
-const VIDEO_SRC  = '/assets/thumbtown/panorama.mp4';
+const VIDEO_WEBM = '/assets/thumbtown/panorama.webm';
+const VIDEO_MP4  = '/assets/thumbtown/panorama.mp4';
 const POSTER_SRC = '/assets/thumbtown/panorama-poster.jpg';
 
 const prefersReducedMotion =
@@ -47,7 +48,10 @@ const VideoHero = forwardRef(function VideoHero(_props, ref) {
       preload="auto"
       aria-hidden
     >
-      <source src={VIDEO_SRC} type="video/mp4" />
+      {/* WebM first — Chrome/Firefox/Edge pick it for sharper compression.
+          Safari falls through to the MP4. */}
+      <source src={VIDEO_WEBM} type="video/webm" />
+      <source src={VIDEO_MP4}  type="video/mp4" />
     </video>
   );
 });
