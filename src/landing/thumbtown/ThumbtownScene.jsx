@@ -1,265 +1,221 @@
-// Thumbtown scene compositor — Phase 2 static layout (rebuild).
+// Thumbtown scene compositor — Phase 2 rebuild.
 //
-// Stacked PNG layers + colour stubs for un-generated MJ assets. No
-// animation, no parallax, no click handlers (Phase 3 / 4 / 5). The
-// baked hero base is mountain-main.png (sky + mountain + river +
-// Frame doorway in one image). Around it we compose:
+// Architecture:
+//   A "MountainCanvas" container is sized via JS so the baked mountain-
+//   main.png fills the viewport by COVER math (scales to whichever
+//   dimension is larger, crops the excess). Every sprite + the Frame
+//   doorway stub is parented inside this container and positioned as a
+//   percentage of the NATURAL image dimensions (816 × 1456). Sprites
+//   therefore always attach to scene content — no floating-in-void.
 //
-//   • floating islands in the upper-centre sky band
-//   • a bird flock further right
-//   • the village cluster in the river valley
-//   • painter / fisherman / gnome sprites at scene-appropriate spots
-//
-// All positions + sizes live in SCENE_LAYERS below for fast iteration.
-// Sprites size by `widthVh` so they scale in lockstep with the baked
-// mountain image (which also uses 100vh height), keeping proportions
-// consistent at any viewport.
+//   An outer absolute-fill div with overflow:hidden clips the cover
+//   overflow to viewport bounds. No gradient stubs, no placeholder
+//   fills, no decorative polygons. Only real PNG assets render.
 
-import React from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { FRAME_DOORWAY } from './frameConstants';
 
 const ASSETS = '/assets/thumbtown';
 
-// ── Base image y-offset (applied to mountain-main AND the Frame stub
-//    so they stay aligned when you nudge). Negative = image shifts up. ──
-const BASE_Y_OFFSET_PCT = -2;   // %
+// Image dimensions mirrored from frameConstants so the cover math stays
+// in sync with the doorway registration math.
+const IMG_W = FRAME_DOORWAY.imageWidth;   // 816
+const IMG_H = FRAME_DOORWAY.imageHeight;  // 1456
+const IMG_ASPECT = IMG_W / IMG_H;
 
-// ── Sprite layer configuration. Each layer renders as an <img> with:
-//    • top OR bottom in %
-//    • left OR right in %
-//    • width expressed in vh so it scales with the base image (which is
-//      h-100vh); or vw for items that should match viewport width
-//    • maxWidth px cap so sprites don't go comically large on ultrawide
-//    • mobile: true renders on <768px; false hides via md:block.
-// ───────────────────────────────────────────────────────────────────── */
+// Y anchor — the fraction of the natural image (0 = top, 1 = bottom) we
+// align with the same fraction of the viewport. 0.65 lands the Frame
+// doorway (at image-Y 0.62) near the middle-lower of the viewport at
+// 16:9 desktop, reading as the focal point without cramping the sky.
+const Y_ANCHOR = 0.65;
+
+// ── Sprite layer configuration ──
+// Every position + size is a percentage of the NATURAL image's
+// dimensions (not the viewport). Because the MountainCanvas container
+// matches image proportions, a sprite at "top: 72%" sits at 72% down the
+// image — same scene feature at every viewport size.
 const SCENE_LAYERS = [
-  // Floating islands — upper sky band, a bit left of centre.
+  // Single floating island — small accent in the upper sky, ~18% of
+  // mountain height per spec. height drives size, width auto preserves
+  // the island's aspect.
   {
     key: 'islands',
     src: `${ASSETS}/floating-islands/floating-islands.png`,
-    top:    '6%',
-    left:   '30%',
-    widthVh:  45,     // ~45% of viewport height
-    maxWidth: 520,
-    opacity:  0.95,
-    mobile: false,
+    style: { top: '5%', left: '28%', height: '18%', width: 'auto', opacity: 0.95 },
   },
-  // Bird flock — right side of the sky, smaller.
+  // Bird flock — upper-right sky.
   {
     key: 'birds',
     src: `${ASSETS}/effects/birds.png`,
-    top:    '10%',
-    right:  '14%',
-    widthVh:  20,
-    maxWidth: 280,
-    opacity:  0.88,
-    mobile: false,
+    style: { top: '13%', right: '16%', width: '14%', height: 'auto', opacity: 0.88 },
   },
-  // Village cluster — in the river valley, slightly left of centre.
+  // Village cluster — river mouth, slightly left of centre.
   {
     key: 'village',
     src: `${ASSETS}/village/village.png`,
-    bottom: '16%',
-    left:   '36%',
-    widthVh:  28,
-    maxWidth: 420,
-    opacity:  1.0,
-    mobile: true,           // keep on mobile — centres the composition
+    style: { top: '72%', left: '37%', width: '26%', height: 'auto' },
   },
-  // Painter — on cliff edge, just right of village, above it in z-stack.
+  // Painter — on the cliff near the Frame, above and slightly right.
   {
     key: 'painter',
     src: `${ASSETS}/characters/painter.png`,
-    bottom: '30%',
-    left:   '52%',
-    widthVh:   6.5,
-    maxWidth: 110,
-    opacity:  1.0,
-    mobile: false,
+    style: { top: '52%', left: '60%', width: '5.5%', height: 'auto' },
   },
-  // Fisherman — on rocky outcrop in the coast area, right third.
+  // Fisherman — by the river, right of village.
   {
     key: 'fisherman',
     src: `${ASSETS}/characters/fisherman.png`,
-    bottom: '14%',
-    right:  '11%',
-    widthVh:   7,
-    maxWidth: 120,
-    opacity:  1.0,
-    mobile: false,
+    style: { top: '79%', left: '64%', width: '6%', height: 'auto' },
   },
-  // Gnome — tucked in the forest, left third.
+  // Gnome — tucked into the low foreground, left of village.
   {
     key: 'gnome',
     src: `${ASSETS}/characters/gnome.png`,
-    bottom: '18%',
-    left:   '11%',
-    widthVh:   6,
-    maxWidth: 100,
-    opacity:  1.0,
-    mobile: false,
+    style: { top: '86%', left: '24%', width: '5%', height: 'auto' },
   },
 ];
 
-// Convert a SCENE_LAYERS entry to inline CSS.
-function layerStyle(cfg) {
-  const style = {
-    position: 'absolute',
-    pointerEvents: 'none',
-    userSelect: 'none',
-    opacity: cfg.opacity,
-    width: cfg.widthVh !== undefined ? `${cfg.widthVh}vh` : undefined,
-    maxWidth: cfg.maxWidth,
-    height: 'auto',
-  };
-  if (cfg.top    !== undefined) style.top    = cfg.top;
-  if (cfg.bottom !== undefined) style.bottom = cfg.bottom;
-  if (cfg.left   !== undefined) style.left   = cfg.left;
-  if (cfg.right  !== undefined) style.right  = cfg.right;
-  return style;
+// ── JS-computed cover bounds ──
+// Returns { w, h, left, top } in pixels for a div that renders the image
+// at the same size & position as object-fit:cover would, using Y_ANCHOR
+// instead of object-position's default centre. Updates on resize.
+function useCoverBounds() {
+  const [bounds, setBounds] = useState({ w: 0, h: 0, left: 0, top: 0 });
+
+  useLayoutEffect(() => {
+    const update = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const vAspect = vw / vh;
+
+      let w;
+      let h;
+      if (vAspect > IMG_ASPECT) {
+        // Viewport wider than image — scale by width, overflow height.
+        w = vw;
+        h = vw / IMG_ASPECT;
+      } else {
+        // Viewport narrower than image — scale by height, overflow width.
+        h = vh;
+        w = vh * IMG_ASPECT;
+      }
+
+      const left = (vw - w) / 2;
+      const top  = Y_ANCHOR * (vh - h);
+      setBounds({ w, h, left, top });
+    };
+
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  return bounds;
 }
 
 // ───────────────────────────────────────────────────────────────────── //
 
 export default function ThumbtownScene() {
+  const { w, h, left, top } = useCoverBounds();
+
   return (
     <div
       className="absolute inset-0 overflow-hidden select-none"
-      style={{ background: '#141024' }}
+      style={{ background: '#0a0714' }}
       aria-hidden
     >
-      {/* ── Stubs for un-generated MJ assets (spec §11 items 4–9) ── */}
-      <Stubs />
-
-      {/* ── Baked hero base — mountain-main.png ──
-          Portrait 816×1456, rendered at 100vh height (auto width), centred
-          horizontally. Occupies ~31% of a 16:9 viewport width; stubs flank. */}
-      <img
-        src={`${ASSETS}/backgrounds/mountain-main.png`}
-        alt=""
-        draggable={false}
-        className="absolute top-0 left-1/2 h-full w-auto max-w-none select-none"
+      {/* MountainCanvas — sized to match cover-rendered image bounds.
+          All sprites + Frame stub parent inside, positioned by % of
+          natural image dimensions so they stay attached to scene
+          content at every viewport size. */}
+      <div
         style={{
-          transform: `translateX(-50%) translateY(${BASE_Y_OFFSET_PCT}%)`,
-          willChange: 'transform',
+          position: 'absolute',
+          width: w,
+          height: h,
+          left,
+          top,
+          pointerEvents: 'none',
         }}
-      />
-
-      {/* ── Frame doorway stub + EDITOR label (placeholder for Phase-6
-            3D FrameWarp). Anchored in vh so it tracks the base image. */}
-      <FrameDoorwayStub />
-
-      {/* ── Sprite layers ──
-          Each driven by SCENE_LAYERS config above. */}
-      {SCENE_LAYERS.map((cfg) => (
+      >
+        {/* Baked hero base — mountain, sky, river, Frame niche. */}
         <img
-          key={cfg.key}
-          src={cfg.src}
+          src={`${ASSETS}/backgrounds/mountain-main.png`}
           alt=""
           draggable={false}
-          className={cfg.mobile ? 'absolute' : 'absolute hidden md:block'}
-          style={layerStyle(cfg)}
+          style={{
+            display: 'block',
+            width: '100%',
+            height: '100%',
+            userSelect: 'none',
+          }}
         />
-      ))}
+
+        {/* Sprite layers — driven by SCENE_LAYERS config. */}
+        {SCENE_LAYERS.map((cfg) => (
+          <img
+            key={cfg.key}
+            src={cfg.src}
+            alt=""
+            draggable={false}
+            style={{
+              position: 'absolute',
+              pointerEvents: 'none',
+              userSelect: 'none',
+              ...cfg.style,
+            }}
+          />
+        ))}
+
+        {/* Frame doorway stub — replaced by 3D FrameWarp in Phase 6. */}
+        <FrameDoorwayStub />
+      </div>
     </div>
   );
 }
 
-// ── Colour-gradient stubs — replace with real PNGs as they arrive. ────
-function Stubs() {
-  return (
-    <>
-      {/* Forest panel — LEFT third (spec §3 Enchanted Forest). */}
-      <div
-        className="absolute inset-y-0 left-0 pointer-events-none hidden md:block"
-        style={{
-          width: '38%',
-          background:
-            'linear-gradient(90deg, #1a2620 0%, #1d3328 22%, #20382c 45%, rgba(30, 48, 38, 0.55) 80%, transparent 100%)',
-        }}
-      />
-      {/* Coast panel — RIGHT third (spec §3 Coast + Mountain area). */}
-      <div
-        className="absolute inset-y-0 right-0 pointer-events-none hidden md:block"
-        style={{
-          width: '34%',
-          background:
-            'linear-gradient(270deg, #3a2818 0%, #4a3020 28%, #583a22 55%, rgba(70, 46, 28, 0.45) 82%, transparent 100%)',
-        }}
-      />
-      {/* Distant mountain range silhouette — polygon right-bottom. */}
-      <div
-        className="absolute pointer-events-none hidden md:block"
-        style={{
-          right: 0,
-          bottom: '20%',
-          width: '28%',
-          height: '24%',
-          background:
-            'linear-gradient(180deg, rgba(74, 58, 82, 0.65) 0%, rgba(46, 32, 58, 0.75) 100%)',
-          clipPath:
-            'polygon(0% 100%, 10% 40%, 22% 60%, 38% 20%, 52% 50%, 70% 25%, 85% 55%, 100% 40%, 100% 100%)',
-          filter: 'blur(1px)',
-        }}
-      />
-      {/* Foreground grass band — bottom 8%, warm olive gradient. */}
-      <div
-        className="absolute left-0 right-0 bottom-0 pointer-events-none"
-        style={{
-          height: '8%',
-          background:
-            'linear-gradient(180deg, transparent 0%, rgba(58, 40, 22, 0.7) 45%, #3a2818 100%)',
-        }}
-      />
-    </>
-  );
-}
-
-// ── Frame doorway stub ──────────────────────────────────────────────
-// Converts the image-space doorway rect (from frameConstants) to a
-// vh-based overlay on the mountain-main base image. For Phase 2 we draw
-// an outlined rectangle + EDITOR label so the registration point is
-// visible during layout iteration. Phase 6 replaces this with the
-// real 3D FrameWarp mesh.
+// ── Frame doorway stub ──
+// Positioned by % of natural image dimensions (not vh). Because the
+// parent MountainCanvas matches image proportions, these percentages
+// align with the actual doorway geometry baked into mountain-main.png
+// at every viewport.
 function FrameDoorwayStub() {
-  const { imageWidth, imageHeight, doorway } = FRAME_DOORWAY;
-
-  // Everything expressed in vh because the base image renders at height
-  // 100vh → a horizontal distance of imagePx == (imagePx/imageHeight)·100vh.
-  const toVh = (imagePx) => `${(imagePx / imageHeight) * 100}vh`;
-  const leftFromImgCenter = toVh(doorway.topLeft.x - imageWidth / 2);
-  const topVh             = toVh(doorway.topLeft.y - imageHeight * Math.abs(BASE_Y_OFFSET_PCT) / 100);
-  const widthVh           = toVh(imageWidth  * doorway.widthPct);
-  const heightVh          = toVh(imageHeight * doorway.heightPct);
+  const { doorway } = FRAME_DOORWAY;
+  const leftPct = (doorway.topLeft.x / IMG_W) * 100;
+  const topPct  = (doorway.topLeft.y / IMG_H) * 100;
+  const widthPct  = doorway.widthPct  * 100;
+  const heightPct = doorway.heightPct * 100;
 
   return (
     <>
       <div
-        className="absolute pointer-events-none hidden md:block"
         style={{
-          left: `calc(50% + ${leftFromImgCenter})`,
-          top: topVh,
-          width: widthVh,
-          height: heightVh,
+          position: 'absolute',
+          left:   `${leftPct}%`,
+          top:    `${topPct}%`,
+          width:  `${widthPct}%`,
+          height: `${heightPct}%`,
           border: '1.5px solid rgba(249, 180, 80, 0.65)',
           boxShadow:
             '0 0 24px -4px rgba(249, 180, 80, 0.55), inset 0 0 20px rgba(249, 180, 80, 0.25)',
           borderRadius: 3,
+          pointerEvents: 'none',
         }}
       />
       <div
-        className="absolute pointer-events-none hidden md:block"
         style={{
-          left: `calc(50% + ${leftFromImgCenter})`,
-          top: `calc(${topVh} + ${heightVh} + 0.6vh)`,
-          width: widthVh,
+          position: 'absolute',
+          left:    `${leftPct}%`,
+          top:     `calc(${topPct + heightPct}% + 6px)`,
+          width:   `${widthPct}%`,
           textAlign: 'center',
           color: '#f0e4d0',
           fontFamily: "'Fraunces Variable', 'Fraunces', Georgia, serif",
-          fontSize: '1.35vh',
+          fontSize: 'calc(10px + 0.4vw)',
           fontWeight: 500,
           letterSpacing: '0.42em',
           textShadow: '0 1px 6px rgba(10, 7, 20, 0.9)',
+          pointerEvents: 'none',
         }}
       >
         EDITOR
