@@ -1,16 +1,15 @@
-// Thumbtown landing — Phase 2 static composition.
+// Thumbtown landing — video hero with SVG Frame portal.
 //
-// Renders:
-//   • Navbar (transparent, sits over the scene)
-//   • ThumbtownScene — layered PNG compositor + colour stubs
-//   • WorldHero — top-left overlay with eyebrow / H1 / CTA
+// Composition:
+//   • ThumbtownScene — full-viewport looping MJ panorama video +
+//     ornate Frame. Clicking the Frame triggers the warp transition,
+//     and onOpenEditor routes to the editor.
+//   • Navbar — transparent top navigation, sits over the video.
+//   • HeroOverlay — top-left copy + primary CTA.
 //
-// No ambient motion yet (Phase 3). No easter-egg clicks (Phase 4). No
-// pricing island transition (Phase 5). No 3D Frame warp (Phase 6). No
-// scroll content below the scene (Phase 7).
-//
-// Mobile: ThumbtownScene and Navbar handle their own responsive scaling
-// via Tailwind md: breakpoints and CSS media queries.
+// Navigation is prop-driven via `setPage` from App.js. If the prop is
+// absent we fall back to a plain window.location navigation so the
+// landing stays functional as a standalone mount.
 
 import React from 'react';
 import '@fontsource-variable/inter';
@@ -18,7 +17,7 @@ import '@fontsource-variable/fraunces';
 import './landing.built.css';
 import Navbar from './components/layout/Navbar';
 import ThumbtownScene from './thumbtown/ThumbtownScene';
-import WorldHero from './thumbtown/WorldHero';
+import HeroOverlay from './thumbtown/HeroOverlay';
 
 export default function LandingPageV2({ setPage }) {
   const goTo = (target) => {
@@ -36,14 +35,9 @@ export default function LandingPageV2({ setPage }) {
         background: '#141024',
       }}
     >
-      {/* Layered painted scene — back-to-front PNG stack + stubs. */}
       <ThumbtownScene />
-
-      {/* Top navigation — sits above scene, transparent background. */}
       <Navbar onNavigate={goTo} />
-
-      {/* Hero overlay — top-left per spec §7. */}
-      <WorldHero onStartFree={() => goTo('signup')} />
+      <HeroOverlay onStartFree={() => goTo('signup')} />
     </div>
   );
 }

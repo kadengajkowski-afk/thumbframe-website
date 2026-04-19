@@ -51,6 +51,11 @@
     <!-- DNS prefetch for API -->
     <link rel="dns-prefetch" href="https://thumbframe-api-production.up.railway.app">
 
+    <!-- Landing hero poster — preloaded so it paints before the video buffers.
+         The video itself uses preload="auto" on the <video> tag — Chrome warns
+         about `as="video"` on <link rel=preload>, so we skip that hint. -->
+    <link rel="preload" as="image" href="/assets/thumbtown/panorama-poster.jpg" fetchpriority="high">
+
     <!-- Satoshi (UI font) -->
     <link rel="preconnect" href="https://api.fontshare.com">
     <link href="https://api.fontshare.com/v2/css?f[]=satoshi@900,800,700,500,400,300&display=swap" rel="stylesheet">
