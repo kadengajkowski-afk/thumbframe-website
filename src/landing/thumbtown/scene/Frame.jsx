@@ -49,7 +49,7 @@ export default function Frame() {
         position: 'absolute',
         inset: 0,
         display: 'block',
-        zIndex: 5,
+        zIndex: 8,
         textDecoration: 'none',
       }}
     >
@@ -84,8 +84,8 @@ export default function Frame() {
           className="frame-outer-glow"
           cx={centerX}
           cy={centerY}
-          rx={width * 1.6}
-          ry={height * 1.3}
+          rx={width * 1.15}
+          ry={height * 0.95}
           fill="url(#frame-glow)"
           style={{ mixBlendMode: 'screen' }}
         />

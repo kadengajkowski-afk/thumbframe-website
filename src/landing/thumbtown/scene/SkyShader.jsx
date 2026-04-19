@@ -1,18 +1,15 @@
 // SkyShader — full-viewport animated atmospheric sky.
 //
-// Two stacked layers:
-//   1. Paper MeshGradient (WebGL) — ambient swirl between sunset tones
-//   2. Vertical linear-gradient <div> overlay — enforces day-to-horizon
-//      banding so the scene reads as a SKY (cool top, warm mid, saturated
-//      glow at the horizon) rather than a uniform amber wash.
+// Paper MeshGradient (WebGL) + vertical linear-gradient <div> overlay.
 //
-// `distortion` dropped from 0.8 → 0.35 so the shader's own color bands
-// are visible instead of being churned into a single hue. `swirl` kept
-// moderate so motion is clearly atmospheric rather than static.
+// Distortion 0.4 — enough motion that the sky is clearly alive, low
+// enough that the four sunset tones read as soft bands rather than a
+// churned wash. Swirl 0.3 keeps the movement ambient.
 //
-// The overlay gradient runs ABOVE the shader (zIndex: 1) but BELOW the
-// mountains (zIndex: 2+). Its center band is transparent so the shader
-// motion reads through in the middle of the sky.
+// Palette: cool cream up top, amber mid, warm rust + rose at the horizon.
+// Order matters — MeshGradient treats the `colors` array as mesh nodes
+// and interpolates between them, so leading with the coolest tone gives
+// the shader a tendency to deposit the cool colour higher in the frame.
 
 import React from 'react';
 import { MeshGradient } from '@paper-design/shaders-react';
@@ -21,10 +18,10 @@ export default function SkyShader() {
   return (
     <>
       <MeshGradient
-        colors={['#f9d7a3', '#f4a261', '#e76f51', '#c9736a']}
-        speed={0.15}
-        distortion={0.35}
-        swirl={0.35}
+        colors={['#f8e4c8', '#f9d7a3', '#f4a261', '#e76f51']}
+        speed={0.12}
+        distortion={0.4}
+        swirl={0.3}
         style={{
           position: 'absolute',
           inset: 0,
@@ -33,7 +30,7 @@ export default function SkyShader() {
           zIndex: 0,
         }}
       />
-      {/* Vertical banding: cool cream top, warm rust horizon */}
+      {/* Vertical sunset bands — cool cream top, warm rust horizon */}
       <div
         aria-hidden
         style={{
@@ -43,11 +40,12 @@ export default function SkyShader() {
           pointerEvents: 'none',
           background:
             'linear-gradient(to bottom, ' +
-              'rgba(253, 232, 196, 0.35) 0%, ' +
-              'rgba(249, 215, 163, 0.15) 22%, ' +
-              'rgba(244, 162, 97, 0.00) 50%, ' +
-              'rgba(231, 111, 81, 0.20) 78%, ' +
-              'rgba(201, 72, 10, 0.35) 100%)',
+              'rgba(253, 240, 210, 0.55) 0%, ' +
+              'rgba(249, 218, 168, 0.25) 18%, ' +
+              'rgba(249, 218, 168, 0.00) 38%, ' +
+              'rgba(244, 162, 97, 0.12) 55%, ' +
+              'rgba(231, 111, 81, 0.28) 78%, ' +
+              'rgba(201, 72, 10, 0.45) 100%)',
         }}
       />
     </>
