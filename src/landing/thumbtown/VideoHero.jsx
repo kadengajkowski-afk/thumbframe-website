@@ -40,6 +40,9 @@ const VideoHero = forwardRef(function VideoHero(_props, ref) {
       loop
       muted
       playsInline
+      disablePictureInPicture
+      controlsList="nodownload noplaybackrate nofullscreen"
+      onContextMenu={(e) => e.preventDefault()}
       poster={POSTER_SRC}
       preload="auto"
       aria-hidden
