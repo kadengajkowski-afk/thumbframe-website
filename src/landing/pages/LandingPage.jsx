@@ -1,16 +1,14 @@
 import LandingScene from '../scenes/LandingScene';
-import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-export default function LandingPage() {
-  const navigate = useNavigate();
+export default function LandingPage({ onNavigate }) {
   const { user } = useAuth();
 
   const handlePrimary = () => {
     if (user) {
-      navigate('/editor');
+      onNavigate?.('editor');
     } else {
-      navigate('/signup');
+      onNavigate?.('signup');
     }
   };
 
@@ -63,15 +61,18 @@ export default function LandingPage() {
         <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
           {user ? (
             <button
-              onClick={() => navigate('/editor')}
+              onClick={() => onNavigate?.('editor')}
               style={navButtonStyle}
             >
               Open editor
             </button>
           ) : (
-            <Link to="/login" style={navLinkStyle}>
+            <button
+              onClick={() => onNavigate?.('login')}
+              style={navButtonStyle}
+            >
               Log in
-            </Link>
+            </button>
           )}
         </div>
       </nav>

@@ -9,5 +9,5 @@ import './landing.built.css';
 import LandingPage from './pages/LandingPage';
 
 export default function LandingPageV2({ setPage }) {
-  return <LandingPage setPage={setPage} />;
+  return <LandingPage onNavigate={setPage} />;
 }
