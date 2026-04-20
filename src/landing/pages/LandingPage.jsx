@@ -81,7 +81,7 @@ export default function LandingPage({ onNavigate }) {
       <div
         style={{
           position: 'absolute',
-          top: '8%',
+          top: '3%',
           left: 0,
           right: 0,
           zIndex: 10,
@@ -126,7 +126,7 @@ export default function LandingPage({ onNavigate }) {
       <div
         style={{
           position: 'absolute',
-          top: '32%',
+          top: '22%',
           left: 0,
           right: 0,
           zIndex: 10,
