@@ -174,68 +174,192 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
   const thrustRef = useRef(1.0);
   const lastXRef = useRef(position[0]);
 
-  // Gentle ship rock — three independent sines, different periods.
-  // Rock is layered on top of the base rotation passed in via props so the
-  // three-quarter hero yaw holds while the ship still sways.
+  // === MANEUVER STATE MACHINE ===
+  const maneuverRef = useRef({
+    state: 'idle',               // 'idle' | 'charging' | 'executing' | 'recovering'
+    type: null,                  // 'vertLoop' | 'horizLoop' | 'barrelRoll' | 'figure8'
+    startTime: 0,
+    duration: 0,
+    nextTriggerAt: 5,            // TEMPORARY — maneuver fires in 5 seconds
+    // Store idle position to return to
+    idleX: position[0],
+    idleY: position[1],
+    idleZ: position[2],
+  });
+
+  const shakeRef = useRef({ intensity: 0 });      // screen-shake pulse
+  const trailRef = useRef({ active: false });     // light streak trail toggle
+
   useFrame((state) => {
     if (!groupRef.current) return;
     const t = state.clock.elapsedTime;
+    const m = maneuverRef.current;
 
-    // === BASE BOB (asymmetric: deeper down than up) ===
-    const bob = Math.sin(t * 0.55);
-    const bobY = bob > 0 ? bob * 0.35 : bob * 0.75;
+    // === STATE TRANSITIONS ===
 
-    // Wide lateral roam — ship moves across the whole frame
-    const driftX = Math.sin(t * 0.18) * 2.5
-                 + Math.sin(t * 0.11 + 1.2) * 1.3
-                 + Math.sin(t * 0.07 + 2.1) * 0.8;
-    const driftZ = Math.sin(t * 0.13 + 0.7) * 0.6
-                 + Math.cos(t * 0.09) * 0.4;
+    if (m.state === 'idle' && t >= m.nextTriggerAt) {
+      // Trigger a new maneuver
+      const types = ['vertLoop', 'horizLoop', 'barrelRoll', 'figure8'];
+      m.type = types[Math.floor(Math.random() * types.length)];
+      m.state = 'charging';
+      m.startTime = t;
+      m.duration = 0.8;  // 0.8s charge-up
+      shakeRef.current.intensity = 0;
+    }
 
-    // Vertical roam on top of bob — ship rises and falls over long periods
-    const roamY = Math.sin(t * 0.08 + 1.7) * 0.8
-                + Math.sin(t * 0.14 + 0.3) * 0.4;
+    else if (m.state === 'charging' && t - m.startTime >= m.duration) {
+      // Transition to executing
+      m.state = 'executing';
+      m.startTime = t;
+      m.duration = m.type === 'figure8' ? 5.0 : 3.0;
+      trailRef.current.active = true;
+    }
 
-    // === GUST LURCHES ===
-    // Occasional burst of extra motion — ship gets hit by a "wind gust"
-    // Uses a sharpened sine that peaks briefly every ~6-10s
-    const gustCycle = Math.sin(t * 0.18 + 0.5);
-    const gustIntensity = Math.pow(Math.max(0, gustCycle), 8);  // peaks narrow
-    const gustX = gustIntensity * Math.sin(t * 2.3) * 0.3;
-    const gustY = gustIntensity * Math.sin(t * 1.9) * 0.2;
-    const gustRoll = gustIntensity * 0.08;
+    else if (m.state === 'executing' && t - m.startTime >= m.duration) {
+      // Transition to recovering
+      m.state = 'recovering';
+      m.startTime = t;
+      m.duration = 1.2;
+      trailRef.current.active = false;
+    }
 
-    // === APPLY POSITION ===
-    groupRef.current.position.x = position[0] + driftX + gustX;
-    groupRef.current.position.y = position[1] + bobY + gustY + roamY;
-    groupRef.current.position.z = position[2] + driftZ;
+    else if (m.state === 'recovering' && t - m.startTime >= m.duration) {
+      // Back to idle, schedule next maneuver
+      m.state = 'idle';
+      m.type = null;
+      m.nextTriggerAt = t + 120 + Math.random() * 120;  // 2-4 min
+    }
 
-    // === ROTATION ===
-    const baseYaw = rotation?.[1] ?? 0;
+    // === IDLE DRIFT (when not executing maneuver) ===
+    let baseX = position[0];
+    let baseY = position[1];
+    let baseZ = position[2];
+    let rotY = rotation?.[1] ?? 0;
+    let rotX = 0;
+    let rotZ = 0;
 
-    // Yaw wobble + slight response to lateral drift
-    groupRef.current.rotation.y = baseYaw
-      + Math.sin(t * 0.22) * 0.06
-      + driftX * 0.015;  // ship noses into its drift direction
+    if (m.state === 'idle' || m.state === 'charging' || m.state === 'recovering') {
+      // Bob
+      const bob = Math.sin(t * 0.55);
+      const bobY = bob > 0 ? bob * 0.35 : bob * 0.75;
 
-    // Pitch — noses up on rise, down on fall
-    groupRef.current.rotation.x = Math.sin(t * 0.55 + 0.5) * 0.07;
+      // Wide drift
+      const driftX = Math.sin(t * 0.18) * 2.5
+                   + Math.sin(t * 0.11 + 1.2) * 1.3
+                   + Math.sin(t * 0.07 + 2.1) * 0.8;
+      const driftZ = Math.sin(t * 0.13 + 0.7) * 0.6
+                   + Math.cos(t * 0.09) * 0.4;
+      const roamY = Math.sin(t * 0.08 + 1.7) * 0.8
+                  + Math.sin(t * 0.14 + 0.3) * 0.4;
 
-    // Roll — leans into lateral sway PLUS reacts to gusts
-    groupRef.current.rotation.z = Math.sin(t * 0.31 + 0.3) * 0.05
-                                + gustRoll * Math.sin(t * 3.1);
+      // Gust lurches
+      const gustCycle = Math.sin(t * 0.18 + 0.5);
+      const gustIntensity = Math.pow(Math.max(0, gustCycle), 8);
+      const gustX = gustIntensity * Math.sin(t * 2.3) * 0.3;
+      const gustY = gustIntensity * Math.sin(t * 1.9) * 0.2;
 
-    // === VELOCITY-BASED THRUST ===
-    // Flame activates when ship moves right (+X), idles when moving left
-    const currentX = groupRef.current.position.x;
-    const dt = state.clock.getDelta ? 1/60 : 1/60;  // approximate
-    const vx = (currentX - lastXRef.current) / dt;
-    lastXRef.current = currentX;
+      baseX = position[0] + driftX + gustX;
+      baseY = position[1] + bobY + roamY + gustY;
+      baseZ = position[2] + driftZ;
 
-    // Map velocity to thrust: 0 when moving backward, up to 1 when
-    // moving forward at full speed
-    const forwardSpeed = Math.max(0, vx);
-    thrustRef.current = Math.min(1.0, forwardSpeed / 0.8);
+      rotY = (rotation?.[1] ?? 0) + Math.sin(t * 0.22) * 0.06 + driftX * 0.015;
+      rotX = Math.sin(t * 0.55 + 0.5) * 0.07;
+      rotZ = Math.sin(t * 0.31 + 0.3) * 0.05;
+    }
+
+    // === MANEUVER OVERRIDES ===
+
+    if (m.state === 'charging') {
+      // Ship tenses up, small tremor, thrusters building
+      const progress = (t - m.startTime) / m.duration;
+      const tremor = Math.sin(t * 60) * 0.04 * progress;
+      baseX += tremor;
+      baseY += Math.cos(t * 55) * 0.03 * progress;
+      shakeRef.current.intensity = progress * 0.6;
+    }
+
+    if (m.state === 'executing') {
+      const p = (t - m.startTime) / m.duration;  // 0 to 1
+      shakeRef.current.intensity = p < 0.1 ? 1.0 : Math.max(0, 0.3 - (p - 0.1));
+
+      if (m.type === 'vertLoop') {
+        // Vertical loop: climb, invert at top, dive back
+        const loopT = p * Math.PI * 2;
+        const radius = 3.5;
+        baseX = m.idleX + Math.sin(loopT) * radius * 1.2;
+        baseY = m.idleY + (1 - Math.cos(loopT)) * radius;
+        baseZ = m.idleZ;
+        rotZ = -loopT;                          // ship spins through loop
+        rotY = (rotation?.[1] ?? 0) + Math.sin(p * Math.PI) * 0.3;
+      }
+
+      else if (m.type === 'horizLoop') {
+        // Horizontal circle — big sweep across frame
+        const loopT = p * Math.PI * 2;
+        const radius = 4.5;
+        baseX = m.idleX + Math.sin(loopT) * radius;
+        baseY = m.idleY + Math.cos(loopT) * 1.2;  // elliptical, less vertical
+        baseZ = m.idleZ - (1 - Math.cos(loopT)) * 2.0;  // arcs into depth
+        rotY = (rotation?.[1] ?? 0) + loopT;      // ship yaws through circle
+      }
+
+      else if (m.type === 'barrelRoll') {
+        // Rolls 720° while drifting across frame
+        baseX = m.idleX + p * 8 - 4;
+        baseY = m.idleY + Math.sin(p * Math.PI) * 1.2;
+        rotX = p * Math.PI * 4;  // two full rolls
+      }
+
+      else if (m.type === 'figure8') {
+        // Two connected loops
+        const loopT = p * Math.PI * 4;
+        const radius = 2.8;
+        baseX = m.idleX + Math.sin(loopT) * radius;
+        baseY = m.idleY + Math.sin(loopT * 2) * radius * 0.6;
+        rotZ = Math.sin(loopT) * 1.5;
+      }
+    }
+
+    if (m.state === 'recovering') {
+      // Ease back from maneuver end position to idle drift
+      const p = (t - m.startTime) / m.duration;
+      const ease = 1 - Math.pow(1 - p, 3);  // cubic ease-out
+
+      // The baseX/Y/Z above were computed for idle at THIS time.
+      // But ship last was at end-of-maneuver position. We smoothly
+      // move from wherever we are toward the idle target.
+      const cur = groupRef.current.position;
+      baseX = cur.x + (baseX - cur.x) * ease * 0.15;
+      baseY = cur.y + (baseY - cur.y) * ease * 0.15;
+      baseZ = cur.z + (baseZ - cur.z) * ease * 0.15;
+
+      shakeRef.current.intensity = Math.max(0, 0.2 - p * 0.2);
+    }
+
+    // === APPLY SHAKE ===
+    const shakeAmp = shakeRef.current.intensity * 0.15;
+    baseX += (Math.random() - 0.5) * shakeAmp;
+    baseY += (Math.random() - 0.5) * shakeAmp;
+
+    // === APPLY ALL TRANSFORMS ===
+    groupRef.current.position.x = baseX;
+    groupRef.current.position.y = baseY;
+    groupRef.current.position.z = baseZ;
+    groupRef.current.rotation.y = rotY;
+    groupRef.current.rotation.x = rotX;
+    groupRef.current.rotation.z = rotZ;
+
+    // === THRUST MODULATION ===
+    // During maneuvers, thrust is FULL regardless of velocity
+    if (m.state === 'executing' || m.state === 'charging') {
+      thrustRef.current = 1.5;  // overpower during maneuver
+    } else {
+      // Normal velocity-based thrust
+      const currentX = groupRef.current.position.x;
+      const vx = (currentX - lastXRef.current) * 60;
+      thrustRef.current = Math.min(1.0, Math.max(0, vx / 0.8));
+    }
+    lastXRef.current = groupRef.current.position.x;
   });
 
   return (
