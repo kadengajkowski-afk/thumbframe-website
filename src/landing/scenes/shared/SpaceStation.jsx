@@ -93,7 +93,7 @@ const sailFragment = `
     // Golden solar sail — warm amber base with cream highlights
     vec3 sailDark  = vec3(0.72, 0.48, 0.20);   // deep amber/bronze
     vec3 sailLight = vec3(0.98, 0.86, 0.55);   // bright gold
-    vec3 tColor    = vec3(0.55, 0.22, 0.08);   // deep rust (T reads dark on gold)
+    vec3 tColor    = vec3(0.93, 0.48, 0.18);   // warm watercolor orange
 
     // Base: gradient from deep amber at edges to bright gold at center
     // Use the billow magnitude as a proxy for "lit by sun" — center
