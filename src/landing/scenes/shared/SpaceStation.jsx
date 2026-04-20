@@ -41,13 +41,13 @@ const sailVertex = `
 
     // Main billow: wind pressure bulges sail in -Z
     float billow = sin(a * 0.5 + vUv.y * 1.2) * 0.18 + 0.55;  // range ~0.37 to 0.73
-    pos.z -= billow * freedom;
+    pos.z += billow * freedom;
 
     // Depth variation (wave-like in/out motion on top of billow)
     float depthZ = sin(b - vUv.y * 3.9 + jy) * 0.25
                  + sin(d * 0.5 + vUv.x * 2.7 - vUv.y * 3.0) * 0.16
                  + sin(a * 1.4 - vUv.x * 1.3) * 0.10;
-    pos.z -= depthZ * freedom;  // note: MINUS because wind from left
+    pos.z += depthZ * freedom;
 
     // Vertical ripple (sail surface rippling up/down)
     float rippleY = sin(c - vUv.y * 5.2 + jx * 3.0) * 0.12
@@ -63,7 +63,7 @@ const sailVertex = `
     float edgeChop = sin(d * 2.1 + vUv.x * 7.0 + vUv.y * 4.0) * 0.035
                    + sin(b * 3.3 - vUv.y * 9.0) * 0.025;
     float trailingEdge = smoothstep(0.4, 1.0, vUv.x);
-    pos.z -= edgeChop * trailingEdge * freedom;
+    pos.z += edgeChop * trailingEdge * freedom;
 
     // Hard pin at top only
     float pinFactor = smoothstep(1.0, 0.92, vUv.y);
