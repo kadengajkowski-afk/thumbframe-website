@@ -90,7 +90,11 @@ function spawnStreak(slot, now) {
   slot.active = true;
 }
 
-export default function ShootingStars({ enabled = true }) {
+export default function ShootingStars({
+  enabled = true,
+  singleRange = [6, 18],
+  showerRange = [60, 120],
+}) {
   const pointsRef = useRef();
   const matRef = useRef();
 
@@ -117,7 +121,7 @@ export default function ShootingStars({ enabled = true }) {
     if (!sched.initialized) {
       // First-arm delay so nothing fires on mount.
       sched.nextSingle = t + randRange(3, 8);
-      sched.nextShower = t + randRange(60, 120);
+      sched.nextShower = t + randRange(showerRange[0], showerRange[1]);
       sched.initialized = true;
     }
 
@@ -128,7 +132,7 @@ export default function ShootingStars({ enabled = true }) {
     if (t >= sched.nextSingle) {
       const freeSlot = pool.slots.find((s) => !s.active);
       if (freeSlot) spawnStreak(freeSlot, t);
-      sched.nextSingle = t + randRange(6, 18) * cadenceMul;
+      sched.nextSingle = t + randRange(singleRange[0], singleRange[1]) * cadenceMul;
     }
 
     // Meteor shower burst.
@@ -144,7 +148,7 @@ export default function ShootingStars({ enabled = true }) {
           spawned += 1;
         }
       }
-      sched.nextShower = t + randRange(60, 120) * cadenceMul;
+      sched.nextShower = t + randRange(showerRange[0], showerRange[1]) * cadenceMul;
     }
 
     // Update positions for every slot, active or not.

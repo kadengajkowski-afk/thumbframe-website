@@ -169,7 +169,18 @@ function Lantern({ position }) {
 
 // ===== MAIN SHIP =====
 
-export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation = [0, 0, 0] }) {
+export default function SpaceStation({
+  position = [0, 0, 0],
+  scale = 1,
+  rotation = [0, 0, 0],
+  calm = false,       // anchored pages: no maneuvers, no drift, just gentle bob/rock
+  engineOff = false,  // hide plume when ship isn't in flight
+  // Calm-mode tuning — defaults match the pricing-page anchored feel.
+  bobAmp  = 0.15,
+  bobFreq = 0.7,
+  rockAmp  = 0.09,
+  rockFreq = 0.4,
+}) {
   const groupRef = useRef();
   const thrustRef = useRef(1.0);
   const lastXRef = useRef(position[0]);
@@ -192,6 +203,21 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
   useFrame((state) => {
     if (!groupRef.current) return;
     const t = state.clock.elapsedTime;
+
+    // Calm mode — anchored/parked pages. No maneuvers, no drift.
+    // Gentle bob + slight roll, tunable via props.
+    if (calm) {
+      groupRef.current.position.x = position[0];
+      groupRef.current.position.y = position[1] + Math.sin(t * bobFreq) * bobAmp;
+      groupRef.current.position.z = position[2];
+      groupRef.current.rotation.y = (rotation?.[1] ?? 0) + Math.sin(t * 0.3) * 0.03;
+      groupRef.current.rotation.x = 0;
+      groupRef.current.rotation.z = Math.sin(t * rockFreq + 1.2) * rockAmp;
+      groupRef.current.scale.setScalar(scale);
+      thrustRef.current = 0;
+      return;
+    }
+
     const m = maneuverRef.current;
 
     // === STATE TRANSITIONS ===
@@ -242,7 +268,13 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
 
       const driftX = Math.sin(t * 0.18) * 2.5
                    + Math.sin(t * 0.11 + 1.2) * 1.3
-                   + Math.sin(t * 0.07 + 2.1) * 0.8;
+                   + Math.sin(t * 0.07 + 2.1) * 0.8
+                   + Math.sin(t * 0.121 + 3.7) * 2.5; // slow ~52s left-sweep, distinct phase
+      // Analytical d(driftX)/dt — velocity used for heading-lead and roll-into-turn.
+      const vDriftX = Math.cos(t * 0.18) * 2.5 * 0.18
+                    + Math.cos(t * 0.11 + 1.2) * 1.3 * 0.11
+                    + Math.cos(t * 0.07 + 2.1) * 0.8 * 0.07
+                    + Math.cos(t * 0.121 + 3.7) * 2.5 * 0.121;
       const driftZ = Math.sin(t * 0.13 + 0.7) * 0.6
                    + Math.cos(t * 0.09) * 0.4;
       const roamY = Math.sin(t * 0.08 + 1.7) * 0.8
@@ -272,9 +304,19 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
         baseZ = targetZ;
       }
 
-      rotY = (rotation?.[1] ?? 0) + Math.sin(t * 0.22) * 0.06 + driftX * 0.015;
-      rotX = Math.sin(t * 0.55 + 0.5) * 0.07;
-      rotZ = Math.sin(t * 0.31 + 0.3) * 0.05;
+      // Yaw: primary sway + slow secondary + heading-lead from velocity
+      // (nose drifts toward direction of travel like a fish leaning into a turn).
+      rotY = (rotation?.[1] ?? 0)
+           + Math.sin(t * 0.22) * 0.06
+           + Math.sin(t * 0.13 + 5.1) * 0.04
+           + vDriftX * 0.08;
+      // Pitch: existing primary + slow secondary
+      rotX = Math.sin(t * 0.55 + 0.5) * 0.07
+           + Math.sin(t * 0.19 + 2.8) * 0.025;
+      // Roll: ±8° fast bank + slow secondary + bank-into-turn from velocity
+      rotZ = Math.sin(t * 0.9 + 1.4) * 0.14
+           + Math.sin(t * 0.37 + 4.2) * 0.04
+           - vDriftX * 0.06;
     }
 
     // === MANEUVER OVERRIDES ===
@@ -301,6 +343,10 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     groupRef.current.rotation.y = rotY;
     groupRef.current.rotation.x = rotX;
     groupRef.current.rotation.z = rotZ;
+    // Breathing: ±2% hull pulse over ~5s — never noticed standalone,
+    // but combines with rotation drift to read as "alive".
+    const breathing = 1 + Math.sin(t * 1.257 + 0.6) * 0.02;
+    groupRef.current.scale.setScalar(scale * breathing);
 
     // === THRUST MODULATION ===
     // During maneuvers, thrust is FULL regardless of velocity
@@ -391,7 +437,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* ===== FLAME ===== */}
-      <EnginePlume position={[-2.4, 0, 0]} thrustRef={thrustRef} />
+      {!engineOff && <EnginePlume position={[-2.4, 0, 0]} thrustRef={thrustRef} />}
     </group>
   );
 }

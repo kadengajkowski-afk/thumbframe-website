@@ -1,4 +1,5 @@
 import LandingScene from '../scenes/LandingScene';
+import Navbar from '../components/layout/Navbar';
 import { useAuth } from '../../context/AuthContext';
 
 export default function LandingPage({ onNavigate }) {
@@ -30,52 +31,7 @@ export default function LandingPage({ onNavigate }) {
       </div>
 
       {/* ===== TOP NAV ===== */}
-      <nav
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 10,
-          padding: '28px 48px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        {/* Wordmark */}
-        <div
-          style={{
-            fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
-            fontSize: '24px',
-            fontWeight: 500,
-            letterSpacing: '-0.01em',
-            color: '#f5e6c8',
-            textShadow: '0 2px 12px rgba(0,0,0,0.4)',
-          }}
-        >
-          ThumbFrame
-        </div>
-
-        {/* Nav links */}
-        <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
-          {user ? (
-            <button
-              onClick={() => onNavigate?.('editor')}
-              style={navButtonStyle}
-            >
-              Open editor
-            </button>
-          ) : (
-            <button
-              onClick={() => onNavigate?.('login')}
-              style={navButtonStyle}
-            >
-              Log in
-            </button>
-          )}
-        </div>
-      </nav>
+      <Navbar onNavigate={onNavigate} />
 
       {/* ===== HEADLINE (center-top area) ===== */}
       <div
@@ -157,26 +113,6 @@ export default function LandingPage({ onNavigate }) {
 }
 
 // ===== STYLES =====
-
-const navLinkStyle = {
-  fontFamily: "'Inter', system-ui, sans-serif",
-  fontSize: '15px',
-  fontWeight: 500,
-  color: '#e8d4a8',
-  textDecoration: 'none',
-  letterSpacing: '0.01em',
-  opacity: 0.9,
-  transition: 'opacity 150ms ease',
-  textShadow: '0 1px 8px rgba(0,0,0,0.4)',
-  cursor: 'pointer',
-};
-
-const navButtonStyle = {
-  ...navLinkStyle,
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-};
 
 const ctaButtonStyle = {
   fontFamily: "'Inter', system-ui, sans-serif",

@@ -1,28 +1,63 @@
-// Top navigation — adapted for Thumbtown per spec §7.
-//   • Fixed at top, TRANSPARENT background (sits over the painted scene)
-//   • Links: Features / Pricing / Login
-//   • Primary CTA: "Open Editor →"
+// Top navigation — used on /, /login, /signup.
+//
+// Inline-styled (no Tailwind classes) so it renders correctly on
+// pages that don't load landing.built.css (e.g. /login, /signup).
+//
+// Layout:
+//   • Left  : ThumbFrame wordmark
+//   • Right : Features, Pricing, [Account ▾] or [Login], primary CTA
 //   • Mobile: hamburger → painterly full-screen panel
 //
-// When scroll content lands below the scene in Phase 7 we'll add a
-// scroll-opacity ramp so the nav fades to opaque; for Phase 2 it stays
-// transparent throughout.
+// Logged-in state shows an Account dropdown (hover desktop, tap mobile)
+// with Settings / Billing / Log out.
 
-import React, { useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Menu, X, ChevronDown } from 'lucide-react';
+import { useAuth } from '../../../context/AuthContext';
 
-const NAV_LINKS = [
-  { label: 'Features', kind: 'anchor', href: '#features' },
-  { label: 'Pricing',  kind: 'anchor', href: '#pricing'  },
-  { label: 'Login',    kind: 'action', href: '/login', target: 'login' },
+const PUBLIC_LINKS = [
+  { label: 'Features', kind: 'action', target: 'features', href: '/features' },
+  { label: 'Pricing',  kind: 'action', target: 'pricing',  href: '/pricing'  },
 ];
 
+const FONT_UI = "'Inter Variable', 'Inter', system-ui, sans-serif";
+const FONT_DISPLAY = "'Fraunces Variable', 'Fraunces', Georgia, serif";
+
+function useIsMobileViewport(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' && window.innerWidth < breakpoint
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const handle = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handle);
+    return () => mq.removeEventListener('change', handle);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 export default function Navbar({ onNavigate }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const isMobile = useIsMobileViewport();
+  const [mobileOpen,  setMobileOpen]  = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const closeTimer = useRef(null);
+
+  const { user, logout } = useAuth();
+  const isLoggedIn = !!user;
+  const accountLabel = user?.name || user?.email?.split('@')[0] || 'Account';
 
   const goTo = (target) => {
     setMobileOpen(false);
+    setAccountOpen(false);
     onNavigate?.(target);
+  };
+
+  const handleLogout = async () => {
+    setMobileOpen(false);
+    setAccountOpen(false);
+    await logout();
+    onNavigate?.('home');
   };
 
   const handleLink = (e, link) => {
@@ -33,123 +68,226 @@ export default function Navbar({ onNavigate }) {
     // Anchor links bubble naturally to the hash target.
   };
 
+  // Hover-open with small leave delay so cursor can travel to the panel.
+  const openAccount = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setAccountOpen(true);
+  };
+  const scheduleCloseAccount = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setAccountOpen(false), 140);
+  };
+
   return (
     <>
-      <nav
-        className="fixed top-0 left-0 right-0 z-50 h-16 flex items-center"
-        style={{ background: 'transparent' }}
-      >
-        <div className="max-w-6xl mx-auto px-6 w-full flex items-center justify-between">
-          {/* Logo — ThumbFrame wordmark (painterly serif) */}
-          <a
-            href="/"
-            onClick={(e) => { e.preventDefault(); goTo('home'); }}
-            className="flex items-center gap-2.5"
-            style={{ textShadow: '0 1px 8px rgba(20, 12, 28, 0.9)' }}
-          >
-            <img
-              src="/logo.jpg"
-              alt=""
-              width={24}
-              height={24}
-              className="rounded-md"
-              style={{ boxShadow: '0 0 12px rgba(249,115,22,0.45)' }}
-            />
-            <span
-              className="text-base font-bold tracking-tight"
-              style={{
-                fontFamily: "'Fraunces Variable', 'Fraunces', Georgia, serif",
-                fontWeight: 500,
-                letterSpacing: '-0.01em',
-                color: '#f5ebd4',
-              }}
-            >
-              ThumbFrame
-            </span>
-          </a>
+      <nav style={{
+        position: 'fixed',
+        top: 20,
+        left: 0,
+        right: 0,
+        zIndex: 50,
+        padding: '0 32px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        pointerEvents: 'none', // children re-enable; lets clicks pass through gaps
+      }}>
+        {/* Wordmark — text-only */}
+        <a
+          href="/"
+          onClick={(e) => { e.preventDefault(); goTo('home'); }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            textDecoration: 'none',
+            pointerEvents: 'auto',
+            textShadow: '0 1px 8px rgba(20, 12, 28, 0.9)',
+          }}
+        >
+          <span style={{
+            fontFamily: FONT_DISPLAY,
+            fontWeight: 500,
+            fontSize: 16,
+            letterSpacing: '-0.01em',
+            color: '#faecd0',
+          }}>
+            ThumbFrame
+          </span>
+        </a>
 
-          {/* Desktop links */}
-          <div
-            className="hidden md:flex items-center gap-7"
-            style={{ textShadow: '0 1px 8px rgba(20, 12, 28, 0.9)' }}
-          >
-            {NAV_LINKS.map((link) => (
+        {/* Right cluster (desktop) */}
+        {!isMobile && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 24,
+            pointerEvents: 'auto',
+            textShadow: '0 1px 8px rgba(20, 12, 28, 0.9)',
+            fontFamily: FONT_UI,
+          }}>
+            {PUBLIC_LINKS.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
                 onClick={(e) => handleLink(e, link)}
-                className="text-sm transition-colors"
-                style={{ color: '#d6c9a8' }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = '#f5ebd4')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = '#d6c9a8')}
+                style={{
+                  fontSize: 14,
+                  color: '#faecd0',
+                  textDecoration: 'none',
+                  transition: 'color 150ms ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = '#faecd0')}
               >
                 {link.label}
               </a>
             ))}
-            <button
-              onClick={() => goTo('editor')}
-              style={{
-                background: '#f97316',
-                color: '#1a0a00',
-                fontFamily: "'Inter Variable', 'Inter', system-ui, sans-serif",
-                fontWeight: 600,
-                fontSize: 13,
-                padding: '8px 16px',
-                borderRadius: 8,
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow:
-                  '0 0 20px -4px rgba(249, 115, 22, 0.55), 0 3px 10px rgba(249, 115, 22, 0.28)',
-                transition: 'transform 160ms ease, box-shadow 160ms ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow =
-                  '0 0 28px -2px rgba(249, 115, 22, 0.75), 0 4px 14px rgba(249, 115, 22, 0.38)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow =
-                  '0 0 20px -4px rgba(249, 115, 22, 0.55), 0 3px 10px rgba(249, 115, 22, 0.28)';
-              }}
-            >
-              Open Editor →
-            </button>
-          </div>
 
-          {/* Mobile hamburger */}
+            {isLoggedIn ? (
+              <div
+                style={{ position: 'relative' }}
+                onMouseEnter={openAccount}
+                onMouseLeave={scheduleCloseAccount}
+              >
+                <button
+                  type="button"
+                  onClick={() => setAccountOpen((v) => !v)}
+                  style={{
+                    fontFamily: FONT_UI,
+                    fontSize: 14,
+                    color: '#faecd0',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    transition: 'color 150ms ease',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = '#faecd0')}
+                  aria-haspopup="menu"
+                  aria-expanded={accountOpen}
+                >
+                  Account
+                  <ChevronDown
+                    size={14}
+                    style={{
+                      transition: 'transform 150ms ease',
+                      transform: accountOpen ? 'rotate(180deg)' : 'rotate(0)',
+                    }}
+                  />
+                </button>
+
+                <div
+                  role="menu"
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    right: 0,
+                    minWidth: 220,
+                    background: 'rgba(10, 7, 20, 0.92)',
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 8,
+                    boxShadow: '0 16px 40px rgba(0,0,0,0.45)',
+                    fontFamily: FONT_UI,
+                    opacity: accountOpen ? 1 : 0,
+                    transform: accountOpen ? 'translateY(0)' : 'translateY(-4px)',
+                    pointerEvents: accountOpen ? 'auto' : 'none',
+                    transition: 'opacity 150ms ease, transform 150ms ease',
+                    overflow: 'hidden',
+                    textShadow: 'none',
+                  }}
+                >
+                  <div style={{
+                    padding: '12px 14px',
+                    fontSize: 12,
+                    color: '#a0a0a0',
+                    wordBreak: 'break-all',
+                  }}>
+                    {user?.email || accountLabel}
+                  </div>
+                  <Divider />
+                  <DropdownItem onClick={() => goTo('settings')}>Settings</DropdownItem>
+                  <DropdownItem onClick={() => goTo('billing')}>Billing</DropdownItem>
+                  <Divider />
+                  <DropdownItem onClick={handleLogout} color="#e87050">Log out</DropdownItem>
+                </div>
+              </div>
+            ) : (
+              <a
+                href="/login"
+                onClick={(e) => { e.preventDefault(); goTo('login'); }}
+                style={{
+                  fontSize: 14,
+                  color: '#faecd0',
+                  textDecoration: 'none',
+                  transition: 'color 150ms ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = '#faecd0')}
+              >
+                Login
+              </a>
+            )}
+
+          </div>
+        )}
+
+        {/* Mobile hamburger */}
+        {isMobile && (
           <button
-            className="md:hidden cursor-pointer"
-            style={{ color: '#f5ebd4', filter: 'drop-shadow(0 1px 6px rgba(20, 12, 28, 0.95))' }}
             onClick={() => setMobileOpen(true)}
             aria-label="Open menu"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 6,
+              color: '#faecd0',
+              filter: 'drop-shadow(0 1px 6px rgba(20, 12, 28, 0.95))',
+              pointerEvents: 'auto',
+            }}
           >
             <Menu size={24} />
           </button>
-        </div>
+        )}
       </nav>
 
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-8"
           style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 60,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 28,
             background: 'rgba(20, 12, 28, 0.96)',
             backdropFilter: 'blur(10px)',
             WebkitBackdropFilter: 'blur(10px)',
-            fontFamily: "'Inter Variable', 'Inter', system-ui, sans-serif",
+            fontFamily: FONT_UI,
           }}
         >
           <button
-            className="absolute top-5 right-6 cursor-pointer"
-            style={{ color: '#f5ebd4' }}
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
+            style={{
+              position: 'absolute', top: 20, right: 24,
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#faecd0',
+            }}
           >
             <X size={26} />
           </button>
-          {NAV_LINKS.map((link) => (
-            // eslint-disable-next-line jsx-a11y/anchor-is-valid
+
+          {PUBLIC_LINKS.map((link) => (
             <a
               key={link.label}
               href={link.href}
@@ -158,32 +296,86 @@ export default function Navbar({ onNavigate }) {
                 setMobileOpen(false);
                 if (link.kind === 'action') goTo(link.target);
               }}
-              className="text-2xl font-semibold"
-              style={{ color: '#f5ebd4' }}
+              style={{ fontSize: 22, fontWeight: 600, color: '#faecd0', textDecoration: 'none' }}
             >
               {link.label}
             </a>
           ))}
-          <button
-            onClick={() => goTo('editor')}
-            style={{
-              background: '#f97316',
-              color: '#1a0a00',
-              fontFamily: 'inherit',
-              fontWeight: 600,
-              fontSize: 16,
-              padding: '14px 28px',
-              borderRadius: 10,
-              border: 'none',
-              cursor: 'pointer',
-              boxShadow:
-                '0 0 28px -4px rgba(249, 115, 22, 0.55), 0 4px 14px rgba(249, 115, 22, 0.28)',
-            }}
-          >
-            Open Editor →
-          </button>
+
+          {isLoggedIn ? (
+            <>
+              <div style={{
+                fontSize: 13, color: '#a0a0a0',
+                wordBreak: 'break-all', textAlign: 'center', maxWidth: '80%',
+              }}>
+                {user?.email}
+              </div>
+              <a
+                href="/settings"
+                onClick={(e) => { e.preventDefault(); goTo('settings'); }}
+                style={{ fontSize: 22, fontWeight: 600, color: '#faecd0', textDecoration: 'none' }}
+              >
+                Settings
+              </a>
+              <a
+                href="/billing"
+                onClick={(e) => { e.preventDefault(); goTo('billing'); }}
+                style={{ fontSize: 22, fontWeight: 600, color: '#faecd0', textDecoration: 'none' }}
+              >
+                Billing
+              </a>
+              <button
+                onClick={handleLogout}
+                style={{
+                  fontSize: 22, fontWeight: 600, color: '#e87050',
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                }}
+              >
+                Log out
+              </button>
+            </>
+          ) : (
+            <a
+              href="/login"
+              onClick={(e) => { e.preventDefault(); goTo('login'); }}
+              style={{ fontSize: 22, fontWeight: 600, color: '#faecd0', textDecoration: 'none' }}
+            >
+              Login
+            </a>
+          )}
         </div>
       )}
     </>
+  );
+}
+
+function Divider() {
+  return <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />;
+}
+
+function DropdownItem({ onClick, color = '#faecd0', children }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      style={{
+        display: 'block',
+        width: '100%',
+        padding: '10px 14px',
+        background: 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        textAlign: 'left',
+        fontFamily: 'inherit',
+        fontSize: 14,
+        color,
+        transition: 'background-color 120ms ease',
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)')}
+      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+    >
+      {children}
+    </button>
   );
 }

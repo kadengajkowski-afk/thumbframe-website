@@ -14,14 +14,14 @@ import * as THREE from 'three';
 const PARTICLE_COUNT = 900;
 const SPREAD = 30;
 
-export default function Stardust() {
+export default function Stardust({ count = PARTICLE_COUNT }) {
   const pointsRef = useRef();
 
   const { positions, sizes, phases } = useMemo(() => {
-    const pos = new Float32Array(PARTICLE_COUNT * 3);
-    const sz = new Float32Array(PARTICLE_COUNT);
-    const ph = new Float32Array(PARTICLE_COUNT);
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const pos = new Float32Array(count * 3);
+    const sz = new Float32Array(count);
+    const ph = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
       pos[i * 3]     = (Math.random() - 0.5) * SPREAD;
       pos[i * 3 + 1] = (Math.random() - 0.5) * SPREAD;
       pos[i * 3 + 2] = (Math.random() - 0.5) * SPREAD;
@@ -76,9 +76,9 @@ export default function Stardust() {
   return (
     <points ref={pointsRef}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" array={positions} count={PARTICLE_COUNT} itemSize={3} />
-        <bufferAttribute attach="attributes-aSize" array={sizes} count={PARTICLE_COUNT} itemSize={1} />
-        <bufferAttribute attach="attributes-aPhase" array={phases} count={PARTICLE_COUNT} itemSize={1} />
+        <bufferAttribute attach="attributes-position" array={positions} count={count} itemSize={3} />
+        <bufferAttribute attach="attributes-aSize" array={sizes} count={count} itemSize={1} />
+        <bufferAttribute attach="attributes-aPhase" array={phases} count={count} itemSize={1} />
       </bufferGeometry>
       <shaderMaterial
         vertexShader={vertexShader}

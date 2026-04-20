@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
+import '@fontsource-variable/fraunces';
 import supabase from '../supabaseClient';
 import { trackEvent } from '../utils/analytics';
+import AuthScene from '../landing/scenes/AuthScene';
+import Navbar from '../landing/components/layout/Navbar';
+
+const FRAUNCES = "'Fraunces Variable', 'Fraunces', Georgia, serif";
 
 export default function Login({ setPage }) {
   const [email,    setEmail]    = useState('');
@@ -50,38 +55,56 @@ export default function Login({ setPage }) {
 
   return (
     <div style={{
-      minHeight: '100vh', background: '#050507',
+      minHeight: '100vh',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 24, fontFamily: "'Satoshi', sans-serif",
+      position: 'relative',
     }}>
-      {/* Orange glow behind card */}
-      <div style={{
-        position: 'fixed', top: '40%', left: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: 600, height: 600,
-        background: 'radial-gradient(circle, rgba(255,107,0,0.07) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
+      <AuthScene />
+      <Navbar onNavigate={setPage} />
 
-      <div style={{ width: '100%', maxWidth: 400, position: 'relative' }}>
+      {/* Suppress Chrome's white autofill background on the dark inputs. */}
+      <style>{`
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus,
+        input:-webkit-autofill:active {
+          -webkit-box-shadow: 0 0 0 1000px #0c0c0f inset !important;
+          -webkit-text-fill-color: #f0f0f3 !important;
+          caret-color: #f0f0f3 !important;
+          transition: background-color 9999s ease-in-out 0s;
+        }
+      `}</style>
+
+      <div style={{
+        width: '100%', maxWidth: 420, position: 'relative', zIndex: 1,
+        padding: '36px 32px',
+        borderRadius: 16,
+        background: 'rgba(10, 7, 20, 0.75)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        boxShadow: '0 30px 80px rgba(0,0,0,0.45)',
+      }}>
 
         {/* Logo */}
         <button onClick={() => setPage('home')} style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'none', border: 'none', cursor: 'pointer',
-          marginBottom: 40, padding: 0,
+          marginBottom: 28, padding: 0,
         }}>
           <img src="/logo.jpg" alt="ThumbFrame" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover' }} />
           <span style={{ fontSize: 16, fontWeight: 700, color: '#f0f0f3' }}>ThumbFrame</span>
         </button>
 
         <h1 style={{
-          fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em',
-          color: '#f0f0f3', margin: '0 0 8px',
+          fontFamily: FRAUNCES,
+          fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em',
+          color: '#f0f0f3', margin: '0 0 8px', lineHeight: 1.1,
         }}>
           Welcome back
         </h1>
-        <p style={{ fontSize: 14, color: '#8a8a93', margin: '0 0 32px', lineHeight: 1.5 }}>
+        <p style={{ fontSize: 14, color: '#a8a0b0', margin: '0 0 28px', lineHeight: 1.5 }}>
           Log in to access your saved thumbnails.
         </p>
 
@@ -145,11 +168,11 @@ export default function Login({ setPage }) {
 
         {/* Switch to signup */}
         <div style={{
-          marginTop: 28, padding: '16px', borderRadius: 10,
-          background: '#0c0c0f', border: '1px solid rgba(255,255,255,0.06)',
+          marginTop: 24, padding: '14px', borderRadius: 10,
+          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
           textAlign: 'center',
         }}>
-          <span style={{ fontSize: 13, color: '#55555e' }}>Don't have an account? </span>
+          <span style={{ fontSize: 13, color: '#8a8294' }}>Don't have an account? </span>
           <span
             onClick={() => setPage('signup')}
             style={{ fontSize: 13, color: '#FF6B00', cursor: 'pointer', fontWeight: 600 }}

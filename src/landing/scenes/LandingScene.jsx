@@ -10,7 +10,7 @@
 
 import React, { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import Nebula, { NEBULA_PALETTES } from './shared/Nebula';
+import Nebula from './shared/Nebula';
 import SpaceStation from './shared/SpaceStation';
 import Stardust from './shared/Stardust';
 import WatercolorStars from './shared/WatercolorStars';
@@ -25,7 +25,7 @@ const POST_DISABLED = typeof window !== 'undefined'
 function SceneGraph() {
   return (
     <>
-      <Nebula palette={NEBULA_PALETTES.purple} />
+      <Nebula cycle />
       <Stardust />
       <WatercolorStars count={55} />
       <LightStreaks />
@@ -41,7 +41,7 @@ function SceneGraph() {
 
       <SolarWind />
 
-      <SpaceStation position={[0.1, -2.8, 0]} scale={0.75} rotation={[0, -0.25, 0]} />
+      <SpaceStation position={[0.1, -1.4, 0]} scale={0.75} rotation={[0, -0.25, 0]} />
 
       {!POST_DISABLED && <PainterlyPost />}
     </>
