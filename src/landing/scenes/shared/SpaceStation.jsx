@@ -188,6 +188,11 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
   });
 
   const trailRef = useRef({ active: false });     // light streak trail toggle
+  const restAnchorRef = useRef({
+    x: position[0],
+    y: position[1],
+    z: position[2],
+  });
 
   useFrame((state) => {
     if (!groupRef.current) return;
@@ -259,9 +264,9 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       const gustX = gustIntensity * Math.sin(t * 2.3) * 0.3;
       const gustY = gustIntensity * Math.sin(t * 1.9) * 0.2;
 
-      baseX = position[0] + driftX + gustX;
-      baseY = position[1] + bobY + roamY + gustY;
-      baseZ = position[2] + driftZ;
+      baseX = restAnchorRef.current.x + driftX + gustX;
+      baseY = restAnchorRef.current.y + bobY + roamY + gustY;
+      baseZ = restAnchorRef.current.z + driftZ;
 
       rotY = (rotation?.[1] ?? 0) + Math.sin(t * 0.22) * 0.06 + driftX * 0.015;
       rotX = Math.sin(t * 0.55 + 0.5) * 0.07;
@@ -271,13 +276,10 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     // === MANEUVER OVERRIDES ===
 
     if (m.state === 'charging') {
-      // Ship holds its captured position with a tremor — no drift
-      const progress = (t - m.startTime) / m.duration;
-      const tremor = Math.sin(t * 60) * 0.04 * progress;
-      baseX = m.idleX + tremor;
-      baseY = m.idleY + Math.cos(t * 55) * 0.03 * progress;
+      // Ship holds position calmly during charge-up — no tremor
+      baseX = m.idleX;
+      baseY = m.idleY;
       baseZ = m.idleZ;
-      // Keep idle rotation behavior so it doesn't snap
     }
 
     if (m.state === 'executing') {
@@ -322,17 +324,14 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     }
 
     if (m.state === 'recovering') {
-      // Smoothly blend from maneuver end toward current idle drift
-      const p = (t - m.startTime) / m.duration;
-      const ease = 1 - Math.pow(1 - p, 3);
-      // At start of recovery, ship is at wherever the maneuver ended.
-      // We blend toward the drift position over the recovery duration.
-      const maneuverEndX = groupRef.current.position.x;
-      const maneuverEndY = groupRef.current.position.y;
-      const maneuverEndZ = groupRef.current.position.z;
-      baseX = maneuverEndX + (baseX - maneuverEndX) * ease;
-      baseY = maneuverEndY + (baseY - maneuverEndY) * ease;
-      baseZ = maneuverEndZ + (baseZ - maneuverEndZ) * ease;
+      // Lock rest anchor to where ship ended the maneuver
+      restAnchorRef.current.x = groupRef.current.position.x;
+      restAnchorRef.current.y = groupRef.current.position.y;
+      restAnchorRef.current.z = groupRef.current.position.z;
+
+      baseX = groupRef.current.position.x;
+      baseY = groupRef.current.position.y;
+      baseZ = groupRef.current.position.z;
     }
 
     // === APPLY ALL TRANSFORMS ===
@@ -354,6 +353,14 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       thrustRef.current = Math.min(1.0, Math.max(0, vx / 0.8));
     }
     lastXRef.current = groupRef.current.position.x;
+
+    // Slowly pull rest anchor back toward mount origin over ~30s
+    if (m.state === 'idle') {
+      const pullStrength = 0.002;
+      restAnchorRef.current.x += (position[0] - restAnchorRef.current.x) * pullStrength;
+      restAnchorRef.current.y += (position[1] - restAnchorRef.current.y) * pullStrength;
+      restAnchorRef.current.z += (position[2] - restAnchorRef.current.z) * pullStrength;
+    }
   });
 
   return (
