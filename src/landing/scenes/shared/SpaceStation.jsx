@@ -187,7 +187,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     idleZ: position[2],
   });
 
-  const shakeRef = useRef({ intensity: 0 });      // screen-shake pulse
   const trailRef = useRef({ active: false });     // light streak trail toggle
 
   useFrame((state) => {
@@ -207,7 +206,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       m.idleX = groupRef.current.position.x;
       m.idleY = groupRef.current.position.y;
       m.idleZ = groupRef.current.position.z;
-      shakeRef.current.intensity = 0;
     }
 
     else if (m.state === 'charging' && t - m.startTime >= m.duration) {
@@ -280,12 +278,10 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       baseY = m.idleY + Math.cos(t * 55) * 0.03 * progress;
       baseZ = m.idleZ;
       // Keep idle rotation behavior so it doesn't snap
-      shakeRef.current.intensity = progress * 0.6;
     }
 
     if (m.state === 'executing') {
       const p = (t - m.startTime) / m.duration;  // 0 to 1
-      shakeRef.current.intensity = p < 0.1 ? 1.0 : Math.max(0, 0.3 - (p - 0.1));
 
       if (m.type === 'vertLoop') {
         // Vertical loop: climb, invert at top, dive back
@@ -337,13 +333,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       baseX = maneuverEndX + (baseX - maneuverEndX) * ease;
       baseY = maneuverEndY + (baseY - maneuverEndY) * ease;
       baseZ = maneuverEndZ + (baseZ - maneuverEndZ) * ease;
-      shakeRef.current.intensity = Math.max(0, 0.2 - (p / 2.5) * 0.2);
     }
-
-    // === APPLY SHAKE ===
-    const shakeAmp = shakeRef.current.intensity * 0.15;
-    baseX += (Math.random() - 0.5) * shakeAmp;
-    baseY += (Math.random() - 0.5) * shakeAmp;
 
     // === APPLY ALL TRANSFORMS ===
     groupRef.current.position.x = baseX;
