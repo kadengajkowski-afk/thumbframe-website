@@ -48,6 +48,8 @@ const sailFragment = `
   }
 
   void main() {
+    float ux = 1.0 - vUv.x;
+
     // Golden solar sail — warm amber base with cream highlights
     vec3 sailDark  = vec3(0.72, 0.48, 0.20);   // deep amber/bronze
     vec3 sailLight = vec3(0.98, 0.86, 0.55);   // bright gold
@@ -60,9 +62,9 @@ const sailFragment = `
 
     // Large T painted across the sail — big and readable
     float soft = 0.02;
-    float horiz = softBar(vUv.x, 0.15, 0.85, soft)
+    float horiz = softBar(ux, 0.15, 0.85, soft)
                 * softBar(vUv.y, 0.68, 0.85, soft);
-    float vert  = softBar(vUv.x, 0.46, 0.54, soft)
+    float vert  = softBar(ux, 0.46, 0.54, soft)
                 * softBar(vUv.y, 0.15, 0.85, soft);
     float tMask = max(horiz, vert);
 
