@@ -37,20 +37,20 @@ const sailVertex = `
     // === HORIZONTAL STREAM (the banner blowing in the wind) ===
     // Bottom of sail streams horizontally in +X direction, with
     // wave traveling DOWN from top to bottom.
-    float streamX = sin(a - vUv.y * 4.7 + jx * 2.0) * 0.35
-                  + sin(c * 1.7 + vUv.y * 2.3 - jx) * 0.22
-                  + sin(b * 0.6 - vUv.y * 6.1) * 0.15;
+    float streamX = sin(a - vUv.y * 4.7 + jx * 2.0) * 0.25
+                  + sin(c * 1.7 + vUv.y * 2.3 - jx) * 0.15
+                  + sin(b * 0.6 - vUv.y * 6.1) * 0.10;
     pos.x += streamX * freedom;
 
     // === DEPTH BILLOW (sail bulging in/out) ===
-    float depthZ = sin(b - vUv.y * 3.9 + jy) * 0.28
-                 + sin(d * 0.5 + vUv.x * 2.7 - vUv.y * 3.0) * 0.18
-                 + sin(a * 1.4 - vUv.x * 1.3) * 0.12;
+    float depthZ = sin(b - vUv.y * 3.9 + jy) * 0.20
+                 + sin(d * 0.5 + vUv.x * 2.7 - vUv.y * 3.0) * 0.13
+                 + sin(a * 1.4 - vUv.x * 1.3) * 0.08;
     pos.z += depthZ * freedom;
 
     // === VERTICAL FLUTTER (flag curls up and down) ===
-    float flutterY = sin(c - vUv.y * 5.2 + jx * 3.0) * 0.22
-                   + sin(d * 0.7 + vUv.x * 1.9) * 0.14;
+    float flutterY = sin(c - vUv.y * 5.2 + jx * 3.0) * 0.15
+                   + sin(d * 0.7 + vUv.x * 1.9) * 0.10;
     pos.y += flutterY * freedom;
 
     // === HIGH-FREQUENCY EDGE CHOP ===
@@ -61,9 +61,8 @@ const sailVertex = `
     float trailingEdge = smoothstep(0.4, 1.0, vUv.x);
     pos.z += edgeChop * trailingEdge * freedom;
 
-    // Hard pin at top: zero displacement for vUv.y > 0.9
-    float pinFactor = smoothstep(1.0, 0.9, vUv.y);
-    pos = mix(position, pos, pinFactor);
+    // Keep the swept-back silhouette
+    pos.z += vUv.y * 0.2;
 
     vBow = 0.7;
 
@@ -227,7 +226,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       {/* ===== SINGLE LARGE SOLAR SAIL ===== */}
       {/* Positioned above and slightly behind ship center, large and swept */}
       <SolarSail
-        position={[0.1, 1.75, 0]}
+        position={[0.1, 2.2, 0]}
         size={[3.0, 2.4]}
         rotation={[0, Math.PI / 2, 0]}
       />
