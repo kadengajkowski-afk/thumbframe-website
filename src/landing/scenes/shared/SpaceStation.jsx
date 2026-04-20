@@ -183,11 +183,16 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     const bob = Math.sin(t * 0.55);
     const bobY = bob > 0 ? bob * 0.35 : bob * 0.75;
 
-    // === LATERAL DRIFT (figure-8 pattern from two non-harmonic sines) ===
-    const driftX = Math.sin(t * 0.31) * 0.45
-                 + Math.sin(t * 0.19 + 1.2) * 0.25;
-    const driftZ = Math.sin(t * 0.23 + 0.7) * 0.2
-                 + Math.cos(t * 0.17) * 0.15;
+    // Wide lateral roam — ship moves across the whole frame
+    const driftX = Math.sin(t * 0.18) * 2.5
+                 + Math.sin(t * 0.11 + 1.2) * 1.3
+                 + Math.sin(t * 0.07 + 2.1) * 0.8;
+    const driftZ = Math.sin(t * 0.13 + 0.7) * 0.6
+                 + Math.cos(t * 0.09) * 0.4;
+
+    // Vertical roam on top of bob — ship rises and falls over long periods
+    const roamY = Math.sin(t * 0.08 + 1.7) * 0.8
+                + Math.sin(t * 0.14 + 0.3) * 0.4;
 
     // === GUST LURCHES ===
     // Occasional burst of extra motion — ship gets hit by a "wind gust"
@@ -200,7 +205,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
 
     // === APPLY POSITION ===
     groupRef.current.position.x = position[0] + driftX + gustX;
-    groupRef.current.position.y = position[1] + bobY + gustY;
+    groupRef.current.position.y = position[1] + bobY + gustY + roamY;
     groupRef.current.position.z = position[2] + driftZ;
 
     // === ROTATION ===
@@ -209,7 +214,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     // Yaw wobble + slight response to lateral drift
     groupRef.current.rotation.y = baseYaw
       + Math.sin(t * 0.22) * 0.06
-      + driftX * 0.04;  // ship noses into its drift direction
+      + driftX * 0.015;  // ship noses into its drift direction
 
     // Pitch — noses up on rise, down on fall
     groupRef.current.rotation.x = Math.sin(t * 0.55 + 0.5) * 0.07;
