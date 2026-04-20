@@ -68,7 +68,7 @@ const sailFragment = `
                 * softBar(vUv.y, 0.15, 0.85, soft);
     float tMask = max(horiz, vert);
 
-    vec3 color = mix(baseColor, tColor, tMask * 0.9);
+    vec3 color = mix(baseColor, tColor, tMask * 0.85);
 
     // Sheen band — subtle moving highlight across the sail
     float sheen = smoothstep(0.0, 0.15,
@@ -148,230 +148,35 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
 
   return (
     <group ref={groupRef} position={position} scale={scale} rotation={rotation}>
-      {/* ===== MAIN HULL BODY — tapered with curved bow/stern ===== */}
-      {/* Bow section (front, wider, curves up) */}
-      <mesh position={[0.9, 0, 0]} rotation={[0, 0, -0.12]} scale={[1.0, 0.32, 0.55]}>
-        <sphereGeometry args={[0.95, 24, 16]} />
-        <meshStandardMaterial color="#a47548" roughness={0.85} metalness={0.05} />
+      {/* ===== HULL ===== */}
+      {/* Main hull — stretched ellipsoid, flatter top */}
+      <mesh position={[0, 0, 0]} scale={[1.4, 0.3, 0.5]}>
+        <sphereGeometry args={[1, 20, 14]} />
+        <meshStandardMaterial color="#b8855a" roughness={0.8} metalness={0.05} />
       </mesh>
 
-      {/* Midsection (main hull volume) */}
-      <mesh position={[-0.05, 0, 0]} scale={[1.4, 0.34, 0.58]}>
-        <sphereGeometry args={[1.0, 24, 16]} />
-        <meshStandardMaterial color="#8a6038" roughness={0.85} metalness={0.05} />
-      </mesh>
-
-      {/* Stern section (back, slightly taller for aftcastle base) */}
-      <mesh position={[-1.0, 0.05, 0]} rotation={[0, 0, 0.15]} scale={[0.85, 0.38, 0.5]}>
-        <sphereGeometry args={[0.9, 24, 16]} />
-        <meshStandardMaterial color="#8a6038" roughness={0.85} metalness={0.05} />
-      </mesh>
-
-      {/* ===== WATERLINE TRIM (dark band running full hull length) ===== */}
-      <mesh position={[0, -0.05, 0.3]} scale={[2.6, 0.05, 0.05]}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#3d2814" roughness={0.9} />
-      </mesh>
-      <mesh position={[0, -0.05, -0.3]} scale={[2.6, 0.05, 0.05]}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#3d2814" roughness={0.9} />
-      </mesh>
-
-      {/* ===== UPPER HULL STRAKE (lighter trim above waterline) ===== */}
-      <mesh position={[0, 0.12, 0.33]} scale={[2.55, 0.04, 0.03]}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#c89968" roughness={0.8} />
-      </mesh>
-      <mesh position={[0, 0.12, -0.33]} scale={[2.55, 0.04, 0.03]}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#c89968" roughness={0.8} />
-      </mesh>
-
-      {/* ===== DECK ===== */}
-      <mesh position={[0, 0.2, 0]}>
-        <boxGeometry args={[2.4, 0.04, 0.9]} />
+      {/* Deck plank */}
+      <mesh position={[0, 0.18, 0]}>
+        <boxGeometry args={[2.4, 0.06, 0.85]} />
         <meshStandardMaterial color="#c89968" roughness={0.75} />
       </mesh>
 
-      {/* ===== DECK PLANKS (thin stripes for plank detail) ===== */}
-      {[-0.3, 0, 0.3].map((z, i) => (
-        <mesh key={`plank-${i}`} position={[0, 0.22, z]}>
-          <boxGeometry args={[2.3, 0.005, 0.015]} />
-          <meshStandardMaterial color="#6a4228" />
-        </mesh>
-      ))}
-
-      {/* ===== RAILINGS (low bulwark around deck perimeter) ===== */}
-      {/* Starboard rail */}
-      <mesh position={[0, 0.32, 0.42]}>
-        <boxGeometry args={[2.3, 0.18, 0.04]} />
-        <meshStandardMaterial color="#8a6038" roughness={0.85} />
-      </mesh>
-      {/* Port rail */}
-      <mesh position={[0, 0.32, -0.42]}>
-        <boxGeometry args={[2.3, 0.18, 0.04]} />
-        <meshStandardMaterial color="#8a6038" roughness={0.85} />
+      {/* Hull waterline trim */}
+      <mesh position={[0, -0.02, 0]} scale={[1.42, 0.08, 0.52]}>
+        <sphereGeometry args={[1, 20, 8]} />
+        <meshStandardMaterial color="#6a4228" roughness={0.85} />
       </mesh>
 
-      {/* Rail top caps (lighter wood) */}
-      <mesh position={[0, 0.42, 0.42]}>
-        <boxGeometry args={[2.3, 0.025, 0.06]} />
-        <meshStandardMaterial color="#c89968" roughness={0.75} />
-      </mesh>
-      <mesh position={[0, 0.42, -0.42]}>
-        <boxGeometry args={[2.3, 0.025, 0.06]} />
-        <meshStandardMaterial color="#c89968" roughness={0.75} />
+      {/* Stern cabin */}
+      <mesh position={[-0.85, 0.35, 0]}>
+        <boxGeometry args={[0.55, 0.45, 0.7]} />
+        <meshStandardMaterial color="#9a6d42" roughness={0.8} />
       </mesh>
 
-      {/* Rail vertical supports (stanchions) */}
-      {[-1.0, -0.5, 0, 0.5, 1.0].map((x, i) => (
-        <group key={`stanchion-${i}`}>
-          <mesh position={[x, 0.32, 0.42]}>
-            <boxGeometry args={[0.05, 0.2, 0.06]} />
-            <meshStandardMaterial color="#6a4228" />
-          </mesh>
-          <mesh position={[x, 0.32, -0.42]}>
-            <boxGeometry args={[0.05, 0.2, 0.06]} />
-            <meshStandardMaterial color="#6a4228" />
-          </mesh>
-        </group>
-      ))}
-
-      {/* ===== PORTHOLES (circular windows along hull side) ===== */}
-      {[-0.8, -0.4, 0, 0.4, 0.8].map((x, i) => (
-        <group key={`porthole-${i}`}>
-          {/* Starboard porthole */}
-          <mesh position={[x, -0.02, 0.42]}>
-            <torusGeometry args={[0.075, 0.014, 8, 16]} />
-            <meshStandardMaterial color="#3d2814" />
-          </mesh>
-          <mesh position={[x, -0.02, 0.415]}>
-            <circleGeometry args={[0.07, 16]} />
-            <meshBasicMaterial color="#ffd080" toneMapped={false} />
-          </mesh>
-          {/* Port porthole */}
-          <mesh position={[x, -0.02, -0.42]} rotation={[0, Math.PI, 0]}>
-            <torusGeometry args={[0.075, 0.014, 8, 16]} />
-            <meshStandardMaterial color="#3d2814" />
-          </mesh>
-          <mesh position={[x, -0.02, -0.415]} rotation={[0, Math.PI, 0]}>
-            <circleGeometry args={[0.07, 16]} />
-            <meshBasicMaterial color="#ffd080" toneMapped={false} />
-          </mesh>
-        </group>
-      ))}
-
-      {/* ===== AFTCASTLE (raised stern deck/cabin) ===== */}
-      {/* Lower tier (quarterdeck) */}
-      <mesh position={[-0.9, 0.45, 0]}>
-        <boxGeometry args={[0.85, 0.35, 0.8]} />
-        <meshStandardMaterial color="#8a6038" roughness={0.85} />
-      </mesh>
-      {/* Middle tier (captain's cabin) */}
-      <mesh position={[-1.0, 0.8, 0]}>
-        <boxGeometry args={[0.7, 0.4, 0.68]} />
-        <meshStandardMaterial color="#9a6d42" roughness={0.85} />
-      </mesh>
-      {/* Upper tier (poop deck cabin) */}
-      <mesh position={[-1.1, 1.15, 0]}>
-        <boxGeometry args={[0.45, 0.25, 0.54]} />
-        <meshStandardMaterial color="#a47548" roughness={0.85} />
-      </mesh>
-      {/* Aftcastle roof (peaked) */}
-      <mesh position={[-1.1, 1.33, 0]}>
-        <boxGeometry args={[0.5, 0.04, 0.6]} />
-        <meshStandardMaterial color="#3d2814" roughness={0.9} />
-      </mesh>
-      {/* Stern flag pole */}
-      <mesh position={[-1.28, 1.55, 0]}>
-        <cylinderGeometry args={[0.01, 0.015, 0.4, 6]} />
-        <meshStandardMaterial color="#3d2814" />
-      </mesh>
-      {/* Captain's cabin stern window (big, glowing) */}
-      <mesh position={[-1.36, 0.8, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[0.5, 0.26]} />
-        <meshBasicMaterial color="#ffd890" toneMapped={false} />
-      </mesh>
-      {/* Upper tier small window */}
-      <mesh position={[-1.33, 1.15, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[0.35, 0.12]} />
-        <meshBasicMaterial color="#ffcc70" toneMapped={false} />
-      </mesh>
-
-      {/* Decorative stern trim (scroll/cornice) */}
-      <mesh position={[-1.35, 0.55, 0]}>
-        <torusGeometry args={[0.09, 0.02, 6, 12]} />
-        <meshStandardMaterial color="#c89968" />
-      </mesh>
-
-      {/* ===== FORECASTLE (raised bow deck) ===== */}
-      <mesh position={[1.0, 0.35, 0]}>
-        <boxGeometry args={[0.45, 0.18, 0.75]} />
-        <meshStandardMaterial color="#8a6038" roughness={0.85} />
-      </mesh>
-
-      {/* ===== BOWSPRIT (short pole angled up from prow) ===== */}
-      <mesh position={[1.75, 0.78, 0]} rotation={[0, 0, -0.35]}>
-        <cylinderGeometry args={[0.02, 0.025, 0.45, 8]} />
-        <meshStandardMaterial color="#4a3020" roughness={0.9} />
-      </mesh>
-
-      {/* Bowsprit decorative ring near tip */}
-      <mesh position={[1.94, 0.9, 0]} rotation={[0, 0, -0.35 + Math.PI / 2]}>
-        <torusGeometry args={[0.03, 0.008, 6, 12]} />
-        <meshStandardMaterial color="#c89968" />
-      </mesh>
-
-      {/* ===== ANCHOR (hanging off the bow starboard side) ===== */}
-      <group position={[0.95, -0.08, 0.42]} rotation={[0.1, 0, 0.1]}>
-        {/* Shaft */}
-        <mesh>
-          <cylinderGeometry args={[0.015, 0.015, 0.22, 6]} />
-          <meshStandardMaterial color="#2a2030" metalness={0.6} roughness={0.5} />
-        </mesh>
-        {/* Crossbar (top) */}
-        <mesh position={[0, 0.1, 0]} rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.012, 0.012, 0.14, 6]} />
-          <meshStandardMaterial color="#2a2030" metalness={0.6} roughness={0.5} />
-        </mesh>
-        {/* Ring (bottom curved flukes — simplified as a torus arc) */}
-        <mesh position={[0, -0.12, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[0.06, 0.012, 6, 12, Math.PI]} />
-          <meshStandardMaterial color="#2a2030" metalness={0.6} roughness={0.5} />
-        </mesh>
-      </group>
-
-      {/* ===== UPSWEPT PROW (bow curves up like a classic galleon) ===== */}
-      {/* Main prow block — taller, more vertical */}
-      <mesh position={[1.45, 0.35, 0]} rotation={[0, 0, 0.45]} scale={[0.3, 0.75, 0.55]}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#8a6038" roughness={0.85} />
-      </mesh>
-      {/* Prow upper curve — decorative scroll at top */}
-      <mesh position={[1.55, 0.75, 0]} rotation={[Math.PI / 2, 0, 0.3]}>
-        <torusGeometry args={[0.08, 0.028, 6, 12]} />
-        <meshStandardMaterial color="#c89968" />
-      </mesh>
-      {/* Small figurehead medallion on the prow face */}
-      <mesh position={[1.55, 0.5, 0]}>
-        <sphereGeometry args={[0.06, 10, 8]} />
-        <meshStandardMaterial color="#c89968" roughness={0.6} metalness={0.2} />
-      </mesh>
-
-      {/* ===== ENGINE HOUSING (where rudder would be, below stern) ===== */}
-      <mesh position={[-1.45, -0.1, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.22, 0.28, 0.4, 12]} />
-        <meshStandardMaterial color="#3d2814" roughness={0.85} />
-      </mesh>
-
-      {/* Engine housing brass bands */}
-      <mesh position={[-1.55, -0.1, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <torusGeometry args={[0.24, 0.018, 6, 20]} />
-        <meshStandardMaterial color="#c89968" metalness={0.3} />
-      </mesh>
-      <mesh position={[-1.35, -0.1, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <torusGeometry args={[0.27, 0.018, 6, 20]} />
-        <meshStandardMaterial color="#c89968" metalness={0.3} />
+      {/* Stern cabin roof */}
+      <mesh position={[-0.85, 0.60, 0]}>
+        <boxGeometry args={[0.65, 0.08, 0.78]} />
+        <meshStandardMaterial color="#5a3a20" roughness={0.85} />
       </mesh>
 
       {/* ===== MAST (single tall spine, slight aft lean) ===== */}
@@ -400,13 +205,25 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
         <meshStandardMaterial color="#6a4228" />
       </mesh>
 
+      {/* ===== BOWSPRIT ===== */}
+      <mesh position={[1.45, 0.25, 0]} rotation={[0, 0, -0.18]}>
+        <cylinderGeometry args={[0.025, 0.035, 0.75, 8]} />
+        <meshStandardMaterial color="#4a3020" roughness={0.9} />
+      </mesh>
+
       {/* ===== LANTERNS ===== */}
       <Lantern position={[0.9, 0.35, 0.38]} />
       <Lantern position={[-0.3, 0.35, 0.38]} />
       <Lantern position={[0.2, 2.05, 0]} />
 
-      {/* Nozzle emissive ring — aligned to rear face of new engine housing */}
-      <mesh position={[-1.68, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
+      {/* ===== ENGINE NOZZLE AT STERN ===== */}
+      <mesh position={[-1.3, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.18, 0.25, 0.3, 16]} />
+        <meshStandardMaterial color="#2a2030" metalness={0.6} roughness={0.5} />
+      </mesh>
+
+      {/* Nozzle emissive ring */}
+      <mesh position={[-1.45, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
         <torusGeometry args={[0.2, 0.035, 8, 20]} />
         <meshBasicMaterial color="#ffb060" toneMapped={false} />
       </mesh>
