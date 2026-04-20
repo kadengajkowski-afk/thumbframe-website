@@ -205,12 +205,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
         <meshStandardMaterial color="#6a4228" />
       </mesh>
 
-      {/* ===== BOWSPRIT ===== */}
-      <mesh position={[1.45, 0.25, 0]} rotation={[0, 0, -0.18]}>
-        <cylinderGeometry args={[0.025, 0.035, 0.75, 8]} />
-        <meshStandardMaterial color="#4a3020" roughness={0.9} />
-      </mesh>
-
       {/* ===== LANTERNS ===== */}
       <Lantern position={[0.9, 0.35, 0.38]} />
       <Lantern position={[-0.3, 0.35, 0.38]} />
