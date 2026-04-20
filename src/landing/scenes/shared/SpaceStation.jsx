@@ -66,9 +66,10 @@ const sailVertex = `
     float trailingEdge = smoothstep(0.4, 1.0, vUv.x);
     pos.z += edgeChop * trailingEdge * freedom;
 
-    // Hard pin at both top AND bottom (12% band each end)
-    float topPin = smoothstep(1.0, 0.88, vUv.y);
-    float botPin = smoothstep(0.0, 0.12, vUv.y);
+    // Pin at both top AND bottom — wider blend zones (25% each)
+    // to avoid visible seams between pinned and free regions
+    float topPin = smoothstep(1.0, 0.75, vUv.y);
+    float botPin = smoothstep(0.0, 0.25, vUv.y);
     float pinFactor = topPin * botPin;
     pos = mix(position, pos, pinFactor);
 
