@@ -188,11 +188,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
   });
 
   const trailRef = useRef({ active: false });     // light streak trail toggle
-  const restAnchorRef = useRef({
-    x: position[0],
-    y: position[1],
-    z: position[2],
-  });
 
   useFrame((state) => {
     if (!groupRef.current) return;
@@ -221,28 +216,16 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     }
 
     else if (m.state === 'executing' && t - m.startTime >= m.duration) {
-      // Set restAnchor so the idle drift THIS frame produces the
-      // ship's current position — no jump when drift takes over.
-      // We compute what drift would output at this exact t, then
-      // subtract that from ship position to get the anchor.
-      const driftX = Math.sin(t * 0.18) * 2.5
-                   + Math.sin(t * 0.11 + 1.2) * 1.3
-                   + Math.sin(t * 0.07 + 2.1) * 0.8;
-      const driftZ = Math.sin(t * 0.13 + 0.7) * 0.6
-                   + Math.cos(t * 0.09) * 0.4;
-      const bob = Math.sin(t * 0.55);
-      const bobY = bob > 0 ? bob * 0.35 : bob * 0.75;
-      const roamY = Math.sin(t * 0.08 + 1.7) * 0.8
-                  + Math.sin(t * 0.14 + 0.3) * 0.4;
-
-      restAnchorRef.current.x = groupRef.current.position.x - driftX;
-      restAnchorRef.current.y = groupRef.current.position.y - bobY - roamY;
-      restAnchorRef.current.z = groupRef.current.position.z - driftZ;
-
       m.state = 'idle';
       m.type = null;
       m.nextTriggerAt = t + 120 + Math.random() * 120;
       trailRef.current.active = false;
+      // Capture exit position — drift will lerp back to mount origin
+      // over ~3 seconds using this as starting point
+      m.exitTime = t;
+      m.exitX = groupRef.current.position.x;
+      m.exitY = groupRef.current.position.y;
+      m.exitZ = groupRef.current.position.z;
     }
 
     // === IDLE DRIFT (when not executing maneuver) ===
@@ -254,11 +237,9 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     let rotZ = 0;
 
     if (m.state === 'idle' || m.state === 'charging') {
-      // Bob
       const bob = Math.sin(t * 0.55);
       const bobY = bob > 0 ? bob * 0.35 : bob * 0.75;
 
-      // Wide drift
       const driftX = Math.sin(t * 0.18) * 2.5
                    + Math.sin(t * 0.11 + 1.2) * 1.3
                    + Math.sin(t * 0.07 + 2.1) * 0.8;
@@ -267,15 +248,29 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       const roamY = Math.sin(t * 0.08 + 1.7) * 0.8
                   + Math.sin(t * 0.14 + 0.3) * 0.4;
 
-      // Gust lurches
       const gustCycle = Math.sin(t * 0.18 + 0.5);
       const gustIntensity = Math.pow(Math.max(0, gustCycle), 8);
       const gustX = gustIntensity * Math.sin(t * 2.3) * 0.3;
       const gustY = gustIntensity * Math.sin(t * 1.9) * 0.2;
 
-      baseX = restAnchorRef.current.x + driftX + gustX;
-      baseY = restAnchorRef.current.y + bobY + roamY + gustY;
-      baseZ = restAnchorRef.current.z + driftZ;
+      // Natural drift target (where ship wants to be)
+      const targetX = position[0] + driftX + gustX;
+      const targetY = position[1] + bobY + roamY + gustY;
+      const targetZ = position[2] + driftZ;
+
+      // Blend from exit position toward drift target over 3 seconds
+      // after a maneuver
+      if (m.exitTime !== undefined && t - m.exitTime < 3.0) {
+        const blendT = (t - m.exitTime) / 3.0;
+        const ease = 1 - Math.pow(1 - blendT, 3);  // cubic ease-out
+        baseX = m.exitX + (targetX - m.exitX) * ease;
+        baseY = m.exitY + (targetY - m.exitY) * ease;
+        baseZ = m.exitZ + (targetZ - m.exitZ) * ease;
+      } else {
+        baseX = targetX;
+        baseY = targetY;
+        baseZ = targetZ;
+      }
 
       rotY = (rotation?.[1] ?? 0) + Math.sin(t * 0.22) * 0.06 + driftX * 0.015;
       rotX = Math.sin(t * 0.55 + 0.5) * 0.07;
@@ -318,13 +313,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       thrustRef.current = Math.min(1.0, Math.max(0, vx / 0.8));
     }
     lastXRef.current = groupRef.current.position.x;
-
-    // Gentle pull of rest anchor back toward mount over long time
-    if (m.state === 'idle') {
-      restAnchorRef.current.x += (position[0] - restAnchorRef.current.x) * 0.001;
-      restAnchorRef.current.y += (position[1] - restAnchorRef.current.y) * 0.001;
-      restAnchorRef.current.z += (position[2] - restAnchorRef.current.z) * 0.001;
-    }
   });
 
   return (
