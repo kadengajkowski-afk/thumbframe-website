@@ -15,6 +15,7 @@ import SpaceStation from './shared/SpaceStation';
 import Stardust from './shared/Stardust';
 import WatercolorStars from './shared/WatercolorStars';
 import LightStreaks from './shared/LightStreaks';
+import SolarWind from './shared/SolarWind';
 import ShootingStars from './shared/ShootingStars';
 import PainterlyPost from '../shaders/painterly/PainterlyPost';
 
@@ -37,6 +38,8 @@ function SceneGraph() {
         position={[-3, 1, 3]}
         intensity={0.35}
       />
+
+      <SolarWind />
 
       <SpaceStation position={[0.1, -2.8, 0]} scale={0.75} rotation={[0, -0.25, 0]} />
 
