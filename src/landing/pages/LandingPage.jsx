@@ -101,7 +101,7 @@ export default function LandingPage({ onNavigate }) {
             letterSpacing: '-0.02em',
             color: '#faecd0',
             textAlign: 'center',
-            maxWidth: '14ch',
+            maxWidth: '18ch',
             margin: 0,
             textShadow: '0 4px 32px rgba(0,0,0,0.5), 0 0 60px rgba(250,236,208,0.15)',
           }}
@@ -113,11 +113,11 @@ export default function LandingPage({ onNavigate }) {
         <div
           style={{
             marginTop: '24px',
-            width: '72px',
-            height: '3px',
+            width: '96px',
+            height: '4px',
             background: 'linear-gradient(90deg, transparent 0%, #f0a060 50%, transparent 100%)',
             borderRadius: '2px',
-            opacity: 0.7,
+            opacity: 0.85,
           }}
         />
       </div>
@@ -126,7 +126,7 @@ export default function LandingPage({ onNavigate }) {
       <div
         style={{
           position: 'absolute',
-          top: '52%',
+          top: '42%',
           left: 0,
           right: 0,
           zIndex: 10,
