@@ -27,7 +27,7 @@ const sailVertex = `
     // Swept-back shape — top edge pulled back more than bottom
     // This gives the sail its "swept" silhouette when rotated into
     // place (vs being a plain rectangle)
-    pos.z -= vUv.y * 0.35;
+    pos.z += vUv.y * 0.35;
 
     // Gentle slack ripple
     float ripple = sin(vUv.y * 4.5 + uTime * 1.0) * 0.025
@@ -181,7 +181,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* ===== YARD (horizontal spar sail hangs from) ===== */}
-      <mesh position={[0.1, 2.0, 0]} rotation={[0, 0, Math.PI / 2 + 0.12]}>
+      <mesh position={[0.1, 2.0, 0]} rotation={[Math.PI / 2 + 0.12, 0, 0]}>
         <cylinderGeometry args={[0.035, 0.035, 3.2, 8]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
@@ -189,8 +189,9 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       {/* ===== SINGLE LARGE SOLAR SAIL ===== */}
       {/* Positioned above and slightly behind ship center, large and swept */}
       <SolarSail
-        position={[0.1, 1.25, 0.1]}
+        position={[0.1, 1.25, 0]}
         size={[3.0, 2.4]}
+        rotation={[0, Math.PI / 2, 0]}
       />
 
       {/* ===== MAST TOP FINIAL (small ornament at top of mast) ===== */}
