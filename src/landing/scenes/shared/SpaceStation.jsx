@@ -202,7 +202,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       m.type = types[Math.floor(Math.random() * types.length)];
       m.state = 'charging';
       m.startTime = t;
-      m.duration = 0.8;
+      m.duration = 1.6;  // was 0.8 — ship takes longer to build up thrust
       // Capture ship's ACTUAL current position as the maneuver origin
       m.idleX = groupRef.current.position.x;
       m.idleY = groupRef.current.position.y;
@@ -214,7 +214,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       // Transition to executing
       m.state = 'executing';
       m.startTime = t;
-      m.duration = m.type === 'figure8' ? 5.0 : 3.0;
+      m.duration = m.type === 'figure8' ? 9.0 : 5.5;  // was 5.0 / 3.0
       trailRef.current.active = true;
     }
 
@@ -222,7 +222,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       // Transition to recovering
       m.state = 'recovering';
       m.startTime = t;
-      m.duration = 1.2;
+      m.duration = 2.5;  // was 1.2 — slower settle back into drift
       trailRef.current.active = false;
     }
 
@@ -337,7 +337,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       baseX = maneuverEndX + (baseX - maneuverEndX) * ease;
       baseY = maneuverEndY + (baseY - maneuverEndY) * ease;
       baseZ = maneuverEndZ + (baseZ - maneuverEndZ) * ease;
-      shakeRef.current.intensity = Math.max(0, 0.2 - p * 0.2);
+      shakeRef.current.intensity = Math.max(0, 0.2 - (p / 2.5) * 0.2);
     }
 
     // === APPLY SHAKE ===
