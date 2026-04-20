@@ -15,9 +15,9 @@ const sailVertex = `
     vec3 pos = position;
 
     // === FREEDOM ENVELOPE ===
-    // Top edge (uv.y = 1) is rigidly pinned to yard arm.
-    // Freedom grows nonlinearly as you go down.
-    float freedom = pow(1.0 - vUv.y, 1.5);
+    // Both top (uv.y=1) and bottom (uv.y=0) are pinned.
+    // Freedom is maximum at the middle.
+    float freedom = sin(vUv.y * 3.14159);
 
     // === MICRO-NOISE JITTER ===
     // Small pseudo-random jitter per-vertex so motion has organic
@@ -37,20 +37,20 @@ const sailVertex = `
     // === HORIZONTAL STREAM (the banner blowing in the wind) ===
     // Bottom of sail streams horizontally in +X direction, with
     // wave traveling DOWN from top to bottom.
-    float streamX = sin(a - vUv.y * 4.7 + jx * 2.0) * 0.25
-                  + sin(c * 1.7 + vUv.y * 2.3 - jx) * 0.15
-                  + sin(b * 0.6 - vUv.y * 6.1) * 0.10;
+    float streamX = sin(a - vUv.y * 4.7 + jx * 2.0) * 0.40
+                  + sin(c * 1.7 + vUv.y * 2.3 - jx) * 0.28
+                  + sin(b * 0.6 - vUv.y * 6.1) * 0.18;
     pos.x += streamX * freedom;
 
     // === DEPTH BILLOW (sail bulging in/out) ===
-    float depthZ = sin(b - vUv.y * 3.9 + jy) * 0.20
-                 + sin(d * 0.5 + vUv.x * 2.7 - vUv.y * 3.0) * 0.13
-                 + sin(a * 1.4 - vUv.x * 1.3) * 0.08;
+    float depthZ = sin(b - vUv.y * 3.9 + jy) * 0.35
+                 + sin(d * 0.5 + vUv.x * 2.7 - vUv.y * 3.0) * 0.22
+                 + sin(a * 1.4 - vUv.x * 1.3) * 0.15;
     pos.z += depthZ * freedom;
 
     // === VERTICAL FLUTTER (flag curls up and down) ===
-    float flutterY = sin(c - vUv.y * 5.2 + jx * 3.0) * 0.15
-                   + sin(d * 0.7 + vUv.x * 1.9) * 0.10;
+    float flutterY = sin(c - vUv.y * 5.2 + jx * 3.0) * 0.25
+                   + sin(d * 0.7 + vUv.x * 1.9) * 0.18;
     pos.y += flutterY * freedom;
 
     // === HIGH-FREQUENCY EDGE CHOP ===
@@ -60,9 +60,6 @@ const sailVertex = `
                    + sin(b * 3.3 - vUv.y * 9.0) * 0.03;
     float trailingEdge = smoothstep(0.4, 1.0, vUv.x);
     pos.z += edgeChop * trailingEdge * freedom;
-
-    // Keep the swept-back silhouette
-    pos.z += vUv.y * 0.2;
 
     vBow = 0.7;
 
@@ -220,6 +217,12 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       {/* ===== YARD (horizontal spar sail hangs from) ===== */}
       <mesh position={[0.1, 2.95, 0]} rotation={[Math.PI / 2 + 0.12, 0, 0]}>
         <cylinderGeometry args={[0.035, 0.035, 3.2, 8]} />
+        <meshStandardMaterial color="#4a3020" roughness={0.9} />
+      </mesh>
+
+      {/* ===== BOOM (horizontal spar at bottom of sail) ===== */}
+      <mesh position={[0.1, 1.02, 0]} rotation={[0, 0, Math.PI / 2 + 0.12]}>
+        <cylinderGeometry args={[0.03, 0.03, 3.0, 8]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
