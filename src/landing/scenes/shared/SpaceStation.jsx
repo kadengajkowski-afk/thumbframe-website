@@ -171,6 +171,8 @@ function Lantern({ position }) {
 
 export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation = [0, 0, 0] }) {
   const groupRef = useRef();
+  const thrustRef = useRef(1.0);
+  const lastXRef = useRef(position[0]);
 
   // Gentle ship rock — three independent sines, different periods.
   // Rock is layered on top of the base rotation passed in via props so the
@@ -222,6 +224,18 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     // Roll — leans into lateral sway PLUS reacts to gusts
     groupRef.current.rotation.z = Math.sin(t * 0.31 + 0.3) * 0.05
                                 + gustRoll * Math.sin(t * 3.1);
+
+    // === VELOCITY-BASED THRUST ===
+    // Flame activates when ship moves right (+X), idles when moving left
+    const currentX = groupRef.current.position.x;
+    const dt = state.clock.getDelta ? 1/60 : 1/60;  // approximate
+    const vx = (currentX - lastXRef.current) / dt;
+    lastXRef.current = currentX;
+
+    // Map velocity to thrust: 0 when moving backward, up to 1 when
+    // moving forward at full speed
+    const forwardSpeed = Math.max(0, vx);
+    thrustRef.current = Math.min(1.0, forwardSpeed / 0.8);
   });
 
   return (
@@ -300,7 +314,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* ===== FLAME ===== */}
-      <EnginePlume position={[-2.4, 0, 0]} />
+      <EnginePlume position={[-2.4, 0, 0]} thrustRef={thrustRef} />
     </group>
   );
 }

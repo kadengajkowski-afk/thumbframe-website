@@ -39,6 +39,7 @@ const vertexShader = `
 
 const fragmentShader = `
   uniform float uTime;
+  uniform float uThrust;
   varying vec2 vUv;
   varying float vDist;
 
@@ -74,27 +75,34 @@ const fragmentShader = `
 
     // Soft turbulence — modulates BRIGHTNESS, not alpha
     float turb = noise(vec3(vUv * 4.0, uTime * 1.5)) * 0.25 + 0.85;
-    color *= turb;
+    color *= turb * (0.3 + uThrust * 0.7);
 
     // Alpha: fade at tip and at radial edge. No holes, no splotches.
     float tipFade  = 1.0 - smoothstep(0.6, 1.0, vDist);
     float edgeFade = 1.0 - smoothstep(0.7, 1.0, radial);
-    float alpha = tipFade * edgeFade * 0.95;
+    float alpha = tipFade * edgeFade * 0.95 * uThrust;
 
     gl_FragColor = vec4(color, alpha);
   }
 `;
 
-export default function EnginePlume({ position = [0, 0, 0] }) {
+export default function EnginePlume({ position = [0, 0, 0], thrustRef }) {
   const matRef = useRef();
 
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
+    uThrust: { value: 1.0 },
   }), []);
 
   useFrame((state) => {
     if (matRef.current) {
       matRef.current.uniforms.uTime.value = state.clock.elapsedTime;
+      // Smoothly ease uThrust toward target from parent
+      if (thrustRef?.current !== undefined) {
+        const current = matRef.current.uniforms.uThrust.value;
+        const target = thrustRef.current;
+        matRef.current.uniforms.uThrust.value = current + (target - current) * 0.08;
+      }
     }
   });
 
