@@ -49,7 +49,7 @@ const fragmentShader = /* glsl */ `
 
 export class OutlineEffect extends Effect {
   constructor({
-    strength = 0.85,
+    strength = 0.15,
     sampleStride = 1.4,
     resolution = new Vector2(1, 1),
   } = {}) {
@@ -58,8 +58,10 @@ export class OutlineEffect extends Effect {
         ['uResolution',   new Uniform(resolution)],
         ['uStrength',     new Uniform(strength)],
         ['uSampleStride', new Uniform(sampleStride)],
-        // #1a0820 — deep violet-black Moebius ink.
-        ['uLineColor',    new Uniform({ x: 0.102, y: 0.031, z: 0.125 })],
+        // #3a2040 — wash-violet ink. Lighter than the previous
+        // near-black so outlines read as a soft ink bleed, not a
+        // hard vector contour.
+        ['uLineColor',    new Uniform({ x: 0.227, y: 0.125, z: 0.251 })],
       ]),
       attributes: 1, // EffectAttribute.DEPTH
     });

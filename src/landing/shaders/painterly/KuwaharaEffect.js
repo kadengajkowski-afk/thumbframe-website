@@ -118,7 +118,7 @@ const fragmentShader = /* glsl */ `
 `;
 
 export class KuwaharaEffect extends Effect {
-  constructor({ kernelNear = 4.0, kernelFar = 10.0, resolution = new Vector2(1, 1) } = {}) {
+  constructor({ kernelNear = 2.0, kernelFar = 6.0, resolution = new Vector2(1, 1) } = {}) {
     super('KuwaharaEffect', fragmentShader, {
       uniforms: new Map([
         ['uKernelNear', new Uniform(kernelNear)],

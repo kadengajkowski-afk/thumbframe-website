@@ -36,7 +36,7 @@ const fragmentShader = /* glsl */ `
 `;
 
 export class PaperGrainEffect extends Effect {
-  constructor({ strength = 0.12, scale = 800.0 } = {}) {
+  constructor({ strength = 0.28, scale = 800.0 } = {}) {
     super('PaperGrainEffect', fragmentShader, {
       uniforms: new Map([
         ['uStrength', new Uniform(strength)],

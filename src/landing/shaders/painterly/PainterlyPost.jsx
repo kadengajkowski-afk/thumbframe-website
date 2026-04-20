@@ -19,12 +19,13 @@ const KUWAHARA_SCALE = IS_MOBILE ? 0.25 : 0.40;
 
 function KuwaharaPass() {
   const { size, viewport } = useThree();
-  // Widened near/far gap for the ink-over-watercolor contrast —
-  // planets at kernelNear=2 (barely smoothed), nebula at kernelFar=12.
+  // Softer watercolor target — dropped kernelFar from 12 to 6 so
+  // gradients inside cloud/hull regions are preserved instead of
+  // quantised into paint-by-numbers bands.
   const effect = useMemo(
     () => new KuwaharaEffect({
       kernelNear: IS_MOBILE ? 2.0 : 2.0,
-      kernelFar:  IS_MOBILE ? 8.0 : 12.0,
+      kernelFar:  IS_MOBILE ? 5.0 : 6.0,
     }),
     []
   );
@@ -42,11 +43,12 @@ function KuwaharaPass() {
 
 function OutlinePass() {
   const { size, viewport } = useThree();
-  // Cranked for explicit ink-illustration read: strength 1.4 (was 0.85;
-  // values >1 fully saturate the line at strong edges), sampleStride 2.2
-  // (was 1.4) for ~3–4px thick contour lines.
+  // Watercolor-soft outline — strength 1.4 → 0.15. Lines now bleed
+  // through as a subtle ink wash rather than saturating the contour.
+  // sampleStride kept at 2.2 so the wash has some width when it does
+  // show.
   const effect = useMemo(() => new OutlineEffect({
-    strength: 1.4,
+    strength: 0.15,
     sampleStride: 2.2,
   }), []);
 
@@ -59,7 +61,10 @@ function OutlinePass() {
 }
 
 function PaperGrainPass() {
-  const effect = useMemo(() => new PaperGrainEffect({ strength: 0.18, scale: 600 }), []);
+  // Grain bumped 0.18 → 0.28 for more visible paper fibre — pushes
+  // the image away from the flat-digital read. The grain multiplier
+  // is symmetric around 1.0 so this doesn't darken the frame.
+  const effect = useMemo(() => new PaperGrainEffect({ strength: 0.28, scale: 600 }), []);
   return <primitive object={effect} dispose={null} />;
 }
 
