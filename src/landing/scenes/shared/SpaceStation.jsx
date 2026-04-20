@@ -14,46 +14,56 @@ const sailVertex = `
     vUv = uv;
     vec3 pos = position;
 
-    // === DIAGNOSTIC BOB TEST ===
-    // If sail visibly bobs 2 units up/down, uTime is reaching GPU.
-    // If no motion, uniform update is not propagating to the material.
-    pos.y += sin(uTime * 3.0) * 2.0;
+    // === FREEDOM ENVELOPE ===
+    // Top edge (uv.y = 1) is rigidly pinned to yard arm.
+    // Freedom grows nonlinearly as you go down.
+    float freedom = pow(1.0 - vUv.y, 1.5);
 
-    // === BANNER BEHAVIOR ===
-    // Top edge (uv.y = 1) is pinned to yard.
-    // Bottom (uv.y = 0) is free and streams in wind.
-    // Motion intensity increases as you go down from top to bottom.
-    float freedom = pow(1.0 - vUv.y, 1.3);
+    // === MICRO-NOISE JITTER ===
+    // Small pseudo-random jitter per-vertex so motion has organic
+    // texture instead of smooth sine sweeps
+    float jx = sin(vUv.x * 47.3 + vUv.y * 23.1) * 0.5 + 0.5;
+    float jy = sin(vUv.x * 31.7 - vUv.y * 19.4) * 0.5 + 0.5;
 
-    // Wave propagation: waves travel DOWN the flag from top to
-    // bottom. Phase offset by uv.y so a wave starts at top and
-    // moves down, like a real flag rippling.
-    float travelPhase = uTime * 4.0 - vUv.y * 6.0;
+    // === FOUR NON-HARMONIC SINES ===
+    // Frequencies chosen as non-integer multiples so the combined
+    // motion has a very long period (effectively never repeats
+    // during viewing).
+    float a = uTime * 1.37;
+    float b = uTime * 2.13;
+    float c = uTime * 0.89;
+    float d = uTime * 3.41;
 
-    // Primary streamer flutter: big horizontal sway
-    // Pushes sail in +X direction (away from mast, toward bow)
-    float streamX = sin(travelPhase) * 0.5
-                  + sin(travelPhase * 0.7 + 1.3) * 0.3;
+    // === HORIZONTAL STREAM (the banner blowing in the wind) ===
+    // Bottom of sail streams horizontally in +X direction, with
+    // wave traveling DOWN from top to bottom.
+    float streamX = sin(a - vUv.y * 4.7 + jx * 2.0) * 0.35
+                  + sin(c * 1.7 + vUv.y * 2.3 - jx) * 0.22
+                  + sin(b * 0.6 - vUv.y * 6.1) * 0.15;
     pos.x += streamX * freedom;
 
-    // Depth wave: in/out billow traveling down the flag
-    float wave1 = sin(travelPhase * 1.1 + vUv.x * 3.0) * 0.25;
-    float wave2 = sin(travelPhase * 0.8 - vUv.x * 2.0 + 0.7) * 0.18;
-    pos.z += (wave1 + wave2) * freedom;
+    // === DEPTH BILLOW (sail bulging in/out) ===
+    float depthZ = sin(b - vUv.y * 3.9 + jy) * 0.28
+                 + sin(d * 0.5 + vUv.x * 2.7 - vUv.y * 3.0) * 0.18
+                 + sin(a * 1.4 - vUv.x * 1.3) * 0.12;
+    pos.z += depthZ * freedom;
 
-    // Vertical lift/droop: flag tip curls up and down
-    float vertFlap = sin(travelPhase * 0.9 + vUv.x * 1.5) * 0.15;
-    pos.y += vertFlap * freedom;
+    // === VERTICAL FLUTTER (flag curls up and down) ===
+    float flutterY = sin(c - vUv.y * 5.2 + jx * 3.0) * 0.22
+                   + sin(d * 0.7 + vUv.x * 1.9) * 0.14;
+    pos.y += flutterY * freedom;
 
-    // High-frequency edge shimmer on trailing edge (right side
-    // where the T is furthest from attachment point)
-    float edgeShimmer = sin(uTime * 12.0 + vUv.y * 8.0) * 0.04;
-    pos.z += edgeShimmer * freedom * smoothstep(0.5, 1.0, vUv.x);
+    // === HIGH-FREQUENCY EDGE CHOP ===
+    // Stronger on the far (trailing) edge only, very fast small
+    // motions on top of the larger waves
+    float edgeChop = sin(d * 2.1 + vUv.x * 7.0 + vUv.y * 4.0) * 0.04
+                   + sin(b * 3.3 - vUv.y * 9.0) * 0.03;
+    float trailingEdge = smoothstep(0.4, 1.0, vUv.x);
+    pos.z += edgeChop * trailingEdge * freedom;
 
-    // Preserve the swept-back top edge aesthetic
+    // Keep the swept-back silhouette
     pos.z += vUv.y * 0.2;
 
-    // vBow varying — static since we no longer do parabolic billow
     vBow = 0.7;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
