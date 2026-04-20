@@ -202,8 +202,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     // === STATE TRANSITIONS ===
 
     if (m.state === 'idle' && t >= m.nextTriggerAt) {
-      const types = ['vertLoop', 'horizLoop', 'barrelRoll', 'figure8'];
-      m.type = types[Math.floor(Math.random() * types.length)];
+      m.type = 'horizLoop';
       m.state = 'charging';
       m.startTime = t;
       m.duration = 1.6;  // was 0.8 — ship takes longer to build up thrust
@@ -213,7 +212,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       // Transition to executing
       m.state = 'executing';
       m.startTime = t;
-      m.duration = m.type === 'figure8' ? 9.0 : 5.5;  // was 5.0 / 3.0
+      m.duration = 5.5;
       // Capture ACTUAL position at moment of launch — no more teleport
       m.idleX = groupRef.current.position.x;
       m.idleY = groupRef.current.position.y;
@@ -276,18 +275,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     if (m.state === 'executing') {
       const p = (t - m.startTime) / m.duration;  // 0 to 1
 
-      if (m.type === 'vertLoop') {
-        // Vertical loop: climb, invert at top, dive back
-        const loopT = p * Math.PI * 2;
-        const radius = 3.5;
-        baseX = m.idleX + Math.sin(loopT) * radius * 1.2;
-        baseY = m.idleY + (1 - Math.cos(loopT)) * radius;
-        baseZ = m.idleZ;
-        rotZ = -loopT;                          // ship spins through loop
-        rotY = (rotation?.[1] ?? 0) + Math.sin(p * Math.PI) * 0.3;
-      }
-
-      else if (m.type === 'horizLoop') {
+      if (m.type === 'horizLoop') {
         // Horizontal circle — big sweep across frame
         const loopT = p * Math.PI * 2;
         const radius = 4.5;
@@ -295,22 +283,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
         baseY = m.idleY + Math.cos(loopT) * 1.2;  // elliptical, less vertical
         baseZ = m.idleZ - (1 - Math.cos(loopT)) * 2.0;  // arcs into depth
         rotY = (rotation?.[1] ?? 0) + loopT;      // ship yaws through circle
-      }
-
-      else if (m.type === 'barrelRoll') {
-        // Rolls 720° while drifting across frame
-        baseX = m.idleX + p * 8 - 4;
-        baseY = m.idleY + Math.sin(p * Math.PI) * 1.2;
-        rotX = p * Math.PI * 4;  // two full rolls
-      }
-
-      else if (m.type === 'figure8') {
-        // Two connected loops
-        const loopT = p * Math.PI * 4;
-        const radius = 2.8;
-        baseX = m.idleX + Math.sin(loopT) * radius;
-        baseY = m.idleY + Math.sin(loopT * 2) * radius * 0.6;
-        rotZ = Math.sin(loopT) * 1.5;
       }
     }
 
