@@ -120,11 +120,15 @@ const fragmentShader = /* glsl */ `
     // Palette distribution — smoothstep bands lowered so colorMid
     // takes over earlier and less of the frame sits in colorCore.
     vec3 color = mix(colorCore, colorMid, smoothstep(0.15, 0.45, n));
-    color = mix(color, colorHigh, smoothstep(0.50, 0.75, n) * 0.6);
+    // colorHigh (dusty rose) — threshold lifted 0.50→0.60 and weight
+    // 0.6→0.45 so pale-pink coverage drops to 10-15% of frame.
+    color = mix(color, colorHigh, smoothstep(0.60, 0.82, n) * 0.45);
 
     // Amber pockets — reuse warpedPos so the amber flows with the
-    // main ink field instead of drifting on its own clock.
-    color = mix(color, colorAccent, smoothstep(0.4, 0.75, amberMask) * 0.6);
+    // main ink field instead of drifting on its own clock. Threshold
+    // lifted 0.4→0.55 and weight 0.6→0.4 so amber sits at the target
+    // 15-20% coverage and lets underlying violet show through.
+    color = mix(color, colorAccent, smoothstep(0.55, 0.85, amberMask) * 0.4);
 
     // Ink-rim edge darkening — softened at the new scale. Rim
     // detection smoothstep widened (0.5-1.2) so it triggers less
