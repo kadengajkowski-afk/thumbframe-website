@@ -82,7 +82,9 @@ const fragmentShader = /* glsl */ `
   float fbm(vec3 p) {
     float v = 0.0, a = 0.5;
     vec3 shift = vec3(100.0);
-    for (int i = 0; i < 5; i++) {
+    // 6 octaves at lacunarity 2.0, gain 0.5 — bumped from 5 to carry
+    // the extra fine detail the higher base frequency brings in.
+    for (int i = 0; i < 6; i++) {
       v += a * noise3(p);
       p = p * 2.0 + shift;
       a *= 0.5;
@@ -95,7 +97,11 @@ const fragmentShader = /* glsl */ `
     // Very slow internal drift — shifting the sample space gives the
     // impression of brush strokes migrating without tearing the masks apart.
     vec3 drift = vec3(uTime * 0.010, uTime * 0.006, uTime * 0.008);
-    vec3 nc = dir * 2.5 + drift;
+    // Base frequency 2.5 → 7.5 (3×). Tighter cloud cells, more of them
+    // across the viewport, reads as a distant galaxy instead of a
+    // nearby haze. n3 keeps its 1.5× relative multiplier so the amber
+    // accent mask scales the same 3× factor (was 3.75, now 11.25).
+    vec3 nc = dir * 7.5 + drift;
 
     float n1 = fbm(nc);
     float n2 = fbm(nc + vec3(5.2, 1.3, 2.8));
