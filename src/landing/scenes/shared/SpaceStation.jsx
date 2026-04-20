@@ -137,9 +137,12 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
   useFrame((state) => {
     if (!groupRef.current) return;
     const t = state.clock.elapsedTime;
-    groupRef.current.rotation.y = rotation[1] + Math.sin(t * 0.28) * 0.15;
-    groupRef.current.position.y = position[1] + Math.sin(t * 0.42) * 0.12;
-    groupRef.current.rotation.x = rotation[0] + Math.sin(t * 0.35) * 0.035;
+    // Gentle rock (slower, smaller)
+    groupRef.current.rotation.y = rotation[1] + Math.sin(t * 0.22) * 0.08;
+    // Pronounced bob — rides a swell of solar wind
+    groupRef.current.position.y = position[1] + Math.sin(t * 0.55) * 0.35;
+    // Subtle pitch phase-linked to the bob so tilt syncs with rise/fall
+    groupRef.current.rotation.x = rotation[0] + Math.sin(t * 0.55 + 0.5) * 0.08;
     groupRef.current.rotation.z = rotation[2];
   });
 
@@ -183,7 +186,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* ===== YARD (horizontal spar sail hangs from) ===== */}
-      <mesh position={[0.1, 2.95, 0]} rotation={[Math.PI / 2 + 0.12, 0, 0]}>
+      <mesh position={[0.1, 2.95, 0]} rotation={[0, 0, Math.PI / 2 + 0.12]}>
         <cylinderGeometry args={[0.035, 0.035, 3.2, 8]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
@@ -193,7 +196,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       <SolarSail
         position={[0.1, 2.2, 0]}
         size={[3.0, 2.4]}
-        rotation={[0, Math.PI / 2, 0]}
       />
 
       {/* ===== MAST TOP FINIAL (small ornament at top of mast) ===== */}
