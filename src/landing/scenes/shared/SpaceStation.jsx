@@ -198,12 +198,15 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     // === STATE TRANSITIONS ===
 
     if (m.state === 'idle' && t >= m.nextTriggerAt) {
-      // Trigger a new maneuver
       const types = ['vertLoop', 'horizLoop', 'barrelRoll', 'figure8'];
       m.type = types[Math.floor(Math.random() * types.length)];
       m.state = 'charging';
       m.startTime = t;
-      m.duration = 0.8;  // 0.8s charge-up
+      m.duration = 0.8;
+      // Capture ship's ACTUAL current position as the maneuver origin
+      m.idleX = groupRef.current.position.x;
+      m.idleY = groupRef.current.position.y;
+      m.idleZ = groupRef.current.position.z;
       shakeRef.current.intensity = 0;
     }
 
@@ -270,11 +273,13 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     // === MANEUVER OVERRIDES ===
 
     if (m.state === 'charging') {
-      // Ship tenses up, small tremor, thrusters building
+      // Ship holds its captured position with a tremor — no drift
       const progress = (t - m.startTime) / m.duration;
       const tremor = Math.sin(t * 60) * 0.04 * progress;
-      baseX += tremor;
-      baseY += Math.cos(t * 55) * 0.03 * progress;
+      baseX = m.idleX + tremor;
+      baseY = m.idleY + Math.cos(t * 55) * 0.03 * progress;
+      baseZ = m.idleZ;
+      // Keep idle rotation behavior so it doesn't snap
       shakeRef.current.intensity = progress * 0.6;
     }
 
@@ -321,18 +326,17 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     }
 
     if (m.state === 'recovering') {
-      // Ease back from maneuver end position to idle drift
+      // Smoothly blend from maneuver end toward current idle drift
       const p = (t - m.startTime) / m.duration;
-      const ease = 1 - Math.pow(1 - p, 3);  // cubic ease-out
-
-      // The baseX/Y/Z above were computed for idle at THIS time.
-      // But ship last was at end-of-maneuver position. We smoothly
-      // move from wherever we are toward the idle target.
-      const cur = groupRef.current.position;
-      baseX = cur.x + (baseX - cur.x) * ease * 0.15;
-      baseY = cur.y + (baseY - cur.y) * ease * 0.15;
-      baseZ = cur.z + (baseZ - cur.z) * ease * 0.15;
-
+      const ease = 1 - Math.pow(1 - p, 3);
+      // At start of recovery, ship is at wherever the maneuver ended.
+      // We blend toward the drift position over the recovery duration.
+      const maneuverEndX = groupRef.current.position.x;
+      const maneuverEndY = groupRef.current.position.y;
+      const maneuverEndZ = groupRef.current.position.z;
+      baseX = maneuverEndX + (baseX - maneuverEndX) * ease;
+      baseY = maneuverEndY + (baseY - maneuverEndY) * ease;
+      baseZ = maneuverEndZ + (baseZ - maneuverEndZ) * ease;
       shakeRef.current.intensity = Math.max(0, 0.2 - p * 0.2);
     }
 
