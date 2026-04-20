@@ -57,7 +57,7 @@ export default function LandingScene() {
       }}
     >
       <Canvas
-        camera={{ fov: 50, near: 0.1, far: 200, position: [0, 1.6, 9] }}
+        camera={{ fov: 50, near: 0.1, far: 200, position: [0, -2.5, 9] }}
         gl={{ antialias: true, alpha: false, preserveDrawingBuffer: false }}
         dpr={[1, 2]}
       >
