@@ -222,19 +222,16 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     }
 
     else if (m.state === 'executing' && t - m.startTime >= m.duration) {
-      // Transition to recovering
-      m.state = 'recovering';
-      m.startTime = t;
-      m.duration = 2.5;  // was 1.2 — slower settle back into drift
-      m.recoveryStarted = false;  // reset so recovery knows to init on first frame
-      trailRef.current.active = false;
-    }
-
-    else if (m.state === 'recovering' && t - m.startTime >= m.duration) {
-      // Back to idle, schedule next maneuver
+      // Skip recovery — ship continues from wherever maneuver ended.
+      // Update restAnchor to ship's current position so idle drift
+      // resumes smoothly from here.
+      restAnchorRef.current.x = groupRef.current.position.x;
+      restAnchorRef.current.y = groupRef.current.position.y;
+      restAnchorRef.current.z = groupRef.current.position.z;
       m.state = 'idle';
       m.type = null;
-      m.nextTriggerAt = t + 120 + Math.random() * 120;  // 2-4 min
+      m.nextTriggerAt = t + 120 + Math.random() * 120;
+      trailRef.current.active = false;
     }
 
     // === IDLE DRIFT (when not executing maneuver) ===
@@ -245,7 +242,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     let rotX = 0;
     let rotZ = 0;
 
-    if (m.state === 'idle' || m.state === 'charging' || m.state === 'recovering') {
+    if (m.state === 'idle' || m.state === 'charging') {
       // Bob
       const bob = Math.sin(t * 0.55);
       const bobY = bob > 0 ? bob * 0.35 : bob * 0.75;
@@ -317,44 +314,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       }
     }
 
-    if (m.state === 'recovering') {
-      // Smoothly pull restAnchor from the maneuver's end position
-      // toward the drift's natural position over the recovery duration.
-      // This lets drift resume naturally from wherever the maneuver ended.
-      const p = Math.min(1, (t - m.startTime) / m.duration);
-      const ease = 1 - Math.pow(1 - p, 2);
-
-      // Compute what the drift would have produced if idle'd continue
-      const driftX = Math.sin(t * 0.18) * 2.5
-                   + Math.sin(t * 0.11 + 1.2) * 1.3
-                   + Math.sin(t * 0.07 + 2.1) * 0.8;
-
-      // Where drift's anchor would need to be so THIS frame's drift
-      // equals the current ship position
-      const shipX = groupRef.current.position.x;
-      const shipY = groupRef.current.position.y;
-      const shipZ = groupRef.current.position.z;
-
-      // Blend restAnchor: start of recovery it matches "ship current"
-      // so drift produces shipX this frame; by end of recovery it's
-      // back to position[] so drift naturally resumes
-      if (p === 0 || !m.recoveryStarted) {
-        // First frame of recovery — set anchor so drift output = current position
-        restAnchorRef.current.x = shipX - driftX;  // simplified — driftY/Z have bob/gust too, but X dominates
-        restAnchorRef.current.y = shipY;
-        restAnchorRef.current.z = shipZ;
-        m.recoveryStarted = true;
-      } else {
-        // Smoothly ease anchor toward original mount position
-        restAnchorRef.current.x += (position[0] - restAnchorRef.current.x) * 0.02;
-        restAnchorRef.current.y += (position[1] - restAnchorRef.current.y) * 0.02;
-        restAnchorRef.current.z += (position[2] - restAnchorRef.current.z) * 0.02;
-      }
-
-      // Don't override baseX/Y/Z — let the idle drift (computed above)
-      // take effect using the newly-set restAnchorRef.
-    }
-
     // === APPLY ALL TRANSFORMS ===
     groupRef.current.position.x = baseX;
     groupRef.current.position.y = baseY;
@@ -374,6 +333,13 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       thrustRef.current = Math.min(1.0, Math.max(0, vx / 0.8));
     }
     lastXRef.current = groupRef.current.position.x;
+
+    // Gentle pull of rest anchor back toward mount over long time
+    if (m.state === 'idle') {
+      restAnchorRef.current.x += (position[0] - restAnchorRef.current.x) * 0.001;
+      restAnchorRef.current.y += (position[1] - restAnchorRef.current.y) * 0.001;
+      restAnchorRef.current.z += (position[2] - restAnchorRef.current.z) * 0.001;
+    }
   });
 
   return (
