@@ -22,13 +22,11 @@ const POST_DISABLED = typeof window !== 'undefined'
 function SceneGraph() {
   return (
     <>
-      <Nebula radius={80} palette={NEBULA_PALETTES.purple} />
+      <Nebula palette={NEBULA_PALETTES.purple} />
       <Stardust />
       <ShootingStars />
 
-      {/* Preview-match framing — ship as the subject, filling ~45% of the
-          viewport. Overlay may overlap the flame tail; tune after review. */}
-      <SpaceStation position={[0.8, 0.0, 0]} scale={1.8} />
+      <SpaceStation position={[2, 0, 0]} scale={1} />
 
       {!POST_DISABLED && <PainterlyPost />}
     </>
