@@ -8,11 +8,11 @@
 // live in the prior commit (a6b701c / 91fea9a) and will come back on
 // top of the final composition, not now.
 //
-// Current phase — Phase 1: painterly pipeline on a single icosphere.
+// Current phase — Phase 2: nebula backdrop through the painterly pipeline.
 
 import React from 'react';
-import PainterlyTest from '../scenes/_tests/PainterlyTest';
+import NebulaTest from '../scenes/_tests/NebulaTest';
 
 export default function LandingPage() {
-  return <PainterlyTest />;
+  return <NebulaTest />;
 }

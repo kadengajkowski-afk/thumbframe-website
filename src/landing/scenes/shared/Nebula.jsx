@@ -103,27 +103,25 @@ const fragmentShader = /* glsl */ `
 
     vec3 color = uCore;
 
-    // Upper hemisphere — cool purple-rose band (mid tone + highlight pocket)
+    // Spec §53: "Mix between tones using smoothed noise thresholds."
+    // Three masks, each gated by an independent fBm channel. Pockets,
+    // not broad washes — the warm wash experiment from 91fea9a
+    // overshot the spec.
+
+    // Rose-violet mid tone — broad, upper-hemisphere-biased.
     float midMask = smoothstep(0.2, 0.7, n1)
                   * smoothstep(-0.2, 0.5, dir.y + n2 * 0.5);
-    color = mix(color, uMid, midMask * 0.75);
+    color = mix(color, uMid, midMask * 0.70);
 
+    // Dusty rose highlight — a hot pocket in the upper-right area.
     float highMask = smoothstep(0.3, 0.8, n2)
                    * smoothstep(0.0, 0.6, 1.0 - length(dir.xz - vec2(0.3, -0.2)));
-    color = mix(color, uHigh, highMask * 0.6);
+    color = mix(color, uHigh, highMask * 0.50);
 
-    // Lower hemisphere — broad warm wash bleeding through the purple.
-    // Preview reference shows amber/brown dominating everything below
-    // the ship; this is what was missing when the accent was gated to
-    // the upper hemisphere.
-    float warmWash = smoothstep(0.25, -0.35, dir.y)
-                   * (0.55 + 0.45 * fbm(nc * 0.7 + vec3(2.0, 0.0, 5.0)));
-    color = mix(color, uAccent * 0.78, warmWash * 0.45);
-
-    // Punchy amber filaments concentrated in the lower half.
-    float accentMask = smoothstep(0.45, 0.9, n3)
-                     * smoothstep(0.2, -0.4, dir.y);
-    color = mix(color, uAccent, accentMask * 0.5);
+    // Amber accent — distinct pockets, noise-gated, gentle lower bias.
+    float accentMask = smoothstep(0.50, 0.90, n3)
+                     * smoothstep(0.30, -0.30, dir.y);
+    color = mix(color, uAccent, accentMask * 0.40);
 
     // Dense bright stars
     float stars = smoothstep(0.92, 0.98, noise3(dir * 80.0));
@@ -146,7 +144,7 @@ function toColor(hex) {
 }
 
 export default function Nebula({
-  radius = 80,
+  radius = 50,
   palette = NEBULA_PALETTES.purple,
   animate = true,
   pulseAmplitude = 0.10,
