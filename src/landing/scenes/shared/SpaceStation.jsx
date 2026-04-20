@@ -41,17 +41,27 @@ const sailVertex = `
     float chop = sin(vUv.x * 14.0 + uTime * 8.0) * 0.02
                + sin(vUv.y * 12.0 - uTime * 7.0) * 0.02;
 
-    // Bottom-edge snap — exaggerated movement at loose bottom
-    float bottomSnap = smoothstep(0.4, 0.0, vUv.y);
-    float snap = sin(uTime * 3.5 + vUv.x * 3.0) * 0.12
-               + sin(uTime * 4.8 - vUv.x * 2.0) * 0.08;
+    // Loose bottom half — increasingly free below vUv.y = 0.5.
+    // The top of the sail is pinned to the yard, the bottom flies
+    // free like a banner.
+    float bottomFree = smoothstep(0.5, 0.0, vUv.y);  // 0 at middle, 1 at bottom
+
+    // Base lift: bottom half of sail raises up/outward in wind
+    float lift = sin(uTime * 1.8 + vUv.x * 2.5) * 0.3
+               + sin(uTime * 1.2 - vUv.x * 1.5) * 0.2;
+    pos.y += lift * bottomFree;
+
+    // Heavy bottom-edge flutter/snap in Z
+    float snap = sin(uTime * 3.5 + vUv.x * 3.0) * 0.2
+               + sin(uTime * 5.2 - vUv.x * 2.0) * 0.12
+               + sin(uTime * 7.0 + vUv.x * 4.5) * 0.06;
+    pos.z += snap * bottomFree;
+
+    // Lateral sway — bottom lashes side to side
+    pos.x += sin(uTime * 2.2 + vUv.y * 3.0) * 0.15 * bottomFree;
 
     // Combine all ripple layers, scaled by freedom envelope
     pos.z += (wave1 + wave2 + chop) * freedom;
-    pos.z += snap * bottomSnap;
-
-    // Side-to-side sway — sail lashes sideways in the wind
-    pos.x += sin(uTime * 2.5 + vUv.y * 2.0) * 0.04 * freedom;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
