@@ -181,7 +181,10 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     // Gentle rock (slower, smaller)
     groupRef.current.rotation.y = rotation[1] + Math.sin(t * 0.22) * 0.08;
     // Pronounced bob — rides a swell of solar wind
-    groupRef.current.position.y = position[1] + Math.sin(t * 0.55) * 0.35;
+    // Symmetric up amount, extended down amount
+    const bob = Math.sin(t * 0.55);
+    const y = bob > 0 ? bob * 0.35 : bob * 0.75;
+    groupRef.current.position.y = position[1] + y;
     // Subtle pitch phase-linked to the bob so tilt syncs with rise/fall
     groupRef.current.rotation.x = rotation[0] + Math.sin(t * 0.55 + 0.5) * 0.08;
     groupRef.current.rotation.z = rotation[2];
