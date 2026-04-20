@@ -162,19 +162,19 @@ function FlameStack() {
       {/* Outer shell — deep red #c82020 at the fringe */}
       <FlameShell
         baseRad={0.46} tipRad={0.08} length={2.8}
-        color="#c82020" intensity={1.0} alpha={0.35}
+        color="#c82020" intensity={0.9} alpha={0.35}
         displace={0.38} freq={1.8} seed={0.3} tipFade={0.85}
       />
       {/* Mid shell — orange #f97316 body */}
       <FlameShell
         baseRad={0.34} tipRad={0.055} length={2.4}
-        color="#f97316" intensity={1.25} alpha={0.42}
+        color="#f97316" intensity={1.4} alpha={0.42}
         displace={0.28} freq={2.4} seed={1.7} tipFade={0.75}
       />
       {/* Inner shell — bright amber #ffd890 */}
       <FlameShell
         baseRad={0.22} tipRad={0.04} length={1.95}
-        color="#ffd890" intensity={1.6} alpha={0.55}
+        color="#ffd890" intensity={1.8} alpha={0.55}
         displace={0.2} freq={2.9} seed={3.1} tipFade={0.65}
       />
       {/* Hot core — white-hot #fff5e0 emissive */}
