@@ -14,25 +14,34 @@ const sailVertex = `
     vUv = uv;
     vec3 pos = position;
 
-    // Big parabolic billow — max at sail center, zero at all edges.
-    // This is what gives the sail its "catching solar wind" bulge.
+    // Big parabolic billow base
     float bowX = sin(vUv.x * 3.14159);
     float bowY = sin(vUv.y * 3.14159);
     float bow = bowX * bowY;
     vBow = bow;
 
-    // Deep billow forward (+Z in local space)
-    pos.z += bow * 0.55;
+    // Breathing: two summed sines at different periods create a wind
+    // pattern that never loops. Range ~0.55 to ~1.25 over ~8-14 sec.
+    float breathe = 0.9
+                  + sin(uTime * 0.45) * 0.25
+                  + sin(uTime * 0.28 + 1.3) * 0.15;
 
-    // Swept-back shape — top edge pulled back more than bottom
-    // This gives the sail its "swept" silhouette when rotated into
-    // place (vs being a plain rectangle)
+    // Apply breathing to the billow depth
+    pos.z += bow * 0.55 * breathe;
+
+    // Swept-back shape (unchanged)
     pos.z += vUv.y * 0.35;
 
-    // Gentle slack ripple
+    // Slack edge flutter — stronger when sail is fuller
     float ripple = sin(vUv.y * 4.5 + uTime * 1.0) * 0.025
                  + sin(vUv.x * 3.0 - uTime * 0.7) * 0.020;
-    pos.z += ripple * bow;
+    pos.z += ripple * bow * breathe;
+
+    // Loose bottom edge snap — free edge at uv.y=0 catches wind
+    // with a lag. Adds a small "thwump" feel.
+    float bottomFreedom = smoothstep(0.3, 0.0, vUv.y);
+    float snap = sin(uTime * 0.8 + vUv.x * 2.0) * 0.08;
+    pos.z += snap * bottomFreedom * breathe;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
