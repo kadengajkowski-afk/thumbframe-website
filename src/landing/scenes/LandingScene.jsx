@@ -26,6 +26,14 @@ function SceneGraph() {
       <Stardust />
       <ShootingStars />
 
+      <ambientLight color="#4a3850" intensity={0.45} />
+      <directionalLight color="#f5e0c0" position={[5, 4, 3]} intensity={0.9} />
+      <directionalLight
+        color="#c88060"
+        position={[-3, 1, 3]}
+        intensity={0.35}
+      />
+
       <SpaceStation position={[-0.1, -0.2, 0]} scale={1.3} rotation={[0, -0.35, 0]} />
 
       {!POST_DISABLED && <PainterlyPost />}

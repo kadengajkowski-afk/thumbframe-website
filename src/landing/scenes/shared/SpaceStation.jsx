@@ -136,67 +136,67 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       {/* Main hull — stretched ellipsoid, flatter top */}
       <mesh position={[0, 0, 0]} scale={[1.4, 0.3, 0.5]}>
         <sphereGeometry args={[1, 20, 14]} />
-        <meshStandardMaterial color="#6b4a2e" roughness={0.85} metalness={0.05} />
+        <meshStandardMaterial color="#b8855a" roughness={0.8} metalness={0.05} />
       </mesh>
 
       {/* Deck plank */}
       <mesh position={[0, 0.18, 0]}>
         <boxGeometry args={[2.4, 0.06, 0.85]} />
-        <meshStandardMaterial color="#8a6a42" roughness={0.8} />
+        <meshStandardMaterial color="#c89968" roughness={0.75} />
       </mesh>
 
       {/* Hull waterline trim */}
       <mesh position={[0, -0.02, 0]} scale={[1.42, 0.08, 0.52]}>
         <sphereGeometry args={[1, 20, 8]} />
-        <meshStandardMaterial color="#3d2814" roughness={0.9} />
+        <meshStandardMaterial color="#6a4228" roughness={0.85} />
       </mesh>
 
       {/* Stern cabin */}
       <mesh position={[-0.85, 0.35, 0]}>
         <boxGeometry args={[0.55, 0.45, 0.7]} />
-        <meshStandardMaterial color="#5a3e26" roughness={0.85} />
+        <meshStandardMaterial color="#9a6d42" roughness={0.8} />
       </mesh>
 
       {/* Stern cabin roof */}
       <mesh position={[-0.85, 0.60, 0]}>
         <boxGeometry args={[0.65, 0.08, 0.78]} />
-        <meshStandardMaterial color="#3d2814" roughness={0.9} />
+        <meshStandardMaterial color="#5a3a20" roughness={0.85} />
       </mesh>
 
       {/* ===== MAIN MAST ===== */}
       <mesh position={[0.2, 1.3, 0]}>
         <cylinderGeometry args={[0.045, 0.055, 2.3, 10]} />
-        <meshStandardMaterial color="#3d2814" roughness={0.9} />
+        <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
       {/* Main yard (horizontal spar) */}
       <mesh position={[0.2, 2.15, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.03, 0.03, 1.9, 8]} />
-        <meshStandardMaterial color="#3d2814" roughness={0.9} />
+        <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
       {/* Mainsail — big T flag */}
-      <Sail position={[0.2, 1.45, 0]} size={[1.75, 1.35]} showT={true} rotation={[0, Math.PI / 2, 0]} />
+      <Sail position={[0.2, 1.45, 0.06]} size={[1.75, 1.35]} showT={true} />
 
       {/* Mast top cap */}
       <mesh position={[0.2, 2.5, 0]}>
         <coneGeometry args={[0.05, 0.15, 8]} />
-        <meshStandardMaterial color="#3d2814" />
+        <meshStandardMaterial color="#4a3020" />
       </mesh>
 
       {/* ===== FOREMAST ===== */}
       <mesh position={[1.15, 0.85, 0]}>
         <cylinderGeometry args={[0.035, 0.045, 1.4, 10]} />
-        <meshStandardMaterial color="#3d2814" roughness={0.9} />
+        <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
       {/* Foresail — smaller, blank */}
-      <Sail position={[1.15, 1.0, 0]} size={[0.7, 0.8]} showT={false} rotation={[0, Math.PI / 2, 0]} />
+      <Sail position={[1.15, 1.0, 0.05]} size={[0.7, 0.8]} showT={false} />
 
       {/* ===== BOWSPRIT ===== */}
       <mesh position={[1.45, 0.25, 0]} rotation={[0, 0, -0.18]}>
         <cylinderGeometry args={[0.025, 0.035, 0.75, 8]} />
-        <meshStandardMaterial color="#3d2814" roughness={0.9} />
+        <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
       {/* ===== LANTERNS ===== */}
