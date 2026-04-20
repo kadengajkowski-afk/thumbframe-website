@@ -149,7 +149,7 @@ export default function LandingPage({ onNavigate }) {
               '0 8px 32px rgba(240, 160, 96, 0.35), 0 0 0 1px rgba(250, 236, 208, 0.2) inset';
           }}
         >
-          {user ? 'Open editor' : 'Start free'}
+          {user ? 'Open editor' : 'Set sail'}
         </button>
       </div>
     </div>
