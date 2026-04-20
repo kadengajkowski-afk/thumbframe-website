@@ -155,7 +155,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
       </mesh>
 
       {/* Mainsail — big T flag */}
-      <Sail position={[0.2, 1.45, 0]} size={[1.75, 1.35]} showT={true} />
+      <Sail position={[0.2, 1.45, 0.06]} size={[1.75, 1.35]} showT={true} />
 
       {/* Mast top cap */}
       <mesh position={[0.2, 2.5, 0]}>
@@ -170,7 +170,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
       </mesh>
 
       {/* Foresail — smaller, blank */}
-      <Sail position={[1.0, 1.15, 0]} size={[0.85, 0.95]} showT={false} />
+      <Sail position={[1.0, 1.15, 0.05]} size={[0.85, 0.95]} showT={false} />
 
       {/* ===== BOWSPRIT ===== */}
       <mesh position={[1.45, 0.25, 0]} rotation={[0, 0, -0.18]}>
@@ -196,7 +196,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
       </mesh>
 
       {/* ===== FLAME ===== */}
-      <EnginePlume position={[-1.8, 0, 0]} />
+      <EnginePlume position={[-2.4, 0, 0]} />
     </group>
   );
 }
