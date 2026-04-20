@@ -301,26 +301,20 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
         <meshStandardMaterial color="#8a6038" roughness={0.85} />
       </mesh>
 
-      {/* Forecastle front (sloped toward bow) */}
-      <mesh position={[1.22, 0.3, 0]} rotation={[0, 0, -0.3]}>
-        <boxGeometry args={[0.2, 0.25, 0.6]} />
-        <meshStandardMaterial color="#8a6038" roughness={0.85} />
-      </mesh>
-
-      {/* ===== BOWSPRIT (pole extending forward from bow) ===== */}
-      <mesh position={[1.55, 0.32, 0]} rotation={[0, 0, -0.15]}>
-        <cylinderGeometry args={[0.025, 0.035, 0.7, 8]} />
+      {/* ===== BOWSPRIT (short pole angled up from prow) ===== */}
+      <mesh position={[1.65, 0.55, 0]} rotation={[0, 0, -0.4]}>
+        <cylinderGeometry args={[0.02, 0.025, 0.4, 8]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
       {/* Bowsprit decorative ring near tip */}
-      <mesh position={[1.78, 0.27, 0]} rotation={[0, 0, -0.15 + Math.PI / 2]}>
-        <torusGeometry args={[0.04, 0.01, 6, 12]} />
+      <mesh position={[1.82, 0.67, 0]} rotation={[0, 0, -0.4 + Math.PI / 2]}>
+        <torusGeometry args={[0.03, 0.008, 6, 12]} />
         <meshStandardMaterial color="#c89968" />
       </mesh>
 
       {/* ===== ANCHOR (hanging off the bow starboard side) ===== */}
-      <group position={[1.15, -0.05, 0.38]} rotation={[0.1, 0, 0.1]}>
+      <group position={[0.95, -0.08, 0.42]} rotation={[0.1, 0, 0.1]}>
         {/* Shaft */}
         <mesh>
           <cylinderGeometry args={[0.015, 0.015, 0.22, 6]} />
@@ -338,10 +332,21 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
         </mesh>
       </group>
 
-      {/* ===== FIGUREHEAD (small ornament at bow tip) ===== */}
-      <mesh position={[1.6, 0.02, 0]} rotation={[0, 0, 0.15]}>
-        <coneGeometry args={[0.08, 0.22, 6]} />
-        <meshStandardMaterial color="#c89968" roughness={0.7} />
+      {/* ===== UPSWEPT PROW (bow curves up like a classic galleon) ===== */}
+      {/* Main prow block — rises from hull line up and forward */}
+      <mesh position={[1.45, 0.25, 0]} rotation={[0, 0, 0.35]} scale={[0.25, 0.5, 0.5]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color="#8a6038" roughness={0.85} />
+      </mesh>
+      {/* Prow upper curve — decorative scroll at top */}
+      <mesh position={[1.52, 0.55, 0]} rotation={[Math.PI / 2, 0, 0.3]}>
+        <torusGeometry args={[0.07, 0.025, 6, 12]} />
+        <meshStandardMaterial color="#c89968" />
+      </mesh>
+      {/* Small figurehead medallion on the prow face */}
+      <mesh position={[1.55, 0.35, 0]}>
+        <sphereGeometry args={[0.05, 10, 8]} />
+        <meshStandardMaterial color="#c89968" roughness={0.6} metalness={0.2} />
       </mesh>
 
       {/* ===== ENGINE HOUSING (where rudder would be, below stern) ===== */}
