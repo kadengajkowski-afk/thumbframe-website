@@ -14,6 +14,11 @@ const sailVertex = `
     vUv = uv;
     vec3 pos = position;
 
+    // === DIAGNOSTIC BOB TEST ===
+    // If sail visibly bobs 2 units up/down, uTime is reaching GPU.
+    // If no motion, uniform update is not propagating to the material.
+    pos.y += sin(uTime * 3.0) * 2.0;
+
     // === BANNER BEHAVIOR ===
     // Top edge (uv.y = 1) is pinned to yard.
     // Bottom (uv.y = 0) is free and streams in wind.
