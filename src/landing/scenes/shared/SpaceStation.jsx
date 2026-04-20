@@ -22,7 +22,7 @@ const sailVertex = `
 
     // Wind direction (+Z = toward camera in local space when ship yaws)
     // Billow pushes sail outward along its normal (+Z in local plane space)
-    pos.z += bulge * 0.35;
+    pos.z += bulge * 0.45;
 
     // === FLUTTER: wind ripple on top of the billow ===
     // Stronger at free edges (bottom & right), subtle at attached top
@@ -152,13 +152,13 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* Stern cabin */}
-      <mesh position={[-0.85, 0.4, 0]}>
+      <mesh position={[-0.85, 0.35, 0]}>
         <boxGeometry args={[0.55, 0.45, 0.7]} />
         <meshStandardMaterial color="#5a3e26" roughness={0.85} />
       </mesh>
 
       {/* Stern cabin roof */}
-      <mesh position={[-0.85, 0.65, 0]}>
+      <mesh position={[-0.85, 0.60, 0]}>
         <boxGeometry args={[0.65, 0.08, 0.78]} />
         <meshStandardMaterial color="#3d2814" roughness={0.9} />
       </mesh>
@@ -185,13 +185,13 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* ===== FOREMAST ===== */}
-      <mesh position={[1.0, 0.95, 0]}>
-        <cylinderGeometry args={[0.035, 0.045, 1.6, 10]} />
+      <mesh position={[1.15, 0.85, 0]}>
+        <cylinderGeometry args={[0.035, 0.045, 1.4, 10]} />
         <meshStandardMaterial color="#3d2814" roughness={0.9} />
       </mesh>
 
       {/* Foresail — smaller, blank */}
-      <Sail position={[1.0, 1.15, 0.05]} size={[0.85, 0.95]} showT={false} />
+      <Sail position={[1.15, 1.0, 0.05]} size={[0.7, 0.8]} showT={false} />
 
       {/* ===== BOWSPRIT ===== */}
       <mesh position={[1.45, 0.25, 0]} rotation={[0, 0, -0.18]}>
