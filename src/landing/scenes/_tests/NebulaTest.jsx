@@ -1,13 +1,14 @@
-// Phase 2 test — Nebula alone, lit per spec, through the painterly
-// pipeline. Verifies visible brush patches of violet, rose, and amber
-// pockets (spec §67) without any other geometry competing for
-// attention.
+// Phase 2 test — Nebula + Stardust, lit per spec, through the
+// painterly pipeline. Verifies visible brush patches of violet, rose,
+// and amber pockets (spec §67), and confirms Stardust renders as
+// sharp pinpricks instead of Kuwahara-smeared blobs.
 //
-// Spec: hero-rebuild-spec.md §43.
+// Spec: hero-rebuild-spec.md §43 + §208.
 
 import React, { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import Nebula from '../shared/Nebula';
+import Stardust from '../shared/Stardust';
 import PainterlyPost from '../../shaders/painterly/PainterlyPost';
 
 export default function NebulaTest() {
@@ -38,6 +39,7 @@ export default function NebulaTest() {
             color="#ffd890"
           />
           <Nebula />
+          <Stardust />
           <PainterlyPost />
         </Suspense>
       </Canvas>

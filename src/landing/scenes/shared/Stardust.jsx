@@ -1,6 +1,11 @@
 // Stardust — ~300 billboard motes with per-particle twinkle.
 // Drift is computed in the vertex shader (sin-based oscillation around the
 // spawn position) so there's no per-frame JS loop or buffer re-upload.
+//
+// aSize is raw pixel scale (not world units) so points render as sharp
+// pinpricks. Perspective distance scaling is dropped — if point size
+// fell off with depth, Kuwahara's minimum-kernel pass would smear the
+// far dim ones into gray watercolor blobs instead of pinpricks.
 
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -20,7 +25,7 @@ export default function Stardust() {
       pos[i * 3]     = (Math.random() - 0.5) * SPREAD;
       pos[i * 3 + 1] = (Math.random() - 0.5) * SPREAD;
       pos[i * 3 + 2] = (Math.random() - 0.5) * SPREAD;
-      sz[i] = 0.03 + Math.random() * 0.06;
+      sz[i] = 0.5 + Math.random() * 1.0;  // raw pixel scale, clamped 1..3 in the shader
       ph[i] = Math.random() * Math.PI * 2;
     }
     return { positions: pos, sizes: sz, phases: ph };
@@ -40,8 +45,11 @@ export default function Stardust() {
 
       vec4 mvPos = modelViewMatrix * vec4(driftPos, 1.0);
       float twinkle = sin(uTime * 0.8 + aPhase) * 0.3 + 0.7;
-      vAlpha = twinkle * (0.3 + aSize * 5.0);
-      gl_PointSize = aSize * 300.0 / -mvPos.z;
+      // Brightness varies with size so larger points read as slightly
+      // brighter stars; no perspective falloff so Kuwahara doesn't
+      // smear far points into blobs.
+      vAlpha = twinkle * (0.35 + aSize * 0.25);
+      gl_PointSize = clamp(aSize, 1.0, 3.0);
       gl_Position = projectionMatrix * mvPos;
     }
   `;

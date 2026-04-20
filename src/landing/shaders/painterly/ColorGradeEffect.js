@@ -24,7 +24,12 @@ const fragmentShader = /* glsl */ `
 
     graded = (graded - 0.5) * 1.08 + 0.5;
     float gray = dot(graded, vec3(0.299, 0.587, 0.114));
-    graded = mix(vec3(gray), graded, 1.15);
+    // Tone-masked saturation — midtones desaturated (0.9×) so the
+    // nebula's rose-violet reads dusty instead of electric magenta.
+    // Shadow/highlight protection: shadows and highlights keep the
+    // previous 1.15× saturation so they don't flatten.
+    float sat = mix(1.15, 0.9, midW);
+    graded = mix(vec3(gray), graded, sat);
 
     color = mix(color, graded, uStrength);
     outputColor = vec4(clamp(color, 0.0, 1.0), inputColor.a);
