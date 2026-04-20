@@ -103,6 +103,7 @@ const fragmentShader = /* glsl */ `
 
     vec3 color = uCore;
 
+    // Upper hemisphere — cool purple-rose band (mid tone + highlight pocket)
     float midMask = smoothstep(0.2, 0.7, n1)
                   * smoothstep(-0.2, 0.5, dir.y + n2 * 0.5);
     color = mix(color, uMid, midMask * 0.75);
@@ -111,9 +112,18 @@ const fragmentShader = /* glsl */ `
                    * smoothstep(0.0, 0.6, 1.0 - length(dir.xz - vec2(0.3, -0.2)));
     color = mix(color, uHigh, highMask * 0.6);
 
-    float accentMask = smoothstep(0.55, 0.95, n3)
-                     * smoothstep(-0.8, -0.1, dir.y);
-    color = mix(color, uAccent, accentMask * 0.35);
+    // Lower hemisphere — broad warm wash bleeding through the purple.
+    // Preview reference shows amber/brown dominating everything below
+    // the ship; this is what was missing when the accent was gated to
+    // the upper hemisphere.
+    float warmWash = smoothstep(0.25, -0.35, dir.y)
+                   * (0.55 + 0.45 * fbm(nc * 0.7 + vec3(2.0, 0.0, 5.0)));
+    color = mix(color, uAccent * 0.78, warmWash * 0.45);
+
+    // Punchy amber filaments concentrated in the lower half.
+    float accentMask = smoothstep(0.45, 0.9, n3)
+                     * smoothstep(0.2, -0.4, dir.y);
+    color = mix(color, uAccent, accentMask * 0.5);
 
     // Dense bright stars
     float stars = smoothstep(0.92, 0.98, noise3(dir * 80.0));

@@ -26,8 +26,9 @@ function SceneGraph() {
       <Stardust />
       <ShootingStars />
 
-      {/* Ship off-center-right so the top-left hero overlay reads clean */}
-      <SpaceStation position={[2.0, 0.2, 0]} scale={1.45} />
+      {/* Preview-match framing — ship as the subject, filling ~45% of the
+          viewport. Overlay may overlap the flame tail; tune after review. */}
+      <SpaceStation position={[0.8, 0.0, 0]} scale={1.8} />
 
       {!POST_DISABLED && <PainterlyPost />}
     </>
