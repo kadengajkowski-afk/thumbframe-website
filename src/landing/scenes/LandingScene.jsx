@@ -14,6 +14,7 @@ import Nebula, { NEBULA_PALETTES } from './shared/Nebula';
 import SpaceStation from './shared/SpaceStation';
 import Stardust from './shared/Stardust';
 import WatercolorStars from './shared/WatercolorStars';
+import LightStreaks from './shared/LightStreaks';
 import ShootingStars from './shared/ShootingStars';
 import PainterlyPost from '../shaders/painterly/PainterlyPost';
 
@@ -26,6 +27,7 @@ function SceneGraph() {
       <Nebula palette={NEBULA_PALETTES.purple} />
       <Stardust />
       <WatercolorStars count={55} />
+      <LightStreaks />
       <ShootingStars />
 
       <ambientLight color="#4a3850" intensity={0.45} />
