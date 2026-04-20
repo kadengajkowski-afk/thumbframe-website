@@ -116,9 +116,10 @@ function WindParticles({ count = 200 }) {
 // ===== COMBINED =====
 
 export default function SolarWind() {
+  console.log('SolarWind component rendering');
   return (
     <>
-      <WindParticles count={400} />
+      <WindParticles count={500} />
     </>
   );
 }
