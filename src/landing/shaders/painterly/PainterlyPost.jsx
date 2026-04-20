@@ -15,7 +15,7 @@ const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth < 768;
 // regardless of input resolution, so dropping this is almost free visually
 // but large wins in pixel work. Mobile is further throttled because the
 // wormhole scene carries more overdraw.
-const KUWAHARA_SCALE = IS_MOBILE ? 0.30 : 0.50;
+const KUWAHARA_SCALE = IS_MOBILE ? 0.25 : 0.40;
 
 function KuwaharaPass() {
   const { size, viewport } = useThree();
@@ -23,8 +23,8 @@ function KuwaharaPass() {
   // planets at kernelNear=2 (barely smoothed), nebula at kernelFar=12.
   const effect = useMemo(
     () => new KuwaharaEffect({
-      kernelNear: IS_MOBILE ? 2.0 : 2.5,
-      kernelFar:  IS_MOBILE ? 10.0 : 16.0,
+      kernelNear: IS_MOBILE ? 2.0 : 2.0,
+      kernelFar:  IS_MOBILE ? 8.0 : 12.0,
     }),
     []
   );
