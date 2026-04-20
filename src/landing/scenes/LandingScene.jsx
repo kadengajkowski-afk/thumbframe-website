@@ -26,7 +26,7 @@ function SceneGraph() {
       <Stardust />
       <ShootingStars />
 
-      <SpaceStation position={[0.3, -0.1, 0]} scale={1.1} />
+      <SpaceStation position={[0.3, -0.1, 0]} scale={1.1} rotation={[0, -0.5, 0]} />
 
       {!POST_DISABLED && <PainterlyPost />}
     </>
