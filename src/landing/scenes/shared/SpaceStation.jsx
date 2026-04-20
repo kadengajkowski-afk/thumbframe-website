@@ -14,54 +14,42 @@ const sailVertex = `
     vUv = uv;
     vec3 pos = position;
 
-    // Parabolic billow base
-    float bowX = sin(vUv.x * 3.14159);
-    float bowY = sin(vUv.y * 3.14159);
-    float bow = bowX * bowY;
-    vBow = bow;
+    // === BANNER BEHAVIOR ===
+    // Top edge (uv.y = 1) is pinned to yard.
+    // Bottom (uv.y = 0) is free and streams in wind.
+    // Motion intensity increases as you go down from top to bottom.
+    float freedom = pow(1.0 - vUv.y, 1.3);
 
-    // Base billow depth (static — the sail is shaped like a sail)
-    pos.z += bow * 0.45;
+    // Wave propagation: waves travel DOWN the flag from top to
+    // bottom. Phase offset by uv.y so a wave starts at top and
+    // moves down, like a real flag rippling.
+    float travelPhase = uTime * 4.0 - vUv.y * 6.0;
 
-    // Swept-back shape
-    pos.z += vUv.y * 0.35;
+    // Primary streamer flutter: big horizontal sway
+    // Pushes sail in +X direction (away from mast, toward bow)
+    float streamX = sin(travelPhase) * 0.5
+                  + sin(travelPhase * 0.7 + 1.3) * 0.3;
+    pos.x += streamX * freedom;
 
-    // === ENERGETIC RIPPLE LAYER ===
-    // Free-edge freedom: ripples strongest at bottom and trailing
-    // edges, zero at fixed top edge
-    float freedom = (1.0 - vUv.y * 0.6);
+    // Depth wave: in/out billow traveling down the flag
+    float wave1 = sin(travelPhase * 1.1 + vUv.x * 3.0) * 0.25;
+    float wave2 = sin(travelPhase * 0.8 - vUv.x * 2.0 + 0.7) * 0.18;
+    pos.z += (wave1 + wave2) * freedom;
 
-    // Primary traveling wave — moves diagonally across sail
-    float wave1 = sin(vUv.x * 7.0 + vUv.y * 3.0 + uTime * 5.5) * 0.08;
+    // Vertical lift/droop: flag tip curls up and down
+    float vertFlap = sin(travelPhase * 0.9 + vUv.x * 1.5) * 0.15;
+    pos.y += vertFlap * freedom;
 
-    // Secondary cross wave — different angle and speed
-    float wave2 = sin(vUv.x * 4.0 - vUv.y * 5.0 + uTime * 4.2) * 0.06;
+    // High-frequency edge shimmer on trailing edge (right side
+    // where the T is furthest from attachment point)
+    float edgeShimmer = sin(uTime * 12.0 + vUv.y * 8.0) * 0.04;
+    pos.z += edgeShimmer * freedom * smoothstep(0.5, 1.0, vUv.x);
 
-    // Fast surface chop — high frequency shimmer
-    float chop = sin(vUv.x * 14.0 + uTime * 8.0) * 0.02
-               + sin(vUv.y * 12.0 - uTime * 7.0) * 0.02;
+    // Preserve the swept-back top edge aesthetic
+    pos.z += vUv.y * 0.2;
 
-    // Loose bottom half — increasingly free below vUv.y = 0.5.
-    // The top of the sail is pinned to the yard, the bottom flies
-    // free like a banner.
-    float bottomFree = smoothstep(0.5, 0.0, vUv.y);  // 0 at middle, 1 at bottom
-
-    // Base lift: bottom half of sail raises up/outward in wind
-    float lift = sin(uTime * 1.8 + vUv.x * 2.5) * 0.3
-               + sin(uTime * 1.2 - vUv.x * 1.5) * 0.2;
-    pos.y += lift * bottomFree;
-
-    // Heavy bottom-edge flutter/snap in Z
-    float snap = sin(uTime * 3.5 + vUv.x * 3.0) * 0.2
-               + sin(uTime * 5.2 - vUv.x * 2.0) * 0.12
-               + sin(uTime * 7.0 + vUv.x * 4.5) * 0.06;
-    pos.z += snap * bottomFree;
-
-    // Lateral sway — bottom lashes side to side
-    pos.x += sin(uTime * 2.2 + vUv.y * 3.0) * 0.15 * bottomFree;
-
-    // Combine all ripple layers, scaled by freedom envelope
-    pos.z += (wave1 + wave2 + chop) * freedom;
+    // vBow varying — static since we no longer do parabolic billow
+    vBow = 0.7;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
@@ -128,7 +116,7 @@ function SolarSail({ position, size = [3.0, 2.4], rotation = [0, 0, 0] }) {
 
   return (
     <mesh position={position} rotation={rotation}>
-      <planeGeometry args={[size[0], size[1], 48, 36]} />
+      <planeGeometry args={[size[0], size[1], 64, 48]} />
       <shaderMaterial
         ref={matRef}
         uniforms={uniforms}
