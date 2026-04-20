@@ -14,34 +14,44 @@ const sailVertex = `
     vUv = uv;
     vec3 pos = position;
 
-    // Big parabolic billow base
+    // Parabolic billow base
     float bowX = sin(vUv.x * 3.14159);
     float bowY = sin(vUv.y * 3.14159);
     float bow = bowX * bowY;
     vBow = bow;
 
-    // Breathing: two summed sines at different periods create a wind
-    // pattern that never loops. Range ~0.55 to ~1.25 over ~8-14 sec.
-    float breathe = 0.9
-                  + sin(uTime * 0.45) * 0.25
-                  + sin(uTime * 0.28 + 1.3) * 0.15;
+    // Base billow depth (static — the sail is shaped like a sail)
+    pos.z += bow * 0.45;
 
-    // Apply breathing to the billow depth
-    pos.z += bow * 0.55 * breathe;
-
-    // Swept-back shape (unchanged)
+    // Swept-back shape
     pos.z += vUv.y * 0.35;
 
-    // Slack edge flutter — stronger when sail is fuller
-    float ripple = sin(vUv.y * 4.5 + uTime * 1.0) * 0.025
-                 + sin(vUv.x * 3.0 - uTime * 0.7) * 0.020;
-    pos.z += ripple * bow * breathe;
+    // === ENERGETIC RIPPLE LAYER ===
+    // Free-edge freedom: ripples strongest at bottom and trailing
+    // edges, zero at fixed top edge
+    float freedom = (1.0 - vUv.y * 0.6);
 
-    // Loose bottom edge snap — free edge at uv.y=0 catches wind
-    // with a lag. Adds a small "thwump" feel.
-    float bottomFreedom = smoothstep(0.3, 0.0, vUv.y);
-    float snap = sin(uTime * 0.8 + vUv.x * 2.0) * 0.08;
-    pos.z += snap * bottomFreedom * breathe;
+    // Primary traveling wave — moves diagonally across sail
+    float wave1 = sin(vUv.x * 7.0 + vUv.y * 3.0 + uTime * 5.5) * 0.08;
+
+    // Secondary cross wave — different angle and speed
+    float wave2 = sin(vUv.x * 4.0 - vUv.y * 5.0 + uTime * 4.2) * 0.06;
+
+    // Fast surface chop — high frequency shimmer
+    float chop = sin(vUv.x * 14.0 + uTime * 8.0) * 0.02
+               + sin(vUv.y * 12.0 - uTime * 7.0) * 0.02;
+
+    // Bottom-edge snap — exaggerated movement at loose bottom
+    float bottomSnap = smoothstep(0.4, 0.0, vUv.y);
+    float snap = sin(uTime * 3.5 + vUv.x * 3.0) * 0.12
+               + sin(uTime * 4.8 - vUv.x * 2.0) * 0.08;
+
+    // Combine all ripple layers, scaled by freedom envelope
+    pos.z += (wave1 + wave2 + chop) * freedom;
+    pos.z += snap * bottomSnap;
+
+    // Side-to-side sway — sail lashes sideways in the wind
+    pos.x += sin(uTime * 2.5 + vUv.y * 2.0) * 0.04 * freedom;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
