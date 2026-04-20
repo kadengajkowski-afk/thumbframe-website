@@ -258,8 +258,8 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* ===== MAST (single tall spine, slight aft lean) ===== */}
-      <mesh position={[-0.05, 1.7, 0]} rotation={[0, 0, 0.08]}>
-        <cylinderGeometry args={[0.05, 0.07, 3.6, 10]} />
+      <mesh position={[-0.05, 1.55, 0]} rotation={[0, 0, 0.08]}>
+        <cylinderGeometry args={[0.05, 0.07, 3.3, 10]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
