@@ -178,16 +178,36 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
   useFrame((state) => {
     if (!groupRef.current) return;
     const t = state.clock.elapsedTime;
-    // Gentle rock (slower, smaller)
-    groupRef.current.rotation.y = rotation[1] + Math.sin(t * 0.22) * 0.08;
-    // Pronounced bob — rides a swell of solar wind
-    // Symmetric up amount, extended down amount
+
+    // === POSITION ===
+    // Asymmetric bob — dips deeper than it rises
     const bob = Math.sin(t * 0.55);
     const y = bob > 0 ? bob * 0.35 : bob * 0.75;
     groupRef.current.position.y = position[1] + y;
-    // Subtle pitch phase-linked to the bob so tilt syncs with rise/fall
-    groupRef.current.rotation.x = rotation[0] + Math.sin(t * 0.55 + 0.5) * 0.08;
-    groupRef.current.rotation.z = rotation[2];
+
+    // Lateral drift — ship sways left/right through space
+    // Two summed sines at non-harmonic rates so motion never loops
+    const driftX = Math.sin(t * 0.31) * 0.45
+                 + Math.sin(t * 0.19 + 1.2) * 0.25;
+    groupRef.current.position.x = position[0] + driftX;
+
+    // Subtle forward/back drift (depth) — gives life without
+    // becoming seasick
+    const driftZ = Math.sin(t * 0.23 + 0.7) * 0.2;
+    groupRef.current.position.z = position[2] + driftZ;
+
+    // === ROTATION ===
+    // Base yaw from mount prop, plus gentle wobble around it
+    const baseYaw = rotation?.[1] ?? 0;
+    groupRef.current.rotation.y = baseYaw + Math.sin(t * 0.22) * 0.06;
+
+    // Pitch — ship tilts nose up when rising, nose down when falling
+    // Phase-locked to bob so it feels like riding a swell
+    groupRef.current.rotation.x = Math.sin(t * 0.55 + 0.5) * 0.07;
+
+    // Roll — ship rolls slightly side to side with lateral drift
+    // Phase-locked to drift so roll matches sway
+    groupRef.current.rotation.z = Math.sin(t * 0.31 + 0.3) * 0.05;
   });
 
   return (
