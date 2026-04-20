@@ -61,8 +61,9 @@ const sailVertex = `
     float trailingEdge = smoothstep(0.4, 1.0, vUv.x);
     pos.z += edgeChop * trailingEdge * freedom;
 
-    // Keep the swept-back silhouette
-    pos.z += vUv.y * 0.2;
+    // Hard pin at top: zero displacement for vUv.y > 0.9
+    float pinFactor = smoothstep(1.0, 0.9, vUv.y);
+    pos = mix(position, pos, pinFactor);
 
     vBow = 0.7;
 
@@ -226,7 +227,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       {/* ===== SINGLE LARGE SOLAR SAIL ===== */}
       {/* Positioned above and slightly behind ship center, large and swept */}
       <SolarSail
-        position={[0.1, 2.2, 0]}
+        position={[0.1, 1.75, 0]}
         size={[3.0, 2.4]}
         rotation={[0, Math.PI / 2, 0]}
       />
