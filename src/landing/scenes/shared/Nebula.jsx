@@ -80,11 +80,13 @@ const fragmentShader = /* glsl */ `
     return o4.y*d.y + o4.x*(1.0-d.y);
   }
 
-  // fBm — 6 octaves, lacunarity 2.0, gain 0.5.
+  // fBm — 5 octaves, lacunarity 2.0, gain 0.5. At the low base
+  // frequency below, a 6th octave starts adding fine noise that
+  // hurts the soft large-cloud read.
   float fbm(vec3 p) {
     float v = 0.0, a = 0.5;
     vec3 shift = vec3(100.0);
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 5; i++) {
       v += a * noise3(p);
       p = p * 2.0 + shift;
       a *= 0.5;
@@ -93,20 +95,22 @@ const fragmentShader = /* glsl */ `
   }
 
   void main() {
-    // Flow field — slower, larger-scale warp. Three fbm channels so
-    // each axis drifts on its own clock; gives the swirl its organic
-    // wander instead of scrolling uniformly.
+    // Flow field — large-scale warp at 0.05 frequency matches the
+    // scale of the cloud cells below. Three fbm channels so each
+    // axis drifts on its own clock.
     vec3 flow = vec3(
-      fbm(vWorldPos * 0.15 + vec3(uTime * 0.04, 0.0, 0.0)),
-      fbm(vWorldPos * 0.15 + vec3(0.0, uTime * 0.05, 0.0)),
-      fbm(vWorldPos * 0.15 + vec3(0.0, 0.0, uTime * 0.03))
+      fbm(vWorldPos * 0.05 + vec3(uTime * 0.03, 0.0, 0.0)),
+      fbm(vWorldPos * 0.05 + vec3(0.0, uTime * 0.04, 0.0)),
+      fbm(vWorldPos * 0.05 + vec3(0.0, 0.0, uTime * 0.02))
     );
-    // Warp the sample position — (flow - 0.5) centres the offset
-    // around 0, × 1.2 controls how swirly vs smooth the ink-flow reads.
-    vec3 warpedPos = vWorldPos + (flow - 0.5) * 1.2;
+    // Warp amplitude 2.5 — broader warp at this larger scale keeps
+    // the motion readable without tearing the cloud masses apart.
+    vec3 warpedPos = vWorldPos + (flow - 0.5) * 2.5;
 
-    float n         = fbm(warpedPos * 0.35 + vec3(uTime * 0.02));
-    float amberMask = fbm(warpedPos * 0.5  + vec3(47.3, 18.9, 93.1));
+    // Base frequency 0.08 (down from 0.35). 3-5 large distinct
+    // cloud regions across the frame, soft gradient transitions.
+    float n         = fbm(warpedPos * 0.08 + vec3(uTime * 0.02));
+    float amberMask = fbm(warpedPos * 0.12 + vec3(47.3, 18.9, 93.1));
 
     vec3 colorCore   = uCore;
     vec3 colorMid    = uMid;
@@ -122,14 +126,17 @@ const fragmentShader = /* glsl */ `
     // main ink field instead of drifting on its own clock.
     color = mix(color, colorAccent, smoothstep(0.4, 0.75, amberMask) * 0.6);
 
-    // Ink-rim edge darkening — high noise-gradient areas pull toward
-    // colorCore × 0.6, the wet-edge ink pooling look.
+    // Ink-rim edge darkening — softened at the new scale. Rim
+    // detection smoothstep widened (0.5-1.2) so it triggers less
+    // often, and mix weight dropped 0.35 → 0.15 so cloud
+    // boundaries read as gradient transitions, not outlined rims.
+    // Epsilon samples use the same 0.08 base frequency as `n`.
     float eps = 0.02;
-    float nx = fbm(warpedPos * 0.35 + vec3(eps, 0.0, 0.0));
-    float ny = fbm(warpedPos * 0.35 + vec3(0.0, eps, 0.0));
+    float nx = fbm(warpedPos * 0.08 + vec3(eps, 0.0, 0.0));
+    float ny = fbm(warpedPos * 0.08 + vec3(0.0, eps, 0.0));
     float gradMag = length(vec2(nx - n, ny - n)) / eps;
-    float inkRim = smoothstep(0.3, 0.8, gradMag);
-    color = mix(color, colorCore * 0.6, inkRim * 0.35);
+    float inkRim = smoothstep(0.5, 1.2, gradMag);
+    color = mix(color, colorCore * 0.6, inkRim * 0.15);
 
     // Dense bright stars
     vec3 dir = normalize(vWorldPos);
