@@ -68,7 +68,7 @@ const sailFragment = `
                 * softBar(vUv.y, 0.15, 0.85, soft);
     float tMask = max(horiz, vert);
 
-    vec3 color = mix(baseColor, tColor, tMask * 0.85);
+    vec3 color = mix(baseColor, tColor, tMask * 0.9);
 
     // Sheen band — subtle moving highlight across the sail
     float sheen = smoothstep(0.0, 0.15,
@@ -242,51 +242,60 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
         <group key={`porthole-${i}`}>
           {/* Starboard porthole */}
           <mesh position={[x, -0.02, 0.42]}>
-            <torusGeometry args={[0.055, 0.012, 8, 16]} />
+            <torusGeometry args={[0.075, 0.014, 8, 16]} />
             <meshStandardMaterial color="#3d2814" />
           </mesh>
           <mesh position={[x, -0.02, 0.415]}>
-            <circleGeometry args={[0.05, 16]} />
-            <meshBasicMaterial color="#ffb060" toneMapped={false} />
+            <circleGeometry args={[0.07, 16]} />
+            <meshBasicMaterial color="#ffd080" toneMapped={false} />
           </mesh>
           {/* Port porthole */}
           <mesh position={[x, -0.02, -0.42]} rotation={[0, Math.PI, 0]}>
-            <torusGeometry args={[0.055, 0.012, 8, 16]} />
+            <torusGeometry args={[0.075, 0.014, 8, 16]} />
             <meshStandardMaterial color="#3d2814" />
           </mesh>
           <mesh position={[x, -0.02, -0.415]} rotation={[0, Math.PI, 0]}>
-            <circleGeometry args={[0.05, 16]} />
-            <meshBasicMaterial color="#ffb060" toneMapped={false} />
+            <circleGeometry args={[0.07, 16]} />
+            <meshBasicMaterial color="#ffd080" toneMapped={false} />
           </mesh>
         </group>
       ))}
 
       {/* ===== AFTCASTLE (raised stern deck/cabin) ===== */}
-      {/* Lower tier */}
-      <mesh position={[-0.95, 0.45, 0]}>
-        <boxGeometry args={[0.7, 0.3, 0.72]} />
+      {/* Lower tier (quarterdeck) */}
+      <mesh position={[-0.9, 0.45, 0]}>
+        <boxGeometry args={[0.85, 0.35, 0.8]} />
         <meshStandardMaterial color="#8a6038" roughness={0.85} />
       </mesh>
-      {/* Upper tier (captain's quarters) */}
-      <mesh position={[-1.05, 0.75, 0]}>
-        <boxGeometry args={[0.55, 0.3, 0.62]} />
+      {/* Middle tier (captain's cabin) */}
+      <mesh position={[-1.0, 0.8, 0]}>
+        <boxGeometry args={[0.7, 0.4, 0.68]} />
         <meshStandardMaterial color="#9a6d42" roughness={0.85} />
       </mesh>
-      {/* Stern cabin windows (big amber glow) */}
-      <mesh position={[-1.34, 0.75, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[0.55, 0.2]} />
-        <meshBasicMaterial color="#ffcc70" toneMapped={false} />
+      {/* Upper tier (poop deck cabin) */}
+      <mesh position={[-1.1, 1.15, 0]}>
+        <boxGeometry args={[0.45, 0.25, 0.54]} />
+        <meshStandardMaterial color="#a47548" roughness={0.85} />
       </mesh>
-      {/* Stern window frame (dark trim around the window) */}
-      <mesh position={[-1.335, 0.75, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <ringGeometry args={[0.13, 0.16, 4, 1, 0, Math.PI * 2]} />
-        <meshBasicMaterial color="#3d2814" toneMapped={false} />
-      </mesh>
-
-      {/* Aftcastle roof */}
-      <mesh position={[-1.05, 0.92, 0]}>
-        <boxGeometry args={[0.6, 0.04, 0.68]} />
+      {/* Aftcastle roof (peaked) */}
+      <mesh position={[-1.1, 1.33, 0]}>
+        <boxGeometry args={[0.5, 0.04, 0.6]} />
         <meshStandardMaterial color="#3d2814" roughness={0.9} />
+      </mesh>
+      {/* Stern flag pole */}
+      <mesh position={[-1.28, 1.55, 0]}>
+        <cylinderGeometry args={[0.01, 0.015, 0.4, 6]} />
+        <meshStandardMaterial color="#3d2814" />
+      </mesh>
+      {/* Captain's cabin stern window (big, glowing) */}
+      <mesh position={[-1.36, 0.8, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[0.5, 0.26]} />
+        <meshBasicMaterial color="#ffd890" toneMapped={false} />
+      </mesh>
+      {/* Upper tier small window */}
+      <mesh position={[-1.33, 1.15, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[0.35, 0.12]} />
+        <meshBasicMaterial color="#ffcc70" toneMapped={false} />
       </mesh>
 
       {/* Decorative stern trim (scroll/cornice) */}
@@ -302,13 +311,13 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* ===== BOWSPRIT (short pole angled up from prow) ===== */}
-      <mesh position={[1.65, 0.55, 0]} rotation={[0, 0, -0.4]}>
-        <cylinderGeometry args={[0.02, 0.025, 0.4, 8]} />
+      <mesh position={[1.75, 0.78, 0]} rotation={[0, 0, -0.35]}>
+        <cylinderGeometry args={[0.02, 0.025, 0.45, 8]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
       {/* Bowsprit decorative ring near tip */}
-      <mesh position={[1.82, 0.67, 0]} rotation={[0, 0, -0.4 + Math.PI / 2]}>
+      <mesh position={[1.94, 0.9, 0]} rotation={[0, 0, -0.35 + Math.PI / 2]}>
         <torusGeometry args={[0.03, 0.008, 6, 12]} />
         <meshStandardMaterial color="#c89968" />
       </mesh>
@@ -333,19 +342,19 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </group>
 
       {/* ===== UPSWEPT PROW (bow curves up like a classic galleon) ===== */}
-      {/* Main prow block — rises from hull line up and forward */}
-      <mesh position={[1.45, 0.25, 0]} rotation={[0, 0, 0.35]} scale={[0.25, 0.5, 0.5]}>
+      {/* Main prow block — taller, more vertical */}
+      <mesh position={[1.45, 0.35, 0]} rotation={[0, 0, 0.45]} scale={[0.3, 0.75, 0.55]}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial color="#8a6038" roughness={0.85} />
       </mesh>
       {/* Prow upper curve — decorative scroll at top */}
-      <mesh position={[1.52, 0.55, 0]} rotation={[Math.PI / 2, 0, 0.3]}>
-        <torusGeometry args={[0.07, 0.025, 6, 12]} />
+      <mesh position={[1.55, 0.75, 0]} rotation={[Math.PI / 2, 0, 0.3]}>
+        <torusGeometry args={[0.08, 0.028, 6, 12]} />
         <meshStandardMaterial color="#c89968" />
       </mesh>
       {/* Small figurehead medallion on the prow face */}
-      <mesh position={[1.55, 0.35, 0]}>
-        <sphereGeometry args={[0.05, 10, 8]} />
+      <mesh position={[1.55, 0.5, 0]}>
+        <sphereGeometry args={[0.06, 10, 8]} />
         <meshStandardMaterial color="#c89968" roughness={0.6} metalness={0.2} />
       </mesh>
 
