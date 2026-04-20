@@ -254,7 +254,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       {/* ===== LANTERNS ===== */}
       <Lantern position={[0.9, 0.35, 0.38]} />
       <Lantern position={[-0.3, 0.35, 0.38]} />
-      <Lantern position={[0.2, 2.05, 0]} />
 
       {/* ===== ENGINE NOZZLE AT STERN ===== */}
       <mesh position={[-1.3, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
