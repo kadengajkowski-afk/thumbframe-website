@@ -179,35 +179,44 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
     if (!groupRef.current) return;
     const t = state.clock.elapsedTime;
 
-    // === POSITION ===
-    // Asymmetric bob — dips deeper than it rises
+    // === BASE BOB (asymmetric: deeper down than up) ===
     const bob = Math.sin(t * 0.55);
-    const y = bob > 0 ? bob * 0.35 : bob * 0.75;
-    groupRef.current.position.y = position[1] + y;
+    const bobY = bob > 0 ? bob * 0.35 : bob * 0.75;
 
-    // Lateral drift — ship sways left/right through space
-    // Two summed sines at non-harmonic rates so motion never loops
+    // === LATERAL DRIFT (figure-8 pattern from two non-harmonic sines) ===
     const driftX = Math.sin(t * 0.31) * 0.45
                  + Math.sin(t * 0.19 + 1.2) * 0.25;
-    groupRef.current.position.x = position[0] + driftX;
+    const driftZ = Math.sin(t * 0.23 + 0.7) * 0.2
+                 + Math.cos(t * 0.17) * 0.15;
 
-    // Subtle forward/back drift (depth) — gives life without
-    // becoming seasick
-    const driftZ = Math.sin(t * 0.23 + 0.7) * 0.2;
+    // === GUST LURCHES ===
+    // Occasional burst of extra motion — ship gets hit by a "wind gust"
+    // Uses a sharpened sine that peaks briefly every ~6-10s
+    const gustCycle = Math.sin(t * 0.18 + 0.5);
+    const gustIntensity = Math.pow(Math.max(0, gustCycle), 8);  // peaks narrow
+    const gustX = gustIntensity * Math.sin(t * 2.3) * 0.3;
+    const gustY = gustIntensity * Math.sin(t * 1.9) * 0.2;
+    const gustRoll = gustIntensity * 0.08;
+
+    // === APPLY POSITION ===
+    groupRef.current.position.x = position[0] + driftX + gustX;
+    groupRef.current.position.y = position[1] + bobY + gustY;
     groupRef.current.position.z = position[2] + driftZ;
 
     // === ROTATION ===
-    // Base yaw from mount prop, plus gentle wobble around it
     const baseYaw = rotation?.[1] ?? 0;
-    groupRef.current.rotation.y = baseYaw + Math.sin(t * 0.22) * 0.06;
 
-    // Pitch — ship tilts nose up when rising, nose down when falling
-    // Phase-locked to bob so it feels like riding a swell
+    // Yaw wobble + slight response to lateral drift
+    groupRef.current.rotation.y = baseYaw
+      + Math.sin(t * 0.22) * 0.06
+      + driftX * 0.04;  // ship noses into its drift direction
+
+    // Pitch — noses up on rise, down on fall
     groupRef.current.rotation.x = Math.sin(t * 0.55 + 0.5) * 0.07;
 
-    // Roll — ship rolls slightly side to side with lateral drift
-    // Phase-locked to drift so roll matches sway
-    groupRef.current.rotation.z = Math.sin(t * 0.31 + 0.3) * 0.05;
+    // Roll — leans into lateral sway PLUS reacts to gusts
+    groupRef.current.rotation.z = Math.sin(t * 0.31 + 0.3) * 0.05
+                                + gustRoll * Math.sin(t * 3.1);
   });
 
   return (
@@ -264,8 +273,8 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       {/* ===== SINGLE LARGE SOLAR SAIL ===== */}
       {/* Positioned above and slightly behind ship center, large and swept */}
       <SolarSail
-        position={[0.1, 2.2, 0]}
-        size={[3.0, 2.4]}
+        position={[0.1, 2.15, 0]}
+        size={[3.0, 2.55]}
         rotation={[0, Math.PI / 2, 0]}
       />
 
