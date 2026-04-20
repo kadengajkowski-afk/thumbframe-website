@@ -1,15 +1,20 @@
-// Nebula backdrop — inverted sphere, fBm noise, painted space.
+// Nebula backdrop — inverted sphere, domain-warped fBm, sumi-e ink-wash feel.
 //
 // Palette-configurable per spec §13. Each page's scene passes its own
 // palette:
-//   • Landing (/)   — purple   { #2a1850, #6a3880, #e8a8c0, #c86020 }
+//   • Landing (/)   — purple   { #4a2e6b, #6a3880, #e8a8c0, #c86020 }
 //   • Pricing       — teal     { #0f2a2e, #2a6670, #9ad0c0, #e8c050 }
 //   • Features      — fire     { #0a0502, #c85020, #ffc850, #a850c8 }
 // Defaults to the landing purple palette.
 //
-// Animation (active when `animate` is true):
-//   • Slow internal brush drift — noise field translates on uTime axis
-//   • Gentle brightness pulse — ±10% over ~4s period (spec §6)
+// Rendering character:
+//   • Domain-warped fBm — a slower large-scale flow field warps the
+//     base sample position, so clouds bloom and drift like ink in
+//     water rather than feeling static / isotropic.
+//   • Ink-rim edge darkening — high noise-gradient regions pull toward
+//     core × 0.6, giving the wet-edge pooling look of ink wash.
+//   • Two-sine breathing pulse (0.25 + 0.17 rad/s, amplitudes 0.10 +
+//     0.05) — non-repeating soft brightness modulation.
 
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -17,7 +22,9 @@ import * as THREE from 'three';
 
 export const NEBULA_PALETTES = {
   purple: {
-    core:      '#2a1850',
+    // colorCore lifted from #2a1850 → #4a2e6b so the dark floor no
+    // longer eats the middle of the frame. Mid/high/accent unchanged.
+    core:      '#4a2e6b',
     mid:       '#6a3880',
     highlight: '#e8a8c0',
     accent:    '#c86020',
@@ -37,26 +44,20 @@ export const NEBULA_PALETTES = {
 };
 
 const vertexShader = /* glsl */ `
-  varying vec3 vPos;
+  varying vec3 vWorldPos;
   void main() {
-    vPos = position;
+    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
-// fBm shader — 3 overlapping masks painted on top of the core color:
-//   mid       — large drifting cloud, strongest band
-//   highlight — hot pocket in the upper field
-//   accent    — sparse warm filaments (used sparingly, ~15%)
-// A dense + faint star layer + a slow 4s brightness pulse finishes it.
 const fragmentShader = /* glsl */ `
   uniform float uTime;
   uniform vec3  uCore;
   uniform vec3  uMid;
   uniform vec3  uHigh;
   uniform vec3  uAccent;
-  uniform float uPulseAmp;
-  varying vec3 vPos;
+  varying vec3  vWorldPos;
 
   vec3 mod289v3(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
   vec4 mod289v4(vec4 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
@@ -79,11 +80,10 @@ const fragmentShader = /* glsl */ `
     return o4.y*d.y + o4.x*(1.0-d.y);
   }
 
+  // fBm — 6 octaves, lacunarity 2.0, gain 0.5.
   float fbm(vec3 p) {
     float v = 0.0, a = 0.5;
     vec3 shift = vec3(100.0);
-    // 6 octaves at lacunarity 2.0, gain 0.5 — bumped from 5 to carry
-    // the extra fine detail the higher base frequency brings in.
     for (int i = 0; i < 6; i++) {
       v += a * noise3(p);
       p = p * 2.0 + shift;
@@ -93,43 +93,46 @@ const fragmentShader = /* glsl */ `
   }
 
   void main() {
-    vec3 dir = normalize(vPos);
-    // Very slow internal drift — shifting the sample space gives the
-    // impression of brush strokes migrating without tearing the masks apart.
-    vec3 drift = vec3(uTime * 0.010, uTime * 0.006, uTime * 0.008);
-    // Base frequency 2.5 → 7.5 (3×). Tighter cloud cells, more of them
-    // across the viewport, reads as a distant galaxy instead of a
-    // nearby haze. n3 keeps its 1.5× relative multiplier so the amber
-    // accent mask scales the same 3× factor (was 3.75, now 11.25).
-    vec3 nc = dir * 7.5 + drift;
+    // Flow field — slower, larger-scale warp. Three fbm channels so
+    // each axis drifts on its own clock; gives the swirl its organic
+    // wander instead of scrolling uniformly.
+    vec3 flow = vec3(
+      fbm(vWorldPos * 0.15 + vec3(uTime * 0.04, 0.0, 0.0)),
+      fbm(vWorldPos * 0.15 + vec3(0.0, uTime * 0.05, 0.0)),
+      fbm(vWorldPos * 0.15 + vec3(0.0, 0.0, uTime * 0.03))
+    );
+    // Warp the sample position — (flow - 0.5) centres the offset
+    // around 0, × 1.2 controls how swirly vs smooth the ink-flow reads.
+    vec3 warpedPos = vWorldPos + (flow - 0.5) * 1.2;
 
-    float n1 = fbm(nc);
-    float n2 = fbm(nc + vec3(5.2, 1.3, 2.8));
-    float n3 = fbm(nc * 1.5 + vec3(1.7, 9.2, 3.4));
+    float n         = fbm(warpedPos * 0.35 + vec3(uTime * 0.02));
+    float amberMask = fbm(warpedPos * 0.5  + vec3(47.3, 18.9, 93.1));
 
-    vec3 color = uCore;
+    vec3 colorCore   = uCore;
+    vec3 colorMid    = uMid;
+    vec3 colorHigh   = uHigh;
+    vec3 colorAccent = uAccent;
 
-    // Spec §53: "Mix between tones using smoothed noise thresholds."
-    // Three masks, each gated by an independent fBm channel. Pockets,
-    // not broad washes — the warm wash experiment from 91fea9a
-    // overshot the spec.
+    // Palette distribution — smoothstep bands lowered so colorMid
+    // takes over earlier and less of the frame sits in colorCore.
+    vec3 color = mix(colorCore, colorMid, smoothstep(0.15, 0.45, n));
+    color = mix(color, colorHigh, smoothstep(0.50, 0.75, n) * 0.6);
 
-    // Rose-violet mid tone — broad, upper-hemisphere-biased.
-    float midMask = smoothstep(0.2, 0.7, n1)
-                  * smoothstep(-0.2, 0.5, dir.y + n2 * 0.5);
-    color = mix(color, uMid, midMask * 0.70);
+    // Amber pockets — reuse warpedPos so the amber flows with the
+    // main ink field instead of drifting on its own clock.
+    color = mix(color, colorAccent, smoothstep(0.4, 0.75, amberMask) * 0.6);
 
-    // Dusty rose highlight — a hot pocket in the upper-right area.
-    float highMask = smoothstep(0.3, 0.8, n2)
-                   * smoothstep(0.0, 0.6, 1.0 - length(dir.xz - vec2(0.3, -0.2)));
-    color = mix(color, uHigh, highMask * 0.50);
-
-    // Amber accent — distinct pockets, noise-gated, gentle lower bias.
-    float accentMask = smoothstep(0.50, 0.90, n3)
-                     * smoothstep(0.30, -0.30, dir.y);
-    color = mix(color, uAccent, accentMask * 0.40);
+    // Ink-rim edge darkening — high noise-gradient areas pull toward
+    // colorCore × 0.6, the wet-edge ink pooling look.
+    float eps = 0.02;
+    float nx = fbm(warpedPos * 0.35 + vec3(eps, 0.0, 0.0));
+    float ny = fbm(warpedPos * 0.35 + vec3(0.0, eps, 0.0));
+    float gradMag = length(vec2(nx - n, ny - n)) / eps;
+    float inkRim = smoothstep(0.3, 0.8, gradMag);
+    color = mix(color, colorCore * 0.6, inkRim * 0.35);
 
     // Dense bright stars
+    vec3 dir = normalize(vWorldPos);
     float stars = smoothstep(0.92, 0.98, noise3(dir * 80.0));
     color += stars * vec3(0.95, 0.90, 0.80) * 0.8;
 
@@ -137,9 +140,12 @@ const fragmentShader = /* glsl */ `
     float faint = smoothstep(0.85, 0.95, noise3(dir * 40.0));
     color += faint * vec3(0.6, 0.5, 0.7) * 0.15;
 
-    // Global brightness pulse — ±uPulseAmp on a 4s period (ω = 2π/4 ≈ 1.5708).
-    float pulse = 1.0 + uPulseAmp * sin(uTime * 1.5708);
-    color *= pulse;
+    // Two-sine breathing — amplitudes 0.10 + 0.05 at different
+    // periods so the pulse never visibly loops.
+    float brightness = 1.0
+                     + sin(uTime * 0.25) * 0.10
+                     + sin(uTime * 0.17 + 1.3) * 0.05;
+    color *= brightness;
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -153,19 +159,17 @@ export default function Nebula({
   radius = 50,
   palette = NEBULA_PALETTES.purple,
   animate = true,
-  pulseAmplitude = 0.10,
 }) {
   const matRef = useRef();
 
   const uniforms = useMemo(() => ({
-    uTime:     { value: 0 },
-    uCore:     { value: toColor(palette.core) },
-    uMid:      { value: toColor(palette.mid) },
-    uHigh:     { value: toColor(palette.highlight) },
-    uAccent:   { value: toColor(palette.accent) },
-    uPulseAmp: { value: pulseAmplitude },
+    uTime:   { value: 0 },
+    uCore:   { value: toColor(palette.core) },
+    uMid:    { value: toColor(palette.mid) },
+    uHigh:   { value: toColor(palette.highlight) },
+    uAccent: { value: toColor(palette.accent) },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [palette.core, palette.mid, palette.highlight, palette.accent, pulseAmplitude]);
+  }), [palette.core, palette.mid, palette.highlight, palette.accent]);
 
   useFrame(({ clock }) => {
     if (!animate || !matRef.current) return;
