@@ -246,12 +246,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
         rotation={[0, Math.PI / 2, 0]}
       />
 
-      {/* ===== MAST TOP FINIAL (small ornament at top of mast) ===== */}
-      <mesh position={[0.15, 3.55, 0]}>
-        <coneGeometry args={[0.06, 0.18, 8]} />
-        <meshStandardMaterial color="#6a4228" />
-      </mesh>
-
       {/* ===== LANTERNS ===== */}
       <Lantern position={[0.9, 0.35, 0.38]} />
       <Lantern position={[-0.3, 0.35, 0.38]} />
