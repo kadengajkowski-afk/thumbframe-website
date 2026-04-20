@@ -8,78 +8,86 @@ import EnginePlume from './EnginePlume';
 const sailVertex = `
   uniform float uTime;
   varying vec2 vUv;
+  varying float vBow;
 
   void main() {
     vUv = uv;
     vec3 pos = position;
 
-    // Parabolic curve: sail bows outward, max bow at vertical center
-    // vUv.y goes 0 (bottom) to 1 (top)
-    float bowCurve = sin(vUv.y * 3.14159);
-    pos.z += bowCurve * 0.35;
+    // Big parabolic billow — max at sail center, zero at all edges.
+    // This is what gives the sail its "catching solar wind" bulge.
+    float bowX = sin(vUv.x * 3.14159);
+    float bowY = sin(vUv.y * 3.14159);
+    float bow = bowX * bowY;
+    vBow = bow;
 
-    // Gentle ripple — slack flutter, not strong wind
-    float ripple1 = sin(vUv.y * 5.0 + uTime * 1.2) * 0.03;
-    float ripple2 = sin(vUv.x * 3.0 - uTime * 0.8 + vUv.y * 2.0) * 0.02;
-    pos.z += (ripple1 + ripple2) * bowCurve;
+    // Deep billow forward (+Z in local space)
+    pos.z += bow * 0.55;
+
+    // Swept-back shape — top edge pulled back more than bottom
+    // This gives the sail its "swept" silhouette when rotated into
+    // place (vs being a plain rectangle)
+    pos.z -= vUv.y * 0.35;
+
+    // Gentle slack ripple
+    float ripple = sin(vUv.y * 4.5 + uTime * 1.0) * 0.025
+                 + sin(vUv.x * 3.0 - uTime * 0.7) * 0.020;
+    pos.z += ripple * bow;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
 `;
 
 const sailFragment = `
-  uniform float uShowT;
-  uniform float uTSize;
+  uniform float uTime;
   varying vec2 vUv;
+  varying float vBow;
 
   float softBar(float x, float a, float b, float soft) {
     return smoothstep(a - soft, a + soft, x) - smoothstep(b - soft, b + soft, x);
   }
 
   void main() {
-    // Sail fabric — warm cream with faint gold sheen
-    vec3 sailColor = vec3(0.98, 0.94, 0.86);
-    vec3 tColor    = vec3(0.95, 0.45, 0.12);
+    // Golden solar sail — warm amber base with cream highlights
+    vec3 sailDark  = vec3(0.72, 0.48, 0.20);   // deep amber/bronze
+    vec3 sailLight = vec3(0.98, 0.86, 0.55);   // bright gold
+    vec3 tColor    = vec3(0.55, 0.22, 0.08);   // deep rust (T reads dark on gold)
 
-    // Radial struts — fan out from bottom center (the mast attachment)
-    // Compute angle from bottom-center
-    vec2 fromBase = vec2(vUv.x - 0.5, vUv.y);
-    float angle = atan(fromBase.x, fromBase.y);  // -PI to PI
-    // 5 struts fanning across the sail
-    float strutPattern = abs(sin(angle * 3.5));
-    float strut = 1.0 - smoothstep(0.92, 0.98, strutPattern);
-    strut *= smoothstep(0.05, 0.25, vUv.y); // no struts at base
+    // Base: gradient from deep amber at edges to bright gold at center
+    // Use the billow magnitude as a proxy for "lit by sun" — center
+    // bulge catches more light than flat edges
+    vec3 baseColor = mix(sailDark, sailLight, vBow * 1.2);
 
-    // T letter — sized by uTSize so smaller sails get smaller T
-    float s = uTSize;
-    float tCenterY = 0.5;
-    float horiz = softBar(vUv.x, 0.5 - 0.38*s, 0.5 + 0.38*s, 0.015)
-                * softBar(vUv.y, tCenterY + 0.22*s, tCenterY + 0.38*s, 0.015);
-    float vert  = softBar(vUv.x, 0.5 - 0.06*s, 0.5 + 0.06*s, 0.015)
-                * softBar(vUv.y, tCenterY - 0.30*s, tCenterY + 0.38*s, 0.015);
-    float tMask = max(horiz, vert) * uShowT;
+    // Large T painted across the sail — big and readable
+    float soft = 0.02;
+    float horiz = softBar(vUv.x, 0.15, 0.85, soft)
+                * softBar(vUv.y, 0.68, 0.85, soft);
+    float vert  = softBar(vUv.x, 0.46, 0.54, soft)
+                * softBar(vUv.y, 0.15, 0.85, soft);
+    float tMask = max(horiz, vert);
 
-    vec3 color = mix(sailColor, tColor, tMask);
+    vec3 color = mix(baseColor, tColor, tMask * 0.85);
 
-    // Apply strut darkening (struts are darker bronze lines)
-    vec3 strutColor = vec3(0.55, 0.40, 0.22);
-    color = mix(color, strutColor, strut * 0.6);
+    // Sheen band — subtle moving highlight across the sail
+    float sheen = smoothstep(0.0, 0.15,
+      0.15 - abs(vUv.x - 0.5 + sin(uTime * 0.3) * 0.3));
+    color += vec3(1.0, 0.92, 0.70) * sheen * 0.12;
 
-    // Soft edge glow — gives solar sail "catching light" feel
-    float edgeGlow = smoothstep(0.85, 1.0, 1.0 - length(vUv - 0.5) * 1.4);
-    color += vec3(1.0, 0.85, 0.55) * edgeGlow * 0.15;
+    // Warm rim glow at all edges — "sail catching starlight"
+    float rimX = smoothstep(0.0, 0.08, vUv.x) * smoothstep(0.0, 0.08, 1.0 - vUv.x);
+    float rimY = smoothstep(0.0, 0.08, vUv.y) * smoothstep(0.0, 0.08, 1.0 - vUv.y);
+    float rim = 1.0 - (rimX * rimY);
+    color += vec3(1.0, 0.78, 0.35) * rim * 0.25;
 
     gl_FragColor = vec4(color, 1.0);
   }
 `;
 
-function SolarSail({ position, size = [1.0, 1.4], showT = true, tSize = 1.0, rotation = [0, 0, 0] }) {
+function SolarSail({ position, size = [3.0, 2.4], rotation = [0, 0, 0] }) {
   const matRef = useRef();
   const uniforms = useMemo(() => ({
-    uTime:   { value: 0 },
-    uShowT:  { value: showT ? 1 : 0 },
-    uTSize:  { value: tSize },
-  }), [showT, tSize]);
+    uTime: { value: 0 },
+  }), []);
 
   useFrame((state) => {
     if (matRef.current) {
@@ -89,7 +97,7 @@ function SolarSail({ position, size = [1.0, 1.4], showT = true, tSize = 1.0, rot
 
   return (
     <mesh position={position} rotation={rotation}>
-      <planeGeometry args={[size[0], size[1], 32, 40]} />
+      <planeGeometry args={[size[0], size[1], 48, 36]} />
       <shaderMaterial
         ref={matRef}
         uniforms={uniforms}
@@ -166,46 +174,28 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
         <meshStandardMaterial color="#5a3a20" roughness={0.85} />
       </mesh>
 
-      {/* ===== CENTRAL SPINE (single mast running length of ship) ===== */}
-      <mesh position={[0, 0.8, 0]}>
-        <cylinderGeometry args={[0.045, 0.06, 1.8, 10]} />
+      {/* ===== MAST (single tall spine, slight aft lean) ===== */}
+      <mesh position={[-0.05, 1.0, 0]} rotation={[0, 0, 0.08]}>
+        <cylinderGeometry args={[0.05, 0.07, 2.2, 10]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
-      {/* ===== MAST CROSSBEAM (horizontal spine from which sails hang) ===== */}
-      <mesh position={[0, 1.7, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.025, 0.025, 3.0, 8]} />
+      {/* ===== YARD (horizontal spar sail hangs from) ===== */}
+      <mesh position={[0.1, 2.0, 0]} rotation={[0, 0, Math.PI / 2 + 0.12]}>
+        <cylinderGeometry args={[0.035, 0.035, 3.2, 8]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
-      {/* ===== SOLAR SAILS — fore-and-aft along ship ===== */}
-      {/* Fore sail (bow-side, smallest) */}
+      {/* ===== SINGLE LARGE SOLAR SAIL ===== */}
+      {/* Positioned above and slightly behind ship center, large and swept */}
       <SolarSail
-        position={[1.25, 1.6, 0]}
-        size={[0.7, 1.0]}
-        showT={true}
-        tSize={0.7}
+        position={[0.1, 1.25, 0.1]}
+        size={[3.0, 2.4]}
       />
 
-      {/* Main sail (center, largest) */}
-      <SolarSail
-        position={[0.0, 1.7, 0]}
-        size={[1.1, 1.4]}
-        showT={true}
-        tSize={1.0}
-      />
-
-      {/* Aft sail (stern-side, medium) */}
-      <SolarSail
-        position={[-1.1, 1.55, 0]}
-        size={[0.85, 1.2]}
-        showT={true}
-        tSize={0.85}
-      />
-
-      {/* Mast cap */}
-      <mesh position={[0, 1.72, 0]}>
-        <sphereGeometry args={[0.06, 10, 8]} />
+      {/* ===== MAST TOP FINIAL (small ornament at top of mast) ===== */}
+      <mesh position={[0.15, 2.15, 0]}>
+        <coneGeometry args={[0.06, 0.18, 8]} />
         <meshStandardMaterial color="#6a4228" />
       </mesh>
 
