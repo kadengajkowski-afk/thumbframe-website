@@ -14,54 +14,62 @@ const sailVertex = `
     vUv = uv;
     vec3 pos = position;
 
-    // === FREEDOM ENVELOPE ===
-    // Both top (uv.y=1) and bottom (uv.y=0) are pinned.
-    // Freedom is maximum at the middle.
-    float freedom = sin(vUv.y * 3.14159);
+    // Top pinned at yard. Freedom grows toward the bottom of the sail.
+    float freedom = pow(1.0 - vUv.y, 1.3);
 
-    // === MICRO-NOISE JITTER ===
-    // Small pseudo-random jitter per-vertex so motion has organic
-    // texture instead of smooth sine sweeps
-    float jx = sin(vUv.x * 47.3 + vUv.y * 23.1) * 0.5 + 0.5;
-    float jy = sin(vUv.x * 31.7 - vUv.y * 19.4) * 0.5 + 0.5;
-
-    // === FOUR NON-HARMONIC SINES ===
-    // Frequencies chosen as non-integer multiples so the combined
-    // motion has a very long period (effectively never repeats
-    // during viewing).
+    // ============================================
+    // FOUR NON-HARMONIC TIME RATES
+    // Frequencies use irrational-ish ratios so combined motion
+    // has effectively infinite period.
+    // ============================================
     float a = uTime * 1.37;
     float b = uTime * 2.13;
     float c = uTime * 0.89;
     float d = uTime * 3.41;
 
-    // === HORIZONTAL STREAM (the banner blowing in the wind) ===
-    // Bottom of sail streams horizontally in +X direction, with
-    // wave traveling DOWN from top to bottom.
-    float streamX = sin(a - vUv.y * 4.7 + jx * 2.0) * 0.40
-                  + sin(c * 1.7 + vUv.y * 2.3 - jx) * 0.28
-                  + sin(b * 0.6 - vUv.y * 6.1) * 0.18;
-    pos.x += streamX * freedom;
+    // Spatial hash for per-vertex phase variation
+    float jx = sin(vUv.x * 47.3 + vUv.y * 23.1) * 0.5 + 0.5;
+    float jy = sin(vUv.x * 31.7 - vUv.y * 19.4) * 0.5 + 0.5;
 
-    // === DEPTH BILLOW (sail bulging in/out) ===
-    float depthZ = sin(b - vUv.y * 3.9 + jy) * 0.35
-                 + sin(d * 0.5 + vUv.x * 2.7 - vUv.y * 3.0) * 0.22
-                 + sin(a * 1.4 - vUv.x * 1.3) * 0.15;
-    pos.z += depthZ * freedom;
+    // ============================================
+    // WIND FROM LEFT
+    // In local space (before the Y-rotation on the mesh), wind
+    // blowing from left pushes the sail in the NEGATIVE Z direction
+    // when the sail is flipped 90°.
+    // Negative Z displacement = sail bulges toward camera-facing side.
+    // ============================================
 
-    // === VERTICAL FLUTTER (flag curls up and down) ===
-    float flutterY = sin(c - vUv.y * 5.2 + jx * 3.0) * 0.25
-                   + sin(d * 0.7 + vUv.x * 1.9) * 0.18;
-    pos.y += flutterY * freedom;
+    // Main billow: wind pressure bulges sail in -Z
+    float billow = sin(a * 0.5 + vUv.y * 1.2) * 0.18 + 0.55;  // range ~0.37 to 0.73
+    pos.z -= billow * freedom;
 
-    // === HIGH-FREQUENCY EDGE CHOP ===
-    // Stronger on the far (trailing) edge only, very fast small
-    // motions on top of the larger waves
-    float edgeChop = sin(d * 2.1 + vUv.x * 7.0 + vUv.y * 4.0) * 0.04
-                   + sin(b * 3.3 - vUv.y * 9.0) * 0.03;
+    // Depth variation (wave-like in/out motion on top of billow)
+    float depthZ = sin(b - vUv.y * 3.9 + jy) * 0.25
+                 + sin(d * 0.5 + vUv.x * 2.7 - vUv.y * 3.0) * 0.16
+                 + sin(a * 1.4 - vUv.x * 1.3) * 0.10;
+    pos.z -= depthZ * freedom;  // note: MINUS because wind from left
+
+    // Vertical ripple (sail surface rippling up/down)
+    float rippleY = sin(c - vUv.y * 5.2 + jx * 3.0) * 0.12
+                  + sin(d * 0.7 + vUv.x * 1.9) * 0.08;
+    pos.y += rippleY * freedom;
+
+    // Lateral wobble (sail surface waves side to side slightly)
+    float wobbleX = sin(b * 0.6 - vUv.y * 6.1 + jy * 2.0) * 0.08
+                  + sin(c * 1.7 + vUv.x * 2.3 - jx) * 0.06;
+    pos.x += wobbleX * freedom;
+
+    // High-freq edge chop (trailing edge has faster small ripples)
+    float edgeChop = sin(d * 2.1 + vUv.x * 7.0 + vUv.y * 4.0) * 0.035
+                   + sin(b * 3.3 - vUv.y * 9.0) * 0.025;
     float trailingEdge = smoothstep(0.4, 1.0, vUv.x);
-    pos.z += edgeChop * trailingEdge * freedom;
+    pos.z -= edgeChop * trailingEdge * freedom;
 
-    vBow = 0.7;
+    // Hard pin at top only
+    float pinFactor = smoothstep(1.0, 0.92, vUv.y);
+    pos = mix(position, pos, pinFactor);
+
+    vBow = billow;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
@@ -217,12 +225,6 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       {/* ===== YARD (horizontal spar sail hangs from) ===== */}
       <mesh position={[0.1, 2.95, 0]} rotation={[Math.PI / 2 + 0.12, 0, 0]}>
         <cylinderGeometry args={[0.035, 0.035, 3.2, 8]} />
-        <meshStandardMaterial color="#4a3020" roughness={0.9} />
-      </mesh>
-
-      {/* ===== BOOM (horizontal spar at bottom of sail) ===== */}
-      <mesh position={[0.1, 1.02, 0]} rotation={[0, 0, Math.PI / 2 + 0.12]}>
-        <cylinderGeometry args={[0.03, 0.03, 3.0, 8]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
