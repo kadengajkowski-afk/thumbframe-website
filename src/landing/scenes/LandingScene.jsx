@@ -34,7 +34,7 @@ function SceneGraph() {
         intensity={0.35}
       />
 
-      <SpaceStation position={[-0.1, -0.2, 0]} scale={1.3} rotation={[0, -0.35, 0]} />
+      <SpaceStation position={[0, -0.1, 0]} scale={1.15} rotation={[0, -1.0, 0]} />
 
       {!POST_DISABLED && <PainterlyPost />}
     </>
