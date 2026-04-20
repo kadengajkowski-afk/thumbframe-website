@@ -280,7 +280,8 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
         const loopT = p * Math.PI * 2;
         const radius = 4.5;
         baseX = m.idleX + Math.sin(loopT) * radius;
-        baseY = m.idleY + Math.cos(loopT) * 1.2;  // elliptical, less vertical
+        // Shift so loop starts AND ends at y=idleY instead of y=idleY+1.2
+        baseY = m.idleY + (Math.cos(loopT) - 1.0) * 1.2;
         baseZ = m.idleZ - (1 - Math.cos(loopT)) * 2.0;  // arcs into depth
         rotY = (rotation?.[1] ?? 0) + loopT;      // ship yaws through circle
       }
