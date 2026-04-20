@@ -170,13 +170,13 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* Main yard (horizontal spar) */}
-      <mesh position={[0.2, 2.15, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh position={[0.2, 2.15, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.03, 0.03, 1.9, 8]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
       {/* Mainsail — big T flag */}
-      <Sail position={[0.2, 1.45, 0]} size={[1.75, 1.35]} showT={true} rotation={[0, Math.PI / 2, 0]} />
+      <Sail position={[0.2, 1.45, 0.06]} size={[1.75, 1.35]} showT={true} />
 
       {/* Mast top cap */}
       <mesh position={[0.2, 2.5, 0]}>
@@ -191,7 +191,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* Foresail — smaller, blank */}
-      <Sail position={[1.15, 1.0, 0]} size={[0.7, 0.8]} showT={false} rotation={[0, Math.PI / 2, 0]} />
+      <Sail position={[1.4, 1.0, 0.05]} size={[0.65, 0.7]} showT={false} />
 
       {/* ===== BOWSPRIT ===== */}
       <mesh position={[1.45, 0.25, 0]} rotation={[0, 0, -0.18]}>
