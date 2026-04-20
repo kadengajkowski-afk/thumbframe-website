@@ -258,19 +258,19 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* ===== MAST (single tall spine, slight aft lean) ===== */}
-      <mesh position={[-0.05, 1.55, 0]} rotation={[0, 0, 0.08]}>
+      <mesh position={[-0.2, 1.55, 0]} rotation={[0, 0, 0.08]}>
         <cylinderGeometry args={[0.05, 0.07, 3.3, 10]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
       {/* ===== YARD (horizontal spar sail hangs from) ===== */}
-      <mesh position={[0.1, 3.1, -0.08]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh position={[-0.15, 3.1, -0.08]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.055, 0.055, 3.05, 10]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
       {/* ===== BOOM (horizontal spar at bottom of sail) ===== */}
-      <mesh position={[0.1, 1.15, -0.08]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh position={[-0.15, 1.15, -0.08]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.05, 0.05, 3.05, 10]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
@@ -278,7 +278,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       {/* ===== SINGLE LARGE SOLAR SAIL ===== */}
       {/* Positioned above and slightly behind ship center, large and swept */}
       <SolarSail
-        position={[0.1, 2.15, 0]}
+        position={[-0.15, 2.15, 0]}
         size={[3.0, 2.55]}
         rotation={[0, Math.PI / 2, 0]}
       />

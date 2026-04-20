@@ -27,8 +27,9 @@ const particleVS = `
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
+    gl_Position.z = -0.5;  // force front depth
     gl_PointSize = aSize * 180.0 * (1.0 / -mv.z);
-    gl_PointSize = clamp(gl_PointSize, 4.0, 16.0);
+    gl_PointSize = clamp(gl_PointSize, 20.0, 50.0);
   }
 `;
 
@@ -41,7 +42,7 @@ const particleFS = `
     float dist = length(coord);
     if (dist > 0.5) discard;
     float soft = 1.0 - smoothstep(0.1, 0.5, dist);
-    gl_FragColor = vec4(vColor, vAlpha * soft * 1.2);
+    gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);  // HOT PINK, FULL OPACITY
   }
 `;
 
