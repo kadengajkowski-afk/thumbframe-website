@@ -22,7 +22,7 @@ const sailVertex = `
 
     // Wind direction (+Z = toward camera in local space when ship yaws)
     // Billow pushes sail outward along its normal (+Z in local plane space)
-    pos.z += bulge * 0.45;
+    pos.z += bulge * 0.4 + bulgeX * bulgeY * sin(uTime * 0.8) * 0.05;
 
     // === FLUTTER: wind ripple on top of the billow ===
     // Stronger at free edges (bottom & right), subtle at attached top
@@ -52,7 +52,7 @@ const sailFragment = `
   }
 
   void main() {
-    vec3 sailColor = vec3(0.96, 0.92, 0.85);
+    vec3 sailColor = vec3(0.99, 0.95, 0.88);
     vec3 tColor    = vec3(0.95, 0.45, 0.12);
 
     float soft = 0.02;
@@ -65,13 +65,13 @@ const sailFragment = `
     // Shade the billow using the bent normal — light from upper-front
     vec3 lightDir = normalize(vec3(0.3, 0.5, 0.8));
     float shade = dot(normalize(vNormal), lightDir) * 0.5 + 0.5;
-    color *= 0.7 + shade * 0.4;
+    color *= 0.92 + shade * 0.15;
 
     gl_FragColor = vec4(color, 1.0);
   }
 `;
 
-function Sail({ position, size = [1.6, 1.3], showT = true }) {
+function Sail({ position, size = [1.6, 1.3], showT = true, rotation = [0, 0, 0] }) {
   const matRef = useRef();
   const uniforms = useMemo(() => ({
     uTime:  { value: 0 },
@@ -85,7 +85,7 @@ function Sail({ position, size = [1.6, 1.3], showT = true }) {
   });
 
   return (
-    <mesh position={position}>
+    <mesh position={position} rotation={rotation}>
       <planeGeometry args={[size[0], size[1], 40, 30]} />
       <shaderMaterial
         ref={matRef}
@@ -176,7 +176,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* Mainsail — big T flag */}
-      <Sail position={[0.2, 1.45, 0.06]} size={[1.75, 1.35]} showT={true} />
+      <Sail position={[0.2, 1.45, 0]} size={[1.75, 1.35]} showT={true} rotation={[0, Math.PI / 2, 0]} />
 
       {/* Mast top cap */}
       <mesh position={[0.2, 2.5, 0]}>
@@ -191,7 +191,7 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* Foresail — smaller, blank */}
-      <Sail position={[1.15, 1.0, 0.05]} size={[0.7, 0.8]} showT={false} />
+      <Sail position={[1.15, 1.0, 0]} size={[0.7, 0.8]} showT={false} rotation={[0, Math.PI / 2, 0]} />
 
       {/* ===== BOWSPRIT ===== */}
       <mesh position={[1.45, 0.25, 0]} rotation={[0, 0, -0.18]}>
