@@ -130,7 +130,7 @@ const fragmentShader = /* glsl */ `
     // detection smoothstep widened (0.5-1.2) so it triggers less
     // often, and mix weight dropped 0.35 → 0.15 so cloud
     // boundaries read as gradient transitions, not outlined rims.
-    // Epsilon samples use the same 0.08 base frequency as `n`.
+    // Epsilon samples use the same 0.08 base frequency as the main n.
     float eps = 0.02;
     float nx = fbm(warpedPos * 0.08 + vec3(eps, 0.0, 0.0));
     float ny = fbm(warpedPos * 0.08 + vec3(0.0, eps, 0.0));
