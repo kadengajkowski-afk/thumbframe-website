@@ -1,4 +1,4 @@
-// Stardust — ~300 billboard motes with per-particle twinkle.
+// Stardust — ~900 billboard motes with per-particle twinkle.
 // Drift is computed in the vertex shader (sin-based oscillation around the
 // spawn position) so there's no per-frame JS loop or buffer re-upload.
 //
@@ -11,7 +11,7 @@ import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-const PARTICLE_COUNT = 300;
+const PARTICLE_COUNT = 900;
 const SPREAD = 30;
 
 export default function Stardust() {
