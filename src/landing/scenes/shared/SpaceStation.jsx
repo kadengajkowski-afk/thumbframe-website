@@ -259,13 +259,13 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1, rotation
       </mesh>
 
       {/* ===== YARD (horizontal spar sail hangs from) ===== */}
-      <mesh position={[0.1, 3.4, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh position={[0.1, 3.25, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.035, 0.035, 3.05, 8]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
 
       {/* ===== BOOM (horizontal spar at bottom of sail) ===== */}
-      <mesh position={[0.1, 1.0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh position={[0.1, 1.15, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.032, 0.032, 3.05, 8]} />
         <meshStandardMaterial color="#4a3020" roughness={0.9} />
       </mesh>
