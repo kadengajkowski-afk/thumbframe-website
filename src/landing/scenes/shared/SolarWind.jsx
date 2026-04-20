@@ -28,7 +28,7 @@ const particleVS = `
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
     gl_PointSize = aSize * 180.0 * (1.0 / -mv.z);
-    gl_PointSize = clamp(gl_PointSize, 1.5, 6.0);
+    gl_PointSize = clamp(gl_PointSize, 4.0, 16.0);
   }
 `;
 
@@ -41,7 +41,7 @@ const particleFS = `
     float dist = length(coord);
     if (dist > 0.5) discard;
     float soft = 1.0 - smoothstep(0.1, 0.5, dist);
-    gl_FragColor = vec4(vColor, vAlpha * soft * 0.7);
+    gl_FragColor = vec4(vColor, vAlpha * soft * 1.2);
   }
 `;
 
@@ -237,7 +237,7 @@ function WindRibbons({ count = 8 }) {
 export default function SolarWind() {
   return (
     <>
-      <WindParticles count={200} />
+      <WindParticles count={500} />
       <WindRibbons count={8} />
     </>
   );
