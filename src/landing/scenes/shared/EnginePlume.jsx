@@ -368,11 +368,37 @@ function Sparks() {
   );
 }
 
+// ── Depth proxy ─────────────────────────────────────────────────────────────
+// All flame shells use depthWrite=false (required for clean additive
+// stacking), so the ship's own silhouette leaks through the flame region
+// and the depth-Sobel OutlineEffect traces a zigzag behind the shells.
+// Kuwahara sees the flame pixels as "far" (clear depth) and applies the
+// big painterly kernel, which shreds the crisp gradient.
+//
+// Fix: a color-silent cone whose envelope matches the outermost flame
+// shell. It writes depth but nothing else, so the painterly passes treat
+// flame pixels as "near" geometry and stop chewing at the edges.
+function FlameDepthProxy() {
+  return (
+    <mesh
+      rotation={[0, 0, Math.PI / 2]}
+      position={[-2.8 / 2, 0, 0]}
+      renderOrder={-1}
+    >
+      <cylinderGeometry args={[0.08, 0.46, 2.8, 32, 1, true]} />
+      <meshBasicMaterial colorWrite={false} depthWrite={true} />
+    </mesh>
+  );
+}
+
 // ── Export ──────────────────────────────────────────────────────────────────
 
 export default function EnginePlume({ position = [0, 0, 0] }) {
   return (
     <group position={position}>
+      {/* Proxy renders first so its depth is visible to the post-process
+          passes even though the subsequent shells paint over it. */}
+      <FlameDepthProxy />
       <Nozzle />
       <FlameStack />
       <Sparks />

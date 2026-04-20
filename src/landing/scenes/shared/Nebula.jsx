@@ -105,15 +105,15 @@ const fragmentShader = /* glsl */ `
 
     float midMask = smoothstep(0.2, 0.7, n1)
                   * smoothstep(-0.2, 0.5, dir.y + n2 * 0.5);
-    color = mix(color, uMid, midMask * 0.6);
+    color = mix(color, uMid, midMask * 0.75);
 
     float highMask = smoothstep(0.3, 0.8, n2)
                    * smoothstep(0.0, 0.6, 1.0 - length(dir.xz - vec2(0.3, -0.2)));
-    color = mix(color, uHigh, highMask * 0.4);
+    color = mix(color, uHigh, highMask * 0.6);
 
     float accentMask = smoothstep(0.55, 0.95, n3)
                      * smoothstep(-0.8, -0.1, dir.y);
-    color = mix(color, uAccent, accentMask * 0.15);
+    color = mix(color, uAccent, accentMask * 0.35);
 
     // Dense bright stars
     float stars = smoothstep(0.92, 0.98, noise3(dir * 80.0));

@@ -27,7 +27,7 @@ function SceneGraph() {
       <ShootingStars />
 
       {/* Ship off-center-right so the top-left hero overlay reads clean */}
-      <SpaceStation position={[2.6, 0.2, 0]} scale={1.15} />
+      <SpaceStation position={[2.0, 0.2, 0]} scale={1.45} />
 
       {!POST_DISABLED && <PainterlyPost />}
     </>

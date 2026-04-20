@@ -180,14 +180,18 @@ export default function SpaceStation({ position = [0, 0, 0], scale = 1 }) {
       ))}
 
       {/* ═══ ENGINE — angled, tapered, with exhaust ═══ */}
+      {/* Radial segments bumped (6 → 24 nozzles, 6 → 16 housing) so the
+          depth-Sobel outline doesn't trace a hexagonal zigzag silhouette
+          around the flame. These cones sit BEHIND the plume — low-poly
+          shows through the translucent shells at unflattering angles. */}
       <mesh position={[-1.4, 0.1, 0]} rotation={[0, 0, Math.PI / 2 + 0.08]}>
-        <cylinderGeometry args={[0.3, 0.55, 0.8, 6]} />
+        <cylinderGeometry args={[0.3, 0.55, 0.8, 16]} />
         <Toon color="#554a68" />
       </mesh>
       {/* 3-cone nozzle cluster */}
       {[[-1.85, 0.25, 0.15], [-1.85, -0.05, -0.18], [-1.85, 0.15, -0.05]].map((p, i) => (
         <mesh key={`noz-${i}`} position={p} rotation={[0, 0, Math.PI / 2]}>
-          <coneGeometry args={[0.12, 0.3, 6]} />
+          <coneGeometry args={[0.12, 0.3, 24]} />
           <Toon color="#4a4060" />
         </mesh>
       ))}
