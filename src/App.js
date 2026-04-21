@@ -3,8 +3,6 @@ import { trackPageView } from './utils/analytics';
 import FabricCanvas from './FabricCanvas';
 import NewEditor from './editor/NewEditor';
 import MobileEditor from './mobile/MobileEditor';
-import ForgotPassword from './ForgotPassword';
-import UpdatePassword from './UpdatePassword';
 import CookieBanner from './components/CookieBanner';
 import { useAuth } from './context/AuthContext';
 import { handleUpgrade } from './utils/checkout';
@@ -28,6 +26,8 @@ const Login     = lazy(() => import('./pages/Login'));
 const Signup    = lazy(() => import('./pages/Signup'));
 const Account   = lazy(() => import('./pages/Account'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPassword'));
+const UpdatePasswordPage = lazy(() => import('./pages/UpdatePassword'));
 
 function PageLoader() {
   return (
@@ -480,6 +480,8 @@ export default function App() {
     signup:      <Signup setPage={setPage} />,
     account:     <Account setPage={setPage} />,
     settings:    <SettingsPage setPage={setPage} />,
+    'forgot-password': <ForgotPasswordPage setPage={setPage} />,
+    'update-password': <UpdatePasswordPage setPage={setPage} />,
     blog:        <Blog setPage={setPage} onOpenPost={(slug) => { setBlogSlug(slug); setPage('blog-post'); window.history.pushState(null, '', `/blog/${slug}`); }} />,
     'blog-post': <BlogPost slug={blogSlug} setPage={setPage} onBack={() => { setPage('blog'); window.history.pushState(null, '', '/blog'); }} />,
     'admin-blog': <BlogAdmin setPage={setPage} user={user} token={authToken} />,
@@ -505,8 +507,6 @@ export default function App() {
       {page === 'howitworks' && <HowItWorks   setPage={setPage} />}
       {page === 'pricing'    && <PricingPage  setPage={setPage} />}
       {page === 'examples'   && <Examples     setPage={setPage} />}
-      {page === 'forgot-password' && <ForgotPassword setPage={setPage} />}
-      {page === 'update-password' && <UpdatePassword setPage={setPage} />}
       <CookieBanner />
     </div>
   );
