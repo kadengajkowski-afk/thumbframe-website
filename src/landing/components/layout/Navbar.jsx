@@ -92,18 +92,30 @@ export default function Navbar({ onNavigate }) {
         justifyContent: 'space-between',
         pointerEvents: 'none', // children re-enable; lets clicks pass through gaps
       }}>
-        {/* Wordmark — text-only */}
+        {/* Ship mark + wordmark */}
         <a
           href="/"
           onClick={(e) => { e.preventDefault(); goTo('home'); }}
           style={{
             display: 'flex',
             alignItems: 'center',
+            gap: 10,
             textDecoration: 'none',
             pointerEvents: 'auto',
             textShadow: '0 1px 8px rgba(20, 12, 28, 0.9)',
           }}
         >
+          <img
+            src="/brand/ship-hero.png"
+            alt=""
+            aria-hidden="true"
+            style={{
+              height: isMobile ? 20 : 24,
+              width: 'auto',
+              display: 'block',
+              filter: 'drop-shadow(0 1px 6px rgba(20, 12, 28, 0.85))',
+            }}
+          />
           <span style={{
             fontFamily: FONT_DISPLAY,
             fontWeight: 500,
