@@ -6,6 +6,7 @@ import {
 import FeaturesScene from '../landing/scenes/FeaturesScene';
 import SaturnOverlay from '../landing/scenes/SaturnOverlay';
 import Navbar from '../landing/components/layout/Navbar';
+import Footer from '../landing/components/layout/Footer';
 import { useSEO } from '../hooks/useSEO';
 import { useAuth } from '../context/AuthContext';
 
@@ -227,6 +228,8 @@ export default function Features({ setPage }) {
           </button>
         </div>
       </div>
+
+      <Footer setPage={setPage} />
     </div>
   );
 }

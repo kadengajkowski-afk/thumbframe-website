@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
+import Footer from '../landing/components/layout/Footer';
 import { useSEO } from '../hooks/useSEO';
 
 export default function NotFound({ setPage }) {

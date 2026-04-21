@@ -3,6 +3,7 @@ import '@fontsource-variable/fraunces';
 import { Trash2 } from 'lucide-react';
 import AuroraScene from '../landing/scenes/AuroraScene';
 import Navbar from '../landing/components/layout/Navbar';
+import Footer from '../landing/components/layout/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useSEO } from '../hooks/useSEO';
 import supabase from '../supabaseClient';
@@ -450,6 +451,8 @@ export default function Gallery({ setPage }) {
           loading={deletingId === toDelete?.id}
         />
       )}
+
+      <Footer setPage={setPage} />
     </div>
   );
 }

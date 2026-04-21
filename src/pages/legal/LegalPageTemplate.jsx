@@ -9,6 +9,7 @@ import '@fontsource-variable/fraunces';
 import { ArrowLeft } from 'lucide-react';
 import LegalScene from '../../landing/scenes/LegalScene';
 import Navbar from '../../landing/components/layout/Navbar';
+import Footer from '../../landing/components/layout/Footer';
 
 const FRAUNCES = "'Fraunces Variable', 'Fraunces', Georgia, serif";
 const INTER    = "'Inter Variable', 'Inter', system-ui, sans-serif";
@@ -189,6 +190,8 @@ export default function LegalPageTemplate({
           <ArrowLeft size={12} /> Back to home
         </button>
       </div>
+
+      <Footer setPage={setPage} />
     </div>
   );
 }

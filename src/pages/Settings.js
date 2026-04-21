@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import '@fontsource-variable/fraunces';
 import AuroraScene from '../landing/scenes/AuroraScene';
 import Navbar from '../landing/components/layout/Navbar';
+import Footer from '../landing/components/layout/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useSEO } from '../hooks/useSEO';
 import supabase from '../supabaseClient';
@@ -920,6 +921,8 @@ export default function Settings({ setPage }) {
           </div>
         )}
       </div>
+
+      <Footer setPage={setPage} />
     </div>
   );
 }

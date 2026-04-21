@@ -4,6 +4,7 @@ import { ArrowLeft, Mail } from 'lucide-react';
 import supabase from '../supabaseClient';
 import AuthScene from '../landing/scenes/AuthScene';
 import Navbar from '../landing/components/layout/Navbar';
+import Footer from '../landing/components/layout/Footer';
 import { useSEO } from '../hooks/useSEO';
 
 const FRAUNCES = "'Fraunces Variable', 'Fraunces', Georgia, serif";
@@ -174,6 +175,7 @@ export default function ForgotPassword({ setPage }) {
   }
 
   return (
+    <>
     <div style={{
       minHeight: '100vh',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -228,6 +230,8 @@ export default function ForgotPassword({ setPage }) {
         )}
       </div>
     </div>
+    <Footer setPage={setPage} />
+    </>
   );
 }
 

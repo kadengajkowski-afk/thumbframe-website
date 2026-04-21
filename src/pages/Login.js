@@ -4,6 +4,7 @@ import supabase from '../supabaseClient';
 import { trackEvent } from '../utils/analytics';
 import AuthScene from '../landing/scenes/AuthScene';
 import Navbar from '../landing/components/layout/Navbar';
+import Footer from '../landing/components/layout/Footer';
 
 const FRAUNCES = "'Fraunces Variable', 'Fraunces', Georgia, serif";
 
@@ -54,6 +55,7 @@ export default function Login({ setPage }) {
   };
 
   return (
+    <>
     <div style={{
       minHeight: '100vh',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -183,5 +185,7 @@ export default function Login({ setPage }) {
 
       </div>
     </div>
+    <Footer setPage={setPage} />
+    </>
   );
 }

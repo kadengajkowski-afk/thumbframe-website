@@ -3,6 +3,7 @@ import '@fontsource-variable/fraunces';
 import { Check } from 'lucide-react';
 import PricingScene from '../landing/scenes/PricingScene';
 import Navbar from '../landing/components/layout/Navbar';
+import Footer from '../landing/components/layout/Footer';
 import { useSEO } from '../hooks/useSEO';
 import { handleUpgrade } from '../utils/checkout';
 import { useAuth } from '../context/AuthContext';
@@ -142,6 +143,8 @@ export default function Pricing({ setPage }) {
           Cancel anytime. No questions asked.
         </p>
       </div>
+
+      <Footer setPage={setPage} />
     </div>
   );
 }
