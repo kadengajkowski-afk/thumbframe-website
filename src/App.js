@@ -5,7 +5,6 @@ import NewEditor from './editor/NewEditor';
 import MobileEditor from './mobile/MobileEditor';
 import ForgotPassword from './ForgotPassword';
 import UpdatePassword from './UpdatePassword';
-import BillingTab from './BillingTab';
 import CookieBanner from './components/CookieBanner';
 import { useAuth } from './context/AuthContext';
 import { handleUpgrade } from './utils/checkout';
@@ -28,6 +27,7 @@ const NotFound  = lazy(() => import('./pages/NotFound'));
 const Login     = lazy(() => import('./pages/Login'));
 const Signup    = lazy(() => import('./pages/Signup'));
 const Account   = lazy(() => import('./pages/Account'));
+const SettingsPage = lazy(() => import('./pages/Settings'));
 
 function PageLoader() {
   return (
@@ -587,102 +587,13 @@ function Dashboard({ setPage, user }) {
   );
 }
 
-// ── Settings ───────────────────────────────────────────────────────────────────
-function Settings({ setPage, user }) {
-  const [activeTab, setActiveTab] = useState('billing');
-
-  return (
-    <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', paddingTop: 80 }}>
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '48px 24px' }}>
-        {/* Header */}
-        <div style={{ marginBottom: 36 }}>
-          <button
-            onClick={() => setPage('dashboard')}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: C.muted,
-              cursor: 'pointer',
-              fontSize: 13,
-              marginBottom: 16,
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            ← Back to dashboard
-          </button>
-          <h1 style={{ fontSize: 28, fontWeight: '800', letterSpacing: '-0.5px', marginBottom: 4, color: C.text }}>Settings</h1>
-          <p style={{ fontSize: 14, color: C.muted }}>Manage your account and subscription.</p>
-        </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 32, borderBottom: `1px solid ${C.border}`, paddingBottom: 0 }}>
-          <button
-            onClick={() => setActiveTab('billing')}
-            style={{
-              padding: '12px 16px',
-              border: 'none',
-              background: 'transparent',
-              color: activeTab === 'billing' ? C.accent : C.muted,
-              cursor: 'pointer',
-              fontSize: 14,
-              fontWeight: activeTab === 'billing' ? '700' : '600',
-              borderBottom: activeTab === 'billing' ? `3px solid ${C.accent}` : 'none',
-              transition: 'color 0.2s',
-            }}
-          >
-            💳 Billing
-          </button>
-          <button
-            onClick={() => setActiveTab('account')}
-            style={{
-              padding: '12px 16px',
-              border: 'none',
-              background: 'transparent',
-              color: activeTab === 'account' ? C.accent : C.muted,
-              cursor: 'pointer',
-              fontSize: 14,
-              fontWeight: activeTab === 'account' ? '700' : '600',
-              borderBottom: activeTab === 'account' ? `3px solid ${C.accent}` : 'none',
-              transition: 'color 0.2s',
-            }}
-          >
-            👤 Account
-          </button>
-        </div>
-
-        {/* Tab content */}
-        {activeTab === 'billing' && <BillingTab />}
-        {activeTab === 'account' && (
-          <div style={{ padding: '24px 0' }}>
-            <div
-              style={{
-                borderRadius: 12,
-                border: `1px solid ${C.border}`,
-                background: C.panel,
-                padding: '32px',
-                maxWidth: 600,
-              }}
-            >
-              <h2 style={{ fontSize: 18, fontWeight: '700', color: C.text, marginBottom: 8 }}>👤 Account Information</h2>
-              <p style={{ fontSize: 14, color: C.muted, marginBottom: 20, lineHeight: 1.6 }}>Email: <strong>{user?.email}</strong></p>
-              <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>Pro Status: <strong>{user?.is_pro ? '✅ Pro' : '🔒 Free'}</strong></p>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── App ────────────────────────────────────────────────────────────────────────
 
 function getInitialPage() {
   const path = window.location.pathname.toLowerCase();
   if (path === '/editor') return 'editor';
   if (path === '/dashboard') return 'dashboard';
+  if (path === '/settings') return 'settings';
   if (path === '/login') return 'login';
   if (path === '/signup') return 'signup';
   if (path === '/pricing') return 'pricing';
@@ -764,6 +675,7 @@ export default function App() {
     login:       <Login setPage={setPage} />,
     signup:      <Signup setPage={setPage} />,
     account:     <Account setPage={setPage} />,
+    settings:    <SettingsPage setPage={setPage} />,
     blog:        <Blog setPage={setPage} onOpenPost={(slug) => { setBlogSlug(slug); setPage('blog-post'); window.history.pushState(null, '', `/blog/${slug}`); }} />,
     'blog-post': <BlogPost slug={blogSlug} setPage={setPage} onBack={() => { setPage('blog'); window.history.pushState(null, '', '/blog'); }} />,
     'admin-blog': <BlogAdmin setPage={setPage} user={user} token={authToken} />,
@@ -790,7 +702,6 @@ export default function App() {
       {page === 'pricing'    && <PricingPage  setPage={setPage} />}
       {page === 'examples'   && <Examples     setPage={setPage} />}
       {page === 'dashboard'  && <Dashboard    setPage={setPage} user={user} />}
-      {page === 'settings'   && <Settings     setPage={setPage} user={user} />}
       {page === 'forgot-password' && <ForgotPassword setPage={setPage} />}
       {page === 'update-password' && <UpdatePassword setPage={setPage} />}
       <CookieBanner />
