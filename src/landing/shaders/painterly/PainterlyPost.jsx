@@ -73,12 +73,9 @@ function ColorGradePass() {
   return <primitive object={effect} dispose={null} />;
 }
 
-// autoClear: opt-in knob for scenes that render additional passes AFTER
-// the composer (e.g. settings aurora overlay on its own layer). Defaults
-// to true so existing callers are unaffected.
-export default function PainterlyPost({ autoClear = true }) {
+export default function PainterlyPost() {
   return (
-    <EffectComposer multisampling={0} resolutionScale={0.5} depthBuffer={true} autoClear={autoClear}>
+    <EffectComposer multisampling={0} resolutionScale={0.5} depthBuffer={true}>
       <KuwaharaPass />
       <OutlinePass />
       <PaperGrainPass />
