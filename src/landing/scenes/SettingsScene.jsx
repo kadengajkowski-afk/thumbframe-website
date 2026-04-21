@@ -1,8 +1,13 @@
 // SettingsScene — deep-space starfield for /settings.
 //
-// Aesthetic contrast vs. other pages: near-black nebula, very sparing
-// color, dense starfield as the focal visual. Rare shooting stars.
-// No ship, no planet, no fireworks.
+// Aesthetic: near-black nebula, dense white starfield as the dominant
+// visual, rare painterly shooting stars. No ship, no planet.
+//
+// Kuwahara note — the painterly post-process uses a 2-6px minimum kernel
+// at half composer resolution. Stars must have enough rasterised footprint
+// to survive that averaging or they smear into the background. The inline
+// DeepStarfield below oversizes the point quad (smoothstep keeps the
+// visible core pinprick-small) so even the smallest tier punches through.
 
 import React, { Suspense, useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -16,7 +21,6 @@ const POST_DISABLED = typeof window !== 'undefined'
 
 const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
-// Dark, minimal nebula — the color hints are whispers, not statements.
 const SETTINGS_PALETTE = {
   core:       '#030515',
   mid:        '#0a1028',
@@ -27,84 +31,93 @@ const SETTINGS_PALETTE = {
   turbulence: 0.2,
 };
 
-// ── Dense starfield (inline — doesn't modify the shared Stardust) ────────────
+// ── DeepStarfield (inline — doesn't modify shared Stardust) ──────────────────
 //
-// Tiered size distribution: 60% tiny pinpricks, 30% small twinkles, 10%
-// brighter stars. Per-star color attribute: mostly warm white, occasional
-// blue-white, pale amber, and rare deep red. Independent twinkle phase
-// per star gives an organic shimmer.
+// Distribution per spec:
+//   • 90% tiny white pinpricks
+//   •  8% slightly larger white twinkles
+//   •  2% bright (occasional warm tint)
+//
+// Independent twinkle per star — random frequency in [2s, 6s] period. No
+// drift; stars stay fixed. Additive blending + pure-white color + oversized
+// point quads keep them visible through PainterlyPost.
 
-const STAR_COLORS = [
-  { color: [1.00, 0.96, 0.88], weight: 70 }, // warm white (#fff4e0)
-  { color: [0.78, 0.88, 1.00], weight: 18 }, // blue-white (#c8e0ff)
-  { color: [1.00, 0.91, 0.75], weight: 10 }, // pale amber (#ffe8c0)
-  { color: [0.97, 0.69, 0.63], weight:  2 }, // deep red (#f8b0a0)
-];
+const SPREAD_XY = 36;
+const SPREAD_Z  = 20;
 
-function pickColor() {
-  const total = STAR_COLORS.reduce((s, c) => s + c.weight, 0);
-  let r = Math.random() * total;
-  for (const entry of STAR_COLORS) {
-    r -= entry.weight;
-    if (r <= 0) return entry.color;
+function generateStars(count) {
+  const pos    = new Float32Array(count * 3);
+  const size   = new Float32Array(count);
+  const phase  = new Float32Array(count);
+  const freq   = new Float32Array(count);
+  const color  = new Float32Array(count * 3);
+
+  for (let i = 0; i < count; i++) {
+    pos[i * 3]     = (Math.random() - 0.5) * SPREAD_XY;
+    pos[i * 3 + 1] = (Math.random() - 0.5) * SPREAD_XY;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * SPREAD_Z;
+
+    const r = Math.random();
+    if (r < 0.90) {
+      // Tiny pinprick — 0.8-1.2 visual size tier
+      size[i] = 0.8 + Math.random() * 0.4;
+    } else if (r < 0.98) {
+      // Small twinkle
+      size[i] = 1.5 + Math.random() * 0.5;
+    } else {
+      // Bright star
+      size[i] = 2.5 + Math.random() * 0.5;
+    }
+
+    phase[i] = Math.random() * Math.PI * 2;
+    // Period 2-6s → angular frequency 2π/T
+    const period = 2 + Math.random() * 4;
+    freq[i] = (Math.PI * 2) / period;
+
+    // 98% white/near-white, 2% warm tint (only on the bright tier)
+    const warmRoll = Math.random();
+    if (r >= 0.98 && warmRoll < 0.5) {
+      color[i * 3]     = 1.00;
+      color[i * 3 + 1] = 0.92;
+      color[i * 3 + 2] = 0.78; // pale amber
+    } else {
+      // Pure white or warm-white
+      const warm = Math.random() < 0.2;
+      color[i * 3]     = 1.00;
+      color[i * 3 + 1] = warm ? 0.97 : 1.00;
+      color[i * 3 + 2] = warm ? 0.94 : 1.00;
+    }
   }
-  return STAR_COLORS[0].color;
+  return { pos, size, phase, freq, color };
 }
 
-function pickSize() {
-  const r = Math.random();
-  if (r < 0.60) return 0.3 + Math.random() * 0.3;   // tiny pinpricks
-  if (r < 0.90) return 0.7 + Math.random() * 0.5;   // small twinkles
-  return 1.4 + Math.random() * 1.0;                  // brighter stars
-}
-
-const SPREAD = 30;
-
-function DeepStarfield({ count = 1000 }) {
+function DeepStarfield({ count }) {
   const pointsRef = useRef();
 
-  const { positions, sizes, phases, colors } = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    const sz = new Float32Array(count);
-    const ph = new Float32Array(count);
-    const col = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      pos[i * 3]     = (Math.random() - 0.5) * SPREAD;
-      pos[i * 3 + 1] = (Math.random() - 0.5) * SPREAD;
-      pos[i * 3 + 2] = (Math.random() - 0.5) * SPREAD;
-      sz[i] = pickSize();
-      ph[i] = Math.random() * Math.PI * 2;
-      const [r, g, b] = pickColor();
-      col[i * 3]     = r;
-      col[i * 3 + 1] = g;
-      col[i * 3 + 2] = b;
-    }
-    return { positions: pos, sizes: sz, phases: ph, colors: col };
-  }, [count]);
+  const { pos, size, phase, freq, color } = useMemo(() => generateStars(count), [count]);
 
   const vertexShader = /* glsl */ `
     attribute float aSize;
     attribute float aPhase;
+    attribute float aFreq;
     attribute vec3  aColor;
     uniform float uTime;
     varying float vAlpha;
     varying vec3  vColor;
 
     void main() {
-      // Very slight GPU-only drift — keeps the field alive without scroll.
-      vec3 driftPos = position;
-      driftPos.y += sin(uTime * 0.18 + aPhase) * 0.20;
-      driftPos.x += cos(uTime * 0.13 + aPhase * 1.3) * 0.12;
+      vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
 
-      vec4 mvPos = modelViewMatrix * vec4(driftPos, 1.0);
-
-      // Independent twinkle per star — amplitude scales with size so
-      // bright stars pulse more, tiny pinpricks barely shimmer.
-      float twinkle = sin(uTime * 0.9 + aPhase) * (0.20 + aSize * 0.15) + 0.75;
-      vAlpha = twinkle * (0.30 + aSize * 0.30);
+      // Independent twinkle — period 2-6s per star (via aFreq).
+      // Oscillates opacity between 0.4 and 1.0.
+      float t = sin(uTime * aFreq + aPhase) * 0.3 + 0.7;
+      vAlpha = clamp(t, 0.4, 1.0);
       vColor = aColor;
 
-      gl_PointSize = clamp(aSize, 1.0, 3.5);
+      // Oversize the rasterised quad so small stars have enough pixel
+      // footprint to survive the Kuwahara post-process. The smoothstep
+      // falloff in the fragment shader keeps the visible core tight.
+      gl_PointSize = clamp(aSize * 2.2, 2.0, 7.0);
       gl_Position = projectionMatrix * mvPos;
     }
   `;
@@ -113,10 +126,12 @@ function DeepStarfield({ count = 1000 }) {
     varying float vAlpha;
     varying vec3  vColor;
     void main() {
+      // Sharper falloff than default — keeps the pinprick read
+      // crisp while the full quad gives Kuwahara something to latch.
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
-      float alpha = smoothstep(0.5, 0.1, d) * vAlpha;
-      gl_FragColor = vec4(vColor, alpha);
+      float core = smoothstep(0.5, 0.15, d);
+      gl_FragColor = vec4(vColor, core * vAlpha);
     }
   `;
 
@@ -127,12 +142,13 @@ function DeepStarfield({ count = 1000 }) {
   });
 
   return (
-    <points ref={pointsRef}>
+    <points ref={pointsRef} frustumCulled={false}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" array={positions} count={count} itemSize={3} />
-        <bufferAttribute attach="attributes-aSize"    array={sizes}     count={count} itemSize={1} />
-        <bufferAttribute attach="attributes-aPhase"   array={phases}    count={count} itemSize={1} />
-        <bufferAttribute attach="attributes-aColor"   array={colors}    count={count} itemSize={3} />
+        <bufferAttribute attach="attributes-position" array={pos}   count={count} itemSize={3} />
+        <bufferAttribute attach="attributes-aSize"    array={size}  count={count} itemSize={1} />
+        <bufferAttribute attach="attributes-aPhase"   array={phase} count={count} itemSize={1} />
+        <bufferAttribute attach="attributes-aFreq"    array={freq}  count={count} itemSize={1} />
+        <bufferAttribute attach="attributes-aColor"   array={color} count={count} itemSize={3} />
       </bufferGeometry>
       <shaderMaterial
         vertexShader={vertexShader}
@@ -140,6 +156,7 @@ function DeepStarfield({ count = 1000 }) {
         uniforms={uniforms}
         transparent
         depthWrite={false}
+        depthTest={false}
         blending={THREE.AdditiveBlending}
       />
     </points>
@@ -150,18 +167,17 @@ function DeepStarfield({ count = 1000 }) {
 function SceneGraph() {
   return (
     <>
-      {/* Dark, very slow nebula — mostly negative space behind the stars. */}
+      {/* Very slow, very dark nebula — atmosphere only. */}
       <Nebula palette={SETTINGS_PALETTE} driftSpeed={0.08} />
 
-      {/* Dense starfield — the visual focal point. */}
-      <DeepStarfield count={isMobile ? 800 : 1100} />
+      {/* Dense starfield — the dominant visual. */}
+      <DeepStarfield count={isMobile ? 1400 : 1800} />
 
-      {/* Slightly more frequent than auth (20-40s vs 30-60s). */}
+      {/* Rare painterly shooting stars (20-40s cycle). */}
       <ShootingStars singleRange={[20, 40]} />
 
-      {/* Minimal lighting — keeps the scene feeling like deep space. */}
-      <ambientLight color="#0a0e20" intensity={0.25} />
-      <directionalLight color="#4a5080" position={[3, 2, 4]} intensity={0.2} />
+      <ambientLight color="#0a0e20" intensity={0.2} />
+      <directionalLight color="#3a4068" position={[3, 2, 4]} intensity={0.15} />
 
       {!POST_DISABLED && <PainterlyPost />}
     </>
