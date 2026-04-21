@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import '@fontsource-variable/fraunces';
 import SettingsScene from '../landing/scenes/SettingsScene';
 import Navbar from '../landing/components/layout/Navbar';
-import BillingTab from '../BillingTab';
 import { useAuth } from '../context/AuthContext';
 import { useSEO } from '../hooks/useSEO';
 import supabase from '../supabaseClient';
@@ -228,13 +227,194 @@ function DeleteModal({ onClose, onConfirm, loading }) {
   );
 }
 
-// ── Billing tab card wrapper ──────────────────────────────────────────────────
-function BillingTabCard() {
+// ── Billing section ───────────────────────────────────────────────────────────
+// Replaces the legacy BillingTab card. Uses the same Stripe Customer Portal
+// endpoint (/api/create-portal-session) as BillingTab.js — BillingTab.js
+// itself is untouched. Conditional render on is_pro.
+function formatRenewalDate(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function BillingSection({ setPage }) {
+  const { user } = useAuth();
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState('');
+
+  const isPro = !!user?.is_pro;
+  const isTrialing = user?.stripeStatus === 'trialing';
+  const renewalDate = formatRenewalDate(user?.trialEndsAt);
+
+  async function handleManageSubscription() {
+    setPortalError('');
+    setPortalLoading(true);
+    try {
+      const token = localStorage.getItem('thumbframe_token');
+      if (!token) throw new Error('Not logged in.');
+      const res = await fetch(`${API_URL}/api/create-portal-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${res.status})`);
+      }
+      const { url } = await res.json();
+      if (!url) throw new Error('No portal URL returned');
+      window.location.href = url;
+    } catch (err) {
+      setPortalError(err?.message || 'Failed to open billing portal');
+      setPortalLoading(false);
+    }
+  }
+
+  const eyebrow = {
+    fontFamily: INTER,
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '0.16em',
+    textTransform: 'uppercase',
+    color: CREAM_60,
+    marginBottom: 12,
+  };
+  const planHeading = {
+    fontFamily: FRAUNCES,
+    fontSize: 44,
+    fontWeight: 500,
+    letterSpacing: '-0.02em',
+    color: CREAM,
+    lineHeight: 1,
+    margin: '0 0 10px',
+  };
+  const priceRow = {
+    fontFamily: INTER,
+    fontSize: 16,
+    color: 'rgba(250,236,208,0.8)',
+    margin: '0 0 14px',
+  };
+  const dollarSpan = {
+    fontFamily: FRAUNCES,
+    fontSize: 20,
+    fontWeight: 500,
+    color: CREAM,
+    marginRight: 2,
+  };
+  const bodyText = {
+    fontFamily: INTER,
+    fontSize: 14,
+    color: CREAM_70,
+    lineHeight: 1.6,
+    margin: 0,
+  };
+  const divider = {
+    height: 1,
+    background: BORDER,
+    margin: '24px 0',
+  };
+  const subHeading = {
+    fontFamily: FRAUNCES,
+    fontSize: 18,
+    fontWeight: 500,
+    color: CREAM,
+    margin: '0 0 8px',
+  };
+  const creamBtn = {
+    display: 'inline-block',
+    padding: '14px 24px',
+    borderRadius: 10,
+    border: 'none',
+    background: 'rgba(255,244,224,1)',
+    color: 'rgba(10,7,20,1)',
+    fontFamily: INTER,
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'background-color 0.15s, transform 0.15s',
+    marginTop: 4,
+  };
+
   return (
-    <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
-      <div style={{ padding: 8 }}>
-        <BillingTab />
-      </div>
+    <div style={cardStyle}>
+      <div style={eyebrow}>Current plan</div>
+
+      {isPro ? (
+        <>
+          <h2 style={planHeading}>Pro</h2>
+          <p style={priceRow}>
+            <span style={dollarSpan}>$15</span>
+            <span> / month</span>
+          </p>
+          <p style={bodyText}>
+            {isTrialing && renewalDate
+              ? `Trial ends ${renewalDate}`
+              : renewalDate
+                ? `Next renewal on ${renewalDate}`
+                : 'Manage renewal below.'}
+          </p>
+
+          <div style={divider} />
+
+          <h3 style={subHeading}>Billing details</h3>
+          <p style={{ ...bodyText, marginBottom: 20 }}>
+            View invoices, update payment methods, or cancel your subscription through the Stripe Customer Portal.
+          </p>
+
+          {portalError && (
+            <div style={{
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: 'rgba(232,112,80,0.12)',
+              border: '1px solid rgba(232,112,80,0.3)',
+              color: DANGER,
+              fontSize: 13,
+              marginBottom: 14,
+              fontFamily: INTER,
+            }}>
+              {portalError}
+            </div>
+          )}
+
+          <button
+            onClick={handleManageSubscription}
+            disabled={portalLoading}
+            style={{
+              ...creamBtn,
+              opacity: portalLoading ? 0.6 : 1,
+              cursor: portalLoading ? 'not-allowed' : 'pointer',
+            }}
+            onMouseEnter={(e) => { if (!portalLoading) e.currentTarget.style.background = '#ffffff'; }}
+            onMouseLeave={(e) => { if (!portalLoading) e.currentTarget.style.background = 'rgba(255,244,224,1)'; }}
+          >
+            {portalLoading ? 'Opening portal…' : 'Manage subscription →'}
+          </button>
+        </>
+      ) : (
+        <>
+          <h2 style={planHeading}>Free</h2>
+          <p style={priceRow}>
+            <span style={dollarSpan}>$0</span>
+            <span> / forever</span>
+          </p>
+          <p style={bodyText}>
+            You're on the Free plan. Upgrade to Pro for unlimited AI features, premium templates, and more.
+          </p>
+
+          <div style={divider} />
+
+          <h3 style={subHeading}>Upgrade to Pro</h3>
+
+          <button
+            onClick={() => setPage('pricing')}
+            style={creamBtn}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#ffffff')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,244,224,1)')}
+          >
+            View Pro features →
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -728,7 +908,7 @@ export default function Settings({ setPage }) {
         </div>
 
         {/* Tab content */}
-        {activeTab === 'billing' && <BillingTabCard />}
+        {activeTab === 'billing' && <BillingSection setPage={setPage} />}
 
         {activeTab === 'account' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
