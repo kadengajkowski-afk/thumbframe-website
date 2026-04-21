@@ -23,9 +23,9 @@ const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
 const SETTINGS_PALETTE = {
   core:       '#030515',
-  mid:        '#0a1028',
-  highlight:  '#1a2048',
-  accent:     '#2a2060',
+  mid:        '#0a0a14',
+  highlight:  '#2a2418',
+  accent:     '#3a3020',
   noiseScale: 1.5,
   octaves:    3,
   turbulence: 0.2,
