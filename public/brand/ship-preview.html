@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ThumbFrame ship — brand export</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+    }
+    /* Checkerboard so transparency is visible before export.
+       Remove the .checker class on #stage (or add ?bg=none) when
+       capturing the PNG. */
+    .checker {
+      background-image:
+        linear-gradient(45deg, #222 25%, transparent 25%),
+        linear-gradient(-45deg, #222 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #222 75%),
+        linear-gradient(-45deg, transparent 75%, #222 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, 12px 0;
+      background-color: #1a1a1a;
+    }
+    #stage {
+      width: 1024px;
+      height: 1024px;
+    }
+    .hint {
+      position: fixed;
+      left: 12px; bottom: 12px;
+      font: 12px/1.5 -apple-system, "Segoe UI", sans-serif;
+      color: #aaa;
+      background: rgba(0,0,0,0.5);
+      padding: 8px 12px;
+      border-radius: 6px;
+      max-width: 420px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Add ?bg=none to hide the checkerboard before screenshotting.
+       Add ?size=2048 to render at 2048x2048.
+       Add ?hint=0 to hide the usage note. -->
+  <div id="stage" class="checker"></div>
+  <div class="hint" id="hint">
+    Ship rendered on a transparent canvas. <br/>
+    Append <code>?bg=none</code> to hide the checker. Use browser devtools
+    to screenshot the canvas (or run <code>scripts/export-ship-logo.js</code>
+    with puppeteer installed).
+  </div>
+
+  <!-- Three.js import-map + ship renderer.
+       ES module CDN keeps this file self-contained: no bundler, no
+       React, no drei — just plain three.js mirroring the essentials
+       of src/landing/scenes/shared/SpaceStation.jsx. -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.184.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    const params = new URLSearchParams(window.location.search);
+    const size   = parseInt(params.get('size') || '1024', 10);
+    const hideBg = params.get('bg') === 'none';
+    const hideHint = params.get('hint') === '0';
+
+    const stage = document.getElementById('stage');
+    stage.style.width  = size + 'px';
+    stage.style.height = size + 'px';
+    if (hideBg) stage.classList.remove('checker');
+    if (hideHint) document.getElementById('hint').style.display = 'none';
+
+    // ── Renderer with true transparency ────────────────────────────────────
+    const renderer = new THREE.WebGLRenderer({
+      alpha: true,
+      antialias: true,
+      preserveDrawingBuffer: true, // so toDataURL works
+    });
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    renderer.setSize(size, size, false);
+    renderer.setClearColor(0x000000, 0);
+    stage.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+
+    // Camera framed for a clean side-portrait of the ship.
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+    camera.position.set(0, 1.6, 9.5);
+    camera.lookAt(0, 1.6, 0);
+
+    // Lights — match the painterly scene's warm palette.
+    scene.add(new THREE.AmbientLight(0x3a2a40, 0.45));
+    const key = new THREE.DirectionalLight(0xffd0a0, 1.1);
+    key.position.set(4, 5, 6);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0x80c0e0, 0.35);
+    rim.position.set(-4, 3, 2);
+    scene.add(rim);
+
+    // ── Sail shaders — trimmed port of the SpaceStation sail ───────────────
+    const sailVertex = /* glsl */`
+      uniform float uTime;
+      varying vec2 vUv;
+      varying float vBow;
+      void main() {
+        vUv = uv;
+        vec3 pos = position;
+        float edgeDist = vUv.y * (1.0 - vUv.y) * 4.0;
+        float freedom = pow(edgeDist, 1.2);
+        float a = uTime * 1.37;
+        float b = uTime * 2.13;
+        float c = uTime * 0.89;
+        float d = uTime * 3.41;
+        float jx = sin(vUv.x * 47.3 + vUv.y * 23.1) * 0.5 + 0.5;
+        float jy = sin(vUv.x * 31.7 - vUv.y * 19.4) * 0.5 + 0.5;
+        float billow = sin(a * 0.5 + vUv.y * 1.2) * 0.18 + 0.55;
+        pos.z += billow * freedom;
+        float depthZ = sin(b - vUv.y * 3.9 + jy) * 0.25
+                     + sin(d * 0.5 + vUv.x * 2.7 - vUv.y * 3.0) * 0.16
+                     + sin(a * 1.4 - vUv.x * 1.3) * 0.10;
+        pos.z += depthZ * freedom;
+        float rippleY = sin(c - vUv.y * 5.2 + jx * 3.0) * 0.12;
+        pos.y += rippleY * freedom;
+        float topPin = smoothstep(1.0, 0.75, vUv.y);
+        float botPin = smoothstep(0.0, 0.25, vUv.y);
+        float pinFactor = topPin * botPin;
+        pos = mix(position, pos, pinFactor);
+        vBow = billow;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+      }
+    `;
+    const sailFragment = /* glsl */`
+      uniform float uTime;
+      varying vec2 vUv;
+      varying float vBow;
+      float softBar(float x, float a, float b, float soft) {
+        return smoothstep(a - soft, a + soft, x) - smoothstep(b - soft, b + soft, x);
+      }
+      void main() {
+        float ux = 1.0 - vUv.x;
+        vec3 sailDark  = vec3(0.72, 0.48, 0.20);
+        vec3 sailLight = vec3(0.98, 0.86, 0.55);
+        vec3 tColor    = vec3(0.93, 0.48, 0.18);
+        vec3 baseColor = mix(sailDark, sailLight, vBow * 1.2);
+        float soft = 0.02;
+        float horiz = softBar(ux, 0.15, 0.85, soft)
+                    * softBar(vUv.y, 0.68, 0.85, soft);
+        float vert  = softBar(ux, 0.46, 0.54, soft)
+                    * softBar(vUv.y, 0.15, 0.85, soft);
+        float tMask = max(horiz, vert);
+        vec3 color = mix(baseColor, tColor, tMask * 0.85);
+        float sheen = smoothstep(0.0, 0.15,
+          0.15 - abs(vUv.x - 0.5 + sin(uTime * 0.3) * 0.3));
+        color += vec3(1.0, 0.92, 0.70) * sheen * 0.12;
+        float rimX = smoothstep(0.0, 0.08, vUv.x) * smoothstep(0.0, 0.08, 1.0 - vUv.x);
+        float rimY = smoothstep(0.0, 0.08, vUv.y) * smoothstep(0.0, 0.08, 1.0 - vUv.y);
+        float rim = 1.0 - (rimX * rimY);
+        color += vec3(1.0, 0.78, 0.35) * rim * 0.25;
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `;
+    const sailUniforms = { uTime: { value: 0 } };
+    const sailMaterial = new THREE.ShaderMaterial({
+      vertexShader: sailVertex,
+      fragmentShader: sailFragment,
+      uniforms: sailUniforms,
+      side: THREE.DoubleSide,
+    });
+
+    // ── Ship group ────────────────────────────────────────────────────────
+    const ship = new THREE.Group();
+
+    const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({
+      color,
+      roughness: opts.roughness ?? 0.8,
+      metalness: opts.metalness ?? 0.05,
+    });
+
+    // Hull
+    const hull = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 18), mat('#b8855a'));
+    hull.scale.set(1.4, 0.3, 0.5);
+    ship.add(hull);
+    // Deck plank
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.06, 0.85), mat('#c89968', { roughness: 0.75 }));
+    deck.position.y = 0.18; ship.add(deck);
+    // Waterline trim
+    const trim = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 10), mat('#6a4228', { roughness: 0.85 }));
+    trim.scale.set(1.42, 0.08, 0.52); trim.position.y = -0.02;
+    ship.add(trim);
+    // Stern cabin
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.45, 0.7), mat('#9a6d42'));
+    cabin.position.set(-0.85, 0.35, 0); ship.add(cabin);
+    // Stern cabin roof
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.08, 0.78), mat('#5a3a20', { roughness: 0.85 }));
+    roof.position.set(-0.85, 0.60, 0); ship.add(roof);
+    // Mast (slight aft lean)
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 3.3, 12), mat('#4a3020', { roughness: 0.9 }));
+    mast.position.set(-0.2, 1.55, 0); mast.rotation.z = 0.08;
+    ship.add(mast);
+    // Yard (top spar)
+    const yard = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 3.05, 12), mat('#4a3020', { roughness: 0.9 }));
+    yard.position.set(-0.15, 3.1, -0.08); yard.rotation.x = Math.PI / 2;
+    ship.add(yard);
+    // Boom (bottom spar)
+    const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.05, 12), mat('#4a3020', { roughness: 0.9 }));
+    boom.position.set(-0.15, 1.15, -0.08); boom.rotation.x = Math.PI / 2;
+    ship.add(boom);
+    // Sail
+    const sail = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 2.55, 64, 48), sailMaterial);
+    sail.position.set(-0.15, 2.15, 0); sail.rotation.y = Math.PI / 2;
+    ship.add(sail);
+    // Lanterns
+    const lanternMat = new THREE.MeshBasicMaterial({ color: '#ffb060' });
+    for (const p of [[0.9, 0.35, 0.38], [-0.3, 0.35, 0.38]]) {
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 10), lanternMat);
+      bulb.position.set(...p); ship.add(bulb);
+      const glow = new THREE.PointLight('#ffb060', 0.35, 1.4);
+      glow.position.set(...p); ship.add(glow);
+    }
+    // Engine nozzle
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.25, 0.3, 18), new THREE.MeshStandardMaterial({ color: '#2a2030', metalness: 0.6, roughness: 0.5 }));
+    nozzle.position.set(-1.3, 0, 0); nozzle.rotation.z = Math.PI / 2;
+    ship.add(nozzle);
+    // Nozzle emissive ring
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.035, 10, 22), new THREE.MeshBasicMaterial({ color: '#ffb060' }));
+    ring.position.set(-1.45, 0, 0); ring.rotation.y = Math.PI / 2;
+    ship.add(ring);
+
+    // Slight bow toward camera so the sail & hull both read in one frame.
+    ship.rotation.y = -0.25;
+    scene.add(ship);
+
+    // ── Animate sail + render loop ────────────────────────────────────────
+    const clock = new THREE.Clock();
+    function tick() {
+      sailUniforms.uTime.value = clock.getElapsedTime();
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    tick();
+
+    // Expose a one-click PNG export for manual capture.
+    window.exportShipPNG = () => {
+      renderer.render(scene, camera);
+      const dataUrl = renderer.domElement.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `ship-hero-${size}.png`;
+      a.click();
+    };
+  </script>
+</body>
+</html>
