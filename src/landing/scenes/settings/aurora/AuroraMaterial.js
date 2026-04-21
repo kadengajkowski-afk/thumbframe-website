@@ -24,6 +24,8 @@ export const AuroraMaterial = shaderMaterial(
     uAltitudeMask:  new THREE.Vector2(0.2, 0.55),
     // Iteration count — 50 desktop, 30 mobile.
     uBandCount:     50,
+    // Debug solid-color override (set to 1 via ?aurora=debug).
+    uDebug:         0,
   },
   vertexShader,
   fragmentShader,

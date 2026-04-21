@@ -58,8 +58,14 @@ const NEBULA_PALETTE = {
 function LayerMaskController() {
   const { camera } = useThree();
   useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[aurora] LayerMaskController — camera type:', camera?.type,
+      'layers.mask before:', camera?.layers?.mask);
     camera.layers.enable(0);
     camera.layers.disable(AURORA_LAYER);
+    // eslint-disable-next-line no-console
+    console.log('[aurora] LayerMaskController — layers.mask after:', camera.layers.mask,
+      '(should be 1 = bit-0-only)');
   }, [camera]);
   return null;
 }

@@ -19,6 +19,7 @@ const fragmentShader = /* glsl */ `
   uniform vec3  uHueB;
   uniform vec2  uAltitudeMask;
   uniform float uBandCount;
+  uniform float uDebug; // 0 = normal, 1 = solid magenta (check #5)
 
   varying vec2 vUv;
 
@@ -59,6 +60,13 @@ const fragmentShader = /* glsl */ `
   }
 
   void main() {
+    // Diagnostic override — solid magenta so we can tell whether the
+    // fragment shader runs at all through the layer-masked render.
+    if (uDebug > 0.5) {
+      gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
+      return;
+    }
+
     // Centred, aspect-corrected NDC uv.
     vec2 uv = vUv * 2.0 - 1.0;
     uv.x *= uResolution.x / uResolution.y;
