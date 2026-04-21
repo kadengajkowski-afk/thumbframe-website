@@ -26,6 +26,8 @@ export const AuroraMaterial = shaderMaterial(
     uBandCount:     50,
     // Debug solid-color override (set to 1 via ?aurora=debug).
     uDebug:         0,
+    // Debug vCrop band test (set to 1 via ?aurora=crop).
+    uCropDebug:     0,
   },
   vertexShader,
   fragmentShader,

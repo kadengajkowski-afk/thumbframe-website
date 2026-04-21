@@ -17,6 +17,7 @@ export default function AuroraOverlay() {
   const frameCountRef = useRef(0);
 
   useFrame(({ clock }) => {
+    const maskAtEntry = camera.layers.mask;
     const prevAutoClear = gl.autoClear;
     gl.autoClear = false;
     camera.layers.set(AURORA_LAYER);
@@ -34,7 +35,8 @@ export default function AuroraOverlay() {
       console.log('[aurora] priority-2 tick — frames since last log:',
         frameCountRef.current,
         'scene children:', scene.children.length,
-        'camera.layers.mask before reset:', (1 << AURORA_LAYER));
+        'mask at entry (post-composer):', maskAtEntry,
+        'aurora layer bit:', (1 << AURORA_LAYER));
       frameCountRef.current = 0;
     }
   }, 2);

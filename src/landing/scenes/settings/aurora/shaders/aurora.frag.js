@@ -19,7 +19,8 @@ const fragmentShader = /* glsl */ `
   uniform vec3  uHueB;
   uniform vec2  uAltitudeMask;
   uniform float uBandCount;
-  uniform float uDebug; // 0 = normal, 1 = solid magenta (check #5)
+  uniform float uDebug;     // 0 = normal, 1 = solid magenta (check #5)
+  uniform float uCropDebug; // 0 = normal, 1 = red-with-vCrop-alpha band test
 
   varying vec2 vUv;
 
@@ -64,6 +65,18 @@ const fragmentShader = /* glsl */ `
     // fragment shader runs at all through the layer-masked render.
     if (uDebug > 0.5) {
       gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
+      return;
+    }
+
+    // Crop diagnostic — solid red with alpha = vCrop. If a red band
+    // appears only in the upper portion of the viewport, vCrop math is
+    // correct and the "aurora fills too much" issue is shape/intensity,
+    // not crop math.
+    if (uCropDebug > 0.5) {
+      float cropDbg =
+        smoothstep(uAltitudeMask.x, uAltitudeMask.y, vUv.y)
+        * (1.0 - smoothstep(0.85, 1.0, vUv.y));
+      gl_FragColor = vec4(1.0, 0.0, 0.0, cropDbg);
       return;
     }
 

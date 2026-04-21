@@ -18,9 +18,12 @@ const isMobile = typeof window !== 'undefined' && (
   (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
 );
 
-// Diagnostic: ?aurora=debug forces a solid-magenta fragment (check #5).
-const DEBUG_MAGENTA = typeof window !== 'undefined'
-  && new URLSearchParams(window.location.search).get('aurora') === 'debug';
+// Diagnostics driven by the ?aurora=… query param.
+const AURORA_QS = typeof window !== 'undefined'
+  ? new URLSearchParams(window.location.search).get('aurora')
+  : null;
+const DEBUG_MAGENTA = AURORA_QS === 'debug';
+const DEBUG_CROP    = AURORA_QS === 'crop';
 
 export default function AuroraPlane({
   intensity = 0.7,
@@ -69,6 +72,7 @@ export default function AuroraPlane({
         uAltitudeMask={new THREE.Vector2(altitudeMask[0], altitudeMask[1])}
         uBandCount={isMobile ? 30 : 50}
         uDebug={DEBUG_MAGENTA ? 1 : 0}
+        uCropDebug={DEBUG_CROP ? 1 : 0}
       />
     </ScreenQuad>
   );

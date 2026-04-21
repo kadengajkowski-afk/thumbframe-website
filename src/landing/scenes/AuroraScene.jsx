@@ -19,8 +19,8 @@
 //
 // Pages mount <AuroraScene /> unchanged.
 
-import React, { Suspense, useEffect } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import React, { Suspense, useEffect, useRef } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 
 import Nebula        from './shared/Nebula';
 import Stardust      from './shared/Stardust';
@@ -57,16 +57,32 @@ const NEBULA_PALETTE = {
 // (bit 0) and aurora meshes are explicitly moved to bit 1.
 function LayerMaskController() {
   const { camera } = useThree();
+  const logCounter = useRef(0);
+
   useEffect(() => {
     // eslint-disable-next-line no-console
-    console.log('[aurora] LayerMaskController — camera type:', camera?.type,
+    console.log('[aurora] LayerMaskController (mount) — camera type:', camera?.type,
       'layers.mask before:', camera?.layers?.mask);
     camera.layers.enable(0);
     camera.layers.disable(AURORA_LAYER);
     // eslint-disable-next-line no-console
-    console.log('[aurora] LayerMaskController — layers.mask after:', camera.layers.mask,
-      '(should be 1 = bit-0-only)');
+    console.log('[aurora] LayerMaskController (mount) — layers.mask after:', camera.layers.mask);
   }, [camera]);
+
+  // Priority-0 tick runs before the composer's priority-1 render each frame.
+  // This guarantees the composer ALWAYS sees mask=1 regardless of what the
+  // previous frame's priority-2 AuroraOverlay left it as.
+  useFrame(() => {
+    const before = camera.layers.mask;
+    camera.layers.set(0); // bit-0 only
+    logCounter.current += 1;
+    if (logCounter.current % 120 === 1) {
+      // eslint-disable-next-line no-console
+      console.log('[aurora] pre-composer (priority 0) — mask before reset:', before,
+        'after:', camera.layers.mask);
+    }
+  }, 0);
+
   return null;
 }
 
