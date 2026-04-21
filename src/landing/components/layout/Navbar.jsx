@@ -106,7 +106,7 @@ export default function Navbar({ onNavigate }) {
           }}
         >
           <img
-            src="/brand/ship-hero.png"
+            src="/brand/ship-logo-final.png"
             alt=""
             aria-hidden="true"
             style={{
@@ -225,7 +225,6 @@ export default function Navbar({ onNavigate }) {
                   <Divider />
                   <DropdownItem onClick={() => goTo('gallery')}>Gallery</DropdownItem>
                   <DropdownItem onClick={() => goTo('settings')}>Settings</DropdownItem>
-                  <DropdownItem onClick={() => goTo('billing')}>Billing</DropdownItem>
                   <Divider />
                   <DropdownItem onClick={handleLogout} color="#e87050">Log out</DropdownItem>
                 </div>
@@ -336,13 +335,6 @@ export default function Navbar({ onNavigate }) {
                 style={{ fontSize: 22, fontWeight: 600, color: '#faecd0', textDecoration: 'none' }}
               >
                 Settings
-              </a>
-              <a
-                href="/billing"
-                onClick={(e) => { e.preventDefault(); goTo('billing'); }}
-                style={{ fontSize: 22, fontWeight: 600, color: '#faecd0', textDecoration: 'none' }}
-              >
-                Billing
               </a>
               <button
                 onClick={handleLogout}
