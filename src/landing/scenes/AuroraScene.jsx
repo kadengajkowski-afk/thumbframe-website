@@ -179,22 +179,12 @@ function StarfieldOverlay() {
 
 // ── Aurora overlay (SVG — skips painterly) ───────────────────────────────────
 //
-// Each tendril is an SVG path driven by a small number of control points
-// that drift via summed-noise offsets. The shape is built as a smooth
-// cubic-bezier through those points. Stroke uses a per-tendril radial
-// gradient (bright core, transparent ends) + heavy Gaussian blur; the
-// outer container uses mix-blend-mode 'screen' so overlapping tendrils
-// brighten additively.
-
-const TENDRILS = [
-  { color: '#3afa9a', baseY: 0.16, amp: 0.10, period: 52, phase: 0.00, waveFreq: 1.3, waveAmp: 0.08, blur: 22, opacity: 0.85 },
-  { color: '#3afa9a', baseY: 0.28, amp: 0.08, period: 58, phase: 0.42, waveFreq: 1.0, waveAmp: 0.06, blur: 20, opacity: 0.70 },
-  { color: '#9060e0', baseY: 0.10, amp: 0.07, period: 60, phase: 0.18, waveFreq: 1.6, waveAmp: 0.09, blur: 24, opacity: 0.82 },
-  { color: '#f890c8', baseY: 0.34, amp: 0.06, period: 50, phase: 0.71, waveFreq: 0.9, waveAmp: 0.05, blur: 22, opacity: 0.72 },
-  { color: '#5ad0d8', baseY: 0.22, amp: 0.09, period: 55, phase: 0.56, waveFreq: 1.2, waveAmp: 0.07, blur: 22, opacity: 0.78 },
-];
-
-const PATH_SAMPLES = 32;
+// Each tendril is a SHORT, independently positioned ribbon. Path geometry
+// is built in ribbon-local space (x: 0..length, y: 0 centerline, noise-
+// displaced) and placed into the viewport by a per-ribbon <g translate +
+// rotate> transform. Each tendril has its own stroke-width, blur, linear
+// gradient (end-fade), drift direction, and phase — so the six ribbons
+// read as distinct light ribbons in different places, not one band.
 
 // Smooth hash-based value noise, 1-D.
 function hash(n) { return (Math.sin(n * 43758.5453) + 1) / 2; }
@@ -205,36 +195,51 @@ function noise1(x) {
   return hash(i) * (1 - smooth(f)) + hash(i + 1) * smooth(f);
 }
 
-// Build an SVG cubic-bezier path that traces a wavy line across the
-// viewport at the tendril's current snapshot.
-function buildTendrilPath(t, w, h, tendril, offsetX) {
-  const {
-    baseY,
-    amp,
-    waveFreq,
-    waveAmp,
-    phase,
-  } = tendril;
+// Six tendrils — independent positions, angles, sizes, drift vectors.
+// homeX/homeY are viewport-relative (0..1); driftX/driftY are viewport
+// fractions traveled across one period before wrapping.
+const TENDRILS = [
+  { color: '#3afa9a', homeX: 0.15, homeY: 0.22, angle: -22, length: 400, thickness: 60, blur: 24, period: 52, driftX: 0.35, driftY: -0.06, phase: 0.00, shape: 'S' },
+  { color: '#3afa9a', homeX: 0.78, homeY: 0.48, angle:  14, length: 320, thickness: 54, blur: 22, period: 56, driftX:-0.30, driftY:  0.08, phase: 0.22, shape: 'curve' },
+  { color: '#9060e0', homeX: 0.46, homeY: 0.12, angle: -72, length: 360, thickness: 50, blur: 26, period: 60, driftX: 0.10, driftY:  0.20, phase: 0.44, shape: 'curve' },
+  { color: '#9060e0', homeX: 0.26, homeY: 0.68, angle:  28, length: 280, thickness: 46, blur: 22, period: 50, driftX: 0.26, driftY: -0.05, phase: 0.66, shape: 'S' },
+  { color: '#f890c8', homeX: 0.62, homeY: 0.28, angle: -10, length: 340, thickness: 52, blur: 24, period: 54, driftX:-0.22, driftY:  0.10, phase: 0.11, shape: 'curve' },
+  { color: '#5ad0d8', homeX: 0.38, homeY: 0.54, angle: -58, length: 300, thickness: 48, blur: 22, period: 58, driftX: 0.18, driftY: -0.14, phase: 0.88, shape: 'S' },
+];
 
-  const yCenter = baseY * h;
-  const slowDrift = (noise1(t * 0.06 + phase * 3.1) - 0.5) * amp * h;
+const PATH_SAMPLES = 14;
 
-  // Sample points across the viewport width.
+// Build a ribbon path in LOCAL space: starts at (0,0), ends at (L,0),
+// centerline displaced by noise. 'S' shape adds an extra low-frequency
+// swing so the ribbon curves back on itself; 'curve' is a simpler arc.
+function buildLocalRibbonPath(t, tendril) {
+  const { length, phase, shape } = tendril;
+  const swing = length * 0.22;  // how far y can deviate from the axis
+  const seed = phase * 17.3;
+
   const pts = [];
   for (let i = 0; i <= PATH_SAMPLES; i++) {
     const u = i / PATH_SAMPLES;
-    const xWorld = u * 1.6 - 0.3;  // extend beyond viewport edges
-    // Displace along the ribbon axis using x-keyed noise + time.
-    const n1 = noise1(xWorld * waveFreq * 3.0 + t * 0.17 + phase * 5.7);
-    const n2 = noise1(xWorld * waveFreq * 1.4 + t * 0.09 + phase * 2.3);
-    const disp = (n1 - 0.5) * waveAmp * 1.0 + (n2 - 0.5) * waveAmp * 0.45;
-    const x = (u * w) + offsetX;
-    const y = yCenter + slowDrift + disp * h;
+    const x = u * length;
+
+    // Base curve — either S or a single arc — parameterised by u.
+    let base;
+    if (shape === 'S') {
+      base = Math.sin(u * Math.PI * 1.6) * 0.8;   // double curve
+    } else {
+      base = Math.sin(u * Math.PI) * 0.65;        // single arc
+    }
+
+    // Morph: low-frequency noise shifts the shape over time.
+    const n1 = noise1(u * 2.6 + t * 0.22 + seed);
+    const n2 = noise1(u * 1.1 + t * 0.11 + seed * 0.6);
+    const noiseDisp = (n1 - 0.5) * 0.35 + (n2 - 0.5) * 0.2;
+
+    const y = (base + noiseDisp) * swing;
     pts.push([x, y]);
   }
 
-  // Build a smooth cubic-bezier path through the sampled points using the
-  // Catmull-Rom → Bezier conversion for tension 0.5.
+  // Catmull-Rom → cubic bezier conversion through the sampled points.
   let d = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[Math.max(0, i - 1)];
@@ -250,6 +255,19 @@ function buildTendrilPath(t, w, h, tendril, offsetX) {
   return d;
 }
 
+// Resolve ribbon position in viewport space, with wrap so ribbons
+// continuously drift through their home area without piling up.
+function ribbonPosition(t, w, h, tendril) {
+  const { homeX, homeY, driftX, driftY, period, phase, length } = tendril;
+  // 0..1 progress through the drift cycle.
+  const prog = ((t / period) + phase) % 1;
+  // Signed offset centered on 0 so the ribbon passes through its home
+  // position; drift vector scales with viewport dimensions.
+  const ox = (prog - 0.5) * driftX * (w + length);
+  const oy = (prog - 0.5) * driftY * h;
+  return { x: homeX * w + ox, y: homeY * h + oy };
+}
+
 // ── Exported composite ────────────────────────────────────────────────────────
 export default function AuroraScene() {
   return (
@@ -261,11 +279,14 @@ export default function AuroraScene() {
   );
 }
 
-// Two-pass tendril renderer — one <g> per tendril with halo + core paths;
-// both paths animate to the same d each frame.
+// Per-ribbon renderer. Each tendril gets its own <g> whose transform is
+// updated every frame to drift + rotate it independently. Inside that
+// group the ribbon path lives in LOCAL space (origin at one end of the
+// ribbon) with two strokes: a wide soft halo + a tighter bright core.
 function AuroraOverlayBoth() {
-  const haloRefs = useRef(TENDRILS.map(() => null));
-  const coreRefs = useRef(TENDRILS.map(() => null));
+  const groupRefs = useRef(TENDRILS.map(() => null));
+  const haloRefs  = useRef(TENDRILS.map(() => null));
+  const coreRefs  = useRef(TENDRILS.map(() => null));
 
   useEffect(() => {
     let raf = 0;
@@ -278,9 +299,11 @@ function AuroraOverlayBoth() {
       const t = (performance.now() - start) / 1000;
       for (let i = 0; i < TENDRILS.length; i++) {
         const tendril = TENDRILS[i];
-        const driftPhase = ((t / tendril.period) + tendril.phase) % 1;
-        const offsetX = (driftPhase - 0.5) * dims.w * 1.2;
-        const d = buildTendrilPath(t, dims.w, dims.h, tendril, offsetX);
+        const { x, y } = ribbonPosition(t, dims.w, dims.h, tendril);
+        const g = groupRefs.current[i];
+        if (g) g.setAttribute('transform', `translate(${x.toFixed(2)},${y.toFixed(2)}) rotate(${tendril.angle})`);
+
+        const d = buildLocalRibbonPath(t, tendril);
         const halo = haloRefs.current[i];
         const core = coreRefs.current[i];
         if (halo) halo.setAttribute('d', d);
@@ -313,37 +336,46 @@ function AuroraOverlayBoth() {
       <defs>
         {TENDRILS.map((tendril, i) => (
           <React.Fragment key={i}>
-            <filter id={`aurora-blur-${i}`} x="-20%" y="-20%" width="140%" height="140%">
+            <filter id={`aurora-blur-${i}`} x="-30%" y="-30%" width="160%" height="160%">
               <feGaussianBlur stdDeviation={tendril.blur} />
             </filter>
-            <linearGradient id={`aurora-grad-${i}`} x1="0" y1="0" x2="1" y2="0">
+            {/* End-fade: ribbon-local x runs 0..length, gradient fades
+                both ends so the ribbon reads as a short glowing streak
+                rather than a hard-capped stroke. */}
+            <linearGradient
+              id={`aurora-grad-${i}`}
+              gradientUnits="userSpaceOnUse"
+              x1="0" y1="0" x2={tendril.length} y2="0"
+            >
               <stop offset="0"    stopColor={tendril.color} stopOpacity="0" />
-              <stop offset="0.15" stopColor={tendril.color} stopOpacity={tendril.opacity * 0.7} />
-              <stop offset="0.5"  stopColor={tendril.color} stopOpacity={tendril.opacity} />
-              <stop offset="0.85" stopColor={tendril.color} stopOpacity={tendril.opacity * 0.7} />
+              <stop offset="0.18" stopColor={tendril.color} stopOpacity="0.75" />
+              <stop offset="0.5"  stopColor={tendril.color} stopOpacity="0.95" />
+              <stop offset="0.82" stopColor={tendril.color} stopOpacity="0.75" />
               <stop offset="1"    stopColor={tendril.color} stopOpacity="0" />
             </linearGradient>
           </React.Fragment>
         ))}
       </defs>
       {TENDRILS.map((tendril, i) => (
-        <g key={i}>
+        <g key={i} ref={(el) => { groupRefs.current[i] = el; }}>
+          {/* Wide soft halo — thickness * 1.6, higher blur via filter */}
           <path
             ref={(el) => { haloRefs.current[i] = el; }}
             d=""
             fill="none"
             stroke={`url(#aurora-grad-${i})`}
-            strokeWidth={100}
+            strokeWidth={tendril.thickness * 1.6}
             strokeLinecap="round"
             filter={`url(#aurora-blur-${i})`}
             opacity={0.55}
           />
+          {/* Bright core — the target thickness per spec (40-80px) */}
           <path
             ref={(el) => { coreRefs.current[i] = el; }}
             d=""
             fill="none"
             stroke={`url(#aurora-grad-${i})`}
-            strokeWidth={34}
+            strokeWidth={tendril.thickness}
             strokeLinecap="round"
             filter={`url(#aurora-blur-${i})`}
             opacity={0.95}
