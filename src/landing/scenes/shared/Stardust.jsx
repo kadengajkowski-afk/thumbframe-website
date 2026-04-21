@@ -29,7 +29,7 @@ export default function Stardust({ count = PARTICLE_COUNT }) {
       ph[i] = Math.random() * Math.PI * 2;
     }
     return { positions: pos, sizes: sz, phases: ph };
-  }, []);
+  }, [count]);
 
   const vertexShader = /* glsl */ `
     attribute float aSize;
