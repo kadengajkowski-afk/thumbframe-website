@@ -110,7 +110,7 @@ export default function Navbar({ onNavigate }) {
             alt=""
             aria-hidden="true"
             style={{
-              height: isMobile ? 20 : 24,
+              height: isMobile ? 32 : 40,
               width: 'auto',
               display: 'block',
               filter: 'drop-shadow(0 1px 6px rgba(20, 12, 28, 0.85))',
