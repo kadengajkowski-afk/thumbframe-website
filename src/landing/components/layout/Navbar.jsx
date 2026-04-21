@@ -211,6 +211,7 @@ export default function Navbar({ onNavigate }) {
                     {user?.email || accountLabel}
                   </div>
                   <Divider />
+                  <DropdownItem onClick={() => goTo('gallery')}>Gallery</DropdownItem>
                   <DropdownItem onClick={() => goTo('settings')}>Settings</DropdownItem>
                   <DropdownItem onClick={() => goTo('billing')}>Billing</DropdownItem>
                   <Divider />
@@ -310,6 +311,13 @@ export default function Navbar({ onNavigate }) {
               }}>
                 {user?.email}
               </div>
+              <a
+                href="/gallery"
+                onClick={(e) => { e.preventDefault(); goTo('gallery'); }}
+                style={{ fontSize: 22, fontWeight: 600, color: '#faecd0', textDecoration: 'none' }}
+              >
+                Gallery
+              </a>
               <a
                 href="/settings"
                 onClick={(e) => { e.preventDefault(); goTo('settings'); }}

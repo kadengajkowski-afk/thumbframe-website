@@ -91,7 +91,7 @@ function Sidebar({ open, onClose, setPage }) {
       title: 'Projects',
       items: [
         { icon: '✦', label: 'New design',    action: () => { setPage('editor'); onClose(); } },
-        { icon: '⊡', label: 'Saved designs', action: () => { setPage('dashboard'); onClose(); } },
+        { icon: '⊡', label: 'Saved designs', action: () => { setPage('gallery'); onClose(); } },
         { icon: '↑', label: 'Import image',  action: () => { setPage('editor'); onClose(); } },
         { icon: '↓', label: 'Export / Download', action: () => { setPage('editor'); onClose(); } },
       ],
@@ -270,8 +270,8 @@ function Nav({ page, setPage, user, onLogout }) {
             {user ? (
               <>
                 <span style={{ fontSize: 13, color: C.text2, fontWeight: '500' }}>{user.name}</span>
-                <button onClick={() => setPage('dashboard')} style={{ padding: '6px 14px', borderRadius: 6, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text2, cursor: 'pointer', fontSize: 13, fontWeight: '500' }}>
-                  Dashboard
+                <button onClick={() => setPage('gallery')} style={{ padding: '6px 14px', borderRadius: 6, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text2, cursor: 'pointer', fontSize: 13, fontWeight: '500' }}>
+                  Gallery
                 </button>
                 <button onClick={onLogout} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer', fontSize: 13 }}>
                   Log out
@@ -390,209 +390,13 @@ function Examples({ setPage }) {
   );
 }
 
-// ── Dashboard ──────────────────────────────────────────────────────────────────
-function Dashboard({ setPage, user }) {
-  const [designs,   setDesigns]   = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [deletingId, setDeletingId] = useState(null);
-
-  const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
-
-  useEffect(() => {
-    const userEmail = user?.email;
-    if (!userEmail) {
-      setDesigns([]);
-      setLoadError('');
-      setLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    setLoading(true);
-    setLoadError('');
-
-    import('./supabaseClient').then(m => m.default.auth.getSession()).then(({data:{session}}) => {
-      const authToken = session?.access_token;
-      return fetch(`${API_URL}/designs`, {
-        signal: controller.signal,
-        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
-      });
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((payload) => {
-        const list = Array.isArray(payload) ? payload : (Array.isArray(payload?.designs) ? payload.designs : (Array.isArray(payload?.data) ? payload.data : []));
-        setDesigns(list);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (err.name === 'AbortError') return;
-        setDesigns([]);
-        setLoadError('Could not load saved designs right now.');
-        setLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [user?.email, API_URL]);
-
-  function getProjectName(design) {
-    if (design?.name && design.name.trim()) return design.name.trim();
-    const fromJson = design?.json_data?.name;
-    if (fromJson && typeof fromJson === 'string' && fromJson.trim()) return fromJson.trim();
-    if (design?.id) return `Project ${String(design.id).slice(-6)}`;
-    return 'Untitled project';
-  }
-
-  function formatEditedDate(value) {
-    if (!value) return 'Last edited: Unknown';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return 'Last edited: Unknown';
-    return `Last edited: ${date.toLocaleString()}`;
-  }
-
-  function openDesign(id) {
-    window.history.replaceState(null, '', `/editor?project=${encodeURIComponent(id)}`);
-    setPage('editor');
-  }
-
-  async function handleDelete(e, id) {
-    e.stopPropagation();
-    if (!id) { console.error('[Dashboard] Cannot delete: Project ID is missing.'); return; }
-    if (deletingId) return;
-
-    setDeletingId(id);
-    try {
-      const { data: { session } } = await import('./supabaseClient').then(m => m.default.auth.getSession());
-      const token = session?.access_token;
-      if (!token) throw new Error('No auth token');
-
-      const res = await fetch(`${API_URL}/designs/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(`Delete failed (${res.status}): ${body}`);
-      }
-
-      // Instant UI update — remove the card without a page refresh.
-      setDesigns(prev => prev.filter(d => d.id !== id));
-    } catch (err) {
-      console.error('[Dashboard] Delete error:', err.message);
-      alert(`Could not delete design: ${err.message}`);
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  return (
-    <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', paddingTop: 80 }}>
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '48px 24px' }}>
-
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 36, flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: '800', letterSpacing: '-0.5px', marginBottom: 4, color: C.text }}>Your designs</h1>
-            <p style={{ fontSize: 14, color: C.muted }}>{designs.length} saved design{designs.length !== 1 ? 's' : ''}</p>
-          </div>
-          <button onClick={() => setPage('editor')} style={{ padding: '10px 20px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: '700' }}>
-            + New design
-          </button>
-        </div>
-
-        {/* States */}
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: C.muted, fontSize: 14 }}>Loading designs…</div>
-        ) : loadError ? (
-          <div style={{ padding: '32px 28px', borderRadius: 12, border: `1px solid ${C.border}`, background: C.panel, textAlign: 'center' }}>
-            <div style={{ fontSize: 16, fontWeight: '700', marginBottom: 8, color: C.text }}>Saved designs are unavailable</div>
-            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>{loadError}</div>
-          </div>
-        ) : designs.length === 0 ? (
-          <div style={{ padding: '60px 40px', borderRadius: 12, border: `1px solid ${C.border}`, background: C.panel, textAlign: 'center' }}>
-            <div style={{ fontSize: 40, marginBottom: 14 }}>🎨</div>
-            <div style={{ fontSize: 16, fontWeight: '700', marginBottom: 8, color: C.text }}>No saved designs yet</div>
-            <div style={{ fontSize: 13, color: C.muted, marginBottom: 24, lineHeight: 1.6 }}>
-              Open the editor, create a thumbnail, and it'll appear here automatically.
-            </div>
-            <button onClick={() => setPage('editor')} style={{ padding: '10px 22px', borderRadius: 7, border: 'none', background: C.accent, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: '600' }}>
-              Open editor →
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
-            {designs.map((d) => {
-              const name = getProjectName(d);
-              const isDeleting = deletingId === d.id;
-              return (
-                <div
-                  key={d.id}
-                  style={{ borderRadius: 10, border: `1px solid ${C.border}`, background: C.panel, overflow: 'hidden', transition: 'transform 0.15s, opacity 0.15s', opacity: isDeleting ? 0.5 : 1, display: 'flex', flexDirection: 'column' }}
-                  onMouseEnter={e => { if (!isDeleting) e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}
-                >
-                  {/* Thumbnail — clickable */}
-                  <div
-                    onClick={() => openDesign(d.id)}
-                    style={{ aspectRatio: '16/9', background: C.bg3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', flexShrink: 0 }}
-                  >
-                    {d.thumbnail ? (
-                      <img
-                        src={d.thumbnail}
-                        alt={name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', imageRendering: 'auto' }}
-                      />
-                    ) : (
-                      <div style={{ textAlign: 'center', color: C.muted }}>
-                        <div style={{ fontSize: 22, marginBottom: 4 }}>🖼</div>
-                        <div style={{ fontSize: 11, fontWeight: '600' }}>No Preview</div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Info + actions */}
-                  <div style={{ padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-                    <div
-                      onClick={() => openDesign(d.id)}
-                      style={{ fontSize: 13, fontWeight: '600', color: C.text, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                      title={name}
-                    >
-                      {name}
-                    </div>
-                    <div style={{ fontSize: 11, color: C.muted }}>{formatEditedDate(d.last_edited)}</div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                      <button
-                        onClick={() => openDesign(d.id)}
-                        style={{ flex: 1, padding: '6px 0', borderRadius: 5, border: `1px solid ${C.border2}`, background: 'transparent', color: C.text2, fontSize: 11, fontWeight: '600', cursor: 'pointer' }}
-                      >
-                        Open
-                      </button>
-                      <button
-                        onClick={(e) => handleDelete(e, d.id)}
-                        disabled={isDeleting}
-                        style={{ padding: '6px 10px', borderRadius: 5, border: `1px solid ${C.border}`, background: 'transparent', color: isDeleting ? C.muted : '#f87171', fontSize: 11, fontWeight: '600', cursor: isDeleting ? 'not-allowed' : 'pointer' }}
-                      >
-                        {isDeleting ? '…' : 'Delete'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── App ────────────────────────────────────────────────────────────────────────
 
 function getInitialPage() {
   const path = window.location.pathname.toLowerCase();
   if (path === '/editor') return 'editor';
-  if (path === '/dashboard') return 'dashboard';
+  // /dashboard is retired — redirect bookmarks to the new /gallery route.
+  if (path === '/dashboard') return 'gallery';
   if (path === '/settings') return 'settings';
   if (path === '/login') return 'login';
   if (path === '/signup') return 'signup';
@@ -629,7 +433,7 @@ function syncPath(page) {
   }
 }
 
-const PROTECTED_PAGES = new Set(['editor', 'dashboard', 'settings', 'account']);
+const PROTECTED_PAGES = new Set(['editor', 'gallery', 'settings', 'account']);
 
 
 export default function App() {
@@ -671,7 +475,7 @@ export default function App() {
     features:    <Features setPage={setPage} />,
     pricing:     <PricingPage setPage={setPage} />,
     about:       <About setPage={setPage} />,
-    gallery:     <Gallery setPage={setPage} />,
+    gallery:     <Gallery setPage={setPage} user={user} />,
     login:       <Login setPage={setPage} />,
     signup:      <Signup setPage={setPage} />,
     account:     <Account setPage={setPage} />,
@@ -701,7 +505,6 @@ export default function App() {
       {page === 'howitworks' && <HowItWorks   setPage={setPage} />}
       {page === 'pricing'    && <PricingPage  setPage={setPage} />}
       {page === 'examples'   && <Examples     setPage={setPage} />}
-      {page === 'dashboard'  && <Dashboard    setPage={setPage} user={user} />}
       {page === 'forgot-password' && <ForgotPassword setPage={setPage} />}
       {page === 'update-password' && <UpdatePassword setPage={setPage} />}
       <CookieBanner />

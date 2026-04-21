@@ -1,394 +1,518 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
-import { useSEO } from '../hooks/useSEO';
+import React, { useState, useEffect } from 'react';
+import '@fontsource-variable/fraunces';
+import { Trash2 } from 'lucide-react';
+import AuroraScene from '../landing/scenes/AuroraScene';
+import Navbar from '../landing/components/layout/Navbar';
 import { useAuth } from '../context/AuthContext';
-import db from '../db';
-import { listProjects, deleteProject as deleteProjectFromStorage, duplicateProject } from '../utils/projectStorage';
+import { useSEO } from '../hooks/useSEO';
+import supabase from '../supabaseClient';
 
-const SHOWCASE = [
-  { bg: 'linear-gradient(135deg,#1a1a2e,#4a3060)', text: 'WATCH THIS',        color: '#FFD700' },
-  { bg: 'linear-gradient(135deg,#0f2027,#2c5364)', text: 'THE TRUTH',          color: '#fff'    },
-  { bg: 'linear-gradient(135deg,#c45c2e,#f7a642)', text: "YOU WON'T BELIEVE",  color: '#fff'    },
-  { bg: 'linear-gradient(135deg,#1a472a,#2d6a4f)', text: 'How I Did It',        color: '#95d5b2' },
-  { bg: 'linear-gradient(135deg,#2c2c54,#706fd3)', text: 'EPIC MOMENT',         color: '#fff'    },
-  { bg: 'linear-gradient(135deg,#3d0000,#c0392b)', text: 'GONE WRONG',          color: '#fff'    },
-  { bg: 'linear-gradient(135deg,#f7971e,#ffd200)', text: '5 TIPS',              color: '#1a1a1a' },
-  { bg: 'linear-gradient(135deg,#11998e,#38ef7d)', text: 'I TRIED IT',          color: '#fff'    },
-  { bg: 'linear-gradient(135deg,#4776E6,#8E54E9)', text: 'THE RESULTS',         color: '#fff'    },
-  { bg: 'linear-gradient(135deg,#c45c2e,#1a1a2e)', text: '10 MISTAKES',         color: '#ffd700' },
-  { bg: 'linear-gradient(135deg,#1a2a4a,#3a6ea8)', text: 'EXPOSED',             color: '#fff'    },
-  { bg: 'linear-gradient(135deg,#2d1b69,#11998e)', text: 'INSANE TRICK',        color: '#fff'    },
-];
+const FRAUNCES = "'Fraunces Variable', 'Fraunces', Georgia, serif";
+const INTER    = "'Inter Variable', 'Inter', system-ui, sans-serif";
+const CREAM    = '#faecd0';
+const CREAM_50 = 'rgba(250,236,208,0.5)';
+const CREAM_70 = 'rgba(250,236,208,0.7)';
+const CREAM_80 = 'rgba(250,236,208,0.8)';
+const DANGER   = '#e87050';
+const BORDER   = 'rgba(255,255,255,0.08)';
+const BORDER_HOVER = 'rgba(250,236,208,0.2)';
+const CARD_BG  = 'rgba(10,7,20,0.75)';
 
-function formatRelativeTime(ms) {
-  const diff = Date.now() - ms;
-  const min  = Math.floor(diff / 60000);
-  const hr   = Math.floor(diff / 3600000);
-  const day  = Math.floor(diff / 86400000);
-  if (min < 1)  return 'Just now';
-  if (min < 60) return `${min}m ago`;
-  if (hr  < 24) return `${hr}h ago`;
-  if (day < 7)  return `${day}d ago`;
-  return new Date(ms).toLocaleDateString();
+const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
+
+// ── Shared styles ─────────────────────────────────────────────────────────────
+const cardStyle = {
+  background: CARD_BG,
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
+  border: `1px solid ${BORDER}`,
+  borderRadius: 16,
+  padding: 32,
+};
+
+const creamBtn = {
+  display: 'inline-block',
+  padding: '12px 22px',
+  borderRadius: 10,
+  border: 'none',
+  background: 'rgba(255,244,224,1)',
+  color: 'rgba(10,7,20,1)',
+  fontFamily: INTER,
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'background-color 0.15s',
+};
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function getProjectName(design) {
+  if (design?.name && design.name.trim()) return design.name.trim();
+  const fromJson = design?.json_data?.name;
+  if (fromJson && typeof fromJson === 'string' && fromJson.trim()) return fromJson.trim();
+  if (design?.id) return `Project ${String(design.id).slice(-6)}`;
+  return 'Untitled project';
 }
 
-const S = `
-  .tf-gallery-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    padding: 0 24px 100px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-  @media (max-width: 900px) { .tf-gallery-grid { grid-template-columns: repeat(3, 1fr); } }
-  @media (max-width: 640px) { .tf-gallery-grid { grid-template-columns: repeat(2, 1fr); padding: 0 16px 80px; gap: 10px; } }
+function formatEditedDate(value) {
+  if (!value) return 'Edited: unknown';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return 'Edited: unknown';
+  const now = Date.now();
+  const diffMs = now - d.getTime();
+  const min = Math.floor(diffMs / 60000);
+  const hr  = Math.floor(diffMs / 3600000);
+  const day = Math.floor(diffMs / 86400000);
+  if (min < 1)  return 'Edited just now';
+  if (min < 60) return `Edited ${min}m ago`;
+  if (hr  < 24) return `Edited ${hr}h ago`;
+  if (day < 7)  return `Edited ${day}d ago`;
+  return `Edited ${d.toLocaleDateString()}`;
+}
 
-  .tf-showcase-card {
-    aspect-ratio: 16/9;
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.07);
-    display: flex; align-items: center; justify-content: center;
-    overflow: hidden; position: relative; cursor: pointer;
-    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-  }
-  .tf-showcase-card:hover {
-    transform: translateY(-3px) scale(1.01);
-    border-color: rgba(255,107,0,0.2);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-  }
-  .tf-showcase-card .hover-overlay {
-    position: absolute; inset: 0;
-    background: rgba(0,0,0,0.5);
-    display: flex; align-items: center; justify-content: center;
-    opacity: 0; transition: opacity 0.2s;
-  }
-  .tf-showcase-card:hover .hover-overlay { opacity: 1; }
-
-  .tf-project-card {
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.07);
-    background: #0c0c0f;
-    overflow: hidden; cursor: pointer;
-    transition: transform 0.2s, border-color 0.2s;
-    display: flex; flex-direction: column;
-    position: relative;
-  }
-  .tf-project-card:hover {
-    transform: translateY(-2px);
-    border-color: rgba(255,107,0,0.25);
-  }
-  .tf-project-actions {
-    display: flex; gap: 4px;
-    position: absolute; top: 6px; right: 6px;
-    opacity: 0; transition: opacity 0.15s;
-  }
-  .tf-project-card:hover .tf-project-actions { opacity: 1; }
-
-  .tf-skeleton {
-    aspect-ratio: 16/9; border-radius: 10px;
-    background: linear-gradient(90deg, #141414 25%, #1c1c1c 50%, #141414 75%);
-    background-size: 200% 100%;
-    animation: tf-shimmer 1.4s infinite;
-    border: 1px solid rgba(255,255,255,0.05);
-  }
-  @keyframes tf-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-  .tf-lightbox-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.92);
-    z-index: 900; display: flex;
-    align-items: center; justify-content: center;
-    animation: lb-in 0.2s ease;
-  }
-  @keyframes lb-in { from { opacity: 0; } to { opacity: 1; } }
-`;
-
-function Lightbox({ items, startIdx, onClose }) {
-  const [idx, setIdx] = useState(startIdx);
-  const touchStartX   = useRef(null);
-  const prev = useCallback(() => setIdx((i) => (i - 1 + items.length) % items.length), [items.length]);
-  const next = useCallback(() => setIdx((i) => (i + 1) % items.length), [items.length]);
-
-  useEffect(() => {
-    const h = (e) => {
-      if (e.key === 'Escape')     onClose();
-      if (e.key === 'ArrowLeft')  prev();
-      if (e.key === 'ArrowRight') next();
-    };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose, prev, next]);
-
-  const item = items[idx];
+// ── Delete modal ──────────────────────────────────────────────────────────────
+function DeleteDesignModal({ design, onClose, onConfirm, loading }) {
+  const name = getProjectName(design);
   return (
     <div
-      className="tf-lightbox-overlay"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-      onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
-      onTouchEnd={(e) => { const dx = e.changedTouches[0].clientX - touchStartX.current; if (dx < -50) next(); else if (dx > 50) prev(); }}
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100,
+        background: 'rgba(5,3,12,0.75)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+      }}
     >
-      <button onClick={onClose} style={navBtnStyle}>✕</button>
-      <button onClick={prev} style={{ ...navBtnStyle, position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }}>‹</button>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ ...cardStyle, maxWidth: 440, width: '100%', fontFamily: INTER }}
+      >
+        <h3 style={{
+          fontFamily: FRAUNCES,
+          fontSize: 22,
+          fontWeight: 500,
+          color: CREAM,
+          margin: '0 0 8px',
+        }}>
+          Delete this design?
+        </h3>
+        <p style={{
+          fontSize: 14,
+          color: CREAM_80,
+          margin: '0 0 6px',
+          fontWeight: 600,
+        }}>
+          {name}
+        </p>
+        <p style={{ fontSize: 13, color: CREAM_70, margin: '0 0 24px' }}>
+          This can't be undone.
+        </p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button
+            onClick={onClose}
+            disabled={loading}
+            style={{
+              padding: '10px 20px',
+              borderRadius: 8,
+              border: `1px solid ${BORDER}`,
+              background: 'transparent',
+              color: CREAM,
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: INTER,
+              cursor: loading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            style={{
+              padding: '10px 20px',
+              borderRadius: 8,
+              border: 'none',
+              background: DANGER,
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 700,
+              fontFamily: INTER,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.6 : 1,
+            }}
+          >
+            {loading ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Design card ───────────────────────────────────────────────────────────────
+function DesignCard({ design, onOpen, onDelete, isDeleting }) {
+  const [hover, setHover] = useState(false);
+  const name = getProjectName(design);
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={() => !isDeleting && onOpen(design.id)}
+      style={{
+        position: 'relative',
+        background: CARD_BG,
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        border: `1px solid ${hover ? BORDER_HOVER : BORDER}`,
+        borderRadius: 12,
+        padding: 12,
+        cursor: isDeleting ? 'wait' : 'pointer',
+        transform: hover && !isDeleting ? 'translateY(-2px)' : 'translateY(0)',
+        transition: 'transform 0.15s, border-color 0.15s, opacity 0.15s',
+        opacity: isDeleting ? 0.55 : 1,
+        fontFamily: INTER,
+      }}
+    >
+      {/* Thumbnail */}
       <div style={{
-        maxWidth: 900, width: '90%', aspectRatio: '16/9',
-        borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)',
-        overflow: 'hidden', position: 'relative',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: item.bg,
+        aspectRatio: '16/9',
+        background: 'rgba(5,3,12,0.5)',
+        borderRadius: 8,
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}>
-        {item.text && (
-          <span style={{ fontSize: 20, fontWeight: 900, color: item.color, fontFamily: 'Impact,sans-serif', textShadow: '2px 2px 0 rgba(0,0,0,0.5)', textAlign: 'center', padding: '0 20px' }}>
-            {item.text}
-          </span>
+        {design.thumbnail ? (
+          <img
+            src={design.thumbnail}
+            alt={name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <div style={{ color: CREAM_50, fontSize: 12 }}>No preview</div>
         )}
-        <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-          {idx + 1} / {items.length}
+      </div>
+
+      {/* Info */}
+      <div style={{ padding: '12px 4px 4px' }}>
+        <div
+          title={name}
+          style={{
+            fontSize: 15,
+            fontWeight: 600,
+            color: CREAM,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            marginBottom: 4,
+          }}
+        >
+          {name}
+        </div>
+        <div style={{ fontSize: 12, color: CREAM_50 }}>
+          {formatEditedDate(design.last_edited || design.updated_at || design.created_at)}
         </div>
       </div>
-      <button onClick={next} style={{ ...navBtnStyle, position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)' }}>›</button>
-    </div>
-  );
-}
 
-const navBtnStyle = {
-  position: 'absolute', top: 16, right: 16,
-  width: 44, height: 44, borderRadius: '50%',
-  background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
-  color: '#fff', fontSize: 18, cursor: 'pointer',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-};
-
-function ProjectCard({ project, onOpen, onDelete, onDuplicate }) {
-  const [thumbSrc, setThumbSrc] = useState(null);
-
-  useEffect(() => {
-    db.blobs.where('projectId').equals(project.id).first().then((blob) => {
-      if (blob?.data) setThumbSrc(blob.data);
-    }).catch(() => {});
-  }, [project.id]);
-
-  const bgColor = (project.data?.layers || []).find((l) => l.type === 'background')?.bgColor || '#1a1a1a';
-
-  return (
-    <div className="tf-project-card" onClick={() => onOpen(project.id)}>
-      <div style={{ aspectRatio: '16/9', overflow: 'hidden', background: bgColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {thumbSrc
-          ? <img src={thumbSrc} alt={project.name || 'Project'} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-          : <div style={{ opacity: 0.3, fontSize: 24 }}>🖼</div>
-        }
-      </div>
-      <div style={{ padding: '10px 12px 12px' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#f0f0f3', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: "'Satoshi',sans-serif" }}>
-          {project.name || 'Untitled Project'}
-        </div>
-        <div style={{ fontSize: 11, color: '#55555e', fontFamily: "'Satoshi',sans-serif" }}>
-          {formatRelativeTime(project.updatedAt)}
-        </div>
-      </div>
-      <div className="tf-project-actions">
-        <button
-          style={{ width: 26, height: 26, borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.12)', color: '#fff' }}
-          title="Duplicate project"
-          onClick={(e) => { e.stopPropagation(); onDuplicate(project.id); }}
-        >⧉</button>
-        <button
-          style={{ width: 26, height: 26, borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(239,68,68,0.85)', color: '#fff' }}
-          title="Delete project"
-          onClick={(e) => { e.stopPropagation(); onDelete(project.id); }}
-        >✕</button>
-      </div>
-    </div>
-  );
-}
-
-const fadeUp = {
-  hidden:  { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } },
-};
-const stagger = { visible: { transition: { staggerChildren: 0.07 } } };
-
-export default function Gallery({ setPage }) {
-  const [lightboxIdx, setLightboxIdx] = useState(null);
-  const [projects,    setProjects]    = useState([]);
-  const [projLoading, setProjLoading] = useState(false);
-
-  const { user, isLoading } = useAuth();
-
-  useSEO({
-    title: 'Gallery — ThumbFrame',
-    description: "Your saved ThumbFrame projects. Open, continue, or export any thumbnail you've created.",
-    url: 'https://thumbframe.com/gallery',
-  });
-
-  useEffect(() => {
-    if (!user) return;
-    setProjLoading(true);
-    listProjects(user.id)
-      .then(async (mine) => {
-        // Backfill missing userId so future queries work correctly.
-        const untagged = mine.filter(p => !p.userId);
-        if (untagged.length > 0) {
-          await Promise.all(untagged.map(p => db.projects.update(p.id, { userId: user.id })));
-        }
-        setProjects(mine);
-        setProjLoading(false);
-      })
-      .catch(() => setProjLoading(false));
-  }, [user]);
-
-  function openProject(id) {
-    // Put the project ID in the URL so the editor's getProjectIdFromUrl() finds it.
-    const url = new URL(window.location.href);
-    url.searchParams.set('project', id);
-    window.history.pushState(null, '', url.pathname + url.search);
-    setPage('editor');
-    window.scrollTo({ top: 0 });
-  }
-
-  async function handleDelete(id) {
-    if (!window.confirm('Delete this project? This cannot be undone.')) return;
-    await deleteProjectFromStorage(id);
-    setProjects((prev) => prev.filter((p) => p.id !== id));
-  }
-
-  async function handleDuplicate(id) {
-    await duplicateProject(id);
-    const updated = await listProjects(user?.id);
-    setProjects(updated);
-  }
-
-  return (
-    <div style={{ background: '#050507', minHeight: '100vh', fontFamily: "'Satoshi', sans-serif", color: '#f0f0f3' }}>
-      <style>{S}</style>
-      <Navbar setPage={setPage} currentPage="gallery" />
-
-      {/* Hero */}
-      <motion.div
-        variants={stagger} initial="hidden" animate="visible"
+      {/* Delete icon — hover only */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(design); }}
+        aria-label="Delete design"
         style={{
-          textAlign: 'center',
-          padding: '140px 24px 60px',
-          position: 'relative', overflow: 'hidden',
+          position: 'absolute',
+          bottom: 12,
+          right: 12,
+          width: 32,
+          height: 32,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 8,
+          border: `1px solid ${BORDER}`,
+          background: 'rgba(5,3,12,0.75)',
+          color: DANGER,
+          cursor: 'pointer',
+          opacity: hover ? 1 : 0,
+          pointerEvents: hover ? 'auto' : 'none',
+          transition: 'opacity 0.15s',
         }}
       >
+        <Trash2 size={15} />
+      </button>
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+export default function Gallery({ setPage }) {
+  const { user } = useAuth();
+  const [designs, setDesigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [toDelete, setToDelete] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
+  useSEO({
+    title: 'Your designs — ThumbFrame',
+    description: 'Your saved ThumbFrame designs.',
+  });
+
+  // Fetch designs — same endpoint the legacy Dashboard used.
+  useEffect(() => {
+    const userEmail = user?.email;
+    if (!userEmail) {
+      setDesigns([]);
+      setLoadError('');
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError('');
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const authToken = session?.access_token;
+      return fetch(`${API_URL}/designs`, {
+        signal: controller.signal,
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+      });
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((payload) => {
+        const list = Array.isArray(payload) ? payload
+          : Array.isArray(payload?.designs) ? payload.designs
+          : Array.isArray(payload?.data) ? payload.data : [];
+        setDesigns(list);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        setDesigns([]);
+        setLoadError('Could not load saved designs right now.');
+        setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [user?.email]);
+
+  function handleOpen(id) {
+    window.history.replaceState(null, '', `/editor?project=${encodeURIComponent(id)}`);
+    setPage('editor');
+  }
+
+  function handleNewDesign() {
+    window.history.replaceState(null, '', '/editor');
+    setPage('editor');
+  }
+
+  async function handleConfirmDelete() {
+    if (!toDelete?.id) return;
+    setDeletingId(toDelete.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('No auth token');
+      const res = await fetch(`${API_URL}/designs/${encodeURIComponent(toDelete.id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Delete failed (${res.status}): ${body}`);
+      }
+      setDesigns((prev) => prev.filter((d) => d.id !== toDelete.id));
+      setToDelete(null);
+    } catch (err) {
+      console.error('[Gallery] delete error:', err.message);
+      alert(`Could not delete design: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const count = designs.length;
+  const isPro = !!user?.is_pro;
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      position: 'relative',
+      fontFamily: INTER,
+      color: CREAM,
+    }}>
+      <AuroraScene />
+      <Navbar onNavigate={setPage} />
+
+      <div style={{
+        position: 'relative',
+        zIndex: 1,
+        maxWidth: 1180,
+        margin: '0 auto',
+        padding: '120px 24px 96px',
+      }}>
+        {/* Header */}
         <div style={{
-          position: 'absolute', inset: 0,
-          background: 'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(255,107,0,0.06) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
-        <motion.p variants={fadeUp} style={{
-          fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
-          textTransform: 'uppercase', color: '#FF6B00', margin: '0 0 16px',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 20,
+          flexWrap: 'wrap',
+          marginBottom: 40,
         }}>
-          {user ? 'MY PROJECTS' : 'GALLERY'}
-        </motion.p>
-        <motion.h1 variants={fadeUp} style={{ margin: '0 0 16px' }}>
-          {user
-            ? 'Your Thumbnails'
-            : <><span style={{ color: '#FF6B00' }}>Made with</span><br />ThumbFrame.</>
-          }
-        </motion.h1>
-        <motion.p variants={fadeUp} style={{ fontSize: 16, color: '#8a8a93', margin: '0 auto', maxWidth: 420, lineHeight: 1.6 }}>
-          {user
-            ? 'Click any project to continue editing.'
-            : 'Real thumbnails made by real creators using ThumbFrame.'
-          }
-        </motion.p>
-      </motion.div>
-
-      {/* Sign-in CTA for logged-out visitors */}
-      {!isLoading && !user && (
-        <div style={{ maxWidth: 1200, margin: '0 auto 32px', padding: '0 24px' }}>
-          <div style={{
-            background: '#0c0c0f', border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 12, padding: '20px 24px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            gap: 16, flexWrap: 'wrap',
-          }}>
-            <p style={{ fontSize: 14, color: '#8a8a93', margin: 0 }}>
-              <span style={{ color: '#f0f0f3', fontWeight: 600 }}>Save your thumbnails</span> — sign in to keep your projects and access them anywhere.
-            </p>
-            <button
-              onClick={() => { setPage('signup'); window.scrollTo({ top: 0 }); }}
-              style={{
-                padding: '8px 18px', borderRadius: 8, border: 'none',
-                background: '#FF6B00', color: '#fff', cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, fontFamily: "'Satoshi',sans-serif",
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Get Started Free →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Content */}
-      {isLoading ? (
-        <div className="tf-gallery-grid">
-          {Array.from({ length: 8 }, (_, i) => <div key={i} className="tf-skeleton" />)}
-        </div>
-      ) : user ? (
-        <div className="tf-gallery-grid">
-          {projLoading ? (
-            Array.from({ length: 6 }, (_, i) => <div key={i} className="tf-skeleton" />)
-          ) : projects.length === 0 ? (
-            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '80px 24px' }}>
-              <div style={{ fontSize: 40, marginBottom: 16, opacity: 0.3 }}>🖼</div>
-              <h3 style={{ fontSize: 22, fontWeight: 700, color: '#f0f0f3', marginBottom: 10 }}>No projects yet</h3>
-              <p style={{ fontSize: 15, color: '#8a8a93', marginBottom: 24 }}>Create your first thumbnail and it'll show up here.</p>
-              <button
-                onClick={() => { setPage('editor'); window.scrollTo({ top: 0 }); }}
-                style={{
-                  padding: '11px 24px', borderRadius: 9, border: 'none',
-                  background: '#FF6B00', color: '#fff', cursor: 'pointer',
-                  fontSize: 14, fontWeight: 700, fontFamily: "'Satoshi',sans-serif",
-                  boxShadow: '0 0 20px rgba(255,107,0,0.25)',
-                }}
-              >
-                Create Thumbnail →
-              </button>
+          <div>
+            <h1 style={{
+              fontFamily: FRAUNCES,
+              fontSize: 'clamp(36px, 5vw, 52px)',
+              fontWeight: 500,
+              letterSpacing: '-0.02em',
+              color: CREAM,
+              lineHeight: 1.05,
+              margin: '0 0 12px',
+              textShadow: '0 4px 32px rgba(0,0,0,0.5)',
+            }}>
+              Your designs
+            </h1>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}>
+              <span style={{ fontSize: 15, color: CREAM_70 }}>
+                {count} design{count === 1 ? '' : 's'}
+                {isPro ? ' · Unlimited storage' : ''}
+              </span>
+              <PlanBadge isPro={isPro} />
             </div>
-          ) : (
-            projects.map((project) => (
-              <ProjectCard key={project.id} project={project} onOpen={openProject} onDelete={handleDelete} onDuplicate={handleDuplicate} />
-            ))
-          )}
+          </div>
+
+          <button
+            onClick={handleNewDesign}
+            style={creamBtn}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#ffffff')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,244,224,1)')}
+          >
+            + New design
+          </button>
         </div>
-      ) : (
-        <>
-          <div className="tf-gallery-grid">
-            {SHOWCASE.map((item, i) => (
-              <div
-                key={i}
-                className="tf-showcase-card"
-                style={{ background: item.bg }}
-                onClick={() => setLightboxIdx(i)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && setLightboxIdx(i)}
-                aria-label={`View thumbnail ${i + 1}`}
-              >
-                <span style={{ fontSize: 13, fontWeight: 900, color: item.color, fontFamily: 'Impact,sans-serif', textShadow: '1px 1px 0 rgba(0,0,0,0.5)', textAlign: 'center', padding: '0 8px', lineHeight: 1.2, zIndex: 1, position: 'relative' }}>
-                  {item.text}
-                </span>
-                <div style={{ position: 'absolute', bottom: 4, right: 5, background: 'rgba(0,0,0,0.7)', borderRadius: 2, padding: '1px 4px', fontSize: 8, color: '#fff' }}>0:00</div>
-                <div className="hover-overlay">
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,107,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18 }}>⤢</div>
-                </div>
-              </div>
+
+        {/* Body */}
+        {loading ? (
+          <div style={{ ...cardStyle, textAlign: 'center', color: CREAM_70, fontSize: 14 }}>
+            Loading designs…
+          </div>
+        ) : loadError ? (
+          <div style={{ ...cardStyle, textAlign: 'center' }}>
+            <h2 style={{
+              fontFamily: FRAUNCES, fontSize: 22, fontWeight: 500, color: CREAM,
+              margin: '0 0 8px',
+            }}>
+              Saved designs are unavailable
+            </h2>
+            <p style={{ fontSize: 14, color: CREAM_70, margin: 0, lineHeight: 1.6 }}>
+              {loadError}
+            </p>
+          </div>
+        ) : count === 0 ? (
+          <EmptyState onOpenEditor={handleNewDesign} />
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: 20,
+          }}>
+            {designs.map((d) => (
+              <DesignCard
+                key={d.id}
+                design={d}
+                onOpen={handleOpen}
+                onDelete={setToDelete}
+                isDeleting={deletingId === d.id}
+              />
             ))}
           </div>
-          {lightboxIdx !== null && (
-            <Lightbox items={SHOWCASE} startIdx={lightboxIdx} onClose={() => setLightboxIdx(null)} />
-          )}
-        </>
-      )}
+        )}
+      </div>
 
-      <Footer setPage={setPage} />
+      {toDelete && (
+        <DeleteDesignModal
+          design={toDelete}
+          onClose={() => setToDelete(null)}
+          onConfirm={handleConfirmDelete}
+          loading={deletingId === toDelete?.id}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Plan badge pill ───────────────────────────────────────────────────────────
+function PlanBadge({ isPro }) {
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      padding: '3px 12px',
+      borderRadius: 999,
+      background: isPro ? 'rgba(255,244,224,0.92)' : 'rgba(255,255,255,0.06)',
+      color: isPro ? '#f97316' : CREAM_70,
+      fontFamily: INTER,
+      fontSize: 11,
+      fontWeight: 700,
+      letterSpacing: '0.12em',
+      textTransform: 'uppercase',
+      border: isPro ? 'none' : `1px solid ${BORDER}`,
+    }}>
+      {isPro ? 'Pro' : 'Free'}
+    </span>
+  );
+}
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+function EmptyState({ onOpenEditor }) {
+  return (
+    <div style={{
+      ...cardStyle,
+      maxWidth: 520,
+      margin: '40px auto 0',
+      textAlign: 'center',
+      padding: 48,
+    }}>
+      <h2 style={{
+        fontFamily: FRAUNCES,
+        fontSize: 28,
+        fontWeight: 500,
+        color: CREAM,
+        letterSpacing: '-0.01em',
+        margin: '0 0 10px',
+      }}>
+        Your gallery is empty
+      </h2>
+      <p style={{
+        fontFamily: INTER,
+        fontSize: 15,
+        color: CREAM_70,
+        margin: '0 0 28px',
+        lineHeight: 1.6,
+      }}>
+        Start creating and your designs will auto-save here.
+      </p>
+      <button
+        onClick={onOpenEditor}
+        style={creamBtn}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#ffffff')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,244,224,1)')}
+      >
+        Open editor →
+      </button>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import '@fontsource-variable/fraunces';
-import SettingsScene from '../landing/scenes/SettingsScene';
+import AuroraScene from '../landing/scenes/AuroraScene';
 import Navbar from '../landing/components/layout/Navbar';
 import { useAuth } from '../context/AuthContext';
 import { useSEO } from '../hooks/useSEO';
@@ -838,7 +838,7 @@ export default function Settings({ setPage }) {
       fontFamily: INTER,
       color: CREAM,
     }}>
-      <SettingsScene />
+      <AuroraScene />
       <Navbar onNavigate={setPage} />
 
       <div style={{
@@ -851,7 +851,7 @@ export default function Settings({ setPage }) {
         {/* Header */}
         <div style={{ marginBottom: 36 }}>
           <button
-            onClick={() => setPage('dashboard')}
+            onClick={() => setPage('gallery')}
             style={{
               background: 'none',
               border: 'none',
@@ -868,7 +868,7 @@ export default function Settings({ setPage }) {
             onMouseEnter={(e) => (e.currentTarget.style.color = CREAM)}
             onMouseLeave={(e) => (e.currentTarget.style.color = CREAM_70)}
           >
-            ← Back to dashboard
+            ← Back to gallery
           </button>
           <h1 style={{
             fontFamily: FRAUNCES,
