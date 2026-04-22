@@ -4,7 +4,7 @@
 //           (shape layers with shapeData.shapeType='path'), so designers
 //           can grab, warp, and recolour individual letters.
 // Exports:  outlineTextToShapes
-// Depends:  opentype.js (already in package.json)
+// Depends:  opentype.js (already in package.json), ./VectorMask
 //
 // Uses opentype.js to load the font and extract each glyph's path.
 // Path commands come out in opentype's format; we translate to the
@@ -15,6 +15,8 @@
 // FontFace instance) is Phase 2.b's job; this file takes a parsed
 // opentype `Font` instance so the two phases can land independently.
 // -----------------------------------------------------------------------------
+
+import { parseSvgPath } from './VectorMask.js';
 
 /**
  * @param {import('opentype.js').Font} font
@@ -87,15 +89,10 @@ function _opentypePathToSvgString(path) {
 
 /**
  * Convert an SVG string to the command array our ShapeRenderer +
- * VectorMask expect. Mirrors parseSvgPath's output but emitted inline
- * to keep this module independent.
+ * VectorMask expect. Delegates to parseSvgPath for a single canonical
+ * implementation.
  */
 function _svgStringToCommands(svg) {
   if (typeof svg !== 'string' || !svg) return [];
-  // Delegate to parseSvgPath for a single canonical implementation.
-  // Inline the dynamic import so tests that stub VectorMask can still
-  // exercise outlineTextToShapes' own branches.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-  const { parseSvgPath } = require('./VectorMask.js');
   return parseSvgPath(svg);
 }
