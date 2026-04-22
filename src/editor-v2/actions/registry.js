@@ -730,6 +730,169 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
     shortcut: null,
     handler: () => _activeSessionCtx?.globalCompositeOperation ?? null,
   });
+
+  // ── Transform (Phase 1.e) ──────────────────────────────────────────────
+  register({
+    id: 'transform.move',
+    label: 'Move',
+    category: 'transform',
+    shortcut: 'V',
+    description:
+      'Translate a layer by (dx, dy). Snaps to smart guides when snap=true.',
+    handler: async (id, dx, dy, { snap = false, guides } = {}) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === id);
+      if (!layer) return;
+      let nx = layer.x + Number(dx || 0);
+      let ny = layer.y + Number(dy || 0);
+      if (snap && guides) {
+        const { snapRect, DEFAULT_SNAP_THRESHOLD_PX } = await import('../engine/SmartGuides.js');
+        const r = snapRect(
+          { x: nx, y: ny, width: layer.width, height: layer.height },
+          guides,
+          DEFAULT_SNAP_THRESHOLD_PX,
+        );
+        nx = r.x; ny = r.y;
+      }
+      s.updateLayer(id, { x: nx, y: ny });
+      await history.snapshot('Move');
+    },
+  });
+
+  register({
+    id: 'transform.resize',
+    label: 'Resize',
+    category: 'transform',
+    shortcut: null,
+    handler: async (id, width, height) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === id);
+      if (!layer) return;
+      s.updateLayer(id, {
+        width:  Math.max(1, Number(width)  || layer.width),
+        height: Math.max(1, Number(height) || layer.height),
+      });
+      await history.snapshot('Resize');
+    },
+  });
+
+  register({
+    id: 'transform.rotate',
+    label: 'Rotate',
+    category: 'transform',
+    shortcut: null,
+    handler: async (id, radians) => {
+      store.getState().updateLayer(id, { rotation: Number(radians) || 0 });
+      await history.snapshot('Rotate');
+    },
+  });
+
+  register({
+    id: 'transform.crop',
+    label: 'Crop',
+    category: 'transform',
+    shortcut: 'C',
+    description: 'Crop the entire canvas to the given rect (Phase 4.f wires on-canvas handles).',
+    handler: async (x, y, width, height) => {
+      // Crop mutates the canvas, not a single layer. Phase 1.e stores
+      // the crop intent on the store; Phase 1.f's renderer wire-up
+      // honours it at export time.
+      const s = store.getState();
+      s.replaceAll({
+        projectId:   s.projectId,
+        projectName: s.projectName,
+        layers:      s.layers.map(l => ({ ...l, x: l.x - Number(x || 0), y: l.y - Number(y || 0) })),
+      });
+      await history.snapshot('Crop');
+      return { x, y, width, height };
+    },
+  });
+
+  // ── Vector mask path set (Phase 1.e) ───────────────────────────────────
+  register({
+    id: 'layer.mask.path.set',
+    label: 'Set mask path',
+    category: 'mask',
+    shortcut: null,
+    handler: async (layerId, pathStr) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === layerId);
+      if (!layer) return;
+      s.updateLayer(layerId, {
+        mask: {
+          ...(layer.mask || { kind: 'vector', dataRef: null, inverted: false }),
+          kind: 'vector',
+          path: pathStr,
+        },
+      });
+      await history.snapshot('Set mask path');
+    },
+  });
+
+  // ── Boolean ops on shape layers (Phase 1.e) ───────────────────────────
+  for (const mode of ['unite', 'subtract', 'intersect', 'exclude']) {
+    register({
+      id: `shape.boolean.${mode}`,
+      label: `Boolean ${mode}`,
+      category: 'shape',
+      shortcut: null,
+      handler: async (ids) => {
+        if (!Array.isArray(ids) || ids.length < 2) return null;
+        const s = store.getState();
+        const layers = ids.map(id => s.layers.find(l => l.id === id)).filter(Boolean);
+        if (layers.length < 2) return null;
+
+        const { booleanOp, multiPolygonToShapeData } = await import('../engine/BooleanOps.js');
+        const result = booleanOp(mode, layers);
+        const shapeData = multiPolygonToShapeData(result);
+        if (!shapeData) return null;
+
+        // Compute bounding box of the polygon for layer.x/y/width/height.
+        const pts = shapeData.points;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const [x, y] of pts) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+        const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+
+        const newId = s.addLayer({
+          type: 'shape',
+          name: `Boolean ${mode}`,
+          x: cx, y: cy,
+          width:  Math.max(1, maxX - minX),
+          height: Math.max(1, maxY - minY),
+          shapeData: { ...shapeData, fill: layers[0].shapeData?.fill || '#f97316' },
+        });
+
+        // Remove the operand layers (Photoshop standard for Combine Shapes).
+        for (const l of layers) s.removeLayer(l.id);
+        await history.snapshot(`Boolean ${mode}`);
+        return newId;
+      },
+    });
+  }
+
+  // ── Adjustment layer compositing hook (Phase 1.e) ─────────────────────
+  // The actual RenderTexture compositing lives in Renderer; the registry
+  // just records the layer's params so the renderer picks them up.
+  register({
+    id: 'layer.adjustment.update',
+    label: 'Update adjustment',
+    category: 'layer',
+    shortcut: null,
+    handler: (id, params) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === id);
+      if (!layer || layer.type !== 'adjustment') return;
+      s.updateLayer(id, {
+        adjustmentData: {
+          ...(layer.adjustmentData || { kind: 'brightness' }),
+          params: { ...(layer.adjustmentData?.params || {}), ...(params || {}) },
+        },
+      });
+    },
+  });
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

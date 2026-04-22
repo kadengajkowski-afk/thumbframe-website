@@ -38,7 +38,7 @@
 - Actions: layer.effects.add, update, remove, toggle
 - Tests in __tests__/phase-1d.test.js
 
-### 1.e — Vector masks, adjustment compositing, transform, smart guides, boolean ops
+### 1.e — Vector masks, adjustment compositing, transform, smart guides, boolean ops [DONE]
 - Vector masks (SVG path-based, stencil render path)
 - Adjustment layer rendering (RenderTexture below-stack composite, apply adjustment, composite back)
 - Transform tool (move, resize, rotate, crop) — action wiring only, on-canvas handles land Phase 4
@@ -65,6 +65,14 @@
 
 - `0d8a6bd` — feat(editor-v2): phase 0 + phase 1.a — foundation + engine layer rendering + tests
   - Combined Phase 0 foundation and Phase 1.a engine upgrade into one commit because 1.a's rewrites to Renderer / History / registry files created before they were ever committed. Untangling retroactively would require artificial history gymnastics. Queue rule #3 says commit each sub-phase separately; this is the one documented exception.
+- Phase 1.e — feat(editor-v2): phase 1.e — vector masks, transforms, guides, boolean ops
+  - engine/VectorMask.js — parseSvgPath subset (M/L/H/V/C/Q/Z + relative variants), samplePathToPolygon Bezier flattening, applyMaskToSprite that builds a Pixi Graphics mask from path.
+  - engine/SmartGuides.js — computeGuides (canvas center / thirds / edges / YouTube safe zones / sibling centers+edges / pixel grid) + snapRect with priority-based resolution.
+  - engine/BooleanOps.js — shapeToPolygon, booleanOp (unite/subtract/intersect/exclude) via polygon-clipping, multiPolygonToShapeData collapses multi results to a single polygon layer.
+  - Registry additions: transform.move/resize/rotate/crop, layer.mask.path.set, layer.adjustment.update, shape.boolean.{unite,subtract,intersect,exclude}.
+  - Dep installed: `polygon-clipping@^0.15.7` (pure-JS, ~30KB unpacked) for MultiPolygon boolean ops.
+  - phase-1e.test.js: 39 tests covering path parsing, polygon sampling, snap math, boolean op roundtrips, registry integration.
+
 - Phase 1.d — feat(editor-v2): phase 1.d — layer effects + HSL blend shaders
   - engine/EffectsRenderer.js — 8-effect pipeline (stroke / outerGlow / innerGlow / dropShadow / innerShadow / bevel / colorOverlay / gradientOverlay). defaultEffectParams(type) + buildEffectPlan(effects[]) partition into behind/onBase/inFront layers; composeEffectsOnCanvas(ctx, base, w, h, plan) consumes the plan against a Canvas 2D ctx.
   - engine/HSLShaders.js — WebGL2 fragment shaders for the HSL quartet (hue, saturation, color, luminosity) per ISO 32000-1 Blend Modes spec. Shared preamble (lum/sat/clipColor/setLum/setSat) + four selector-differing bodies. buildHSLFilter(mode) lazy-imports Pixi to keep jsdom test runs lean.
