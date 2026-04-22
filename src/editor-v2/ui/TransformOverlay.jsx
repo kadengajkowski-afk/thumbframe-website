@@ -35,7 +35,10 @@ export default function TransformOverlay({
   const dragRef = useRef(null);
 
   const onBodyPointerDown = useCallback((e) => {
-    dragRef.current = { kind: 'move', startX: e.clientX, startY: e.clientY };
+    dragRef.current = {
+      kind: 'move', startX: e.clientX, startY: e.clientY, gestureOpen: true,
+    };
+    executeAction('renderer.beginGesture');
     e.target.setPointerCapture?.(e.pointerId);
   }, []);
 
@@ -52,7 +55,9 @@ export default function TransformOverlay({
       kind: 'resize', handle,
       startX: e.clientX, startY: e.clientY,
       startW: layer.width, startH: layer.height,
+      gestureOpen: true,
     };
+    executeAction('renderer.beginGesture');
     setActiveHandle(handle);
     e.target.setPointerCapture?.(e.pointerId);
   };
@@ -63,7 +68,9 @@ export default function TransformOverlay({
       kind: 'rotate',
       cx: layer.x * canvasScale, cy: layer.y * canvasScale,
       startAngle: Math.atan2(e.clientY - layer.y * canvasScale, e.clientX - layer.x * canvasScale) - (layer.rotation || 0),
+      gestureOpen: true,
     };
+    executeAction('renderer.beginGesture');
     setActiveHandle('rotate');
     e.target.setPointerCapture?.(e.pointerId);
   };
@@ -99,6 +106,7 @@ export default function TransformOverlay({
   };
 
   const onPointerUp = () => {
+    if (dragRef.current?.gestureOpen) executeAction('renderer.endGesture');
     dragRef.current = null;
     setActiveHandle(null);
   };

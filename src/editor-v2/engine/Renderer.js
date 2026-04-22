@@ -37,6 +37,23 @@ import { renderText, textFingerprint } from './TextRenderer.js';
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
 
+// RAF shims. Tests run under jsdom where requestAnimationFrame may be
+// a setTimeout stub; keep both paths isolated so we can spy cleanly.
+function _raf(fn) {
+  if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(fn);
+  return setTimeout(() => fn(_now()), 16);
+}
+function _cancelRaf(id) {
+  if (!id) return;
+  if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(id);
+  else clearTimeout(id);
+}
+function _now() {
+  return typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
+}
+
 /** Background color behind the 1280×720 document. */
 const SCENE_BG = 0x020308;
 /** Color of the document rectangle itself. */
@@ -80,9 +97,24 @@ export class Renderer {
 
     this._canvasEl = null;
 
+    // Demand-driven rendering (Phase 4.5.a, per TECHNICAL_RESEARCH.md):
+    //   • always-running RAF drains a `_needsRender` flag — one frame
+    //     per mutation, otherwise idle;
+    //   • when any part of the app enters an interactive gesture
+    //     (paint stroke, transform drag, slider scrub) it calls
+    //     `beginGesture()` to promote to ticker-driven 60fps and
+    //     `endGesture()` to fall back to demand-driven. Gestures
+    //     stack, so nested callers are safe.
+    this._needsRender     = true;
+    this._rafId           = 0;
+    this._gestureDepth    = 0;
+    this._gestureTickerOn = false;
+    this._stats = { rendersIssued: 0, lastRenderTs: 0 };
+
     this._onContextLost     = this._onContextLost.bind(this);
     this._onContextRestored = this._onContextRestored.bind(this);
     this._onTick            = this._onTick.bind(this);
+    this._onRaf             = this._onRaf.bind(this);
   }
 
   /**
@@ -106,6 +138,8 @@ export class Renderer {
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
       preserveDrawingBuffer: true,
+      autoStart:    false,   // demand-driven RAF owns frame timing
+      sharedTicker: false,   // don't tie our ticker to Pixi's global one
     });
 
     if (this._disposed) {
@@ -135,22 +169,71 @@ export class Renderer {
       this._app.renderer.on?.('contextChange', this._onContextRestored);
     } catch { /* noop */ }
 
-    this._unsubStore = this._store.subscribe(() => this.markDirty());
+    this._unsubStore = this._store.subscribe(() => this.requestRender());
 
+    // Ticker stays off by default — only used while a gesture is active.
     this._app.ticker.autoStart = false;
     this._app.ticker.add(this._onTick);
-    this.markDirty();
+
+    // Start the demand-driven RAF loop. One frame is pending right now
+    // because _needsRender defaults to true in the constructor.
+    this._rafId = _raf(this._onRaf);
 
     if (this._store.getState().setRendererReady) {
       this._store.getState().setRendererReady(true);
     }
   }
 
-  /** External hook to force a re-render even if the store didn't change. */
-  markDirty() {
+  /**
+   * Request exactly one render on the next RAF tick. Wire every state
+   * mutation through here. Cheap and idempotent — calling 100× in the
+   * same frame still yields one render.
+   */
+  requestRender() {
     if (this._disposed || !this._app) return;
-    this._dirty = true;
-    if (!this._app.ticker.started) this._app.ticker.start();
+    this._needsRender = true;
+  }
+
+  /**
+   * Legacy alias preserved for callers written against the pre-4.5.a
+   * Renderer. New code should call requestRender().
+   */
+  markDirty() { this.requestRender(); }
+
+  /**
+   * Enter interactive gesture mode — the ticker starts and every RAF
+   * tick renders, giving guaranteed 60fps throughout a drag, stroke,
+   * or slider scrub. Balanced with endGesture().
+   */
+  beginGesture() {
+    if (this._disposed || !this._app) return;
+    this._gestureDepth++;
+    if (!this._gestureTickerOn) {
+      try { this._app.ticker.start(); } catch { /* noop */ }
+      this._gestureTickerOn = true;
+    }
+    this.requestRender();
+  }
+
+  /** Leave gesture mode. When depth hits zero, the ticker stops. */
+  endGesture() {
+    if (this._disposed || !this._app) return;
+    if (this._gestureDepth > 0) this._gestureDepth--;
+    if (this._gestureDepth === 0 && this._gestureTickerOn) {
+      try { this._app.ticker.stop(); } catch { /* noop */ }
+      this._gestureTickerOn = false;
+    }
+  }
+
+  /** Dev-only stats snapshot; see PHASE_4_5_QUEUE.md for exit criteria. */
+  stats() {
+    return {
+      rendersIssued: this._stats.rendersIssued,
+      lastRenderTs:  this._stats.lastRenderTs,
+      gestureDepth:  this._gestureDepth,
+      gestureActive: this._gestureTickerOn,
+      needsRender:   this._needsRender,
+    };
   }
 
   /**
@@ -171,6 +254,7 @@ export class Renderer {
 
   destroy() {
     this._disposed = true;
+    if (this._rafId)      { _cancelRaf(this._rafId); this._rafId = 0; }
     if (this._unsubStore) { this._unsubStore(); this._unsubStore = null; }
 
     if (this._canvasEl) {
@@ -200,13 +284,44 @@ export class Renderer {
 
   // ── ticker / reconciliation ────────────────────────────────────────────────
 
-  /** @private */
+  /**
+   * Always-running RAF. Drains `_needsRender`; while a gesture is
+   * active it renders every frame regardless so slider drags and
+   * paint strokes hit 60fps.
+   *
+   * @private
+   */
+  _onRaf() {
+    if (this._disposed) return;
+    if (!this._app) {
+      this._rafId = _raf(this._onRaf);
+      return;
+    }
+    const shouldRender = this._needsRender || this._gestureTickerOn;
+    if (shouldRender) {
+      this._needsRender = false;
+      this._dirty       = false;
+      this._sync();
+      try { this._app.renderer.render(this._app.stage); } catch { /* noop */ }
+      this._stats.rendersIssued += 1;
+      this._stats.lastRenderTs   = _now();
+    }
+    this._rafId = _raf(this._onRaf);
+  }
+
+  /**
+   * Legacy ticker callback — retained so Pixi's ticker can also drive
+   * renders during gesture mode without a second scene rebuild per
+   * frame. Defers to the same path as the RAF loop.
+   *
+   * @private
+   */
   _onTick() {
-    if (!this._dirty || !this._app) return;
-    this._dirty = false;
-    this._sync();
-    this._app.renderer.render(this._app.stage);
-    if (this._app.ticker.started) this._app.ticker.stop();
+    if (!this._gestureTickerOn) return;
+    // The RAF loop does the actual work — Pixi's ticker running is just
+    // a keep-alive that keeps browsers from throttling the RAF while
+    // the user is mid-gesture.
+    this._needsRender = true;
   }
 
   /**

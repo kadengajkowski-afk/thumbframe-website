@@ -143,9 +143,10 @@ export function __resetRegistry() {
  *   store: import('zustand').StoreApi<any>,
  *   history: import('../history/History.js').History,
  *   paintCanvases?: import('../engine/PaintCanvases.js').PaintCanvases,
+ *   renderer?: { beginGesture:Function, endGesture:Function, requestRender:Function },
  * }} deps
  */
-export function registerFoundationActions({ store, history, paintCanvases }) {
+export function registerFoundationActions({ store, history, paintCanvases, renderer }) {
   // ── Layer
   register({
     id: 'layer.add',
@@ -652,6 +653,7 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
       _activeSessionMeta = { layerId, target: tgt, tool: toolId };
 
       s.setStrokeActive(true);
+      renderer?.beginGesture?.();
       _activeSession.begin(
         Number.isFinite(x) ? x : 0,
         Number.isFinite(y) ? y : 0,
@@ -708,6 +710,7 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
       _activeSessionCtx  = null;
       _activeSessionMeta = null;
 
+      renderer?.endGesture?.();
       await history.snapshot('Paint stroke');
       return { stampCount: summary.stampCount, points: summary.points.length };
     },
@@ -737,6 +740,33 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
     category: 'paint',
     shortcut: null,
     handler: () => _activeSessionCtx?.globalCompositeOperation ?? null,
+  });
+
+  // ── Phase 4.5.a — gesture lifecycle (renderer-scoped) ─────────────────
+  // UI surfaces that drive high-frequency mutation (slider scrub,
+  // transform drag, future pan/zoom) call these to promote the renderer
+  // to ticker-driven 60fps and demote it back to demand-driven on
+  // release. Balanced calls (depth-counted) keep nested gestures sane.
+  register({
+    id: 'renderer.beginGesture',
+    label: 'Begin interactive gesture',
+    category: 'renderer',
+    shortcut: null,
+    handler: () => { renderer?.beginGesture?.(); },
+  });
+  register({
+    id: 'renderer.endGesture',
+    label: 'End interactive gesture',
+    category: 'renderer',
+    shortcut: null,
+    handler: () => { renderer?.endGesture?.(); },
+  });
+  register({
+    id: 'renderer.requestRender',
+    label: 'Request render',
+    category: 'renderer',
+    shortcut: null,
+    handler: () => { renderer?.requestRender?.(); },
   });
 
   // ── Transform (Phase 1.e) ──────────────────────────────────────────────

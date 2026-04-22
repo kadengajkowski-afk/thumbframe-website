@@ -10,6 +10,7 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 import { COLORS, TYPOGRAPHY, SPACING, transition } from './tokens';
+import { executeAction } from '../actions/registry';
 
 export default function ScrubNumber({
   value,
@@ -29,7 +30,7 @@ export default function ScrubNumber({
 
   const onPointerDown = (e) => {
     if (editing) return;
-    startRef.current = { x: e.clientX, v: Number(value) || 0 };
+    startRef.current = { x: e.clientX, v: Number(value) || 0, gestureOpen: false };
     e.target.setPointerCapture?.(e.pointerId);
     e.preventDefault();
   };
@@ -37,6 +38,12 @@ export default function ScrubNumber({
   const onPointerMove = (e) => {
     if (!startRef.current) return;
     const dx = e.clientX - startRef.current.x;
+    // Only open a gesture window once the drag has actually moved —
+    // avoids pinning the ticker for click-to-edit interactions.
+    if (!startRef.current.gestureOpen && Math.abs(dx) > 2) {
+      startRef.current.gestureOpen = true;
+      executeAction('renderer.beginGesture');
+    }
     const next = clamp(startRef.current.v + dx * step);
     onChange?.(next);
   };
@@ -44,6 +51,7 @@ export default function ScrubNumber({
   const onPointerUp = (e) => {
     if (!startRef.current) return;
     const moved = Math.abs(e.clientX - startRef.current.x) > 2;
+    if (startRef.current.gestureOpen) executeAction('renderer.endGesture');
     startRef.current = null;
     e.target.releasePointerCapture?.(e.pointerId);
     if (!moved) setEditing(true);

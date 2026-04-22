@@ -88,7 +88,7 @@ describe('TransformOverlay', () => {
     expect(onResize).toHaveBeenCalled();
   });
 
-  test('onMove / onResize callbacks take precedence over registry dispatch', () => {
+  test('onMove / onResize callbacks take precedence over registry dispatch of transform actions', () => {
     const spy = jest.spyOn(registry, 'executeAction').mockImplementation(() => {});
     const onMove = jest.fn();
     const { container } = render(<TransformOverlay layer={layer} onMove={onMove} />);
@@ -96,7 +96,12 @@ describe('TransformOverlay', () => {
     fireEvent.pointerDown(body, { clientX: 0, clientY: 0, pointerId: 1 });
     fireEvent.pointerMove(body, { clientX: 5, clientY: 5, pointerId: 1 });
     expect(onMove).toHaveBeenCalled();
-    expect(spy).not.toHaveBeenCalled();
+    // Phase 4.5.a wires renderer.beginGesture on pointerdown regardless
+    // of the override — that's intentional. The precedence contract is
+    // about transform.move / transform.resize / transform.rotate, not
+    // the gesture lifecycle.
+    const transformCalls = spy.mock.calls.filter(c => /^transform\./.test(c[0]));
+    expect(transformCalls).toEqual([]);
   });
 
   test('returns null on missing layer', () => {

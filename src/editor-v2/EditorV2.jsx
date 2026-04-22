@@ -134,7 +134,7 @@ export default function EditorV2() {
         useStore.getState().setSelectionInstance(selection);
         useStore.getState().setSAMClient(samClient);
 
-        registerFoundationActions({ store: useStore, history, paintCanvases });
+        registerFoundationActions({ store: useStore, history, paintCanvases, renderer });
 
         if (urlProjectId) await save.loadFromIDB(urlProjectId);
         await history.load();
