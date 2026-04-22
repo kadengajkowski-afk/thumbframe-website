@@ -10,6 +10,7 @@
 import React from 'react';
 import { COLORS, TYPOGRAPHY, SPACING } from './tokens';
 import ScrubNumber from './ScrubNumber';
+import ColorPicker from './ColorPicker';
 import { executeAction } from '../actions/registry';
 import { useDocumentLayer, useSelection } from '../store/hooks';
 
@@ -292,20 +293,54 @@ function Field({ label, value, suffix = '' }) {
 }
 
 function ColorField({ label, value, onChange }) {
+  const [open, setOpen] = React.useState(false);
+  const resolved = /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#000000';
   return (
-    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${SPACING.xs}px 0`, fontSize: TYPOGRAPHY.sizeSm, color: COLORS.textSecondary }}>
-      <span>{label}</span>
-      <input
-        type="color"
-        value={/^#[0-9a-f]{6}$/i.test(value || '') ? value : '#000000'}
-        onChange={(e) => onChange?.(e.target.value)}
+    <div style={{ position: 'relative', padding: `${SPACING.xs}px 0` }}>
+      <button
+        type="button"
+        data-color-field
+        aria-label={`Edit ${label}`}
+        onClick={() => setOpen((o) => !o)}
         style={{
-          width: 36, height: 22, padding: 0,
-          border: `1px solid ${COLORS.borderSoft}`, borderRadius: 4,
-          background: 'transparent', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: SPACING.sm,
+          width: '100%',
+          background: 'transparent', border: 0, padding: 0,
+          fontSize: TYPOGRAPHY.sizeSm,
+          color: 'var(--text-secondary)',
+          cursor: 'pointer',
         }}
-      />
-    </label>
+      >
+        <span>{label}</span>
+        <span
+          aria-hidden
+          style={{
+            width: 36, height: 22,
+            borderRadius: 4,
+            border: '1px solid var(--border-soft)',
+            background: resolved,
+          }}
+        />
+      </button>
+      {open && (
+        <div
+          style={{
+            position: 'absolute', top: '100%', right: 0,
+            zIndex: 20,
+            marginTop: SPACING.xs,
+            background: 'var(--panel-bg-raised)',
+            border: '1px solid var(--border-soft)',
+            borderRadius: 8,
+            padding: SPACING.sm,
+            width: 220,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+          }}
+        >
+          <ColorPicker label={label} value={resolved} onChange={onChange} />
+        </div>
+      )}
+    </div>
   );
 }
 
