@@ -1029,6 +1029,37 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
     },
   });
 
+  // ── Phase 2.b: font system ────────────────────────────────────────────
+  register({
+    id: 'font.load',
+    label: 'Load font',
+    category: 'font',
+    shortcut: null,
+    description:
+      'Request a catalog font be loaded. Handler returns the loader '
+      + 'promise for the caller to await. Pass the FontLoader instance '
+      + 'via deps.fontLoader or via the store (Phase 4.a mount).',
+    handler: async (fontId) => {
+      // The loader is attached to EditorV2's deps. This action is a
+      // thin forwarder so UI callers can go through executeAction.
+      const loader = store.getState().__fontLoader;
+      if (!loader) return null;
+      return loader.load(fontId);
+    },
+  });
+
+  register({
+    id: 'font.resolve',
+    label: 'Resolve font family',
+    category: 'font',
+    shortcut: null,
+    handler: (fontId) => {
+      const loader = store.getState().__fontLoader;
+      if (!loader) return null;
+      return loader.resolveCssFamily(fontId);
+    },
+  });
+
   register({
     id: 'text.outline.toShapes',
     label: 'Convert text to shapes',

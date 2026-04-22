@@ -86,6 +86,10 @@ export const useStore = create(
     },
     strokeActive: false,
 
+    // Phase 2.b — injected non-serializable dependencies. Not
+    // persisted through save; EditorV2 sets these on mount.
+    __fontLoader: /** @type {any} */ (null),
+
     // ═══════════════════════════════════════════════════════════════════════
     // ACTIONS
     // ═══════════════════════════════════════════════════════════════════════
@@ -195,6 +199,11 @@ export const useStore = create(
     /** @param {boolean} active */
     setStrokeActive(active) {
       set((state) => { state.strokeActive = !!active; });
+    },
+
+    /** Inject the FontLoader singleton. Phase 2.b wiring. */
+    setFontLoader(loader) {
+      set((state) => { state.__fontLoader = loader; });
     },
 
     /**
