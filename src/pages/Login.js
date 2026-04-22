@@ -89,13 +89,20 @@ export default function Login({ setPage }) {
         boxShadow: '0 30px 80px rgba(0,0,0,0.45)',
       }}>
 
-        {/* Logo */}
+        {/* Logo — ship mark + wordmark, matches the shared Navbar */}
         <button onClick={() => setPage('home')} style={{
-          display: 'flex', alignItems: 'center', gap: 8,
+          display: 'flex', alignItems: 'center', gap: 10,
           background: 'none', border: 'none', cursor: 'pointer',
           marginBottom: 28, padding: 0,
         }}>
-          <img src="/logo.jpg" alt="ThumbFrame" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover' }} />
+          <img
+            src="/brand/ship-logo-final.png"
+            alt="ThumbFrame"
+            style={{
+              height: 40, width: 'auto', display: 'block',
+              filter: 'drop-shadow(0 1px 6px rgba(20, 12, 28, 0.85))',
+            }}
+          />
           <span style={{ fontSize: 16, fontWeight: 700, color: '#f0f0f3' }}>ThumbFrame</span>
         </button>
 
@@ -146,15 +153,17 @@ export default function Login({ setPage }) {
           )}
 
           <button type="submit" disabled={loading} style={{
-            width: '100%', padding: '13px', borderRadius: 8, border: 'none',
-            background: loading ? '#1e1e24' : '#FF6B00',
-            color: loading ? '#55555e' : '#fff',
+            width: '100%', padding: '13px', borderRadius: 10, border: 'none',
+            background: loading ? 'rgba(255,244,224,0.25)' : 'rgba(255,244,224,1)',
+            color: loading ? 'rgba(10,7,20,0.4)' : 'rgba(10,7,20,1)',
             cursor: loading ? 'default' : 'pointer',
             fontSize: 15, fontWeight: 700,
-            boxShadow: loading ? 'none' : '0 0 30px rgba(255,107,0,0.25)',
-            transition: 'all 0.2s', marginTop: 4,
+            transition: 'background-color 0.15s, opacity 0.15s', marginTop: 4,
             fontFamily: "'Satoshi', sans-serif",
-          }}>
+          }}
+            onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = '#ffffff'; }}
+            onMouseLeave={(e) => { if (!loading) e.currentTarget.style.background = 'rgba(255,244,224,1)'; }}
+          >
             {loading ? 'Logging in…' : 'Log in →'}
           </button>
         </form>
@@ -162,7 +171,9 @@ export default function Login({ setPage }) {
         <p style={{ textAlign: 'center', margin: '14px 0 0', fontSize: 12, color: '#55555e' }}>
           <span
             onClick={() => setPage('forgot-password')}
-            style={{ color: '#FF6B00', cursor: 'pointer' }}
+            style={{ color: 'rgba(255,244,224,0.9)', cursor: 'pointer', transition: 'text-decoration 0.15s' }}
+            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
           >
             Forgot password?
           </span>
@@ -177,7 +188,9 @@ export default function Login({ setPage }) {
           <span style={{ fontSize: 13, color: '#8a8294' }}>Don't have an account? </span>
           <span
             onClick={() => setPage('signup')}
-            style={{ fontSize: 13, color: '#FF6B00', cursor: 'pointer', fontWeight: 600 }}
+            style={{ fontSize: 13, color: 'rgba(255,244,224,0.9)', cursor: 'pointer', fontWeight: 600, transition: 'text-decoration 0.15s' }}
+            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
           >
             Sign up free →
           </span>
