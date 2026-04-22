@@ -300,6 +300,14 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
           stroke: { enabled: false, color: '#000000', width: 0 },
           shadow: { enabled: false, color: '#000000', blur: 0, offsetX: 0, offsetY: 0, opacity: 0 },
           glow:   { enabled: false, color: '#ffffff', blur: 0, strength: 0, opacity: 0 },
+          // Phase 2.a extensions — all null / empty by default.
+          multiStroke:    [],
+          warp:           null,
+          pathId:         null,
+          variableAxes:   {},
+          gradientFill:   null,
+          gradientStroke: null,
+          perCharacter:   [],
           ...overrides?.textData,
         },
       });
@@ -891,6 +899,165 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
           params: { ...(layer.adjustmentData?.params || {}), ...(params || {}) },
         },
       });
+    },
+  });
+
+  // ── Phase 2.a: full text system ────────────────────────────────────────
+  register({
+    id: 'text.stroke.add',
+    label: 'Add text stroke',
+    category: 'text',
+    shortcut: null,
+    description:
+      'Append a stroke to textData.multiStroke. Strokes render '
+      + 'bottom-up so the first added is the innermost.',
+    handler: async (layerId, stroke) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === layerId);
+      if (!layer || layer.type !== 'text') return;
+      const { mergeStrokeList } = await import('../engine/TextSystem.js');
+      const next = mergeStrokeList(layer.textData?.multiStroke, stroke || {});
+      s.updateLayer(layerId, {
+        textData: { ...layer.textData, multiStroke: next },
+      });
+      await history.snapshot('Add text stroke');
+    },
+  });
+
+  register({
+    id: 'text.stroke.remove',
+    label: 'Remove text stroke',
+    category: 'text',
+    shortcut: null,
+    handler: async (layerId, index) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === layerId);
+      if (!layer || layer.type !== 'text') return;
+      const strokes = (layer.textData?.multiStroke || []).slice();
+      if (index < 0 || index >= strokes.length) return;
+      strokes.splice(index, 1);
+      s.updateLayer(layerId, { textData: { ...layer.textData, multiStroke: strokes } });
+      await history.snapshot('Remove text stroke');
+    },
+  });
+
+  register({
+    id: 'text.warp.set',
+    label: 'Set text warp',
+    category: 'text',
+    shortcut: null,
+    description: 'Apply a WARP_PRESET to the text layer. Pass null to clear.',
+    handler: async (layerId, warp) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === layerId);
+      if (!layer || layer.type !== 'text') return;
+      s.updateLayer(layerId, { textData: { ...layer.textData, warp: warp || null } });
+      await history.snapshot(warp ? `Warp: ${warp.preset || 'custom'}` : 'Clear warp');
+    },
+  });
+
+  register({
+    id: 'text.gradient.set',
+    label: 'Set text gradient',
+    category: 'text',
+    shortcut: null,
+    description: 'Set gradientFill or gradientStroke on a text layer.',
+    handler: async (layerId, which, grad) => {
+      if (which !== 'fill' && which !== 'stroke') return;
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === layerId);
+      if (!layer || layer.type !== 'text') return;
+      const key = which === 'fill' ? 'gradientFill' : 'gradientStroke';
+      s.updateLayer(layerId, { textData: { ...layer.textData, [key]: grad || null } });
+      await history.snapshot(`Set text gradient ${which}`);
+    },
+  });
+
+  register({
+    id: 'text.variableAxis.set',
+    label: 'Set variable font axis',
+    category: 'text',
+    shortcut: null,
+    description:
+      'Merge an {axisTag: value} patch into textData.variableAxes. '
+      + 'Axis tag must be a 4-character OpenType axis code (wght, wdth, '
+      + 'slnt, opsz).',
+    handler: async (layerId, patch) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === layerId);
+      if (!layer || layer.type !== 'text' || !patch) return;
+      const axes = { ...(layer.textData?.variableAxes || {}), ...patch };
+      s.updateLayer(layerId, { textData: { ...layer.textData, variableAxes: axes } });
+      // Axis slider drags call this action, so skip the snapshot here
+      // and rely on the caller to snapshot on drag-end.
+    },
+  });
+
+  register({
+    id: 'text.path.set',
+    label: 'Bind text to path',
+    category: 'text',
+    shortcut: null,
+    description:
+      'Point a text layer at a vectorPath shape layer. Renderer samples '
+      + 'the path and flows glyphs along it.',
+    handler: async (layerId, pathLayerId) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === layerId);
+      if (!layer || layer.type !== 'text') return;
+      s.updateLayer(layerId, { textData: { ...layer.textData, pathId: pathLayerId || null } });
+      await history.snapshot(pathLayerId ? 'Bind text to path' : 'Unbind text path');
+    },
+  });
+
+  register({
+    id: 'text.perChar.set',
+    label: 'Per-character style override',
+    category: 'text',
+    shortcut: null,
+    description:
+      'Upsert a per-character override (color/size/weight/letterSpacing) '
+      + 'keyed by glyph index.',
+    handler: async (layerId, index, overrides) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === layerId);
+      if (!layer || layer.type !== 'text') return;
+      const { perCharacterOverride } = await import('../engine/TextSystem.js');
+      const next = perCharacterOverride(layer.textData?.perCharacter, index, overrides || {});
+      s.updateLayer(layerId, { textData: { ...layer.textData, perCharacter: next } });
+      await history.snapshot('Per-character style');
+    },
+  });
+
+  register({
+    id: 'text.outline.toShapes',
+    label: 'Convert text to shapes',
+    category: 'text',
+    shortcut: null,
+    description:
+      'Expand a text layer into one vectorPath shape layer per glyph. '
+      + 'Destroys the source text layer (Photoshop-standard). Requires '
+      + 'an opentype Font object passed in — the font-load pipeline '
+      + 'lands in Phase 2.b.',
+    handler: async (layerId, font) => {
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === layerId);
+      if (!layer || layer.type !== 'text' || !font) return null;
+      const { outlineTextToShapes } = await import('../engine/TextOutline.js');
+      const shapes = outlineTextToShapes(font, layer.textData?.content || '', {
+        x:        layer.x - (layer.width || 0) / 2,
+        y:        layer.y - (layer.height || 0) / 2,
+        fontSize: layer.textData?.fontSize || 96,
+        fill:     layer.textData?.fill || '#faecd0',
+        letterSpacing: layer.textData?.letterSpacing || 0,
+      });
+      const ids = [];
+      for (const shapeOverrides of shapes) {
+        ids.push(s.addLayer(shapeOverrides));
+      }
+      s.removeLayer(layerId);
+      await history.snapshot('Text to shapes');
+      return ids;
     },
   });
 }
