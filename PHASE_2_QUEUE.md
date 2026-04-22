@@ -74,4 +74,16 @@
 (empty)
 
 ## Commits made
-(populate as you go)
+- Phase 2.a — feat(editor-v2): phase 2.a — full text system (TextWarp, TextSystem, TextOutline, 8 new text registry actions, 42 tests)
+- Phase 2.b — feat(editor-v2): phase 2.b — font system (20-font catalog, FontLoader with dedup, FontPicker helpers, font.load/font.resolve actions, 23 tests)
+- Phase 2.c — feat(editor-v2): phase 2.c — live legibility preview (Contrast WCAG math, buildLegibilityPreview with 180px offscreen canvas, 19 tests)
+- Phase 2.d — feat(editor-v2): phase 2.d — full selection system rebuild (Selection singleton, LassoSelector with fixed feather complexity, MagicWand, ColorRange, RefineEdge, SAMClient, 7 registry actions, 34 tests)
+
+## Judgment calls logged
+- Phase 2.a defers the actual Pixi-filter-based vertex warp implementation to Phase 4 polish; shipping the pure math + data model now so text.warp.set is fully wired and Phase 4.c panels can bind to it.
+- Phase 2.b's font loader is designed to run on the FontFace API at mount time; in jsdom it takes a stub path so tests can still exercise resolveCssFamily. The URL scheme for fontsource entries (`/fonts/<id>.woff2`) is a stand-in — Phase 4.a will wire real @fontsource imports.
+- Phase 2.c's contrast heuristic flags sub-18px fonts as a warning even with AA-passing contrast. Rationale: AA passes ratio-only; at postage-stamp size fonts under 18px are unreadable regardless. Documented rule of thumb.
+- Phase 2.d's decontaminateColors ships as a no-op stub — needs source imageData plus the edge-matte recovery algorithm (~150 line hot loop). Scoped post-launch when Selection gets a full UX pass.
+
+## Deployment prerequisites captured
+- REPLICATE_API_TOKEN must be set on the Railway backend before selection.sam.click produces real masks. Frontend never handles the token.
