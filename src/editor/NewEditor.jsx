@@ -17,6 +17,7 @@ import StatusBar from './components/StatusBar';
 import RightPanel from './components/RightPanel';
 import CommandPalette from './components/CommandPalette';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
+import useAutoSave          from './hooks/useAutoSave';
 import { hitTestLayers, computeMove } from './tools/SelectTool';
 import { computeGuides } from './engine/SmartGuides';
 import { processImageFile, processImageFileIntoLayer } from './utils/imageUpload';
@@ -151,6 +152,15 @@ export default function NewEditor({ user, setPage }) {
 
   const setCurrentStreak      = useEditorStore(s => s.setCurrentStreak);
   const toolParams            = useEditorStore(s => s.toolParams);
+
+  // ── Auto-save (cloud + IDB) ──────────────────────────────────────────────
+  // Wires the Railway /designs/save path to every store history commit,
+  // loads on mount when ?project=<id> is present, and drives saveStatus in
+  // the store (which TopBar renders as a visible saved/saving/unsaved/
+  // error indicator). See src/editor/hooks/useAutoSave.js for the full
+  // save lifecycle (debounce, offline handling, beforeunload guard).
+  // eslint-disable-next-line no-unused-vars
+  const { saveImmediate: _saveImmediate } = useAutoSave({ platform: 'youtube' });
 
   // ── Fun layer hooks ──────────────────────────────────────────────────────
   const { unlock: unlockAchievement, checkTriggers, pendingToast, setPendingToast } = useAchievements(user);
