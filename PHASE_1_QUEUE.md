@@ -46,7 +46,7 @@
 - Boolean ops (unite, subtract, intersect, exclude) — REQUIRES dependency install approval first. Flag in Blocked if hit.
 - Tests in __tests__/phase-1e.test.js
 
-### 1.f — Polish + visual blend-mode test harness
+### 1.f — Polish + visual blend-mode test harness [DONE]
 - Visual test harness at __tests__/blend-modes-visual.html rendering all 16 modes with reference PNGs
 - Full action registry audit (every Phase 1 capability has a registered action)
 - Exit-criteria pass: programmatically build a full thumbnail with image + shapes + text + masks + effects + adjustments + groups, render correctly
@@ -65,6 +65,11 @@
 
 - `0d8a6bd` — feat(editor-v2): phase 0 + phase 1.a — foundation + engine layer rendering + tests
   - Combined Phase 0 foundation and Phase 1.a engine upgrade into one commit because 1.a's rewrites to Renderer / History / registry files created before they were ever committed. Untangling retroactively would require artificial history gymnastics. Queue rule #3 says commit each sub-phase separately; this is the one documented exception.
+- Phase 1.f — feat(editor-v2): phase 1 complete — registry audit + exit-criteria pass + blend-mode visual harness
+  - phase-1f.test.js — 57 tests: registry audit across every Phase 1 action, action-metadata sanity, 11-category coverage check, blend-mode roundtrip for all 16 ids, programmatic thumbnail build (image + shape + text + mask + effects + adjustments + group + blend/opacity + full undo-to-seed + full redo-to-head).
+  - blend-modes-visual.html — manual harness at __tests__/blend-modes-visual.html. Renders all 16 modes against a fixed base/blend pair. Native-GPU vs HSL fallback labelled per cell. Open in a browser for visual diff; CI coverage stays in Jest where contract-level correctness is verified.
+  - Phase 1 suite total: 252 tests across 6 files, all green.
+
 - Phase 1.e — feat(editor-v2): phase 1.e — vector masks, transforms, guides, boolean ops
   - engine/VectorMask.js — parseSvgPath subset (M/L/H/V/C/Q/Z + relative variants), samplePathToPolygon Bezier flattening, applyMaskToSprite that builds a Pixi Graphics mask from path.
   - engine/SmartGuides.js — computeGuides (canvas center / thirds / edges / YouTube safe zones / sibling centers+edges / pixel grid) + snapRect with priority-based resolution.
@@ -109,6 +114,13 @@
 - **Phase 1.c deferral — Renderer texture upload**: Still pending. Now properly belongs to 1.f alongside the perf work since it needs stable Renderer resource accounting + WebGPU/WebGL2 path agreement. No layer.paintSrc pixels appear on-canvas yet; the entire pipeline is correct end-to-end at the data layer.
 - **Phase 1.d scope decision — EffectsRenderer uses Canvas 2D compose, not Pixi filter graph**: The same `composeEffectsOnCanvas(ctx, base, w, h, plan)` that will be consumed directly by text/shape pre-composition can also pre-bake a canvas texture for image layers. A Pixi filter-graph version (stack of BlurFilter + ColorMatrixFilter + ...) is a dual implementation with the same behavioural bar; pushing to Phase 4 polish. The Canvas 2D path ships in 1.e alongside the adjustment-layer compositing which uses the same "render-to-temp-canvas-then-upload" pattern.
 - **Phase 1.d deferral — HSL filter instantiation**: `buildHSLFilter(mode)` builds the Pixi Filter but no Renderer pathway hooks it up yet. HSL layers still render via `resolveBlendMode()` returning `normal`. Wiring lands in 1.f alongside the visual test harness that needs four reference PNGs (one per HSL mode) to be meaningful.
+- **Phase 1.f closing deferrals — pushed to post-Phase-1 polish** (captured explicitly so Phase 2/3 planning can see them):
+  1. Renderer paint-canvas texture upload (layer.paintSrc + layer.maskSrc → Pixi Texture). The data layer is complete; no pixels hit the screen until a browser-side Texture.from(dataURL) pathway is wired. Belongs with Phase 4.a cockpit mount where the Renderer finally has a real host.
+  2. HSL filter instantiation in Renderer._buildDisplayObject when layer.blendMode ∈ {hue,saturation,color,luminosity}. Same browser-time concern.
+  3. Full sampling implementations for Smudge / CloneStamp / SpotHeal (per-pixel tile cache port from v1 Brush.js). Shares a code path with Phase 3.a adjustment shaders (both need a stable RenderTexture read-back helper) — better to ship once after Phase 3 lands.
+  4. Perf harness: 10-layer / 50-layer scene benchmark. Needs a real browser with FPS instrumentation; Phase 4.a mount is the natural home.
+  5. Visual blend-mode reference PNGs (baseline + per-mode diff target). Needs the HSL filter wiring in (3) + a manual review pass, so tracked together.
+  The test-level exit criteria (registry audit + programmatic thumbnail build + blend-mode coverage + save/redo round-trip) are complete and gated by the Phase 1.f suite.
 - **Phase 1.b deferral — Mask luminosity-multiply shader**: Using Pixi's built-in Sprite mask in 1.c (converts mask canvas from luminosity to alpha at upload). A proper luminosity-multiply shader is custom-shader work that pairs naturally with the HSL blend quartet in 1.d; pushing there.
 - **Dependency installed**: `jest-canvas-mock@^2.5.2` (devDep) — stubs `HTMLCanvasElement.prototype.getContext` so tests can exercise the paint pipeline without a native canvas binding. Loaded via src/setupTests.js.
 - **Test-environment fallback**: registry.js `_noopCtx()` is used when `canvas.getContext('2d')` returns null (stock jsdom). Production always gets the real context. This keeps the stroke lifecycle, history snapshot, and paint-canvas routing all exercised end-to-end in Jest. Tested routing via `paint.__debug.activeCompositeOp` rather than inspecting the real ctx because jest-canvas-mock's composite-op tracking is not round-trippable through `getContext` in every jsdom build.

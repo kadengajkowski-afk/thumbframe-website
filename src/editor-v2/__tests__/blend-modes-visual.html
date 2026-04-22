@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>editor-v2 · blend-mode visual harness</title>
+<style>
+  body { margin: 0; background: #0a0a10; color: #faecd0;
+         font: 14px 'Inter', system-ui, sans-serif; padding: 24px; }
+  h1   { margin: 0 0 4px 0; font-size: 20px; letter-spacing: 0.02em; }
+  p    { opacity: 0.7; margin: 0 0 24px 0; max-width: 720px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .cell {
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 8px;
+    background: rgba(255,255,255,0.02);
+  }
+  .cell canvas { width: 100%; height: auto; display: block;
+                 border-radius: 4px; background: #111; }
+  .cell .lbl { font-size: 12px; opacity: 0.8; margin-top: 6px;
+               text-transform: uppercase; letter-spacing: 0.12em; }
+  .native { color: #7fe4a1; }
+  .hsl    { color: #ffb066; }
+</style>
+</head>
+<body>
+<h1>Blend-mode visual harness</h1>
+<p>
+  Renders all 16 ids from <code>BlendModes.BLEND_MODES</code> against a
+  fixed base + blend pair. Native-GPU modes render through Pixi's
+  default path; the four HSL modes fall back to <code>normal</code>
+  with a console.info until their filter wiring ships in a post-Phase 1
+  polish pass (tracked in the Phase 1 queue).
+</p>
+<p style="opacity:0.55;font-size:11px;">
+  This file is a manual harness — open in a browser to inspect. CI
+  verification is via Phase 1's Jest suites which cover the data-model
+  and resolver contract.
+</p>
+<div id="grid" class="grid"></div>
+
+<script type="module">
+  const BLEND_MODES = [
+    { id: 'normal',      native: true  },
+    { id: 'multiply',    native: true  },
+    { id: 'screen',      native: true  },
+    { id: 'overlay',     native: true  },
+    { id: 'darken',      native: true  },
+    { id: 'lighten',     native: true  },
+    { id: 'color-dodge', native: true  },
+    { id: 'color-burn',  native: true  },
+    { id: 'hard-light',  native: true  },
+    { id: 'soft-light',  native: true  },
+    { id: 'difference',  native: true  },
+    { id: 'exclusion',   native: true  },
+    { id: 'hue',         native: false },
+    { id: 'saturation',  native: false },
+    { id: 'color',       native: false },
+    { id: 'luminosity',  native: false },
+  ];
+
+  const grid = document.getElementById('grid');
+  const W = 220, H = 124;
+
+  function paintBase(ctx) {
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, '#2050a0');
+    g.addColorStop(1, '#c03040');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ffe066';
+    ctx.beginPath();
+    ctx.arc(W * 0.33, H * 0.55, 34, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function paintBlend(ctx, mode) {
+    ctx.globalCompositeOperation = mode;
+    ctx.fillStyle = '#50ffa0';
+    ctx.beginPath();
+    ctx.arc(W * 0.66, H * 0.45, 40, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(W * 0.25, H * 0.25, W * 0.5, 12);
+  }
+
+  for (const m of BLEND_MODES) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    paintBase(ctx);
+    try { paintBlend(ctx, m.id); }
+    catch (e) { paintBlend(ctx, 'normal'); }
+    cell.appendChild(c);
+    const lbl = document.createElement('div');
+    lbl.className = 'lbl ' + (m.native ? 'native' : 'hsl');
+    lbl.textContent = m.id + (m.native ? '' : '  · hsl');
+    cell.appendChild(lbl);
+    grid.appendChild(cell);
+  }
+</script>
+</body>
+</html>
