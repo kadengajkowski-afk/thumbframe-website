@@ -81,29 +81,56 @@ Blank canvas renders. Add a layer via action, save fires, reload preserves the l
 
 The paint set foundation.
 
-### Layer System
-- Real non-destructive raster masks (paintable)
-- Vector masks
-- Layer groups / folders
-- Adjustment layers as a layer type
-- Layer effects panel: stroke, outer glow, inner glow, drop shadow, bevel, color overlay, gradient overlay
-- All 16 blend modes working correctly
-- Fill blend modes (blend layer fill separately from effects)
+**Execution note:** Phase 1 is too large for a single focused session. It splits into 1.a → 1.f, each a single session producing working committable code. The full aggregate exit criteria (below) still hold — "make a complete thumbnail with no AI" — and are only met after 1.f passes. Do not skip sub-phases. Do not combine.
 
-### Ported Tools (from current editor, cleaned up)
-- Brush, eraser, dodge, burn, sponge, blur, sharpen, smudge
-- Spot heal, clone, light painting
-- Add pressure sensitivity + brush dynamics (Procreate-level)
+### Phase 1.a — Engine layer model upgrade
+- Renderer actually renders layers from the store (Phase 0 left it blank; sync() now reconciles PixiJS display objects to store.layers on every dirty tick)
+- Layer schema extensions: raster mask / vector mask / group / adjustment are all in the factory, with type-specific rendering stubs routed through the new sync
+- Blend-mode module — all 16 modes declared in one place, native 12 wired correctly, HSL quartet (hue/saturation/color/luminosity) flagged for 1.d
+- Shape layers rendering via PixiJS Graphics: rectangle (with per-corner radius), circle, ellipse, polygon, star, arrow, line, speech bubble. Fill + stroke + gradient fill + gradient stroke
+- Basic text rendering: font family, size, weight, fill, align, line-height. Stroke/glow/shadow/warp land in Phase 2
+- Action registry extensions + history snapshots for every new capability above
+- **Exit:** can build a full thumbnail programmatically from DevTools (`window.__v2`) combining images, shapes, text, groups — and see it render at 1280×720 with blend modes and opacity applied correctly.
 
-### New from Scratch
-- Move, resize, rotate, crop with on-canvas handles
-- Shapes: rectangle, circle, polygon, star, arrow, line, speech bubble
-- Boolean ops on shapes: unite, subtract, intersect, exclude
-- Smart guides during drag (center, thirds, safe zones, alignment)
-- Snap-to-grid, snap-to-pixel toggles
+### Phase 1.b — Raster masks + core paint pipeline
+- RasterMask data model + GPU compositing (mask texture per layer, composited at render time)
+- Paint target routing — brush can write to layer OR to mask, tool state bit
+- Ported tools: brush, eraser, smudge, blur, sharpen — rebuilt on the v2 engine, no `window.__paintCanvases`
+- Pressure sensitivity via `PointerEvent.pressure` with mouse fallback to 1.0
+- Brush dynamics: size jitter, opacity jitter, flow, smoothing, angle jitter, scatter
+- Undo/redo captures paint strokes as single atoms (per-stroke, not per-stamp)
+- **Exit:** paint on a layer OR its mask, undo/redo works, pressure affects stroke when a tablet is present.
 
-### Exit Criteria
-Make a complete thumbnail using only brushes, shapes, and layer effects. No AI needed.
+### Phase 1.c — Remaining paint tools
+- Dodge, burn, sponge — tonal brush shaders
+- Spot heal (content-aware), clone stamp, light painting
+- All sharing the Phase 1.b brush pipeline; no duplication
+- **Exit:** every v1 paint tool has a v2 equivalent that works correctly on masks and layers.
+
+### Phase 1.d — Layer effects + HSL blend modes
+- LayerEffects engine — stroke (inside/center/outside), outer glow, drop shadow as first-class (highest-value three)
+- Inner glow, bevel, color overlay, gradient overlay as second-class (implemented but may be lower fidelity for now)
+- Effects render via PixiJS filters or custom multi-pass shaders; update without full canvas re-render
+- HSL blend-mode quartet implemented via filter shaders that sample the below-stack (WebGL has no native blend equation)
+- Fill blend modes — blend layer fill separately from effects (Photoshop parity)
+- Visual test harness at `src/editor-v2/__tests__/blend-modes-visual.html` rendering all 16 modes side-by-side
+- **Exit:** every blend mode visually matches reference, every effect is non-destructive and editable.
+
+### Phase 1.e — Vector masks, adjustment rendering, transform, guides, boolean ops
+- Vector mask stencil path
+- Adjustment layer rendering — "filter applies to layers below within the same group" via RenderTexture-to-below-stack then composite-back
+- TransformTool — move/resize/rotate/crop math + actions (on-canvas handles are UI, lands in Phase 4)
+- SmartGuides algorithm — snap to canvas center / thirds / other-layer edges/centers / safe zones; snap-to-grid and snap-to-pixel togglable. Visible rendering in Phase 4
+- Boolean ops (unite/subtract/intersect/exclude) — **requires approval for a new npm dep (`paper.js` or `polybooljs`)** before I install
+- **Exit:** non-destructive adjustment layer above a stack of images darkens/saturates them. Boolean ops produce correct shape geometry.
+
+### Phase 1.f — Polish + exit-criteria pass
+- Full action-registry audit (every new action has correct id/label/shortcut/category)
+- History snapshot labels are user-readable on every action
+- Performance pass on dirty-rect rendering
+- Exit-criteria regression tests
+- Any bugs uncovered during 1.a–1.e that were deferred land here
+- **Exit:** the aggregate Phase 1 exit criteria — make a complete thumbnail using only brushes, shapes, and layer effects, no AI — passes end-to-end.
 
 ---
 
