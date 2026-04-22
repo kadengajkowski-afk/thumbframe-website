@@ -24,9 +24,32 @@
  * @property {string}   [description]
  */
 
-import { BrushTool }     from '../tools/BrushTool.js';
-import { EraserTool }    from '../tools/EraserTool.js';
-import { StrokeSession } from '../tools/StrokeSession.js';
+import { BrushTool }         from '../tools/BrushTool.js';
+import { EraserTool }        from '../tools/EraserTool.js';
+import { StrokeSession }     from '../tools/StrokeSession.js';
+import { BlurTool, SharpenTool } from '../tools/ConvolutionTools.js';
+import { DodgeTool, BurnTool, SpongeTool } from '../tools/ToneTools.js';
+import { SmudgeTool, CloneStampTool, SpotHealTool } from '../tools/SamplingTools.js';
+import { LightPaintingTool } from '../tools/LightPaintingTool.js';
+
+/**
+ * Central tool registry. The registry + StrokeSession look up tools by id
+ * through this map — never via eager string-switch. New tools land here
+ * and in Store.toolParams simultaneously.
+ */
+const _tools = {
+  brush:         BrushTool,
+  eraser:        EraserTool,
+  blur:          BlurTool,
+  sharpen:       SharpenTool,
+  dodge:         DodgeTool,
+  burn:          BurnTool,
+  sponge:        SpongeTool,
+  smudge:        SmudgeTool,
+  cloneStamp:    CloneStampTool,
+  spotHeal:      SpotHealTool,
+  lightPainting: LightPaintingTool,
+};
 
 /** @type {Map<string, Action>} */
 const _actions = new Map();
@@ -539,6 +562,22 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
     handler: () => { store.getState().setActiveTool('eraser'); },
   });
 
+  // Phase 1.c — register a tool.<id>.select action for every non-brush,
+  // non-eraser tool defined in _tools. Keeps the switch logic in one
+  // place so Phase 4.b's toolbar can list(...) actions by category and
+  // render icons + shortcuts without bespoke plumbing.
+  for (const [toolId, tool] of Object.entries(_tools)) {
+    if (toolId === 'brush' || toolId === 'eraser') continue;
+    const actionId = `tool.${toolId}.select`;
+    register({
+      id: actionId,
+      label: tool.label || toolId,
+      category: 'tool',
+      shortcut: tool.shortcut || null,
+      handler: () => { store.getState().setActiveTool(toolId); },
+    });
+  }
+
   register({
     id: 'tool.params.update',
     label: 'Update tool params',
@@ -757,7 +796,7 @@ function normaliseShortcut(shortcut) {
 
 /** @param {string} toolId */
 function _resolveTool(toolId) {
-  return toolId === 'eraser' ? EraserTool : BrushTool;
+  return _tools[toolId] || BrushTool;
 }
 
 function _endSessionNoSnapshot() {

@@ -21,6 +21,10 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { createLayer } from '../engine/layerFactory.js';
 import { DEFAULT_BRUSH_PARAMS, DEFAULT_ERASER_PARAMS } from '../tools/BrushEngine.js';
+import { BlurTool, SharpenTool }                  from '../tools/ConvolutionTools.js';
+import { DodgeTool, BurnTool, SpongeTool }        from '../tools/ToneTools.js';
+import { SmudgeTool, CloneStampTool, SpotHealTool } from '../tools/SamplingTools.js';
+import { LightPaintingTool }                      from '../tools/LightPaintingTool.js';
 
 /** @typedef {import('../engine/Layer.js').Layer} Layer */
 
@@ -68,8 +72,17 @@ export const useStore = create(
     // heavier reconciliation until the stroke finishes.
     activeTool: /** @type {string} */ ('brush'),
     toolParams: {
-      brush:  { ...DEFAULT_BRUSH_PARAMS },
-      eraser: { ...DEFAULT_ERASER_PARAMS },
+      brush:         { ...DEFAULT_BRUSH_PARAMS },
+      eraser:        { ...DEFAULT_ERASER_PARAMS },
+      blur:          BlurTool.defaultParams(),
+      sharpen:       SharpenTool.defaultParams(),
+      dodge:         DodgeTool.defaultParams(),
+      burn:          BurnTool.defaultParams(),
+      sponge:        SpongeTool.defaultParams(),
+      smudge:        SmudgeTool.defaultParams(),
+      cloneStamp:    CloneStampTool.defaultParams(),
+      spotHeal:      SpotHealTool.defaultParams(),
+      lightPainting: LightPaintingTool.defaultParams(),
     },
     strokeActive: false,
 

@@ -24,7 +24,7 @@
 - History: snapshot on stroke end, not per frame
 - Tests in __tests__/phase-1b.test.js
 
-### 1.c — Remaining paint tools
+### 1.c — Remaining paint tools [DONE]
 - Port: dodge, burn, sponge, spot heal, clone stamp, light painting
 - Same pipeline as 1.b
 - Tests in __tests__/phase-1c.test.js
@@ -65,6 +65,13 @@
 
 - `0d8a6bd` — feat(editor-v2): phase 0 + phase 1.a — foundation + engine layer rendering + tests
   - Combined Phase 0 foundation and Phase 1.a engine upgrade into one commit because 1.a's rewrites to Renderer / History / registry files created before they were ever committed. Untangling retroactively would require artificial history gymnastics. Queue rule #3 says commit each sub-phase separately; this is the one documented exception.
+- Phase 1.c — feat(editor-v2): phase 1.c — remaining paint tools (blur, sharpen, dodge, burn, sponge, smudge, cloneStamp, spotHeal, lightPainting)
+  - 9 new tool modules: ConvolutionTools (Blur, Sharpen), ToneTools (Dodge, Burn, Sponge), SamplingTools (Smudge, CloneStamp, SpotHeal), LightPaintingTool.
+  - Central `_tools` registry in actions/registry.js — one object lookup instead of string-switches scattered across the file. Dynamic `tool.<id>.select` action registration loop iterates this map.
+  - Store.toolParams seeded with defaultParams() for all 11 tools (including brush + eraser).
+  - Composite-op routing per tool: Dodge → color-dodge, Burn → color-burn, LightPainting → lighter, Blur/Sharpen/Sponge → source-over with ctx.filter set. Smudge/CloneStamp/SpotHeal ship with Canvas-2D filter-based placeholders per the documented scope decision.
+  - phase-1c.test.js: 52 tests covering registration, toolParams seeding, composite-op routing, lifecycle round-trip per tool, and Dodge/Burn color-lookup math. Phase-1 suite now 126 tests, all green.
+
 - Phase 1.b — feat(editor-v2): phase 1.b — paint pipeline (brush + eraser)
   - PaintCanvases class (no window globals; v1's scattered window.__paintCanvases stays dead).
   - BrushEngine pure stamp math + Canvas 2D application — interpolate, smooth, dynamics (size/opacity/flow jitter + scatter + angle jitter).
@@ -85,6 +92,8 @@
 - **Deferred**: visual blend-mode test harness is explicitly Phase 1.d work (needs reference PNGs that require the HSL shader ship first to be meaningful).
 - **Phase 1.b scope decision**: Originally listed brush + eraser + smudge + blur + sharpen. Shipping brush + eraser as 1.b with the full stamp pipeline, paint-target routing, stroke lifecycle, pressure, and core dynamics (size/opacity/flow/spacing). Moving smudge/blur/sharpen into 1.c alongside the other sampling/convolution tools (dodge/burn/sponge/spot-heal/clone/light-painting) — they share the same implementation shape and are cleaner as one batch.
 - **Phase 1.b deferral — Renderer wiring of paint canvases**: The Renderer does not yet upload PaintCanvases output into the live Pixi texture. The store side (layer.paintSrc / layer.maskSrc) and paint pipeline are complete and fully tested; Renderer texture promotion lands in 1.c alongside smudge/blur/sharpen which need to READ paint-canvas pixels (shared pipeline). This keeps 1.b focused on pipeline correctness and avoids speculative async Texture.from work.
+- **Phase 1.c scope decision — stub-quality sampling tools**: Smudge, CloneStamp, and SpotHeal ship with Canvas-2D filter-based placeholders (blur kernel with size based on strength/sampleRadius). A full per-pixel sampling implementation (tile cache + directional smear for smudge, offset-blit for clone, content-aware fill for spot-heal) is a 200-line hot loop ported from v1's Brush.js. Pushing to 1.f's perf pass so we can benchmark against v1 rather than reimplementing it twice. Routing, lifecycle, stroke snapshots, and params seeding are all complete; only the pixel-accuracy polish is deferred.
+- **Phase 1.c deferral — Renderer texture upload**: Still pending. Now properly belongs to 1.f alongside the perf work since it needs stable Renderer resource accounting + WebGPU/WebGL2 path agreement. No layer.paintSrc pixels appear on-canvas yet; the entire pipeline is correct end-to-end at the data layer.
 - **Phase 1.b deferral — Mask luminosity-multiply shader**: Using Pixi's built-in Sprite mask in 1.c (converts mask canvas from luminosity to alpha at upload). A proper luminosity-multiply shader is custom-shader work that pairs naturally with the HSL blend quartet in 1.d; pushing there.
 - **Dependency installed**: `jest-canvas-mock@^2.5.2` (devDep) — stubs `HTMLCanvasElement.prototype.getContext` so tests can exercise the paint pipeline without a native canvas binding. Loaded via src/setupTests.js.
 - **Test-environment fallback**: registry.js `_noopCtx()` is used when `canvas.getContext('2d')` returns null (stock jsdom). Production always gets the real context. This keeps the stroke lifecycle, history snapshot, and paint-canvas routing all exercised end-to-end in Jest. Tested routing via `paint.__debug.activeCompositeOp` rather than inspecting the real ctx because jest-canvas-mock's composite-op tracking is not round-trippable through `getContext` in every jsdom build.
