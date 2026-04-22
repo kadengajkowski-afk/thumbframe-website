@@ -13,6 +13,13 @@ import {
   COLORS, TYPOGRAPHY, SPACING, RADII, SHADOWS, MOTION, transition,
 } from '../ui/tokens';
 
+// Phase 4.6 introduced a tablet breakpoint; pin the test viewport to
+// desktop so the 320px panel assertion below is deterministic.
+beforeEach(() => {
+  Object.defineProperty(window, 'innerWidth',  { configurable: true, value: 1440 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900  });
+});
+
 describe('tokens', () => {
   test('COLORS carries the cream accent from the landing', () => {
     expect(COLORS.cream).toBe('#faecd0');
@@ -63,48 +70,44 @@ describe('CockpitShell', () => {
   test('renders canvas, tool, panel, layer, status regions', () => {
     const { container } = render(
       <CockpitShell
+        topBar={<div data-testid="topbar-slot">top bar</div>}
         canvas={<div data-testid="canvas-slot">canvas</div>}
         toolPalette={<div data-testid="tools-slot">tools</div>}
         contextualPanel={<div data-testid="panel-slot">panel</div>}
         layerPanel={<div data-testid="layers-slot">layers</div>}
-        projectName="demo"
-        layerCount={3}
-        saveStatus="saved"
-        zoomPercent={87}
       />,
     );
     expect(screen.getByTestId('canvas-slot')).toBeInTheDocument();
     expect(screen.getByTestId('tools-slot')).toBeInTheDocument();
     expect(screen.getByTestId('panel-slot')).toBeInTheDocument();
     expect(screen.getByTestId('layers-slot')).toBeInTheDocument();
-    expect(container.querySelector('[data-status]')).toBeInTheDocument();
+    expect(screen.getByTestId('topbar-slot')).toBeInTheDocument();
+    // Phase 4.6: the status bar was replaced by the top bar + save
+    // indicator, so we look for the top-bar region instead.
+    expect(container.querySelector('[data-cockpit-topbar]')).toBeInTheDocument();
   });
 
-  test('status bar renders project / layer count / zoom / save', () => {
+  test('top bar slot renders its children (project name lives there now)', () => {
     render(
       <CockpitShell
+        topBar={<span>Hero Thumbnail</span>}
         canvas={null} toolPalette={null} contextualPanel={null} layerPanel={null}
-        projectName="Hero Thumbnail"
-        layerCount={7}
-        saveStatus="saving"
-        zoomPercent={125}
       />,
     );
     expect(screen.getByText(/Hero Thumbnail/)).toBeInTheDocument();
-    expect(screen.getByText(/layers: 7/)).toBeInTheDocument();
-    expect(screen.getByText(/zoom: 125%/)).toBeInTheDocument();
-    expect(screen.getByLabelText('save: saving')).toBeInTheDocument();
   });
 
-  test('cockpit grid uses 56px tool column + 320px panel column', () => {
+  test('cockpit grid uses 48px tool column + 320px panel column (Phase 4.6 layout)', () => {
     const { container } = render(
       <CockpitShell canvas={null} toolPalette={null} contextualPanel={null} layerPanel={null} />,
     );
     const root = container.querySelector('[data-cockpit]');
     expect(root).toBeInTheDocument();
-    const style = root.getAttribute('style') || '';
+    const grid = container.querySelector('[data-cockpit-grid]');
+    expect(grid).toBeInTheDocument();
+    const style = grid.getAttribute('style') || '';
     expect(style).toMatch(/grid-template-columns/);
-    expect(style).toContain('56px');
+    expect(style).toContain('48px');
     expect(style).toContain('320px');
   });
 });
