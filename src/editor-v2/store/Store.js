@@ -25,6 +25,22 @@ import { BlurTool, SharpenTool }                  from '../tools/ConvolutionTool
 import { DodgeTool, BurnTool, SpongeTool }        from '../tools/ToneTools.js';
 import { SmudgeTool, CloneStampTool, SpotHealTool } from '../tools/SamplingTools.js';
 import { LightPaintingTool }                      from '../tools/LightPaintingTool.js';
+import { documentStore }  from './DocumentStore.js';
+import { ephemeralStore } from './EphemeralStore.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4.5.b — the Zustand store is now a backwards-compat proxy for the
+// DocumentStore (layers) + EphemeralStore (selection) underneath. Existing
+// callers still read useStore.getState().layers / selectedLayerIds and see
+// the right data. Reads stay on the Zustand mirror so React can subscribe.
+// Mutations: the action runs against documentStore/ephemeralStore first,
+// then copies the derived view back into the mirror via set().
+//
+// A follow-up commit inside 4.5.b migrates every React consumer to the
+// dedicated useDocumentLayers()/useSelection() hooks and deletes the
+// mirror. Do NOT extend the mirror with new fields — add them to the
+// target store directly.
+// ─────────────────────────────────────────────────────────────────────────────
 
 /** @typedef {import('../engine/Layer.js').Layer} Layer */
 
@@ -104,14 +120,22 @@ export const useStore = create(
 
     /**
      * Add a new layer. Pass overrides to control type / position / dimensions.
+     * Phase 4.5.b: routed through DocumentStore (truth) and mirrored into
+     * the Zustand `layers` slot (backwards-compat read surface).
+     *
      * @param {Partial<Layer>} [overrides]
      * @returns {string} the new layer id
      */
     addLayer(overrides) {
       const layer = createLayer(overrides);
+      documentStore.produce((draft) => {
+        draft.layers.byId[layer.id] = layer;
+        draft.layers.allIds.push(layer.id);
+      }, { label: 'addLayer' });
+      ephemeralStore.setSelection([layer.id]);
       set((state) => {
-        state.layers.push(layer);
-        state.selectedLayerIds = [layer.id];
+        state.layers = documentStore.layersArray();
+        state.selectedLayerIds = ephemeralStore.getSelection();
       });
       return layer.id;
     },
@@ -123,18 +147,25 @@ export const useStore = create(
      * @param {Partial<Layer>} changes
      */
     updateLayer(id, changes) {
-      set((state) => {
-        const layer = state.layers.find(l => l.id === id);
+      documentStore.produce((draft) => {
+        const layer = draft.layers.byId[id];
         if (!layer) return;
         Object.assign(layer, changes, { updatedAt: Date.now() });
-      });
+      }, { label: 'updateLayer' });
+      set((state) => { state.layers = documentStore.layersArray(); });
     },
 
     /** @param {string} id */
     removeLayer(id) {
+      documentStore.produce((draft) => {
+        if (!draft.layers.byId[id]) return;
+        delete draft.layers.byId[id];
+        draft.layers.allIds = draft.layers.allIds.filter(x => x !== id);
+      }, { label: 'removeLayer' });
+      ephemeralStore.setSelection(ephemeralStore.getSelection().filter(x => x !== id));
       set((state) => {
-        state.layers = state.layers.filter(l => l.id !== id);
-        state.selectedLayerIds = state.selectedLayerIds.filter(i => i !== id);
+        state.layers = documentStore.layersArray();
+        state.selectedLayerIds = ephemeralStore.getSelection();
       });
     },
 
@@ -144,32 +175,38 @@ export const useStore = create(
      * @param {number} newIndex
      */
     moveLayer(id, newIndex) {
-      set((state) => {
-        const from = state.layers.findIndex(l => l.id === id);
+      documentStore.produce((draft) => {
+        const arr = draft.layers.allIds;
+        const from = arr.indexOf(id);
         if (from < 0) return;
-        const clamped = Math.max(0, Math.min(state.layers.length - 1, newIndex | 0));
+        const clamped = Math.max(0, Math.min(arr.length - 1, newIndex | 0));
         if (from === clamped) return;
-        const [layer] = state.layers.splice(from, 1);
-        state.layers.splice(clamped, 0, layer);
-      });
+        arr.splice(from, 1);
+        arr.splice(clamped, 0, id);
+      }, { label: 'moveLayer' });
+      set((state) => { state.layers = documentStore.layersArray(); });
     },
 
     /** @param {string[]} ids */
     setSelection(ids) {
-      set((state) => { state.selectedLayerIds = ids.slice(); });
+      ephemeralStore.setSelection(ids);
+      set((state) => { state.selectedLayerIds = ephemeralStore.getSelection(); });
     },
 
     clearSelection() {
+      ephemeralStore.clearSelection();
       set((state) => { state.selectedLayerIds = []; });
     },
 
     /** @param {string} name */
     setProjectName(name) {
+      documentStore.produce((draft) => { draft.projectName = name; }, { label: 'setProjectName' });
       set((state) => { state.projectName = name; });
     },
 
     /** @param {string|null} id */
     setProjectId(id) {
+      documentStore.produce((draft) => { draft.projectId = id; }, { label: 'setProjectId' });
       set((state) => { state.projectId = id; });
     },
 
@@ -235,10 +272,16 @@ export const useStore = create(
      * @param {{ projectId?: string|null, projectName?: string, layers?: Layer[] }} snapshot
      */
     replaceAll(snapshot) {
+      documentStore.replaceAll({
+        projectId:   snapshot.projectId,
+        projectName: snapshot.projectName,
+        layers:      Array.isArray(snapshot.layers) ? snapshot.layers : undefined,
+      });
+      ephemeralStore.setSelection([]);
       set((state) => {
         if (snapshot.projectId   !== undefined) state.projectId   = snapshot.projectId;
         if (snapshot.projectName !== undefined) state.projectName = snapshot.projectName;
-        if (Array.isArray(snapshot.layers))     state.layers      = snapshot.layers;
+        if (Array.isArray(snapshot.layers))     state.layers      = documentStore.layersArray();
         state.selectedLayerIds = [];
       });
     },
@@ -260,3 +303,39 @@ export function getDocumentSnapshot() {
     canvasHeight: s.canvasHeight,
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4.5.b — bidirectional sync guard.
+//
+// Existing tests call `useStore.setState({ layers: [...] })` directly in
+// beforeEach helpers. During the backwards-compat window we intercept
+// those external writes and mirror them into DocumentStore + Ephemeral
+// so the truth stays consistent. The recursion guard prevents the mirror
+// path from feeding back into the Zustand subscription.
+// ─────────────────────────────────────────────────────────────────────────────
+let _mirroringFromDoc = false;
+useStore.subscribe((state, prev) => {
+  if (_mirroringFromDoc) return;
+  if (state.layers !== prev.layers) {
+    const current = documentStore.layersArray();
+    if (current.length !== state.layers.length
+        || current.some((l, i) => l !== state.layers[i])) {
+      // External replacement of the layers array — usually a test
+      // calling useStore.setState({ layers: [] }). Mirror into
+      // DocumentStore so subsequent addLayer() calls start clean.
+      _mirroringFromDoc = true;
+      try {
+        documentStore.replaceAll({ layers: state.layers });
+      } finally { _mirroringFromDoc = false; }
+    }
+  }
+  if (state.selectedLayerIds !== prev.selectedLayerIds) {
+    const current = ephemeralStore.getSelection();
+    const next = state.selectedLayerIds || [];
+    if (current.length !== next.length || current.some((id, i) => id !== next[i])) {
+      _mirroringFromDoc = true;
+      try { ephemeralStore.setSelection(next); }
+      finally { _mirroringFromDoc = false; }
+    }
+  }
+});

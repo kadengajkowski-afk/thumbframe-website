@@ -171,6 +171,16 @@ export class Renderer {
 
     this._unsubStore = this._store.subscribe(() => this.requestRender());
 
+    // Phase 4.5.b — also listen to the DocumentStore directly. When
+    // document patches arrive the Renderer already knows to re-sync;
+    // the Zustand subscription still fires via the backwards-compat
+    // proxy so existing paths keep working.
+    try {
+      // eslint-disable-next-line global-require
+      const { documentStore } = require('../store/DocumentStore.js');
+      this._unsubDocumentStore = documentStore.subscribe(() => this.requestRender());
+    } catch { /* tests without DocumentStore still work via Zustand sub */ }
+
     // Ticker stays off by default — only used while a gesture is active.
     this._app.ticker.autoStart = false;
     this._app.ticker.add(this._onTick);
@@ -256,6 +266,7 @@ export class Renderer {
     this._disposed = true;
     if (this._rafId)      { _cancelRaf(this._rafId); this._rafId = 0; }
     if (this._unsubStore) { this._unsubStore(); this._unsubStore = null; }
+    if (this._unsubDocumentStore) { this._unsubDocumentStore(); this._unsubDocumentStore = null; }
 
     if (this._canvasEl) {
       this._canvasEl.removeEventListener('webglcontextlost',     this._onContextLost);
