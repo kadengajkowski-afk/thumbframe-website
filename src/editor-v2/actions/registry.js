@@ -1060,6 +1060,58 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
     },
   });
 
+  // ── Phase 3.c: LUT + preset system ─────────────────────────────────────
+  register({
+    id: 'lut.import',
+    label: 'Import .cube LUT',
+    category: 'lut',
+    shortcut: null,
+    description:
+      'Parse a .cube string and return a { size, data } LUT the caller '
+      + 'can pass to lut.apply. Returns null on malformed input.',
+    handler: async (cubeStr) => {
+      const { parseCubeLut } = await import('../adjustments/LutParser.js');
+      return parseCubeLut(cubeStr);
+    },
+  });
+
+  register({
+    id: 'lut.apply',
+    label: 'Apply LUT',
+    category: 'lut',
+    shortcut: null,
+    handler: async ({ imageData, lut, strength = 1 } = {}) => {
+      if (!imageData || !lut) return false;
+      const { applyLut } = await import('../adjustments/LutParser.js');
+      applyLut(imageData.data, lut, strength);
+      return true;
+    },
+  });
+
+  register({
+    id: 'lut.bundled',
+    label: 'Build bundled LUT',
+    category: 'lut',
+    shortcut: null,
+    handler: async (id) => {
+      const { buildBundledLut } = await import('../adjustments/BundledLuts.js');
+      return buildBundledLut(id);
+    },
+  });
+
+  register({
+    id: 'preset.apply',
+    label: 'Apply preset',
+    category: 'preset',
+    shortcut: null,
+    handler: async ({ imageData, preset } = {}) => {
+      if (!imageData || !preset) return false;
+      const { applyPreset } = await import('../adjustments/Presets.js');
+      applyPreset(imageData.data, imageData.width, imageData.height, preset);
+      return true;
+    },
+  });
+
   // ── Phase 3.a: adjustments (direct-to-layer bake) ──────────────────────
   register({
     id: 'layer.adjustment.bake',

@@ -53,4 +53,24 @@
 (empty)
 
 ## Commits made
-(populate as you go)
+- Phase 3.a — feat(editor-v2): phase 3.a — core adjustments (brightness through selective-color)
+  - CPU impls for 9 adjustment kinds (brightness/contrast/saturation/exposure/vibrance/curves/hsl/toneCurve/selectiveColor)
+  - GLSL fragment shaders for the 4 commonest kinds (brightness/contrast/saturation/exposure)
+  - layer.adjustment.bake action (direct-to-layer destructive path)
+  - 31 tests
+- Phase 3.b — feat(editor-v2): phase 3.b — advanced color grading
+  - 3-wheel grade, split toning, tone sliders (highlights/shadows/whites/blacks), clarity, dehaze, gradient map, match colors
+  - 13 tests
+- Phase 3.c — feat(editor-v2): phase 3.c — LUTs + presets
+  - .cube parser (comments, titles, DOMAIN_MIN/MAX, 1D rejection)
+  - trilinear applyLut
+  - 11 bundled LUTs (identity, make-it-pop, cinema, warm, cool, vintage, neon, moody, gaming, bleach-bypass, bw) built procedurally (17³)
+  - DEFAULT_PRESETS covering all 8 categories (Make It Pop / Cinema / Warm / Cool / Vintage / Neon / Moody / Gaming)
+  - normalizePreset + applyPreset helpers
+  - 4 registry actions (lut.import, lut.apply, lut.bundled, preset.apply)
+  - 20 tests
+
+## Judgment calls logged
+- Phase 3.a's GPU fragment shaders cover the 4 simplest kinds (brightness/contrast/saturation/exposure). The other 5 (curves/hsl/toneCurve/selectiveColor/vibrance) can ship as CPU-only in their first adjustment-layer render pass since Renderer wires through a RenderTexture round-trip anyway — the GPU shaders are a perf optimisation, not a correctness requirement.
+- Bundled LUTs ship as procedural generators rather than .cube text files. Saves bundle size, keeps the aesthetic in code review. Real .cube files can be imported via lut.import + fed into the same applyLut.
+- matchColors uses channel mean+std normalisation, not a full LAB-space CDF match. Gets the gross color shift right; a perceptual upgrade can ship post-launch if users complain.
