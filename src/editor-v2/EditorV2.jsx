@@ -18,7 +18,8 @@
 // -----------------------------------------------------------------------------
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Renderer }     from './engine/Renderer';
+import { Renderer }      from './engine/Renderer';
+import { PaintCanvases } from './engine/PaintCanvases';
 import { useStore, SAVE_STATUS } from './store/Store';
 import { SaveEngine }   from './save/SaveEngine';
 import { History }      from './history/History';
@@ -39,6 +40,7 @@ export default function EditorV2() {
   const rendererRef = useRef(null);
   const saveRef     = useRef(null);
   const historyRef  = useRef(null);
+  const paintRef    = useRef(null);
   const [mountError, setMountError] = useState(null);
 
   const saveStatus   = useStore(s => s.saveStatus);
@@ -58,6 +60,7 @@ export default function EditorV2() {
           new URLSearchParams(window.location.search).get('project');
         if (urlProjectId) useStore.getState().setProjectId(urlProjectId);
 
+        const paintCanvases = new PaintCanvases();
         const renderer = new Renderer();
         const history  = new History({
           store:     useStore,
@@ -68,7 +71,7 @@ export default function EditorV2() {
           apiUrl: API_URL,
         });
 
-        registerFoundationActions({ store: useStore, history });
+        registerFoundationActions({ store: useStore, history, paintCanvases });
 
         // Load any persisted state before wiring listeners, so we don't
         // trigger a save on the load-restore itself.
@@ -89,6 +92,7 @@ export default function EditorV2() {
         rendererRef.current = renderer;
         saveRef.current     = save;
         historyRef.current  = history;
+        paintRef.current    = paintCanvases;
 
         // Dev inspection surface — intentional single namespace.
         window.__v2 = {
@@ -96,8 +100,9 @@ export default function EditorV2() {
           renderer,
           save,
           history,
+          paintCanvases,
           actions:  { executeAction, listActions, findByShortcut },
-          version:  'phase-0',
+          version:  'phase-1b',
         };
       } catch (err) {
         if (!cancelled) setMountError(err?.message || String(err));
@@ -112,6 +117,8 @@ export default function EditorV2() {
       rendererRef.current = null;
       saveRef.current     = null;
       historyRef.current  = null;
+      paintRef.current?.clear();
+      paintRef.current    = null;
       if (typeof window !== 'undefined') delete window.__v2;
     };
   }, []);

@@ -78,6 +78,15 @@ export function createLayer(overrides = {}) {
     groupData:      overrides.groupData      ?? null,
     adjustmentData: overrides.adjustmentData ?? null,
 
+    // Phase 1.b — paint pipeline serialization handles. Non-null when
+    // the layer has been painted on (layer-target) or when a raster
+    // mask has been stroked (mask-target). The renderer reads these
+    // and rehydrates the in-memory paint canvas on load / history
+    // restore. Stored as data URLs so structuredClone can round-trip
+    // them through history snapshots.
+    paintSrc:       overrides.paintSrc       ?? null,
+    maskSrc:        overrides.maskSrc        ?? null,
+
     adjustments: overrides.adjustments ?? {},
 
     createdAt: overrides.createdAt ?? now,

@@ -20,6 +20,7 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { createLayer } from '../engine/layerFactory.js';
+import { DEFAULT_BRUSH_PARAMS, DEFAULT_ERASER_PARAMS } from '../tools/BrushEngine.js';
 
 /** @typedef {import('../engine/Layer.js').Layer} Layer */
 
@@ -58,6 +59,19 @@ export const useStore = create(
 
     // ── Renderer flag, toggled by rendering layer after a sync ──────────────
     rendererReady: false,
+
+    // ── Paint / tool state (Phase 1.b) ──────────────────────────────────────
+    // The active paint tool drives the registry's paint.* handlers. Tool
+    // params are editable per-tool; consumers read the slice matching
+    // the active tool. strokeActive is a render hint — true while a
+    // pointer stroke is being recorded so the renderer can skip
+    // heavier reconciliation until the stroke finishes.
+    activeTool: /** @type {string} */ ('brush'),
+    toolParams: {
+      brush:  { ...DEFAULT_BRUSH_PARAMS },
+      eraser: { ...DEFAULT_ERASER_PARAMS },
+    },
+    strokeActive: false,
 
     // ═══════════════════════════════════════════════════════════════════════
     // ACTIONS
@@ -144,6 +158,30 @@ export const useStore = create(
 
     setRendererReady(ready) {
       set((state) => { state.rendererReady = !!ready; });
+    },
+
+    /** @param {string} toolId */
+    setActiveTool(toolId) {
+      set((state) => { state.activeTool = String(toolId || 'brush'); });
+    },
+
+    /**
+     * Merge partial params into the given tool slice. Unknown tool ids
+     * are ignored rather than silently creating a new bucket — this
+     * catches typos at the caller site.
+     * @param {string} toolId
+     * @param {object} patch
+     */
+    updateToolParams(toolId, patch) {
+      set((state) => {
+        if (!state.toolParams[toolId]) return;
+        Object.assign(state.toolParams[toolId], patch || {});
+      });
+    },
+
+    /** @param {boolean} active */
+    setStrokeActive(active) {
+      set((state) => { state.strokeActive = !!active; });
     },
 
     /**

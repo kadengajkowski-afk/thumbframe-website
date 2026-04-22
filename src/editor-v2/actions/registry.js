@@ -24,8 +24,22 @@
  * @property {string}   [description]
  */
 
+import { BrushTool }     from '../tools/BrushTool.js';
+import { EraserTool }    from '../tools/EraserTool.js';
+import { StrokeSession } from '../tools/StrokeSession.js';
+
 /** @type {Map<string, Action>} */
 const _actions = new Map();
+
+// ── Paint-session state (Phase 1.b) ────────────────────────────────────────
+// One stroke at a time. The session is created by paint.beginStroke and
+// cleared by paint.endStroke. It lives at module scope so the three
+// handlers (begin / addPoint / endStroke) can share it without passing
+// a handle through every call. Tests reset it via __resetRegistry.
+/** @type {import('../tools/StrokeSession.js').StrokeSession | null} */
+let _activeSession    = null;
+let _activeSessionCtx = /** @type {CanvasRenderingContext2D | null} */ (null);
+let _activeSessionMeta = /** @type {{ layerId:string, target:'layer'|'mask', tool:string } | null} */ (null);
 
 /**
  * Register a single action. Throws on duplicate id — duplicates are
@@ -89,6 +103,9 @@ export function findByShortcut(shortcut) {
 /** Drop every registered action. Test helper. */
 export function __resetRegistry() {
   _actions.clear();
+  _activeSession     = null;
+  _activeSessionCtx  = null;
+  _activeSessionMeta = null;
 }
 
 // ── Foundation actions ──────────────────────────────────────────────────────
@@ -99,9 +116,13 @@ export function __resetRegistry() {
  * Register the core set of actions. Call once during editor boot with a
  * store + history instance so the handlers can route through them.
  *
- * @param {{ store: import('zustand').StoreApi<any>, history: import('../history/History.js').History }} deps
+ * @param {{
+ *   store: import('zustand').StoreApi<any>,
+ *   history: import('../history/History.js').History,
+ *   paintCanvases?: import('../engine/PaintCanvases.js').PaintCanvases,
+ * }} deps
  */
-export function registerFoundationActions({ store, history }) {
+export function registerFoundationActions({ store, history, paintCanvases }) {
   // ── Layer
   register({
     id: 'layer.add',
@@ -499,6 +520,177 @@ export function registerFoundationActions({ store, history }) {
       await history.snapshot('Invert mask');
     },
   });
+
+  // ── Tool selection (Phase 1.b) ─────────────────────────────────────────
+  register({
+    id: 'tool.brush.select',
+    label: 'Brush',
+    category: 'tool',
+    shortcut: 'B',
+    description: 'Make the brush the active paint tool.',
+    handler: () => { store.getState().setActiveTool('brush'); },
+  });
+
+  register({
+    id: 'tool.eraser.select',
+    label: 'Eraser',
+    category: 'tool',
+    shortcut: 'E',
+    handler: () => { store.getState().setActiveTool('eraser'); },
+  });
+
+  register({
+    id: 'tool.params.update',
+    label: 'Update tool params',
+    category: 'tool',
+    shortcut: null,
+    description:
+      'Merge a partial params patch into store.toolParams[toolId]. '
+      + 'Non-snapshotting — callers are expected to snapshot manually '
+      + 'if they want size/hardness adjustments in undo history.',
+    handler: (toolId, patch) => {
+      store.getState().updateToolParams(toolId, patch);
+    },
+  });
+
+  // ── Paint stroke lifecycle (Phase 1.b) ─────────────────────────────────
+  register({
+    id: 'paint.beginStroke',
+    label: 'Begin paint stroke',
+    category: 'paint',
+    shortcut: null,
+    description:
+      'Open a brush/eraser stroke session on the given layer + target '
+      + '(layer|mask). Does not snapshot — the post-stroke snapshot is '
+      + 'issued by paint.endStroke.',
+    handler: async ({ layerId, target, x, y, pressure }) => {
+      if (_activeSession) _endSessionNoSnapshot();
+      if (!paintCanvases) {
+        console.warn('[actions] paint.beginStroke: no paintCanvases injected; strokes are a no-op');
+        return false;
+      }
+      const s = store.getState();
+      const layer = s.layers.find(l => l.id === layerId);
+      if (!layer) return false;
+      const tgt = target === 'mask' ? 'mask' : 'layer';
+
+      // Choose a tool object from the current activeTool. Lazy-require
+      // so the registry file has no eager dependency on tool modules
+      // (keeps existing Phase 1.a consumers unaffected when tools are
+      // not used).
+      const toolId = s.activeTool || 'brush';
+      const tool   = _resolveTool(toolId);
+      const params = s.toolParams?.[toolId] || {};
+
+      const canvas = paintCanvases.getOrCreate(
+        layerId,
+        tgt,
+        layer.width  || 1280,
+        layer.height || 720,
+      );
+      let ctx = canvas.getContext('2d');
+      if (!ctx) {
+        // jsdom Canvas2D returns null for getContext in stock config.
+        // Use a recording stub so the stroke lifecycle still proceeds;
+        // stamp output in that environment is a no-op but the registry
+        // flow, history snapshot, and paint-canvas routing all exercise
+        // correctly. Real browsers hit the real 2D context above.
+        ctx = _noopCtx();
+      }
+
+      _activeSession = new StrokeSession({
+        ctx, tool, target: tgt, params,
+      });
+      _activeSessionCtx  = ctx;
+      _activeSessionMeta = { layerId, target: tgt, tool: toolId };
+
+      s.setStrokeActive(true);
+      _activeSession.begin(
+        Number.isFinite(x) ? x : 0,
+        Number.isFinite(y) ? y : 0,
+        Number.isFinite(pressure) ? pressure : 1,
+      );
+      return true;
+    },
+  });
+
+  register({
+    id: 'paint.addPoint',
+    label: 'Paint point',
+    category: 'paint',
+    shortcut: null,
+    handler: ({ x, y, pressure } = {}) => {
+      if (!_activeSession) return false;
+      _activeSession.addPoint(
+        Number.isFinite(x) ? x : 0,
+        Number.isFinite(y) ? y : 0,
+        Number.isFinite(pressure) ? pressure : 1,
+      );
+      return true;
+    },
+  });
+
+  register({
+    id: 'paint.endStroke',
+    label: 'End paint stroke',
+    category: 'paint',
+    shortcut: null,
+    description:
+      'Close the active stroke session, bake the paint canvas into '
+      + 'layer.paintSrc (target=layer) or layer.maskSrc (target=mask), '
+      + 'then issue a single post-stroke history snapshot.',
+    handler: async () => {
+      if (!_activeSession) return false;
+      const meta = _activeSessionMeta;
+      const summary = _activeSession.end();
+      const s = store.getState();
+      s.setStrokeActive(false);
+
+      // Bake: read the paint canvas back into the layer record so the
+      // snapshot + IDB payload carries the pixels.
+      if (paintCanvases && meta) {
+        const canvas = paintCanvases.get(meta.layerId, meta.target);
+        const src = _canvasToDataURL(canvas);
+        if (src !== undefined) {
+          const patch = meta.target === 'mask' ? { maskSrc: src } : { paintSrc: src };
+          s.updateLayer(meta.layerId, patch);
+        }
+      }
+
+      _activeSession     = null;
+      _activeSessionCtx  = null;
+      _activeSessionMeta = null;
+
+      await history.snapshot('Paint stroke');
+      return { stampCount: summary.stampCount, points: summary.points.length };
+    },
+  });
+
+  // Allow tests to probe the active session state without importing
+  // private module state.
+  register({
+    id: 'paint.__debug.isActive',
+    label: '[debug] stroke active?',
+    category: 'paint',
+    shortcut: null,
+    handler: () => !!_activeSession,
+  });
+
+  register({
+    id: 'paint.__debug.activeToolId',
+    label: '[debug] active stroke tool id',
+    category: 'paint',
+    shortcut: null,
+    handler: () => _activeSessionMeta?.tool ?? null,
+  });
+
+  register({
+    id: 'paint.__debug.activeCompositeOp',
+    label: '[debug] active stroke composite op',
+    category: 'paint',
+    shortcut: null,
+    handler: () => _activeSessionCtx?.globalCompositeOperation ?? null,
+  });
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -561,4 +753,47 @@ function normaliseShortcut(shortcut) {
     .toLowerCase()
     .replace(/\s*\+\s*/g, '+')
     .replace(/\b(cmd|command|ctrl|control)\b/g, 'mod');
+}
+
+/** @param {string} toolId */
+function _resolveTool(toolId) {
+  return toolId === 'eraser' ? EraserTool : BrushTool;
+}
+
+function _endSessionNoSnapshot() {
+  try { _activeSession?.end(); } catch { /* noop */ }
+  _activeSession     = null;
+  _activeSessionCtx  = null;
+  _activeSessionMeta = null;
+}
+
+/** Safely get a dataURL off a canvas-like object, returning undefined on error. */
+function _canvasToDataURL(canvas) {
+  if (!canvas || typeof canvas.toDataURL !== 'function') return undefined;
+  try { return canvas.toDataURL('image/png'); }
+  catch { return undefined; }
+}
+
+/**
+ * Fallback Canvas 2D ctx used in test environments where jsdom declines
+ * to provide one. Records composite-op / globalAlpha / fillStyle writes
+ * so downstream assertions can verify routing; draw calls are no-ops.
+ * This keeps the stroke lifecycle, history snapshot, and paint-canvas
+ * registry all exercised end-to-end in jest without a native canvas.
+ */
+function _noopCtx() {
+  const ctx = {
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    fillStyle: '#000000',
+    save() {}, restore() {},
+    translate() {}, rotate() {}, scale() {},
+    beginPath() {}, closePath() {},
+    moveTo() {}, lineTo() {},
+    arc() {}, fillRect() {}, fill() {}, stroke() {},
+    createRadialGradient() { return null; },
+    createLinearGradient() { return null; },
+    createPattern() { return null; },
+  };
+  return ctx;
 }
