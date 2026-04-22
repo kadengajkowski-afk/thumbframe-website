@@ -1060,6 +1060,25 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
     },
   });
 
+  // ── Phase 3.a: adjustments (direct-to-layer bake) ──────────────────────
+  register({
+    id: 'layer.adjustment.bake',
+    label: 'Bake adjustment to layer',
+    category: 'layer',
+    shortcut: null,
+    description:
+      'Apply an adjustment kind/params directly to a layer\'s paintSrc '
+      + 'ImageData (mutating). Complements the non-destructive '
+      + 'adjustment-layer path.',
+    handler: async (layerId, kind, params, imageData) => {
+      if (!imageData || typeof imageData.width !== 'number') return false;
+      const { applyAdjustment } = await import('../adjustments/Adjustments.js');
+      applyAdjustment(imageData.data, imageData.width, imageData.height, kind, params);
+      await history.snapshot(`Bake ${kind}`);
+      return true;
+    },
+  });
+
   // ── Phase 2.d: selection system ──────────────────────────────────────
   register({
     id: 'selection.lasso.apply',
