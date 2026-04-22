@@ -1060,6 +1060,118 @@ export function registerFoundationActions({ store, history, paintCanvases }) {
     },
   });
 
+  // ── Phase 2.d: selection system ──────────────────────────────────────
+  register({
+    id: 'selection.lasso.apply',
+    label: 'Lasso selection',
+    category: 'selection',
+    shortcut: 'L',
+    description:
+      'Build a mask from a polygon and apply it to the selection '
+      + 'singleton with the given combine op (replace|add|subtract|intersect).',
+    handler: async ({ polygon, feather, op = 'replace' } = {}) => {
+      const sel = store.getState().__selection;
+      if (!sel) return false;
+      const { buildLassoMask } = await import('../selection/LassoSelector.js');
+      const mask = buildLassoMask(polygon, { width: sel.width, height: sel.height, feather });
+      sel.apply(mask, op);
+      return true;
+    },
+  });
+
+  register({
+    id: 'selection.wand.apply',
+    label: 'Magic wand',
+    category: 'selection',
+    shortcut: 'W',
+    handler: async ({ imageData, x, y, tolerance, contiguous = true, op = 'replace' } = {}) => {
+      const sel = store.getState().__selection;
+      if (!sel || !imageData) return false;
+      const { buildMagicWandMask } = await import('../selection/MagicWand.js');
+      const mask = buildMagicWandMask(imageData, x, y, { tolerance, contiguous });
+      sel.apply(mask, op);
+      return true;
+    },
+  });
+
+  register({
+    id: 'selection.colorRange.apply',
+    label: 'Color range',
+    category: 'selection',
+    shortcut: null,
+    handler: async ({ imageData, target, hueTolerance, satTolerance, lumTolerance, op = 'replace' } = {}) => {
+      const sel = store.getState().__selection;
+      if (!sel || !imageData || !target) return false;
+      const { buildColorRangeMask } = await import('../selection/ColorRange.js');
+      const mask = buildColorRangeMask(imageData, target, { hueTolerance, satTolerance, lumTolerance });
+      sel.apply(mask, op);
+      return true;
+    },
+  });
+
+  register({
+    id: 'selection.sam.click',
+    label: 'SAM click-to-select',
+    category: 'selection',
+    shortcut: null,
+    description:
+      'Send a click + canvas screenshot to the Railway SAM 2 endpoint; '
+      + 'decode the returned mask into the selection. Pro feature. '
+      + 'Requires REPLICATE_API_TOKEN set on the Railway backend.',
+    handler: async ({ image, width, height, click, op = 'replace' } = {}) => {
+      const s = store.getState();
+      const sel    = s.__selection;
+      const client = s.__samClient;
+      if (!sel || !client) return false;
+      const mask = await client.segment({ image, width, height, click });
+      if (!mask) return false;
+      sel.apply(mask, op);
+      return true;
+    },
+  });
+
+  register({
+    id: 'selection.refineEdge',
+    label: 'Refine edge',
+    category: 'selection',
+    shortcut: null,
+    handler: async ({ feather, contrast, smooth, decontaminateColors } = {}) => {
+      const sel = store.getState().__selection;
+      if (!sel || sel.isEmpty) return false;
+      const mask = sel.maskCopy();
+      const { refineEdge } = await import('../selection/RefineEdge.js');
+      refineEdge(mask, sel.width, sel.height, { feather, contrast, smooth, decontaminateColors });
+      sel.apply(mask, 'replace');
+      return true;
+    },
+  });
+
+  register({
+    id: 'selection.invert',
+    label: 'Invert selection',
+    category: 'selection',
+    shortcut: 'Mod+Shift+I',
+    handler: () => {
+      const sel = store.getState().__selection;
+      if (!sel) return false;
+      sel.invert();
+      return true;
+    },
+  });
+
+  register({
+    id: 'selection.deselect',
+    label: 'Deselect',
+    category: 'selection',
+    shortcut: 'Mod+D',
+    handler: () => {
+      const sel = store.getState().__selection;
+      if (!sel) return false;
+      sel.deselect();
+      return true;
+    },
+  });
+
   register({
     id: 'text.outline.toShapes',
     label: 'Convert text to shapes',

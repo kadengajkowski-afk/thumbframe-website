@@ -90,6 +90,14 @@ export const useStore = create(
     // persisted through save; EditorV2 sets these on mount.
     __fontLoader: /** @type {any} */ (null),
 
+    // Phase 2.d — selection singleton (non-serialized; lives for the
+    // duration of the editor mount). The mask bytes are deliberately
+    // outside history since they're large + regenerable from the
+    // user's last interaction. A toggle to include-in-history is a
+    // post-launch setting.
+    __selection: /** @type {any} */ (null),
+    __samClient: /** @type {any} */ (null),
+
     // ═══════════════════════════════════════════════════════════════════════
     // ACTIONS
     // ═══════════════════════════════════════════════════════════════════════
@@ -204,6 +212,14 @@ export const useStore = create(
     /** Inject the FontLoader singleton. Phase 2.b wiring. */
     setFontLoader(loader) {
       set((state) => { state.__fontLoader = loader; });
+    },
+
+    /** Inject the Selection singleton + SAM client. Phase 2.d wiring. */
+    setSelection(selection) {
+      set((state) => { state.__selection = selection; });
+    },
+    setSAMClient(client) {
+      set((state) => { state.__samClient = client; });
     },
 
     /**
