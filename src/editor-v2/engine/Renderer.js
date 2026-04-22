@@ -165,7 +165,10 @@ export class Renderer {
     });
 
     if (this._disposed) {
-      try { this._app.destroy(true, { children: true }); } catch { /* noop */ }
+      try {
+        // Phase 4.5.d — full destroy options per research destroy audit.
+        this._app.destroy(true, { children: true, texture: true, baseTexture: true });
+      } catch { /* noop */ }
       this._app = null;
       return;
     }
@@ -333,7 +336,22 @@ export class Renderer {
 
     if (this._app) {
       try { this._app.ticker.remove(this._onTick); } catch { /* noop */ }
-      try { this._app.destroy(true, { children: true }); } catch { /* noop */ }
+
+      // Phase 4.5.d — iOS Safari mitigation (pqina.nl pattern). iOS
+      // leaks GPU memory when a canvas is released at its native
+      // resolution; resizing to 1x1 first lets the GPU free the
+      // backing store before the element is GC'd.
+      try {
+        const el = this._app.canvas || this._canvasEl;
+        if (el && typeof el.width === 'number') {
+          el.width  = 1;
+          el.height = 1;
+        }
+      } catch { /* noop */ }
+
+      try {
+        this._app.destroy(true, { children: true, texture: true, baseTexture: true });
+      } catch { /* noop */ }
       this._app = null;
     }
   }
@@ -672,7 +690,11 @@ export class Renderer {
     }
 
     try { s.obj.parent?.removeChild(s.obj); } catch { /* noop */ }
-    try { s.obj.destroy({ children: true }); } catch { /* noop */ }
+    // Phase 4.5.d — full destroy options per research destroy audit.
+    // texture: true destroys any sprite's bound texture; baseTexture:
+    // true frees the underlying GPU memory. Without these, bare
+    // destroy({children:true}) leaks textures across edits.
+    try { s.obj.destroy({ children: true, texture: true, baseTexture: true }); } catch { /* noop */ }
     if (s.ownedTexture) {
       try { s.ownedTexture.destroy(true); } catch { /* noop */ }
     }

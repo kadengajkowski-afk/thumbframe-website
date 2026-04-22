@@ -4,6 +4,73 @@
 ThumbFrame (thumbframe.com) is a YouTube thumbnail editor SaaS.
 Solo founder. Every decision matters. No wasted work. Quality over speed.
 
+## Stack — do not migrate
+
+The editor-v2 rebuild (`src/editor-v2/`) locked in these foundational
+choices after deep evaluation (see `TECHNICAL_RESEARCH.md`). Do not
+propose alternatives. Do not add parallel libraries. The rule is
+**patterns on top of the stack, not stack swaps.**
+
+- **PixiJS v8** (not v7 — breaking-change territory). v8 is async,
+  instruction-based, has a RenderGroup API and `pixi.js/advanced-blend-modes`
+  for the HSL blend quartet. Konva / Fabric / Three.js / CanvasKit are
+  ruled out for solo-founder scope.
+  - `app.init()` is async.
+  - `renderer.render({ container: app.stage })` is the v8 call.
+  - `container.isRenderGroup = true` (or `enableRenderGroup()`) makes
+    it a cached instruction set — use for background / layers / overlay.
+  - `cacheAsTexture({resolution: 2})` replaces v7's `cacheAsBitmap`.
+  - `container.destroy({ children: true, texture: true, baseTexture: true })`
+    — never bare `destroy()` and never just `{ children: true }`.
+    Bare forms leak textures; research audit flagged this explicitly.
+  - `import 'pixi.js/advanced-blend-modes'` once at entry so HSL / overlay /
+    soft-light modes work. Document that import — don't let it get
+    removed by a pruner.
+- **Zustand v5**: UI store only. Panel state, modals, active tool id,
+  save status, zoom/pan session. **NOT the document** — the document
+  lives in `src/editor-v2/store/DocumentStore.js` (plain JS + Immer
+  patches, subscribed imperatively by the Renderer). Selection +
+  hover + drag preview live in `src/editor-v2/store/EphemeralStore.js`
+  (plain JS + EventEmitter + nonce counters). Never put layer data
+  back in Zustand.
+- **React 19 + React Compiler**: function components only. The
+  compiler auto-memoizes, so **delete most `useMemo` / `useCallback`**
+  — they're extra comparison cost with no benefit now. React 19 makes
+  `ref` a regular prop; drop `forwardRef` wrappers.
+- **Vite 5 via react-scripts** — no Vite config drift.
+- **Supabase** for auth + DB; **Stripe** for billing; **Railway** for
+  backend (Stripe webhooks must be on Railway, NOT Vercel serverless).
+- **No new dependencies without justification.** If a new package is
+  needed, it must be cited in TECHNICAL_RESEARCH.md or justified
+  against it. Specifically **do not install**: `zundo`, `jotai`,
+  Redux Toolkit, MobX, `@pixi/react`, `lodash`, `date-fns`.
+
+### editor-v2 demand-driven rendering (Phase 4.5.a+)
+
+- `Application.init({ autoStart: false, sharedTicker: false })` — the
+  built-in ticker is off by default.
+- `Renderer.requestRender()` is the write-side API. Every mutation
+  should call it (or go through a subscribed store that does).
+- `Renderer.beginGesture()` / `endGesture()` are depth-counted. Wrap
+  every slider scrub, transform drag, and paint stroke in a balanced
+  pair. During a gesture the Pixi ticker runs; otherwise the frame
+  loop is demand-driven RAF.
+- The `renderer.beginGesture` / `renderer.endGesture` registry actions
+  let UI components trigger gesture mode without a renderer handle.
+
+### editor-v2 three-store architecture (Phase 4.5.b)
+
+- `store/DocumentStore.js` — canvas truth. `produce(recipe)` returns
+  `{patches, inversePatches}`. `subscribe(fn)` for the Renderer's
+  imperative patch channel.
+- `store/EphemeralStore.js` — selection / hover / drag preview.
+  `sceneNonce` + `selectionNonce` are the memoization keys.
+- `history/CommandHistory.js` — patch-based undo/redo (replaces the
+  snapshot-based `history/History.js` for document state).
+- `store/hooks.js` — `useDocumentLayer(id)`, `useDocumentLayers()`,
+  `useSelection()`, etc. Panels use these. Do not subscribe to the
+  Zustand store for document data — that's the laggy-feel path.
+
 ## Stack
 - **Frontend**: React on Vercel (thumbframe.com)
 - **Backend**: Node.js/Express on Railway (thumbframe-api-production.up.railway.app)

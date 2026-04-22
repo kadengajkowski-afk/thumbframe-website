@@ -41,6 +41,7 @@ import { Selection }       from './selection/Selection';
 import { SAMClient }       from './selection/SAMClient';
 import { FontLoader }      from './fonts/FontLoader';
 import { buildHelloFile, shouldMountHelloFile } from './helloFile';
+import { importImage } from './engine/imageImport';
 
 import CockpitShell            from './ui/CockpitShell';
 import ToolPalette             from './ui/ToolPalette';
@@ -283,25 +284,29 @@ export default function EditorV2() {
   const canvasIsEmpty = layers.length === 0;
 
   // ── File drop → image layer ─────────────────────────────────────────────
+  // Phase 4.5.d routes every import through importImage(), which caps
+  // dimensions at 4096px via createImageBitmap(resizeQuality:'high').
+  // Without this gate, iOS Safari will silently fail at ~2GB of layer
+  // memory (i.e. after 10–20 large uploads).
   const onDropFiles = useCallback(async (files) => {
     for (const file of files) {
       if (!file.type.startsWith('image/')) continue;
-      const dataUrl = await _readFileAsDataURL(file);
-      const img = await _loadImage(dataUrl);
+      const imported = await importImage(file);
+      if (!imported) continue;
       const id = useStore.getState().addLayer({
         type:  'image',
         name:  file.name || 'Image',
         x:     CANVAS_W / 2,
         y:     CANVAS_H / 2,
-        width: Math.min(CANVAS_W, img.naturalWidth  || CANVAS_W),
-        height:Math.min(CANVAS_H, img.naturalHeight || CANVAS_H),
+        width: Math.min(CANVAS_W, imported.width),
+        height:Math.min(CANVAS_H, imported.height),
         imageData: {
-          src: dataUrl,
-          originalWidth:  img.naturalWidth  || null,
-          originalHeight: img.naturalHeight || null,
-          textureWidth:   img.naturalWidth  || null,
-          textureHeight:  img.naturalHeight || null,
-          dataRef: null,
+          src:            imported.dataUrl,
+          originalWidth:  imported.originalWidth,
+          originalHeight: imported.originalHeight,
+          textureWidth:   imported.width,
+          textureHeight:  imported.height,
+          dataRef:        null,
         },
       });
       await historyRef.current?.snapshot('Drop image');
@@ -411,21 +416,5 @@ export default function EditorV2() {
   );
 }
 
-// ── helpers ────────────────────────────────────────────────────────────────
-function _readFileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload  = () => resolve(r.result);
-    r.onerror = () => reject(r.error || new Error('FileReader error'));
-    r.readAsDataURL(file);
-  });
-}
-
-function _loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload  = () => resolve(img);
-    img.onerror = () => reject(new Error('Image decode failed'));
-    img.src = src;
-  });
-}
+// File-drop helpers live in engine/imageImport.js now — single pipeline
+// with the 4096px cap + off-thread resize (Phase 4.5.d).
