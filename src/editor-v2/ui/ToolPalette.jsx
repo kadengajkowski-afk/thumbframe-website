@@ -1,100 +1,143 @@
 // src/editor-v2/ui/ToolPalette.jsx
 // -----------------------------------------------------------------------------
-// Purpose:  Vertical icon strip for the editor's active tool. Lists the
-//           tool set defined in TOOL_GROUPS, shows a tooltip with the
-//           ThumbFrame-voice hint + shortcut, and dispatches through
-//           the action registry.
-// Exports:  ToolPalette (default), TOOL_GROUPS
-// Depends:  ../actions/registry (executeAction), ./tokens
+// Purpose:  Phase 4.6.d tool palette. Vertical 48px strip with Lucide
+//           icons, six tool groups separated by dividers, and voice-
+//           matched tooltips sourced from copy.js.
 //
-// Voice in tooltips: direct address, short, honest, action-oriented.
-//   • Brush       — "Paint on the canvas. [B]"
-//   • Eraser      — "Erase what's there. [E]"
-//   • Magic wand  — "Click an area to select similar pixels. [W]"
+//           Active state: cream-accent glow + icon tint. Hover: 102%
+//           scale + brightness(1.15). Collapsible via a chevron at
+//           the top — collapsed width is 12px with just the chevron.
 //
-// Lucide icons were specced in the queue, but we ship our own tiny
-// inline SVGs here to avoid pulling more iconography into the bundle.
-// They are drawn in the cream accent and consistently stroke-weighted.
+// Exports:  default (ToolPalette), TOOL_GROUPS
+// Depends:  ./tokens, ./copy, ../actions/registry, lucide-react (icons)
 // -----------------------------------------------------------------------------
 
 import React, { useState } from 'react';
-import { COLORS, SPACING, SHADOWS, transition } from './tokens';
+import {
+  MousePointer2, Lasso, Wand2, Target,
+  Square, Circle, Hexagon, Star, ArrowRight, Minus, MessageSquare,
+  Paintbrush, Eraser, Sun, Flame, Droplet, Wind, Zap, Fingerprint, Copy,
+  Bandage, Sparkles,
+  Type, Crop, Hand, ZoomIn,
+  ChevronLeft, ChevronRight,
+} from 'lucide-react';
+import { TYPOGRAPHY, SPACING, SHADOWS, buildTransition } from './tokens';
+import { COPY } from './copy';
 import { executeAction } from '../actions/registry';
 
-// ── Tool definitions ───────────────────────────────────────────────────────
+// ── Tool definitions ──────────────────────────────────────────────────────
 export const TOOL_GROUPS = Object.freeze([
   {
     id: 'select',
+    header: 'selection',
     tools: [
-      { id: 'select.move', label: 'Move', hint: 'Move layers around. [V]',
-        shortcut: 'V', actionId: 'selection.clear', icon: 'move' },
-      { id: 'select.lasso', label: 'Lasso', hint: 'Draw a freeform selection. [L]',
-        shortcut: 'L', actionId: null, icon: 'lasso' },
-      { id: 'select.wand', label: 'Magic wand',
-        hint: 'Click an area to select similar pixels. [W]',
-        shortcut: 'W', actionId: null, icon: 'wand' },
+      { id: 'tool.move',      label: 'move',      icon: MousePointer2, shortcut: 'V', actionId: 'selection.clear' },
+      { id: 'tool.lasso',     label: 'lasso',     icon: Lasso,         shortcut: 'L', actionId: null },
+      { id: 'tool.wand',      label: 'magicWand', icon: Wand2,         shortcut: 'W', actionId: null },
+      { id: 'tool.sam',       label: 'samSelect', icon: Target,        shortcut: 'S', actionId: null },
     ],
   },
   {
     id: 'shapes',
+    header: 'shapes',
     tools: [
-      { id: 'shape.rect',   label: 'Rectangle',  hint: 'Drag to place a rectangle. [U]',   shortcut: 'U', actionId: 'shape.create',
-        actionArgs: { shapeData: { shapeType: 'rect'   } }, icon: 'rect' },
-      { id: 'shape.circle', label: 'Ellipse',    hint: 'Drag to place a circle.',           shortcut: null, actionId: 'shape.create',
-        actionArgs: { shapeData: { shapeType: 'circle' } }, icon: 'circle' },
-      { id: 'shape.polygon',label: 'Polygon',    hint: 'Drag to place a polygon.',          shortcut: null, actionId: 'shape.create',
-        actionArgs: { shapeData: { shapeType: 'polygon'} }, icon: 'hex' },
-      { id: 'shape.star',   label: 'Star',       hint: 'Drag to place a star sticker.',     shortcut: null, actionId: 'shape.create',
-        actionArgs: { shapeData: { shapeType: 'star'   } }, icon: 'star' },
+      { id: 'shape.rect',         label: 'rectangle',    icon: Square,        shortcut: 'R', actionId: 'shape.create', actionArgs: { shapeData: { shapeType: 'rect'   } } },
+      { id: 'shape.ellipse',      label: 'ellipse',      icon: Circle,        shortcut: 'O', actionId: 'shape.create', actionArgs: { shapeData: { shapeType: 'circle' } } },
+      { id: 'shape.polygon',      label: 'polygon',      icon: Hexagon,       shortcut: null, actionId: 'shape.create', actionArgs: { shapeData: { shapeType: 'polygon'} } },
+      { id: 'shape.star',         label: 'star',         icon: Star,          shortcut: null, actionId: 'shape.create', actionArgs: { shapeData: { shapeType: 'star'   } } },
+      { id: 'shape.arrow',        label: 'arrow',        icon: ArrowRight,    shortcut: null, actionId: 'shape.create', actionArgs: { shapeData: { shapeType: 'arrow'  } } },
+      { id: 'shape.line',         label: 'line',         icon: Minus,         shortcut: null, actionId: 'shape.create', actionArgs: { shapeData: { shapeType: 'line'   } } },
+      { id: 'shape.speechBubble', label: 'speechBubble', icon: MessageSquare, shortcut: null, actionId: 'shape.create', actionArgs: { shapeData: { shapeType: 'speechBubble' } } },
     ],
   },
   {
-    id: 'brushes',
+    id: 'paint',
+    header: 'paint',
     tools: [
-      { id: 'tool.brush',        label: 'Brush',       hint: "Paint on the canvas. [B]",                           shortcut: 'B', actionId: 'tool.brush.select',        icon: 'brush' },
-      { id: 'tool.eraser',       label: 'Eraser',      hint: "Erase what's there. [E]",                            shortcut: 'E', actionId: 'tool.eraser.select',       icon: 'eraser' },
-      { id: 'tool.blur',         label: 'Blur',        hint: 'Soften details under the cursor.',                   shortcut: null, actionId: 'tool.blur.select',         icon: 'blur' },
-      { id: 'tool.sharpen',      label: 'Sharpen',     hint: 'Crisp up details under the cursor.',                 shortcut: null, actionId: 'tool.sharpen.select',      icon: 'sharpen' },
-      { id: 'tool.dodge',        label: 'Dodge',       hint: 'Brighten the area you paint. [O]',                   shortcut: 'O', actionId: 'tool.dodge.select',        icon: 'dodge' },
-      { id: 'tool.burn',         label: 'Burn',        hint: 'Darken the area you paint.',                         shortcut: null, actionId: 'tool.burn.select',         icon: 'burn' },
+      { id: 'tool.brush',         label: 'brush',         icon: Paintbrush,  shortcut: 'B', actionId: 'tool.brush.select' },
+      { id: 'tool.eraser',        label: 'eraser',        icon: Eraser,      shortcut: 'E', actionId: 'tool.eraser.select' },
+      { id: 'tool.dodge',         label: 'dodge',         icon: Sun,         shortcut: null, actionId: 'tool.dodge.select' },
+      { id: 'tool.burn',          label: 'burn',          icon: Flame,       shortcut: null, actionId: 'tool.burn.select' },
+      { id: 'tool.sponge',        label: 'sponge',        icon: Droplet,     shortcut: null, actionId: 'tool.sponge.select' },
+      { id: 'tool.blur',          label: 'blur',          icon: Wind,        shortcut: null, actionId: 'tool.blur.select' },
+      { id: 'tool.sharpen',       label: 'sharpen',       icon: Zap,         shortcut: null, actionId: 'tool.sharpen.select' },
+      { id: 'tool.smudge',        label: 'smudge',        icon: Fingerprint, shortcut: null, actionId: 'tool.smudge.select' },
+      { id: 'tool.clone',         label: 'clone',         icon: Copy,        shortcut: null, actionId: 'tool.cloneStamp.select' },
+      { id: 'tool.spotHeal',      label: 'spotHeal',      icon: Bandage,     shortcut: null, actionId: 'tool.spotHeal.select' },
+      { id: 'tool.lightPainting', label: 'lightPainting', icon: Sparkles,    shortcut: null, actionId: 'tool.lightPainting.select' },
     ],
   },
   {
     id: 'text',
+    header: 'text',
     tools: [
-      { id: 'text.add', label: 'Text', hint: 'Type text onto the canvas. [T]',
-        shortcut: 'T', actionId: 'text.create', icon: 'text' },
+      { id: 'tool.text', label: 'text', icon: Type, shortcut: 'T', actionId: 'text.create' },
     ],
   },
   {
-    id: 'transform',
+    id: 'crop',
+    header: 'crop',
     tools: [
-      { id: 'transform.crop',  label: 'Crop',   hint: 'Trim the canvas. [C]',      shortcut: 'C', actionId: null, icon: 'crop' },
-      { id: 'viewport.hand',   label: 'Hand',   hint: 'Pan the canvas. [Space]',   shortcut: 'Space', actionId: null, icon: 'hand' },
-      { id: 'viewport.zoom',   label: 'Zoom',   hint: 'Zoom in or out. [Z]',       shortcut: 'Z', actionId: null, icon: 'zoom' },
+      { id: 'tool.crop', label: 'crop', icon: Crop, shortcut: 'C', actionId: null },
+    ],
+  },
+  {
+    id: 'viewport',
+    header: 'viewport',
+    tools: [
+      { id: 'tool.hand', label: 'hand', icon: Hand,   shortcut: 'H', actionId: null },
+      { id: 'tool.zoom', label: 'zoom', icon: ZoomIn, shortcut: 'Z', actionId: null },
     ],
   },
 ]);
 
-// ── ToolPalette component ──────────────────────────────────────────────────
+/**
+ * @param {{
+ *   activeToolId?: string,
+ *   onSelect?: (tool: any) => void,
+ * }} props
+ */
 export default function ToolPalette({ activeToolId = 'tool.brush', onSelect }) {
+  const [collapsed, setCollapsed] = useState(false);
   const [hoverId, setHoverId] = useState(null);
 
   return (
-    <div role="toolbar" aria-label="Editor tools" style={{ display: 'contents' }}>
-      {TOOL_GROUPS.map((group, gi) => (
+    <div
+      role="toolbar"
+      aria-label={COPY.tools.groupHeaders.selection}
+      data-tool-palette
+      data-collapsed={collapsed ? 'true' : 'false'}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        gap: SPACING.xs,
+        paddingBlock: SPACING.xs,
+        width: collapsed ? 12 : 48,
+        transition: buildTransition('width', 'standard'),
+      }}
+    >
+      <button
+        type="button"
+        aria-label={collapsed ? 'Expand tool palette' : 'Collapse tool palette'}
+        onClick={() => setCollapsed(v => !v)}
+        data-tool-palette-toggle
+        style={iconButtonStyle(false, false)}
+      >
+        {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+      </button>
+
+      {!collapsed && TOOL_GROUPS.map((group, gi) => (
         <React.Fragment key={group.id}>
           {gi > 0 && <Divider />}
           {group.tools.map(tool => (
             <ToolButton
               key={tool.id}
               tool={tool}
-              active={tool.id === activeToolId}
+              active={activeToolId === tool.id}
               hovered={hoverId === tool.id}
               onHover={(on) => setHoverId(on ? tool.id : null)}
               onClick={() => {
                 if (tool.actionId) executeAction(tool.actionId, tool.actionArgs);
-                if (typeof onSelect === 'function') onSelect(tool);
+                onSelect?.(tool);
               }}
             />
           ))}
@@ -110,7 +153,7 @@ function Divider() {
       aria-hidden
       style={{
         width: 24, height: 1,
-        background: COLORS.borderFaint,
+        background: 'var(--border-subtle)',
         margin: `${SPACING.xs}px 0`,
       }}
     />
@@ -118,110 +161,65 @@ function Divider() {
 }
 
 function ToolButton({ tool, active, hovered, onHover, onClick }) {
+  const Icon = tool.icon;
   return (
     <div
+      style={{ position: 'relative' }}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
-      style={{ position: 'relative' }}
     >
       <button
         type="button"
-        onClick={onClick}
-        aria-label={tool.label}
-        data-tool-id={tool.id}
+        aria-label={COPY.tools[tool.label]}
         aria-pressed={active}
-        style={{
-          width: 40, height: 40,
-          border: 0,
-          background: active ? COLORS.bgPanelRaised : 'transparent',
-          color: active ? COLORS.cream : COLORS.textSecondary,
-          borderRadius: 8,
-          cursor: 'pointer',
-          boxShadow: active ? SHADOWS.activeToolGlow : 'none',
-          transition: transition('all', 'fast'),
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transform: hovered && !active ? 'scale(1.05)' : 'scale(1)',
-        }}
+        data-tool-id={tool.id}
+        onClick={onClick}
+        style={iconButtonStyle(active, hovered)}
       >
-        <Icon kind={tool.icon} />
+        <Icon size={20} />
       </button>
-
-      {hovered && (
-        <Tooltip hint={tool.hint} shortcut={tool.shortcut} />
-      )}
+      {hovered && <Tooltip text={COPY.tools[tool.label]} />}
     </div>
   );
 }
 
-// Tooltip positioned to the right of the tool strip. Appears on hover;
-// shortcut text sits at the right edge.
-function Tooltip({ hint, shortcut }) {
+function Tooltip({ text }) {
   return (
     <div
       role="tooltip"
       style={{
-        position: 'absolute',
-        left: '100%',
-        top: '50%',
+        position: 'absolute', left: '100%', top: '50%',
         transform: 'translate(10px, -50%)',
-        background: COLORS.bgPanelRaised,
-        color: COLORS.textPrimary,
+        background: 'var(--panel-bg-raised)',
+        color: 'var(--text-primary)',
         padding: `${SPACING.xs + 2}px ${SPACING.sm}px`,
         borderRadius: 8,
-        fontSize: 12,
-        border: `1px solid ${COLORS.borderSoft}`,
+        fontSize: TYPOGRAPHY.sizeSm,
+        border: '1px solid var(--border-soft)',
         boxShadow: SHADOWS.panel,
         whiteSpace: 'nowrap',
         pointerEvents: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        gap: SPACING.sm,
+        zIndex: 100,
       }}
     >
-      {hint}
-      {shortcut && (
-        <kbd
-          style={{
-            fontFamily: 'inherit',
-            fontSize: 10,
-            padding: '1px 5px',
-            background: COLORS.borderSoft,
-            borderRadius: 4,
-            color: COLORS.textSecondary,
-          }}
-        >
-          {shortcut}
-        </kbd>
-      )}
+      {text}
     </div>
   );
 }
 
-// ── Inline SVG icons ───────────────────────────────────────────────────────
-function Icon({ kind }) {
-  const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none',
-                   stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round',
-                   strokeLinejoin: 'round' };
-  switch (kind) {
-    case 'move':    return <svg {...common}><path d="M5 12h14M12 5v14M8 8L4 12l4 4M16 8l4 4-4 4M8 4l4-4 4 4M8 20l4 4 4-4" /></svg>;
-    case 'lasso':   return <svg {...common}><path d="M4 18c0-6 4-12 8-12s8 6 8 12M4 18c0 2 2 3 4 3M14 21c-2 2-6 1-6-2" /></svg>;
-    case 'wand':    return <svg {...common}><path d="M15 3l6 6-12 12H3v-6L15 3zM15 9l0 0M14 4l2 2" /></svg>;
-    case 'rect':    return <svg {...common}><rect x="4" y="4" width="16" height="16" rx="2" /></svg>;
-    case 'circle':  return <svg {...common}><circle cx="12" cy="12" r="8" /></svg>;
-    case 'hex':     return <svg {...common}><path d="M12 3l8 5v8l-8 5-8-5V8z" /></svg>;
-    case 'star':    return <svg {...common}><path d="M12 3l2.5 5.5 6 .8-4.3 4.2 1 6-5.2-2.7-5.2 2.7 1-6-4.3-4.2 6-.8z" /></svg>;
-    case 'brush':   return <svg {...common}><path d="M4 20c3 0 4-2 4-4l10-10-4-4L4 12c-2 0-4 1-4 4s2 4 4 4z" /></svg>;
-    case 'eraser':  return <svg {...common}><path d="M16 3l5 5L10 19H5l-2-2v-2L16 3z" /></svg>;
-    case 'blur':    return <svg {...common}><circle cx="6" cy="12" r="1" /><circle cx="10" cy="12" r="1.5" /><circle cx="14" cy="12" r="2" /><circle cx="18" cy="12" r="2.5" /></svg>;
-    case 'sharpen': return <svg {...common}><path d="M4 18l8-14 8 14M8 18h8" /></svg>;
-    case 'dodge':   return <svg {...common}><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /></svg>;
-    case 'burn':    return <svg {...common}><circle cx="12" cy="12" r="8" fill="currentColor" fillOpacity="0.3" /><path d="M12 4v16" /></svg>;
-    case 'text':    return <svg {...common}><path d="M5 6h14M12 6v14M9 20h6" /></svg>;
-    case 'crop':    return <svg {...common}><path d="M6 2v16h16M2 6h16v16" /></svg>;
-    case 'hand':    return <svg {...common}><path d="M7 8v-3a2 2 0 014 0v3M11 8v-4a2 2 0 014 0v4M15 9v-3a2 2 0 014 0v10a6 6 0 01-6 6H9a6 6 0 01-6-6v-4a2 2 0 014 0v2" /></svg>;
-    case 'zoom':    return <svg {...common}><circle cx="10" cy="10" r="7" /><path d="M15 15l6 6M7 10h6M10 7v6" /></svg>;
-    default:        return <svg {...common}><circle cx="12" cy="12" r="2" /></svg>;
-  }
+function iconButtonStyle(active, hovered) {
+  return {
+    width: 36, height: 36,
+    border: 0,
+    background: active ? 'var(--panel-bg-raised)' : 'transparent',
+    color: active ? 'var(--accent-cream)' : 'var(--text-secondary)',
+    borderRadius: 8,
+    cursor: 'pointer',
+    boxShadow: active ? SHADOWS.activeToolGlow : 'none',
+    transition: buildTransition('all', 'fast'),
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transform: hovered && !active ? 'scale(1.02)' : 'scale(1)',
+    filter: hovered && !active ? 'brightness(1.15)' : 'brightness(1)',
+    padding: 0,
+  };
 }
