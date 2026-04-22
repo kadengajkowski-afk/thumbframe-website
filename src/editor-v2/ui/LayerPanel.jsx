@@ -15,6 +15,7 @@
 import React, { useState, useRef } from 'react';
 import { COLORS, TYPOGRAPHY, SPACING, SHADOWS, transition } from './tokens';
 import { executeAction } from '../actions/registry';
+import { useDocumentLayers, useSelection } from '../store/hooks';
 
 /**
  * @param {{
@@ -24,10 +25,17 @@ import { executeAction } from '../actions/registry';
  * }} props
  */
 export default function LayerPanel({
-  layers = [],
-  selectedIds = [],
+  layers,
+  selectedIds,
   orientation = 'horizontal',
 }) {
+  // Props take precedence (isolated tests supply arrays); otherwise
+  // subscribe to document + ephemeral stores directly so sibling
+  // panels' slider scrubs don't re-render this tree.
+  const docLayers = useDocumentLayers();
+  const docSel    = useSelection();
+  layers      = Array.isArray(layers)      ? layers      : docLayers;
+  selectedIds = Array.isArray(selectedIds) ? selectedIds : docSel;
   const [menuFor, setMenuFor]       = useState(null);
   const [renaming, setRenaming]     = useState(null);
   const dragState = useRef(null);

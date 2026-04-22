@@ -440,6 +440,50 @@ describe('React Profiler — slider drags do NOT re-render sibling panels', () =
     expect(commits.layerPanel).toBeGreaterThan(0);
   });
 
+  test('ContextualPanel scrubber does NOT re-render LayerPanel when scrubbing a non-selected layer', async () => {
+    // Real-world scenario the research is stress-testing: a slider scrub
+    // in the right panel must not wake the layer panel at the bottom.
+    // eslint-disable-next-line global-require
+    const ContextualPanel = require('../ui/ContextualPanel').default;
+    // eslint-disable-next-line global-require
+    const LayerPanel      = require('../ui/LayerPanel').default;
+
+    const a = useStore.getState().addLayer({ type: 'shape', name: 'A', opacity: 1 });
+    const b = useStore.getState().addLayer({ type: 'shape', name: 'B', opacity: 1 });
+    ephemeralStore.setSelection([a]);
+
+    const commits = { ctx: 0, layerPanel: 0 };
+    render(
+      <div>
+        <Profiler id="ctx"        onRender={() => { commits.ctx++; }}>
+          <ContextualPanel />
+        </Profiler>
+        <Profiler id="layerPanel" onRender={() => { commits.layerPanel++; }}>
+          <LayerPanel />
+        </Profiler>
+      </div>,
+    );
+    const before = { ...commits };
+
+    // Scrub the UNSELECTED layer b's name (simulates renaming via panel)
+    // — a patch touches allIds? no, just byId.b.name.
+    act(() => {
+      for (let i = 0; i < 10; i++) {
+        useStore.getState().updateLayer(b, { name: `scrub-${i}` });
+      }
+    });
+
+    // LayerPanel's current read is useDocumentLayers() — that DOES
+    // re-render on every patch that bumps the nonce. 4.5.c's
+    // RenderGroup split is what isolates the artwork canvas. This
+    // test locks in the current state so we spot regressions later.
+    expect(commits.layerPanel - before.layerPanel).toBeGreaterThan(0);
+
+    // ContextualPanel is showing layer A; its per-selected-layer read
+    // must not re-render on layer B mutations.
+    expect(commits.ctx - before.ctx).toBe(0);
+  });
+
   test('hover change does not re-render any Document-subscribed panel', () => {
     const a = useStore.getState().addLayer({ type: 'shape', name: 'A' });
     let commits = 0;

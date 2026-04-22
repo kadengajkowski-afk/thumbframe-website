@@ -11,6 +11,7 @@ import React from 'react';
 import { COLORS, TYPOGRAPHY, SPACING } from './tokens';
 import ScrubNumber from './ScrubNumber';
 import { executeAction } from '../actions/registry';
+import { useDocumentLayer, useSelection } from '../store/hooks';
 
 /** @typedef {'empty'|'image'|'text'|'shape'|'adjustment'|'multi'} PanelKind */
 
@@ -29,11 +30,48 @@ export function resolvePanelKind(layers, selectedIds) {
   }
 }
 
-export default function ContextualPanel({ layers = [], selectedIds = [] }) {
-  const kind = resolvePanelKind(layers, selectedIds);
-  const layer = selectedIds.length === 1
-    ? (layers.find(l => l.id === selectedIds[0]) || null)
-    : null;
+/** Internal helper — handles both prop-driven and hook-driven paths. */
+function _resolveKindForPanel(layersProp, selectedIds, singleFromStore) {
+  if (!Array.isArray(selectedIds) || selectedIds.length === 0) return 'empty';
+  if (selectedIds.length > 1) return 'multi';
+  const layer = Array.isArray(layersProp)
+    ? layersProp.find(l => l.id === selectedIds[0])
+    : singleFromStore;
+  if (!layer) return 'empty';
+  switch (layer.type) {
+    case 'image':      return 'image';
+    case 'text':       return 'text';
+    case 'shape':      return 'shape';
+    case 'adjustment': return 'adjustment';
+    default:           return 'empty';
+  }
+}
+
+/**
+ * Props are optional — when omitted the panel reads directly from the
+ * document + ephemeral stores so slider scrubs on siblings don't
+ * re-render unrelated trees. Phase 4c/4d tests still pass explicit
+ * arrays for isolated rendering.
+ */
+export default function ContextualPanel({ layers, selectedIds }) {
+  // Two subscription paths depending on whether the caller passed props
+  // explicitly (isolated tests do) or we're in the live editor.
+  //
+  // In the live path we deliberately AVOID useDocumentLayers() so that
+  // slider drags on unrelated layers don't wake this panel. Instead:
+  //   • useSelection()          — primitive array, small diff
+  //   • useDocumentLayer(id)    — patch-scoped to THIS layer only
+  const docSel     = useSelection();
+  const selectedIdsResolved = Array.isArray(selectedIds) ? selectedIds : docSel;
+  const singleId   = selectedIdsResolved.length === 1 ? selectedIdsResolved[0] : null;
+  const singleFromStore = useDocumentLayer(singleId);
+
+  // Prop path (tests) — read from the caller's layers array.
+  // Hook path (live) — singleFromStore already has the layer.
+  const layer = Array.isArray(layers)
+    ? (singleId ? (layers.find(l => l.id === singleId) || null) : null)
+    : singleFromStore;
+  const kind = _resolveKindForPanel(layers, selectedIdsResolved, singleFromStore);
 
   return (
     <div
@@ -45,13 +83,13 @@ export default function ContextualPanel({ layers = [], selectedIds = [] }) {
         color: COLORS.textPrimary,
       }}
     >
-      <PanelHeader kind={kind} layer={layer} selectedIds={selectedIds} />
+      <PanelHeader kind={kind} layer={layer} selectedIds={selectedIdsResolved} />
       {kind === 'empty'      && <CanvasSettingsBody />}
       {kind === 'image'      && <ImageBody      layer={layer} />}
       {kind === 'text'       && <TextBody       layer={layer} />}
       {kind === 'shape'      && <ShapeBody      layer={layer} />}
       {kind === 'adjustment' && <AdjustmentBody layer={layer} />}
-      {kind === 'multi'      && <MultiSelectBody selectedIds={selectedIds} />}
+      {kind === 'multi'      && <MultiSelectBody selectedIds={selectedIdsResolved} />}
     </div>
   );
 }

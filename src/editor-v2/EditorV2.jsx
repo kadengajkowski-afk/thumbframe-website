@@ -24,6 +24,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Renderer }      from './engine/Renderer';
 import { PaintCanvases } from './engine/PaintCanvases';
 import { useStore }      from './store/Store';
+import {
+  useDocumentLayers, useProjectName,
+  useSelection,
+} from './store/hooks';
 import { SaveEngine }    from './save/SaveEngine';
 import { History }       from './history/History';
 import {
@@ -98,12 +102,14 @@ export default function EditorV2() {
 
   // ── Live store slices ───────────────────────────────────────────────────
   const saveStatus      = useStore(s => s.saveStatus);
-  const layers          = useStore(s => s.layers);
-  const selectedIds     = useStore(s => s.selectedLayerIds);
-  const projectName     = useStore(s => s.projectName);
   const activeTool      = useStore(s => s.activeTool);
   const toolParams      = useStore(s => s.toolParams);
   const strokeActive    = useStore(s => s.strokeActive);
+  // Document + ephemeral reads come from the dedicated hooks now —
+  // sibling mutations don't re-render this component.
+  const layers          = useDocumentLayers();
+  const selectedIds     = useSelection();
+  const projectName     = useProjectName();
 
   // ── Boot: wire all deps once per mount ──────────────────────────────────
   useEffect(() => {
