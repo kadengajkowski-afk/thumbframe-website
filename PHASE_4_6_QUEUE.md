@@ -337,4 +337,11 @@ Banned words:
 (empty)
 
 ## Commits made
-(populate as you go)
+- Phase 4.6.a — feat(editor-v2): phase 4.6.a — design tokens + theme system (32 tests)
+- Phase 4.6.b — feat(editor-v2): phase 4.6.b — cockpit layout shell (16 tests)
+- Phase 4.6.c — feat(editor-v2): phase 4.6.c — empty state + ship-alive transition (17 tests)
+- Phase 4.6.d — feat(editor-v2): phase 4.6.d — tool palette with voice tooltips + Lucide icons (7+9 tests)
+- Phase 4.6.e — feat(editor-v2): phase 4.6.e — contextual color picker + layer panel copy (8 tests)
+- Phase 4.6.f — feat(editor-v2): phase 4.6.f — top bar + Ship it + save indicator + settings (15 tests)
+- Phase 4.6.g — feat(editor-v2): phase 4.6.g — keyboard shortcut registry via tinykeys (9 tests)
+- Phase 4.6.h — feat(editor-v2): phase 4.6 complete — UI rebuild (8 tests)
