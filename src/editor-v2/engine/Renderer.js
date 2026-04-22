@@ -37,6 +37,20 @@ import { renderText, textFingerprint } from './TextRenderer.js';
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
 
+// Mark a Container as a RenderGroup in the Pixi v8 way. Pixi's test
+// stub doesn't implement `enableRenderGroup`, so we write the flag
+// directly which is also how v8 documents this API for dev use.
+function _setRenderGroup(container) {
+  if (!container) return;
+  try {
+    if (typeof container.enableRenderGroup === 'function') {
+      container.enableRenderGroup();
+    } else {
+      container.isRenderGroup = true;
+    }
+  } catch { /* stub Containers in tests just get the flag */ }
+}
+
 // RAF shims. Tests run under jsdom where requestAnimationFrame may be
 // a setTimeout stub; keep both paths isolated so we can spy cleanly.
 function _raf(fn) {
@@ -109,7 +123,15 @@ export class Renderer {
     this._rafId           = 0;
     this._gestureDepth    = 0;
     this._gestureTickerOn = false;
-    this._stats = { rendersIssued: 0, lastRenderTs: 0 };
+    this._stats = {
+      rendersIssued:      0,
+      lastRenderTs:       0,
+      // Phase 4.5.c — count how many times the layers-group
+      // reconciliation actually ran. Overlay-only frames (selection
+      // drag, hover, command-palette open) should NOT bump this.
+      layersSyncCount:    0,
+      lastLayersNonce:   -1,
+    };
 
     this._onContextLost     = this._onContextLost.bind(this);
     this._onContextRestored = this._onContextRestored.bind(this);
@@ -156,12 +178,33 @@ export class Renderer {
     this._viewport = new Container();
     this._app.stage.addChild(this._viewport);
 
+    // Phase 4.5.c — three top-level RenderGroups (Excalidraw /
+    // TECHNICAL_RESEARCH.md pattern):
+    //   _bgGroup      : document background rect — changes ~never
+    //   _layersGroup  : user layers — the expensive one
+    //   _overlayGroup : selection/handles/previews — short-lived
+    //
+    // Each Container is marked isRenderGroup so Pixi caches its
+    // instruction list. Overlay-only updates (selection box drag,
+    // hover marker) do not rebuild _layersGroup's instructions.
+    this._bgGroup      = new Container();
+    this._layersGroup  = new Container();
+    this._overlayGroup = new Container();
+    _setRenderGroup(this._bgGroup);
+    _setRenderGroup(this._layersGroup);
+    _setRenderGroup(this._overlayGroup);
+    this._viewport.addChild(this._bgGroup);
+    this._viewport.addChild(this._layersGroup);
+    this._viewport.addChild(this._overlayGroup);
+
     this._docBg = new Graphics();
     this._docBg.rect(0, 0, CANVAS_W, CANVAS_H).fill({ color: DOC_BG });
-    this._viewport.addChild(this._docBg);
+    this._bgGroup.addChild(this._docBg);
 
-    this._layerContainer = new Container();
-    this._viewport.addChild(this._layerContainer);
+    // Keep legacy _layerContainer alias so _renderInto() stays
+    // source-compatible. Phase 1.a rendering already flowed into
+    // this Container; we just retargeted it onto the layers group.
+    this._layerContainer = this._layersGroup;
 
     this._canvasEl.addEventListener('webglcontextlost',     this._onContextLost);
     this._canvasEl.addEventListener('webglcontextrestored', this._onContextRestored);
@@ -238,11 +281,13 @@ export class Renderer {
   /** Dev-only stats snapshot; see PHASE_4_5_QUEUE.md for exit criteria. */
   stats() {
     return {
-      rendersIssued: this._stats.rendersIssued,
-      lastRenderTs:  this._stats.lastRenderTs,
-      gestureDepth:  this._gestureDepth,
-      gestureActive: this._gestureTickerOn,
-      needsRender:   this._needsRender,
+      rendersIssued:    this._stats.rendersIssued,
+      lastRenderTs:     this._stats.lastRenderTs,
+      gestureDepth:     this._gestureDepth,
+      gestureActive:    this._gestureTickerOn,
+      needsRender:      this._needsRender,
+      layersSyncCount:  this._stats.layersSyncCount,
+      lastLayersNonce:  this._stats.lastLayersNonce,
     };
   }
 
@@ -345,6 +390,25 @@ export class Renderer {
    */
   _sync() {
     if (!this._layerContainer || !this._store) return;
+
+    // Phase 4.5.c — short-circuit the layer reconciliation when the
+    // DocumentStore nonce has not advanced. Overlay-only interactions
+    // (selection drag, hover move, command palette open, UI scrubs
+    // that didn't mutate a layer) render the frame but skip the
+    // instruction-list rebuild on the layers RenderGroup.
+    let currentNonce = -1;
+    try {
+      // eslint-disable-next-line global-require
+      const { documentStore } = require('../store/DocumentStore.js');
+      currentNonce = documentStore.nonce();
+    } catch { /* noop — older code paths without the doc store */ }
+
+    if (currentNonce !== -1 && currentNonce === this._stats.lastLayersNonce) {
+      // No document-level change — nothing to reconcile on the
+      // layers group. Leave display objects alone.
+      return;
+    }
+
     const state = this._store.getState();
     const layers = Array.isArray(state.layers) ? state.layers : [];
 
@@ -367,6 +431,9 @@ export class Renderer {
     // 3. Render top-level stack (layers not claimed by any group).
     const topLevel = layers.filter(l => !childIds.has(l.id));
     this._renderInto(this._layerContainer, topLevel, byId);
+
+    this._stats.layersSyncCount += 1;
+    this._stats.lastLayersNonce  = currentNonce;
   }
 
   /**
