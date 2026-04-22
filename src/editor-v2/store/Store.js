@@ -214,8 +214,13 @@ export const useStore = create(
       set((state) => { state.__fontLoader = loader; });
     },
 
-    /** Inject the Selection singleton + SAM client. Phase 2.d wiring. */
-    setSelection(selection) {
+    /**
+     * Inject the Selection singleton. Named with the `Instance` suffix
+     * so it doesn't collide with `setSelection(ids)` above, which is
+     * the foundation action that writes the layer-id selection array.
+     * Phase 2.d wiring.
+     */
+    setSelectionInstance(selection) {
       set((state) => { state.__selection = selection; });
     },
     setSAMClient(client) {

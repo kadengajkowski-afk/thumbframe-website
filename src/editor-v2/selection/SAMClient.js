@@ -24,7 +24,16 @@ export class SAMClient {
   /** @param {{ apiUrl: string, fetchImpl?: typeof fetch }} opts */
   constructor(opts) {
     this._apiUrl = String(opts.apiUrl || '').replace(/\/$/, '');
-    this._fetch  = opts.fetchImpl || (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : null);
+    // Prefer the caller's fetch impl (tests); otherwise use the
+    // browser's fetch if present. Avoids touching `globalThis` / `self`
+    // which CRA's eslint config flags under no-restricted-globals.
+    let fallback = null;
+    if (opts.fetchImpl && typeof opts.fetchImpl === 'function') {
+      fallback = opts.fetchImpl;
+    } else if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+      fallback = window.fetch.bind(window);
+    }
+    this._fetch = fallback;
   }
 
   /**

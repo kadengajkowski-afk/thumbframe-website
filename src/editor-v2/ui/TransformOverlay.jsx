@@ -9,7 +9,7 @@
 // -----------------------------------------------------------------------------
 
 import React, { useCallback, useRef, useState } from 'react';
-import { COLORS, SPACING, transition } from './tokens';
+import { COLORS, transition } from './tokens';
 import { executeAction } from '../actions/registry';
 
 export const HANDLE_POSITIONS = Object.freeze([
@@ -34,17 +34,17 @@ export default function TransformOverlay({
   const [activeHandle, setActiveHandle] = useState(null);
   const dragRef = useRef(null);
 
+  const onBodyPointerDown = useCallback((e) => {
+    dragRef.current = { kind: 'move', startX: e.clientX, startY: e.clientY };
+    e.target.setPointerCapture?.(e.pointerId);
+  }, []);
+
   if (!layer) return null;
 
   const left = (layer.x - layer.width  / 2) * canvasScale;
   const top  = (layer.y - layer.height / 2) * canvasScale;
   const w    = layer.width  * canvasScale;
   const h    = layer.height * canvasScale;
-
-  const onBodyPointerDown = useCallback((e) => {
-    dragRef.current = { kind: 'move', startX: e.clientX, startY: e.clientY };
-    e.target.setPointerCapture?.(e.pointerId);
-  }, []);
 
   const onHandlePointerDown = (handle) => (e) => {
     e.stopPropagation();

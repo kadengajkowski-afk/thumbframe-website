@@ -70,7 +70,7 @@ async function resetAll() {
   paintCanvases = new PaintCanvases();
   selection     = new Selection(32, 24);   // small canvas for speed
   samClient     = new SAMClient({ apiUrl: 'http://does-not-resolve.invalid' });
-  useStore.getState().setSelection(selection);
+  useStore.getState().setSelectionInstance(selection);
   useStore.getState().setSAMClient(samClient);
   history = new History({ store: useStore, projectId: 'test-project', max: 50 });
   await history.load();

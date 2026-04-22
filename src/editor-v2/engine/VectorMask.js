@@ -170,19 +170,12 @@ export async function buildMaskGraphics(commands, width, height) {
   // Coordinates in the path are assumed to be in 0..width × 0..height;
   // we don't re-center here (the Sprite's own anchor does the work).
   void width; void height;
-  let cx = 0, cy = 0;
   for (const c of commands) {
-    if (c.kind === 'M') { g.moveTo(c.args[0], c.args[1]); cx = c.args[0]; cy = c.args[1]; }
-    else if (c.kind === 'L') { g.lineTo(c.args[0], c.args[1]); cx = c.args[0]; cy = c.args[1]; }
-    else if (c.kind === 'C') {
-      g.bezierCurveTo(c.args[0], c.args[1], c.args[2], c.args[3], c.args[4], c.args[5]);
-      cx = c.args[4]; cy = c.args[5];
-    }
-    else if (c.kind === 'Q') {
-      g.quadraticCurveTo(c.args[0], c.args[1], c.args[2], c.args[3]);
-      cx = c.args[2]; cy = c.args[3];
-    }
-    else if (c.kind === 'Z') { g.closePath(); }
+    if (c.kind === 'M')      g.moveTo(c.args[0], c.args[1]);
+    else if (c.kind === 'L') g.lineTo(c.args[0], c.args[1]);
+    else if (c.kind === 'C') g.bezierCurveTo(c.args[0], c.args[1], c.args[2], c.args[3], c.args[4], c.args[5]);
+    else if (c.kind === 'Q') g.quadraticCurveTo(c.args[0], c.args[1], c.args[2], c.args[3]);
+    else if (c.kind === 'Z') g.closePath();
   }
   g.fill({ color: 0xffffff, alpha: 1 });
   return g;
