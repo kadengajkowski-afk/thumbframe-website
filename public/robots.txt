@@ -1,7 +1,9 @@
 User-agent: *
 Allow: /
+Disallow: /admin
 Disallow: /editor
-Disallow: /dashboard
 Disallow: /settings
+Disallow: /gallery
+Disallow: /account
 
 Sitemap: https://www.thumbframe.com/sitemap.xml

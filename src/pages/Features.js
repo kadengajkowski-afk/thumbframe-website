@@ -19,8 +19,8 @@ const HERO_FEATURES = [
   {
     Icon: MessageCircle,
     name: 'ThumbFriend',
-    tag: 'AI-powered',
-    tagline: 'Your AI creative partner.',
+    tag: 'Smart feature',
+    tagline: 'Your creative partner.',
     desc: 'Five distinct personalities help you brainstorm, critique, and refine thumbnails. Canvas editing and long-term memory on Pro.',
   },
   {
@@ -33,16 +33,16 @@ const HERO_FEATURES = [
   {
     Icon: Scissors,
     name: 'Background Remover',
-    tag: 'AI-powered',
+    tag: 'Smart feature',
     tagline: 'One click. Gone.',
-    desc: 'Remove backgrounds instantly with AI. Five free per month, unlimited on Pro.',
+    desc: 'Cut backgrounds instantly — even hair, glass, and soft edges. Five free per month, unlimited on Pro.',
   },
   {
     Icon: Wand2,
     name: 'Auto Thumbnail',
-    tag: 'AI-powered · Pro',
+    tag: 'Pro feature',
     tagline: 'Describe it. Get it.',
-    desc: 'Type what your video is about. Get a complete thumbnail generated end-to-end with faces, text, and composition.',
+    desc: 'Type what your video is about. Get a complete thumbnail end-to-end — faces, text, composition, all laid out.',
   },
   {
     Icon: Brush,
@@ -68,8 +68,8 @@ const CATEGORIES = [
   },
   {
     eyebrow: 'Smart shortcuts',
-    name: 'AI Magic',
-    items: ['AI Generate (DALL-E 3)', 'A/B Variants', 'Face Enhancement', 'Style Transfer', 'Text Suggestions'],
+    name: 'Smart Shortcuts',
+    items: ['Image generator', 'A/B Variants', 'Face Enhancement', 'Style Transfer', 'Text Suggestions'],
   },
   {
     eyebrow: 'Know before you ship',

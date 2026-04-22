@@ -29,7 +29,7 @@ const PRO_FEATURES = [
   'ThumbFriend unlimited messages + all 5 personalities',
   'ThumbFriend canvas editing + deep memory',
   'Premium templates',
-  'AI Generate (DALL-E 3)',
+  'Image generator',
   'Auto Thumbnail generator',
   'A/B Variants',
   'CTR Score advanced breakdown',

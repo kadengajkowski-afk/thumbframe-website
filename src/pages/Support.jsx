@@ -35,11 +35,11 @@ const FAQ = [
   },
   {
     q: "What’s the difference between Free and Pro?",
-    a: "Free includes the full editor (paint, erase, clone, selections, text, layers, templates) with watermark-free exports, 5 ThumbFriend messages per day, and 5 background removals per month. Pro adds unlimited AI features (AI Generate, Auto Thumbnail, Face Enhancement, Style Transfer, A/B Variants), unlimited background removals, unlimited ThumbFriend messages, deep memory, premium templates, CTR Score breakdowns, and priority support — all for $15/month.",
+    a: "Free includes the full editor (paint, erase, clone, selections, text, layers, templates) with watermark-free exports, 5 ThumbFriend messages per day, and 5 background removals per month. Pro adds unlimited smart features (Image Generator, Auto Thumbnail, Face Enhancement, Style Transfer, A/B Variants), unlimited background removals, unlimited ThumbFriend messages, deep memory, premium templates, CTR Score breakdowns, and priority support — all for $15/month.",
   },
   {
-    q: 'How does AI Generate work?',
-    a: "You describe what you want and we use DALL-E 3 to generate a full image. It’s not just backgrounds — the AI builds a complete scene based on your prompt. Pro only. Each generation costs us money, but it’s included in your subscription.",
+    q: 'How does the image generator work?',
+    a: "You describe what you want and an advanced image-generation model builds the full scene from your prompt. It’s not just backgrounds — the output is a complete composition. Pro only. Each generation costs us money, but it’s included in your subscription.",
   },
   {
     q: 'How do I connect my YouTube channel?',
