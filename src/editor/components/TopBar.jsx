@@ -118,16 +118,25 @@ export default function TopBar({ user, setPage, onExport, onShare }) {
           </svg>
         </IconBtn>
 
-        {/* Logo */}
+        {/* Logo — ship mark matches the shared Navbar used everywhere else. */}
         <div
           onClick={(e) => { setPage?.('home'); window.dispatchEvent(new CustomEvent('tf:logo-click')); }}
           title="ThumbFrame — click 5× fast for a surprise"
           style={{
-            width: 28, height: 28, borderRadius: 6,
-            background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', flexShrink: 0, fontWeight: 900, fontSize: 16, color: '#fff',
+            width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', flexShrink: 0,
           }}
-        >T</div>
+        >
+          <img
+            src="/brand/ship-logo-final.png"
+            alt=""
+            aria-hidden="true"
+            style={{
+              height: 28, width: 'auto', display: 'block',
+              filter: 'drop-shadow(0 1px 4px rgba(20, 12, 28, 0.9))',
+            }}
+          />
+        </div>
 
         {/* Project name */}
         {editingName ? (

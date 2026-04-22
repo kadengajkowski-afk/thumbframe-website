@@ -24,16 +24,19 @@ const FACTOR_LABELS = {
   safe_zones:              'Safe Zones',
 };
 
+// Color scale — swapped from alarm colors to the site's dark-space palette.
+// Green -> sage (calm success), yellow -> amber (neutral warmth),
+// red -> warm coral (flag without urgency).
 function scoreColor(s) {
-  if (s >= 70) return '#22c55e';
-  if (s >= 40) return '#eab308';
-  return '#ef4444';
+  if (s >= 70) return '#8aa090';
+  if (s >= 40) return '#ffb866';
+  return '#e87050';
 }
 
 function barColor(s) {
-  if (s >= 80) return '#22c55e';
-  if (s >= 50) return '#eab308';
-  return '#ef4444';
+  if (s >= 80) return '#8aa090';
+  if (s >= 50) return '#ffb866';
+  return '#e87050';
 }
 
 function scoreLabel(s) {

@@ -1,18 +1,27 @@
 /* src/editor/editor.css — Observatory design system tokens */
 
 :root {
-  --bg-0: #050507;
-  --bg-1: #09090b;
-  --bg-2: #111113;
-  --bg-3: #18181b;
-  --bg-4: #1f1f23;
-  --bg-5: #27272a;
+  /* Background scale — violet-tinted dark space. Mirrors the same
+     step-lighter progression as before so any component that used
+     --bg-0..5 as a "darker to lighter" ramp still reads correctly.
+     Core palette sourced from the landing nebula so the editor
+     feels like the same universe. */
+  --bg-0: #060418;
+  --bg-1: #0c0722;
+  --bg-2: #14102c;
+  --bg-3: #1c1838;
+  --bg-4: #2a2048;
+  --bg-5: #362c58;
 
+  /* Primary accent — amber. Reserved for "active/important/NOW".
+     Softer secondary amber + cream for info labels and secondary UI. */
   --accent:        #f97316;
   --accent-hover:  #fb923c;
   --accent-active: #ea580c;
   --accent-dim:    rgba(249,115,22,0.12);
   --accent-border: rgba(249,115,22,0.30);
+  --accent-soft:   #ffb866;
+  --cream:         #fff4e0;
 
   --text-1: #F5F5F7;
   --text-2: rgba(245,245,247,0.65);
