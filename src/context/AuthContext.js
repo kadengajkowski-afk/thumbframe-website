@@ -60,7 +60,7 @@ async function fetchProfile(email) {
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .select('is_dev, is_pro, plan')
+      .select('is_dev, is_pro, plan, editor_version')
       .eq('email', email)
       .single();
     if (error) {
@@ -130,6 +130,7 @@ export function AuthProvider({ children }) {
             is_dev: profile.is_dev === true,
             is_pro: profile.is_pro === true || enriched.is_pro,
             plan:   profile.plan || enriched.plan,
+            editor_version: profile.editor_version === 'v2' ? 'v2' : 'v1',
           };
 
           // Try to enrich further from backend /api/me (non-fatal if absent).
@@ -207,6 +208,7 @@ export function AuthProvider({ children }) {
             is_dev: profile.is_dev === true,
             is_pro: profile.is_pro === true || u.is_pro,
             plan:   profile.plan || u.plan,
+            editor_version: profile.editor_version === 'v2' ? 'v2' : 'v1',
           };
           console.log('[Auth] onAuthStateChange user:', {
             email: u.email, is_dev: u.is_dev, is_pro: u.is_pro,

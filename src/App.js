@@ -6,6 +6,7 @@ import MobileEditor from './mobile/MobileEditor';
 import CookieBanner from './components/CookieBanner';
 import { useAuth } from './context/AuthContext';
 import { handleUpgrade } from './utils/checkout';
+import { readUrlOverride } from './editor-v2/flag';
 
 // ── Code-split marketing pages ────────────────────────────────────────────────
 const Home      = lazy(() => import('./landing/LandingPageV2'));
@@ -28,6 +29,7 @@ const Account   = lazy(() => import('./pages/Account'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPassword'));
 const UpdatePasswordPage = lazy(() => import('./pages/UpdatePassword'));
+const EditorV2           = lazy(() => import('./editor-v2/EditorV2'));
 
 function PageLoader() {
   return (
@@ -394,6 +396,7 @@ function Examples({ setPage }) {
 
 function getInitialPage() {
   const path = window.location.pathname.toLowerCase();
+  if (path === '/editor-v2') return 'editor-v2';
   if (path === '/editor') return 'editor';
   // /dashboard is retired — redirect bookmarks to the new /gallery route.
   if (path === '/dashboard') return 'gallery';
@@ -433,7 +436,7 @@ function syncPath(page) {
   }
 }
 
-const PROTECTED_PAGES = new Set(['editor', 'gallery', 'settings', 'account']);
+const PROTECTED_PAGES = new Set(['editor', 'editor-v2', 'gallery', 'settings', 'account']);
 
 
 export default function App() {
@@ -459,12 +462,32 @@ export default function App() {
     }
   }, [page, user]);
 
+  // Explicit v2 route — dev access regardless of profile flag.
+  if (page === 'editor-v2') {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <EditorV2 />
+      </Suspense>
+    );
+  }
+
   if (page === 'editor') {
     if (isMobile) return <MobileEditor user={user} />;
     // ?engine=fabric escapes to the legacy Fabric.js canvas (dev fallback only)
     const engineParam = new URLSearchParams(window.location.search).get('engine');
     if (engineParam === 'fabric') {
       return <FabricCanvas user={user} darkMode={true} />;
+    }
+    // Flag-routed v2: either the URL override ?editor=v2 OR the user's
+    // profile.editor_version === 'v2' promotes them to the new editor.
+    const flagV2 =
+      readUrlOverride() === 'v2' || user?.editor_version === 'v2';
+    if (flagV2) {
+      return (
+        <Suspense fallback={<PageLoader />}>
+          <EditorV2 />
+        </Suspense>
+      );
     }
     return <NewEditor user={user} setPage={setPage} />;
   }

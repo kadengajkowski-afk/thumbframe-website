@@ -1,0 +1,509 @@
+// src/editor-v2/engine/Renderer.js
+// -----------------------------------------------------------------------------
+// Purpose:  PixiJS v8 renderer for the v2 editor. Owns the Application,
+//           the viewport container, and the layer container. Subscribes
+//           to the store and re-renders only when something changes
+//           (dirty-flag driven). Handles WebGL/WebGPU context loss with
+//           re-upload from TexturePool.
+//
+//           Phase 1.a upgrade: sync() now reconciles store.layers to
+//           PixiJS display objects. Group layers render their children
+//           inside their own Container so the group's opacity and blend
+//           mode compose correctly over the stack. Adjustment layers
+//           don't render anything directly in Phase 1.a — their
+//           "filter-applies-to-below" semantics ship in Phase 1.e.
+// Exports:  Renderer class
+// Depends:  pixi.js, ./TexturePool, ./BlendModes, ./ShapeRenderer,
+//           ./TextRenderer
+//
+// Design notes:
+//   • PixiJS v8 honors `preference: 'webgpu'` and falls back to WebGL2
+//     on browsers without WebGPU. No manual probe.
+//   • The ticker is started only when `_dirty` is true and stopped
+//     immediately after a render. Between frames PixiJS uses zero CPU.
+//   • Context loss: on `webglcontextlost` we preventDefault() so the
+//     browser will fire `webglcontextrestored`. WebGPU uses the
+//     renderer's contextChange event.
+//   • No `window.__*` globals. The Renderer receives the store at init
+//     time and holds it as private state.
+// -----------------------------------------------------------------------------
+
+import { Application, Container, Graphics, Sprite } from 'pixi.js';
+import { TexturePool } from './TexturePool.js';
+import { resolveBlendMode } from './BlendModes.js';
+import { buildShapeGraphics, shapeFingerprint } from './ShapeRenderer.js';
+import { renderText, textFingerprint } from './TextRenderer.js';
+
+const CANVAS_W = 1280;
+const CANVAS_H = 720;
+
+/** Background color behind the 1280×720 document. */
+const SCENE_BG = 0x020308;
+/** Color of the document rectangle itself. */
+const DOC_BG   = 0x0f0a18;
+
+/**
+ * Per-layer render state stored alongside the PixiJS display object.
+ * Lives in a Map keyed by layer.id — not on the display object itself
+ * so destroying the object doesn't leak expando properties.
+ * @typedef {Object} LayerState
+ * @property {import('pixi.js').Container} obj
+ * @property {string} fingerprint
+ * @property {import('pixi.js').Texture|null} ownedTexture  - Non-null when we
+ *          created the texture ourselves (text, shape gradients) and are
+ *          responsible for destroying it.
+ */
+
+export class Renderer {
+  constructor() {
+    /** @type {Application|null} */
+    this._app = null;
+    /** @type {Container|null} */
+    this._viewport = null;
+    /** @type {Graphics|null} */
+    this._docBg = null;
+    /** @type {Container|null} */
+    this._layerContainer = null;
+
+    this._pool = new TexturePool();
+
+    /** @type {null | (() => void)} */
+    this._unsubStore = null;
+    /** @type {null | { getState: () => any, subscribe: (fn: Function) => () => void }} */
+    this._store = null;
+
+    /** @type {Map<string, LayerState>} */
+    this._layerStates = new Map();
+
+    this._dirty = true;
+    this._disposed = false;
+
+    this._canvasEl = null;
+
+    this._onContextLost     = this._onContextLost.bind(this);
+    this._onContextRestored = this._onContextRestored.bind(this);
+    this._onTick            = this._onTick.bind(this);
+  }
+
+  /**
+   * Initialise the PixiJS application into the given container and begin
+   * observing the store. Idempotent.
+   *
+   * @param {HTMLElement} containerEl
+   * @param {any} store
+   */
+  async init(containerEl, store) {
+    if (this._app || this._disposed) return;
+    this._store = store;
+
+    this._app = new Application();
+    await this._app.init({
+      width:  CANVAS_W,
+      height: CANVAS_H,
+      background: SCENE_BG,
+      preference: 'webgpu',
+      antialias: true,
+      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      autoDensity: true,
+      preserveDrawingBuffer: true,
+    });
+
+    if (this._disposed) {
+      try { this._app.destroy(true, { children: true }); } catch { /* noop */ }
+      this._app = null;
+      return;
+    }
+
+    this._canvasEl = this._app.canvas;
+    this._canvasEl.style.display     = 'block';
+    this._canvasEl.style.touchAction = 'none';
+    containerEl.appendChild(this._canvasEl);
+
+    this._viewport = new Container();
+    this._app.stage.addChild(this._viewport);
+
+    this._docBg = new Graphics();
+    this._docBg.rect(0, 0, CANVAS_W, CANVAS_H).fill({ color: DOC_BG });
+    this._viewport.addChild(this._docBg);
+
+    this._layerContainer = new Container();
+    this._viewport.addChild(this._layerContainer);
+
+    this._canvasEl.addEventListener('webglcontextlost',     this._onContextLost);
+    this._canvasEl.addEventListener('webglcontextrestored', this._onContextRestored);
+    try {
+      this._app.renderer.on?.('contextChange', this._onContextRestored);
+    } catch { /* noop */ }
+
+    this._unsubStore = this._store.subscribe(() => this.markDirty());
+
+    this._app.ticker.autoStart = false;
+    this._app.ticker.add(this._onTick);
+    this.markDirty();
+
+    if (this._store.getState().setRendererReady) {
+      this._store.getState().setRendererReady(true);
+    }
+  }
+
+  /** External hook to force a re-render even if the store didn't change. */
+  markDirty() {
+    if (this._disposed || !this._app) return;
+    this._dirty = true;
+    if (!this._app.ticker.started) this._app.ticker.start();
+  }
+
+  /**
+   * Export the current frame as a data URL.
+   * @param {'image/png'|'image/jpeg'} [format]
+   * @param {number} [quality]
+   */
+  exportToDataURL(format = 'image/png', quality = 0.9) {
+    if (!this._app) return null;
+    try {
+      this._app.renderer.render(this._app.stage);
+      return this._app.canvas.toDataURL(format, quality);
+    } catch (err) {
+      console.warn('[Renderer] export failed:', err);
+      return null;
+    }
+  }
+
+  destroy() {
+    this._disposed = true;
+    if (this._unsubStore) { this._unsubStore(); this._unsubStore = null; }
+
+    if (this._canvasEl) {
+      this._canvasEl.removeEventListener('webglcontextlost',     this._onContextLost);
+      this._canvasEl.removeEventListener('webglcontextrestored', this._onContextRestored);
+      this._canvasEl = null;
+    }
+    try {
+      this._app?.renderer?.off?.('contextChange', this._onContextRestored);
+    } catch { /* noop */ }
+
+    // Destroy owned textures first to avoid leaks.
+    for (const state of this._layerStates.values()) {
+      if (state.ownedTexture) {
+        try { state.ownedTexture.destroy(true); } catch { /* noop */ }
+      }
+    }
+    this._layerStates.clear();
+    this._pool.clear();
+
+    if (this._app) {
+      try { this._app.ticker.remove(this._onTick); } catch { /* noop */ }
+      try { this._app.destroy(true, { children: true }); } catch { /* noop */ }
+      this._app = null;
+    }
+  }
+
+  // ── ticker / reconciliation ────────────────────────────────────────────────
+
+  /** @private */
+  _onTick() {
+    if (!this._dirty || !this._app) return;
+    this._dirty = false;
+    this._sync();
+    this._app.renderer.render(this._app.stage);
+    if (this._app.ticker.started) this._app.ticker.stop();
+  }
+
+  /**
+   * Reconcile store.layers against the PixiJS scene graph. Group layers
+   * have children stored in layer.groupData.childIds and render their
+   * children inside a dedicated Container so blend mode and opacity
+   * compose correctly.
+   *
+   * @private
+   */
+  _sync() {
+    if (!this._layerContainer || !this._store) return;
+    const state = this._store.getState();
+    const layers = Array.isArray(state.layers) ? state.layers : [];
+
+    // 1. Index layers by id for quick lookup and build a set of layers that
+    //    are children of some group — those render inside the group, not at
+    //    the top level.
+    const byId = new Map(layers.map(l => [l.id, l]));
+    const childIds = new Set();
+    for (const l of layers) {
+      if (l.type === 'group' && l.groupData && Array.isArray(l.groupData.childIds)) {
+        for (const cid of l.groupData.childIds) childIds.add(cid);
+      }
+    }
+
+    // 2. Drop display objects for layers that no longer exist.
+    for (const id of [...this._layerStates.keys()]) {
+      if (!byId.has(id)) this._disposeLayer(id);
+    }
+
+    // 3. Render top-level stack (layers not claimed by any group).
+    const topLevel = layers.filter(l => !childIds.has(l.id));
+    this._renderInto(this._layerContainer, topLevel, byId);
+  }
+
+  /**
+   * Reconcile a list of layers into a container. Recurses into groups so
+   * a group's children become children of the group's Container.
+   *
+   * @param {Container} parent
+   * @param {Array} orderedLayers  In stack order (bottom-first).
+   * @param {Map<string, any>} byId
+   * @private
+   */
+  _renderInto(parent, orderedLayers, byId) {
+    // Build/update each display object.
+    for (const layer of orderedLayers) {
+      if (layer.visible === false) {
+        // Still ensure the state is tracked (hidden toggled off later), but
+        // hide the current object if it exists.
+        const s = this._layerStates.get(layer.id);
+        if (s) s.obj.visible = false;
+        continue;
+      }
+
+      const state = this._ensureDisplayObject(layer, byId);
+      if (!state) continue;
+
+      // Apply transform + presentation.
+      this._applyPresentation(state.obj, layer);
+
+      // Re-parent if needed (groups move children, top-level moves to parent).
+      if (state.obj.parent !== parent) {
+        try { state.obj.parent?.removeChild(state.obj); } catch { /* noop */ }
+        parent.addChild(state.obj);
+      }
+    }
+
+    // Enforce stack order — bottom first, top last.
+    let wantedIndex = 0;
+    for (const layer of orderedLayers) {
+      if (layer.visible === false) continue;
+      const state = this._layerStates.get(layer.id);
+      if (!state) continue;
+      if (parent.getChildIndex(state.obj) !== wantedIndex) {
+        parent.setChildIndex(state.obj, wantedIndex);
+      }
+      wantedIndex++;
+    }
+  }
+
+  /**
+   * Ensure a display object exists for `layer`. Creates it on first call
+   * or when the fingerprint changes; otherwise updates the existing one.
+   *
+   * @param {any} layer
+   * @param {Map<string, any>} byId
+   * @returns {LayerState | null}
+   * @private
+   */
+  _ensureDisplayObject(layer, byId) {
+    const fingerprint = this._fingerprint(layer);
+    const prev = this._layerStates.get(layer.id);
+
+    if (prev && prev.fingerprint === fingerprint) {
+      // Group children may have changed without changing the group's own
+      // fingerprint — recurse so moves within a group reflect on screen.
+      if (layer.type === 'group') {
+        const children = (layer.groupData?.childIds || [])
+          .map(id => byId.get(id))
+          .filter(Boolean);
+        this._renderInto(/** @type {Container} */ (prev.obj), children, byId);
+      }
+      return prev;
+    }
+
+    // Fingerprint changed (or new) — rebuild.
+    if (prev) this._disposeLayer(layer.id);
+
+    const built = this._buildDisplayObject(layer, byId);
+    if (!built) return null;
+
+    /** @type {LayerState} */
+    const state = {
+      obj: built.obj,
+      fingerprint,
+      ownedTexture: built.ownedTexture,
+    };
+    this._layerStates.set(layer.id, state);
+
+    if (layer.type === 'group') {
+      const children = (layer.groupData?.childIds || [])
+        .map(id => byId.get(id))
+        .filter(Boolean);
+      this._renderInto(/** @type {Container} */ (state.obj), children, byId);
+    }
+
+    return state;
+  }
+
+  /**
+   * Build a fresh display object for this layer. Does not parent it or
+   * apply transform; the caller handles that.
+   *
+   * @param {any} layer
+   * @returns {{ obj: Container, ownedTexture: import('pixi.js').Texture|null } | null}
+   * @private
+   */
+  _buildDisplayObject(layer, _byId) {
+    switch (layer.type) {
+      case 'image': {
+        // Image textures are supplied by upstream code (Phase 1.b will
+        // add the image-upload pipeline). In Phase 1.a the cached
+        // texture on layer.texture is honored if present; otherwise a
+        // placeholder rectangle is drawn.
+        if (layer.texture) {
+          const sprite = new Sprite(layer.texture);
+          sprite.anchor.set(0.5, 0.5);
+          return { obj: sprite, ownedTexture: null };
+        }
+        const g = new Graphics();
+        const w = Math.max(1, layer.width || 200);
+        const h = Math.max(1, layer.height || 200);
+        g.rect(-w / 2, -h / 2, w, h).fill({ color: 0x1a1430 });
+        g.rect(-w / 2, -h / 2, w, h).stroke({ color: 0xffffff, width: 1, alpha: 0.12 });
+        return { obj: g, ownedTexture: null };
+      }
+
+      case 'shape': {
+        const g = buildShapeGraphics(layer);
+        // ShapeRenderer draws from (0,0) — wrap in a container so pivot
+        // works uniformly.
+        const wrap = new Container();
+        g.x = -(layer.width  || 0) / 2;
+        g.y = -(layer.height || 0) / 2;
+        wrap.addChild(g);
+        return { obj: wrap, ownedTexture: null };
+      }
+
+      case 'text': {
+        if (!layer.textData) {
+          const g = new Graphics();
+          return { obj: g, ownedTexture: null };
+        }
+        const { texture, width, height } = renderText(layer.textData, {
+          width:  layer.width,
+          height: layer.height,
+        });
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5, 0.5);
+        sprite.width  = width;
+        sprite.height = height;
+        // Pool the texture so context-loss can rehydrate it.
+        this._pool.register(layer.id, texture, width, height);
+        return { obj: sprite, ownedTexture: texture };
+      }
+
+      case 'group': {
+        // Groups are pure containers — their children get parented in by
+        // _renderInto. Blend mode + opacity on the container compose the
+        // whole stack.
+        return { obj: new Container(), ownedTexture: null };
+      }
+
+      case 'adjustment': {
+        // Adjustment layers don't render anything themselves in Phase 1.a.
+        // Phase 1.e will wire "filter applies to below-stack". For now,
+        // return an empty container so the layer has a slot in the tree.
+        return { obj: new Container(), ownedTexture: null };
+      }
+
+      default:
+        return { obj: new Container(), ownedTexture: null };
+    }
+  }
+
+  /** @private */
+  _applyPresentation(obj, layer) {
+    obj.visible = layer.visible !== false;
+    obj.alpha   = typeof layer.opacity === 'number' ? Math.max(0, Math.min(1, layer.opacity)) : 1;
+    obj.x = typeof layer.x === 'number' ? layer.x : CANVAS_W / 2;
+    obj.y = typeof layer.y === 'number' ? layer.y : CANVAS_H / 2;
+    obj.rotation = typeof layer.rotation === 'number' ? layer.rotation : 0;
+
+    const sx = typeof layer.scaleX === 'number' ? layer.scaleX : 1;
+    const sy = typeof layer.scaleY === 'number' ? layer.scaleY : 1;
+    if (obj.scale && typeof obj.scale.set === 'function') {
+      obj.scale.set(sx, sy);
+    }
+
+    const bm = resolveBlendMode(layer.blendMode);
+    obj.blendMode = bm.pixi;
+  }
+
+  /** @private */
+  _fingerprint(layer) {
+    const common = `${layer.type}|${layer.width || 0}|${layer.height || 0}|${layer.visible !== false ? 1 : 0}`;
+    switch (layer.type) {
+      case 'shape': return `${common}|${shapeFingerprint(layer)}`;
+      case 'text':  return `${common}|${textFingerprint(layer.textData, { width: layer.width, height: layer.height })}`;
+      case 'image': return `${common}|tex:${layer.texture?.uid ?? 'none'}`;
+      case 'group': return `${common}|grp:${(layer.groupData?.childIds || []).join(',')}`;
+      case 'adjustment': return `${common}|adj:${layer.adjustmentData?.kind || ''}`;
+      default:      return `${common}|${layer.type}`;
+    }
+  }
+
+  /**
+   * Dispose a layer's display object. Before destroying, detach any
+   * children that are themselves tracked in `_layerStates` — otherwise
+   * PixiJS's recursive `destroy({ children: true })` would cascade into
+   * them and leave their store entries pointing at destroyed objects.
+   *
+   * Group layers hit this path on ungroup/undo: their children are in
+   * `_layerStates` and must survive. Shape wrappers have a non-tracked
+   * inner Graphics that correctly dies as part of the cascade.
+   *
+   * @private
+   */
+  _disposeLayer(id) {
+    const s = this._layerStates.get(id);
+    if (!s) return;
+
+    // Build a set of tracked objects (excluding this one) so we can
+    // detach only the children that have their own lifecycle.
+    if (s.obj.children && s.obj.children.length > 0) {
+      /** @type {Set<object>} */
+      const tracked = new Set();
+      for (const [cid, cs] of this._layerStates) {
+        if (cid !== id) tracked.add(cs.obj);
+      }
+      // Iterate a snapshot — removeChild mutates .children.
+      const kids = [...s.obj.children];
+      for (const child of kids) {
+        if (tracked.has(child)) {
+          try { s.obj.removeChild(child); } catch { /* noop */ }
+        }
+      }
+    }
+
+    try { s.obj.parent?.removeChild(s.obj); } catch { /* noop */ }
+    try { s.obj.destroy({ children: true }); } catch { /* noop */ }
+    if (s.ownedTexture) {
+      try { s.ownedTexture.destroy(true); } catch { /* noop */ }
+    }
+    this._pool.release(id);
+    this._layerStates.delete(id);
+  }
+
+  // ── context loss / restore ────────────────────────────────────────────────
+
+  /** @private @param {Event} e */
+  _onContextLost(e) {
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    this._pool.clearGPU();
+    console.warn('[Renderer] WebGL context lost — waiting for restore');
+  }
+
+  /** @private */
+  async _onContextRestored() {
+    if (!this._app || this._disposed) return;
+    console.info('[Renderer] context restored — rehydrating');
+    // Force a full rebuild on the next tick — fingerprints will mismatch
+    // destroyed textures and the layers will be recreated fresh from
+    // store state.
+    for (const id of [...this._layerStates.keys()]) this._disposeLayer(id);
+    this.markDirty();
+  }
+}
