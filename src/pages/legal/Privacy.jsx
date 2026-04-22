@@ -14,6 +14,12 @@ export default function Privacy({ setPage }) {
       eyebrow="Legal"
       title="Privacy Policy"
       lastUpdated="April 2026"
+      palette={{
+        core:      '#081408',
+        mid:       '#1a3a20',
+        highlight: '#2a6048',
+        accent:    '#c8e0a0',
+      }}
     >
       <div className="tf-legal-disclaimer">
         Plain English, no lawyer-speak. If something isn't clear, email{' '}

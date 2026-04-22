@@ -11,7 +11,6 @@ const FRAUNCES = "'Fraunces Variable', 'Fraunces', Georgia, serif";
 const FONT_UI  = "'Inter Variable', 'Inter', system-ui, sans-serif";
 
 const CREAM    = '#faecd0';
-const CREAM_50 = 'rgba(250,236,208,0.5)';
 const CREAM_60 = 'rgba(250,236,208,0.6)';
 const CREAM_70 = 'rgba(250,236,208,0.7)';
 const CREAM_80 = 'rgba(250,236,208,0.8)';
@@ -22,6 +21,8 @@ const INPUT_BG = '#0c0c0f';
 const INPUT_TXT = '#f0f0f3';
 const DANGER   = '#e87050';
 const SUCCESS  = '#86efac';
+
+const API_URL = (process.env.REACT_APP_API_URL || 'https://thumbframe-api-production.up.railway.app').replace(/\/$/, '');
 
 const FAQ = [
   {
@@ -363,22 +364,41 @@ function ContactForm() {
   const [status, setStatus]     = useState(null);         // 'success' | 'error'
   const [submittedEmail, setSubmittedEmail] = useState('');
 
+  const [errorMsg, setErrorMsg] = useState('');
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (submitting) return;
     setStatus(null);
+    setErrorMsg('');
     setSubmitting(true);
     try {
-      // TODO: wire to Railway /api/support endpoint with Resend integration.
-      // For now, log the payload and simulate a successful submission.
-      // eslint-disable-next-line no-console
-      console.log('[support] message (stub):', { name, email, subject, message });
-      await new Promise((r) => setTimeout(r, 600));
+      const res = await fetch(`${API_URL}/api/support-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, subject, message }),
+      });
+
+      if (res.status === 429) {
+        const body = await res.json().catch(() => ({}));
+        setErrorMsg(body.error || "You're sending messages too fast. Please wait a minute.");
+        setStatus('error');
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (!data.success) throw new Error('Unexpected response');
+
       setSubmittedEmail(email);
       setStatus('success');
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[support] send failed:', err);
+      setErrorMsg('Something went wrong. Please email hello@thumbframe.com directly.');
       setStatus('error');
     } finally {
       setSubmitting(false);
@@ -461,11 +481,15 @@ function ContactForm() {
 
         {status === 'error' && (
           <div className="tf-support-alert err" role="alert" aria-live="polite">
-            Something went wrong. Please email{' '}
-            <a href="mailto:hello@thumbframe.com" style={{ color: DANGER, textDecoration: 'underline' }}>
-              hello@thumbframe.com
-            </a>{' '}
-            directly.
+            {errorMsg || (
+              <>
+                Something went wrong. Please email{' '}
+                <a href="mailto:hello@thumbframe.com" style={{ color: DANGER, textDecoration: 'underline' }}>
+                  hello@thumbframe.com
+                </a>{' '}
+                directly.
+              </>
+            )}
           </div>
         )}
 
@@ -490,7 +514,12 @@ export default function Support({ setPage }) {
 
   return (
     <div className="tf-support-page">
-      <LegalScene />
+      <LegalScene palette={{
+        core:      '#020812',
+        mid:       '#0a2438',
+        highlight: '#2a6878',
+        accent:    '#80c0c8',
+      }} />
       <Navbar onNavigate={setPage} />
       <style>{CSS}</style>
       <style>{AUTOFILL_FIX}</style>

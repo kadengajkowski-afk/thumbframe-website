@@ -14,6 +14,12 @@ export default function Terms({ setPage }) {
       eyebrow="Legal"
       title="Terms of Service"
       lastUpdated="April 2026"
+      palette={{
+        core:      '#050818',
+        mid:       '#1a1a38',
+        highlight: '#3a3868',
+        accent:    '#b8c0e0',
+      }}
     >
       <div className="tf-legal-disclaimer">
         This is a plain-English summary of our legal terms. For the full

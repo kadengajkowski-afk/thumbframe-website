@@ -162,11 +162,12 @@ export default function LegalPageTemplate({
   title,
   subtitle,
   lastUpdated,
+  palette,
   children,
 }) {
   return (
     <div className="tf-legal-page">
-      <LegalScene />
+      <LegalScene palette={palette} />
       <Navbar onNavigate={setPage} />
       <style>{PROSE_CSS}</style>
 

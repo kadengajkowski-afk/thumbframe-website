@@ -14,6 +14,12 @@ export default function Refund({ setPage }) {
       eyebrow="Legal"
       title="Refund Policy"
       lastUpdated="April 2026"
+      palette={{
+        core:      '#180808',
+        mid:       '#3a1a20',
+        highlight: '#6a3848',
+        accent:    '#ffb088',
+      }}
     >
       <p>
         We don't offer refunds on Pro subscriptions.

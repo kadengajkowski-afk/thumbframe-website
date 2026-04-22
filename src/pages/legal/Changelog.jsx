@@ -63,6 +63,12 @@ export default function Changelog({ setPage }) {
       title="Changelog"
       subtitle="What's new in ThumbFrame."
       lastUpdated={lastUpdated}
+      palette={{
+        core:      '#100820',
+        mid:       '#2a1a48',
+        highlight: '#58388a',
+        accent:    '#e0a0d8',
+      }}
     >
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {ENTRIES.map((entry, idx) => (

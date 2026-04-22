@@ -18,11 +18,16 @@ const POST_DISABLED = typeof window !== 'undefined'
 
 const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
-const LEGAL_PALETTE = {
-  core:       '#020812',
-  mid:        '#0a2438',
-  highlight:  '#2a6878',
-  accent:     '#80c0c8',
+// Default palette — teal/aqua. Each page can pass its own palette prop
+// to LegalScene to render a distinct backdrop while sharing all other
+// scene structure (starfield, shooting stars, painterly pipeline).
+const DEFAULT_PALETTE = {
+  core:      '#020812',
+  mid:       '#0a2438',
+  highlight: '#2a6878',
+  accent:    '#80c0c8',
+};
+const NEBULA_PARAMS = {
   noiseScale: 1.3,
   octaves:    isMobile ? 2 : 3,
   turbulence: 0.3,
@@ -122,10 +127,11 @@ function DeepStarfield({ count }) {
   );
 }
 
-function SceneGraph() {
+function SceneGraph({ palette }) {
+  const nebulaPalette = { ...palette, ...NEBULA_PARAMS };
   return (
     <>
-      <Nebula palette={LEGAL_PALETTE} driftSpeed={0.08} />
+      <Nebula palette={nebulaPalette} driftSpeed={0.08} />
       <DeepStarfield count={isMobile ? 1200 : 1700} />
       <ShootingStars singleRange={[30, 60]} />
 
@@ -137,7 +143,8 @@ function SceneGraph() {
   );
 }
 
-export default function LegalScene() {
+export default function LegalScene({ palette }) {
+  const resolved = { ...DEFAULT_PALETTE, ...(palette || {}) };
   return (
     <div
       aria-hidden
@@ -145,7 +152,7 @@ export default function LegalScene() {
         position: 'fixed',
         inset: 0,
         zIndex: 0,
-        background: '#020812',
+        background: resolved.core,
       }}
     >
       <Canvas
@@ -154,7 +161,7 @@ export default function LegalScene() {
         dpr={[1, 2]}
       >
         <Suspense fallback={null}>
-          <SceneGraph />
+          <SceneGraph palette={resolved} />
         </Suspense>
       </Canvas>
     </div>
