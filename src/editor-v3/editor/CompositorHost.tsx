@@ -17,6 +17,7 @@ export function CompositorHost() {
     const app = new Application();
     const compositor = new Compositor(app);
     let cancelled = false;
+    let initDone = false;
 
     (async () => {
       await app.init({
@@ -26,9 +27,12 @@ export function CompositorHost() {
         preference: "webgl",
       });
       if (cancelled) {
+        // Cleanup already fired but skipped destroy because init hadn't
+        // resolved. Now that app is fully constructed, tear it down here.
         app.destroy(true);
         return;
       }
+      initDone = true;
       host.appendChild(app.canvas);
       compositor.start();
     })();
@@ -36,7 +40,13 @@ export function CompositorHost() {
     return () => {
       cancelled = true;
       compositor.stop();
-      app.destroy(true, { children: true, texture: true });
+      // Only destroy if init finished. Calling destroy() mid-init throws
+      // "this._cancelResize is not a function" from ResizePlugin because
+      // the plugin hasn't bound its handlers yet. The cancelled flag
+      // hands teardown off to the in-flight init.
+      if (initDone) {
+        app.destroy(true, { children: true, texture: true });
+      }
     };
   }, []);
 
