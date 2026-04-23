@@ -1,0 +1,10 @@
+/** Layer schema per docs/spikes/react-pixi-wiring.md. Cycle 1 = rect only. */
+export type Layer = {
+  id: string;
+  type: "rect";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: number; // 0xRRGGBB
+};

@@ -1,0 +1,52 @@
+/* Sailship design tokens. Dark mode = space; light mode = ocean (wired Day 2+). */
+
+:root {
+  /* Space palette (dark mode default) */
+  --bg-space-1: #050416;
+  --bg-space-2: #0c0a24;
+  --bg-space-3: #151036;
+
+  /* Accents */
+  --accent-cream: #f9f0e1;
+  --accent-navy: #1b2430;
+
+  /* Ghostly canvas frame on empty state */
+  --ghost-stroke: rgba(249, 240, 225, 0.14);
+  --ghost-fill: rgba(249, 240, 225, 0.02);
+
+  /* Typography */
+  --text-1: #f9f0e1;
+  --text-2: rgba(249, 240, 225, 0.62);
+  --text-3: rgba(249, 240, 225, 0.34);
+
+  /* Motion tokens */
+  --motion-fast: 120ms;
+  --motion-standard: 240ms;
+  --motion-ship-alive: 1200ms;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-ship: cubic-bezier(0.22, 1, 0.36, 1);
+
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg-space-1);
+  color: var(--text-1);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font-family: inherit;
+}
