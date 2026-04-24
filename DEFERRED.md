@@ -77,6 +77,51 @@ Promote to SCOPE.md only after 48 hours of consideration.
   Regression test: `__tests__/day3.test.tsx` "Escape nulls
   selectedLayerId and removes the outline."
 
+## Cycle 1 Day 7 — held back (date: 2026-04-23)
+
+- **Arrow-repeat flood.** Spec asked for "one history entry per
+  press" — holding an arrow key produces one entry per
+  auto-repeat keydown (so ~30 entries per second on a standard
+  repeat rate). The undo stack caps at 100, so a 4-second hold
+  evicts older history that might matter. Coalescing a long
+  repeat into a single stroke is doable (first keydown → begin,
+  250ms-idle → end) but tuning belongs with a real UX pass.
+
+- **Multi-select UI.** selectedLayerIds is an array today; the
+  UI still single-selects. Shift-click / Cmd-click extensions,
+  marquee-drag, shift-arrow bump of a group as a unit — all
+  Cycle 2.
+
+- **Pixel-grid stroke thickness doesn't scale with zoom.** Today
+  it's fixed at 0.1 canvas-px — at 6× that's 0.6 screen-px (a
+  bit mushy), at 16× it's 1.6 screen-px (clean). A pixel-perfect
+  grid would compute 1 / viewport.scale per frame, but Graphics
+  rebuilds for 2000 lines on every tick would be too expensive.
+  Right long-term fix is a GLSL Filter that draws grid lines in
+  screen space. Cycle 2 or later polish.
+
+- **Pixel grid covers the full canvas, not just the visible area.**
+  2000-line Graphics renders fine, but culling to the visible
+  viewport bounds would halve GPU work on large canvases. Add
+  when we grow beyond 1280×720 (Cycle 2 export).
+
+- **Constant-pixel outline uses scale-compensated stroke, not a
+  screen-space layer.** Works for axis-aligned rects; once we
+  get rotation, the outline's math needs to project through the
+  world→screen transform. Deferred until the first rotated layer.
+
+- **LayerPanel trash is on hover only.** Keyboard users can't
+  reach it without tabbing through several buttons. Add Delete
+  shortcut focused on a row (Cycle 2), or a right-click context
+  menu.
+
+- **Alt+Arrow resize skipped.** Spec flagged this as Cycle 2.
+  Noted.
+
+- **setLayerName is a history action with no UI caller.** Inline
+  rename lands Day 8. Until then, the action is callable via
+  tests and future callers.
+
 ## Cycle 1 Day 6 — held back (date: 2026-04-23)
 
 - **Rope-line flourish on sail-drop.** Kaden's original DEFERRED note

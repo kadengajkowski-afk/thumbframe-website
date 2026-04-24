@@ -165,46 +165,44 @@ export class Compositor {
   }
 
   fit(animated: boolean) {
-    const scale = this.fitScale();
     useUiStore.setState({ isFitMode: true });
-    if (animated) {
-      this.viewport.animate({
-        time: ZOOM_ANIM_MS,
-        scale,
-        position: { x: WORLD_W / 2, y: WORLD_H / 2 },
-        ease: "easeInOutSine",
-        callbackOnComplete: () =>
-          useUiStore.setState({ zoomScale: scale, isFitMode: true }),
-      });
-    } else {
-      this.viewport.setZoom(scale, true);
-      this.viewport.moveCenter(WORLD_W / 2, WORLD_H / 2);
-      useUiStore.setState({ zoomScale: scale });
-    }
+    this.zoomTo(this.fitScale(), true, animated, ZOOM_ANIM_MS);
   }
 
   zoomBy(factor: number) {
     const next = clamp(this.viewport.scale.x * factor, MIN_SCALE, MAX_SCALE);
-    this.viewport.animate({ time: 180, scale: next, ease: "easeOutSine" });
-    useUiStore.setState({ zoomScale: next, isFitMode: false });
+    useUiStore.setState({ isFitMode: false });
+    this.zoomTo(next, false, true, 180);
   }
 
   setZoomPercent(pct: number, animated: boolean) {
-    const scale = clamp(pct / 100, MIN_SCALE, MAX_SCALE);
+    useUiStore.setState({ isFitMode: false });
+    this.zoomTo(clamp(pct / 100, MIN_SCALE, MAX_SCALE), true, animated, ZOOM_ANIM_MS);
+  }
+
+  private zoomTo(scale: number, recenter: boolean, animated: boolean, ms: number) {
+    const center = recenter ? { x: WORLD_W / 2, y: WORLD_H / 2 } : undefined;
     if (animated) {
       this.viewport.animate({
-        time: ZOOM_ANIM_MS,
+        time: ms,
         scale,
-        position: { x: WORLD_W / 2, y: WORLD_H / 2 },
+        ...(center ? { position: center } : {}),
         ease: "easeInOutSine",
-        callbackOnComplete: () => useUiStore.setState({ zoomScale: scale }),
+        callbackOnComplete: () => this.afterProgrammaticZoom(scale),
       });
     } else {
       this.viewport.setZoom(scale, true);
-      this.viewport.moveCenter(WORLD_W / 2, WORLD_H / 2);
-      useUiStore.setState({ zoomScale: scale });
+      if (center) this.viewport.moveCenter(center.x, center.y);
+      this.afterProgrammaticZoom(scale);
     }
-    useUiStore.setState({ isFitMode: false });
+  }
+
+  // Programmatic setZoom / animate don't fire pixi-viewport's 'zoomed'
+  // event, so mirror the zoom-tracking side-effects here.
+  private afterProgrammaticZoom(scale: number) {
+    useUiStore.setState({ zoomScale: scale });
+    this.refreshSelectionStroke();
+    this.updatePixelGrid();
   }
 
   /** Returns true if there was an active drag to cancel. */
