@@ -1,15 +1,15 @@
-import {
-  Application,
-  Container,
-  Graphics,
-  ImageSource,
-  Sprite,
-  Texture,
-} from "pixi.js";
+import { Application, Container, Graphics } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import type { Layer } from "@/state/types";
+import {
+  clamp,
+  createNode,
+  destroyNode,
+  matchesType,
+  paintNode,
+} from "./sceneHelpers";
 
 // World is plenty bigger than the canvas so users can pan past the
 // edges into "space" and still land on a clean world-bg fill.
@@ -315,46 +315,3 @@ export class Compositor {
   }
 }
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-
-function matchesType(node: Container, layer: Layer): boolean {
-  if (layer.type === "rect") return node instanceof Graphics;
-  return node instanceof Sprite;
-}
-
-function createNode(layer: Layer): Container {
-  if (layer.type === "rect") {
-    const g = new Graphics();
-    g.label = `layer:${layer.id}`;
-    return g;
-  }
-  const source = new ImageSource({ resource: layer.bitmap });
-  const texture = new Texture({ source });
-  const sprite = new Sprite(texture);
-  sprite.label = `layer:${layer.id}`;
-  return sprite;
-}
-
-function paintNode(node: Container, layer: Layer) {
-  node.x = layer.x;
-  node.y = layer.y;
-  node.alpha = layer.opacity;
-
-  if (layer.type === "rect") {
-    const g = node as Graphics;
-    g.clear();
-    g.rect(0, 0, layer.width, layer.height);
-    g.fill({ color: layer.color, alpha: 1 });
-    return;
-  }
-
-  const s = node as Sprite;
-  s.width = layer.width;
-  s.height = layer.height;
-}
-
-function destroyNode(node: Container) {
-  node.destroy({ children: true, texture: true, textureSource: true });
-}
