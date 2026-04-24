@@ -6,6 +6,7 @@ import {
 } from "immer";
 import { nanoid } from "nanoid";
 import { useDocStore } from "@/state/docStore";
+import { useUiStore } from "@/state/uiStore";
 import type { ImageLayer, Layer } from "@/state/types";
 
 // Canvas logical size. Lives here until docStore gains a `canvas` field
@@ -80,6 +81,12 @@ export const history = {
       const idx = layers.findIndex((l) => l.id === id);
       if (idx >= 0) layers.splice(idx, 1);
     });
+    // Stale selection cleanup. Every deletion path routes through
+    // history, so any caller that deletes a layer gets this for free.
+    const ui = useUiStore.getState();
+    if (ui.selectedLayerIds.includes(id)) {
+      ui.setSelectedLayerIds(ui.selectedLayerIds.filter((x) => x !== id));
+    }
   },
 
   moveLayer(id: string, x: number, y: number) {
