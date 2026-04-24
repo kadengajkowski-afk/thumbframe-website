@@ -77,6 +77,60 @@ Promote to SCOPE.md only after 48 hours of consideration.
   Regression test: `__tests__/day3.test.tsx` "Escape nulls
   selectedLayerId and removes the outline."
 
+## Cycle 1 Day 9 — held back (date: 2026-04-23)
+
+- **ColorSwatchButton popover doesn't reposition on viewport edges.**
+  Today the popover is absolute-positioned 240px wide directly below
+  the swatch. With the Fill swatch near the right edge of the
+  ContextPanel, the popover can clip off-screen. Fix: small
+  boundary check at open time, flip right-align when needed. Day 9
+  ships without it because the ContextPanel has enough left-side
+  padding that clipping only occurs at <800px viewport widths.
+
+- **No image-layer tint / color overlay.** ColorSwatchButton is
+  wired only for rect layers. Image layers show neither Fill nor
+  Stroke sections — clean but means there's no "recolor this
+  image" affordance. Cycle 2 when filters + tint land.
+
+- **Gradient fills deferred per spec.** "DO NOT build gradients"
+  was explicit. Cycle 2+.
+
+- **Eyedropper isn't available in Firefox / Safari** (no EyeDropper
+  API). Button feature-detects and hides. If 30%+ of our audience
+  lands on those browsers, bundle a fallback that screenshots via
+  getDisplayMedia + pixel sampling.
+
+- **Alpha-aware transparency checkerboard is 8px tiles hardcoded.**
+  Fine today; if designer feedback calls for crisper scaling, we can
+  switch to a CSS background-image with repeatable SVG.
+
+- **ColorPicker.tsx is 282 lines.** Under the 400 file ceiling and
+  under the 200 component ceiling (the main component is ~50 lines;
+  the rest are small subcomponents). Still worth splitting per-field
+  (HexField/RgbField/AlphaField/SwatchRow) into a siblings file if
+  the picker grows (HSL / OKLCH / custom palettes).
+
+- **Preset row is hardcoded in ColorPicker.** Move to a token/config
+  file when we ship channel Brand Kits (Cycle 4 — paste YouTube URL
+  → auto-extract brand palette).
+
+- **Stroke alpha uses OpacityControl indirectly (the color swatch's
+  own alpha input).** The spec asked for an "OpacityControl for
+  strokeAlpha" in the stroke row — chose to fold it into the
+  stroke-color picker instead so fill + stroke have parallel
+  controls. Flag if designer wants a separate stroke-alpha slider
+  exposed permanently.
+
+- **Stroke pixel assertion samples at screen-local coords** —
+  brittle to viewport-layout tweaks. If pan/zoom defaults change,
+  expect this test to need a coord refresh. Same pattern as Day 8's
+  multiply test.
+
+- **Recent colors don't survive a store wipe.** If `_resetToasts`
+  or similar resets uiStore, recents evaporate in-memory but
+  localStorage still holds them until the next set. Only relevant
+  in tests.
+
 ## Cycle 1 Day 8 — held back (date: 2026-04-23)
 
 - **Full 27-mode blend set.** Day 8 ships 12 of PixiJS v8's 27. The
