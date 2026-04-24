@@ -9,7 +9,7 @@ import { history } from "@/lib/history";
  */
 export function TopBar() {
   return (
-    <header style={bar}>
+    <header style={bar} data-alive="topbar">
       <Logo />
       <div style={{ flex: 1 }} />
       <button

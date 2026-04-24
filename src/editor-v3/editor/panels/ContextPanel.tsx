@@ -14,7 +14,11 @@ export function ContextPanel() {
 
   if (!layer) {
     return (
-      <aside style={panel} aria-label="Layer properties">
+      <aside
+        style={panel}
+        aria-label="Layer properties"
+        data-alive="contextpanel"
+      >
         <header style={panelHeader}>Properties</header>
         <div style={hint}>Select something</div>
       </aside>
@@ -22,7 +26,11 @@ export function ContextPanel() {
   }
 
   return (
-    <aside style={panel} aria-label="Layer properties">
+    <aside
+      style={panel}
+      aria-label="Layer properties"
+      data-alive="contextpanel"
+    >
       <header style={panelHeader}>{layer.name}</header>
       <div style={row}>
         <span style={label}>Fill</span>

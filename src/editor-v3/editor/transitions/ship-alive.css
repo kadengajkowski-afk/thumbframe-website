@@ -1,0 +1,121 @@
+/* Ship-coming-alive transition — plays once per tab (sessionStorage-gated).
+ * Total 1200ms. Individual panels stagger in; empty state fades out over
+ * the first 300ms so the handoff feels organic, not like a slide show. */
+
+.ship-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: auto;
+}
+.ship-empty.fading {
+  animation: ship-empty-out 300ms var(--ease-ship) forwards;
+  pointer-events: none;
+}
+
+.ship-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* Stagger. Each panel holds its `from` state during the delay via
+ * animation-fill-mode: both — otherwise elements would flash visible
+ * for ~500ms before snapping to opacity 0 when the keyframe starts. */
+.ship-editor.entering [data-alive="canvas"] {
+  animation: ship-canvas-in 500ms 200ms var(--ease-ship) both;
+  transform-origin: center;
+}
+.ship-editor.entering [data-alive="topbar"] {
+  animation: ship-topbar-in 400ms 500ms var(--ease-ship) both;
+}
+.ship-editor.entering [data-alive="leftrail"] {
+  animation: ship-leftrail-in 400ms 600ms var(--ease-ship) both;
+}
+.ship-editor.entering [data-alive="contextpanel"] {
+  animation: ship-contextpanel-in 400ms 700ms var(--ease-ship) both;
+}
+.ship-editor.entering [data-alive="layerpanel"] {
+  animation: ship-layerpanel-in 400ms 800ms var(--ease-ship) both;
+}
+
+@keyframes ship-empty-out {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes ship-canvas-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes ship-topbar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ship-leftrail-in {
+  from {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes ship-contextpanel-in {
+  from {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes ship-layerpanel-in {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reduced motion: everything fades in over 200ms, no movement. */
+@media (prefers-reduced-motion: reduce) {
+  .ship-empty.fading {
+    animation: ship-empty-out 200ms linear forwards;
+  }
+  .ship-editor.entering [data-alive] {
+    animation: ship-reduced-in 200ms linear both !important;
+    transform: none !important;
+  }
+  @keyframes ship-reduced-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}

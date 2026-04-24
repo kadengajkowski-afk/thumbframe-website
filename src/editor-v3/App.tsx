@@ -4,9 +4,11 @@ import { CompositorHost } from "@/editor/CompositorHost";
 import { TopBar } from "@/editor/panels/TopBar";
 import { LayerPanel } from "@/editor/panels/LayerPanel";
 import { ContextPanel } from "@/editor/panels/ContextPanel";
+import { ShipComingAlive } from "@/editor/transitions/ShipComingAlive";
 import { installHotkeys } from "@/editor/hotkeys";
 
-/** Cycle 1 shell: empty state until hasEntered, then the editor grid. */
+/** Cycle 1 shell: empty state until hasEntered, then the editor grid.
+ * The ShipComingAlive wrapper owns the first-visit transition. */
 export function App() {
   const hasEntered = useUiStore((s) => s.hasEntered);
 
@@ -15,7 +17,11 @@ export function App() {
   return (
     <div style={shell}>
       <Nebula />
-      {hasEntered ? <EditorShell /> : <EmptyState />}
+      <ShipComingAlive
+        hasEntered={hasEntered}
+        empty={<EmptyState />}
+        editor={<EditorShell />}
+      />
     </div>
   );
 }
@@ -46,8 +52,12 @@ function EditorShell() {
     <div style={editorGrid}>
       <TopBar />
       <div style={editorRow}>
-        <aside style={leftRail} aria-label="Tool palette placeholder" />
-        <main style={canvasSurface}>
+        <aside
+          style={leftRail}
+          aria-label="Tool palette placeholder"
+          data-alive="leftrail"
+        />
+        <main style={canvasSurface} data-alive="canvas">
           <CompositorHost />
         </main>
         <ContextPanel />

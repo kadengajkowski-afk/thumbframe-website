@@ -13,7 +13,7 @@ export function LayerPanel() {
   const setSelectedLayerId = useUiStore((s) => s.setSelectedLayerId);
 
   return (
-    <section style={panel} aria-label="Layers">
+    <section style={panel} aria-label="Layers" data-alive="layerpanel">
       <header style={panelHeader}>Layers</header>
       {layers.length === 0 ? (
         <div style={hint}>Drop something here, or add from the toolbar.</div>
