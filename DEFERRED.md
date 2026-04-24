@@ -51,6 +51,22 @@ Promote to SCOPE.md only after 48 hours of consideration.
   - `cmdk` — Day 10 (command palette)
   - `pixi-filters` — Cycle 2+ (filters)
 
+## Cycle 1 Day 3 — fix at start of day (date: 2026-04-23)
+
+- **Esc highlights the selected layer instead of clearing it.** Day 2
+  bug. `hotkeys.ts` calls `setSelectedLayerId(null)` on Escape, and
+  Compositor removes the outline when id is null — but in the browser
+  the observed behavior is the outline appearing/brightening on Esc,
+  not vanishing. Likely culprits: (a) Escape is being swallowed by a
+  focused `<button>` in LayerPanel whose native :focus ring reads as
+  "highlight," (b) StrictMode dev-only duplicate listener still bound
+  after a cancelled mount, or (c) Esc is re-firing the last click
+  because `button` elements treat Esc as activation in some browsers.
+  First move: reproduce in prod build (`npm run build && npm run
+  preview`) to rule out StrictMode, then add `e.stopPropagation()` +
+  blur the active element inside the Esc branch. Fix before any other
+  Day 3 work.
+
 ## Cycle 1 Day 2 — held back (date: 2026-04-23)
 
 - **Playwright smoke test.** SCOPE.md lists one smoke (boot → upload
