@@ -70,3 +70,45 @@ export function findLayerId(target: Container | null): string | null {
   }
   return null;
 }
+
+const SELECTION_COLOR = 0xf9f0e1;
+const BORDER_GHOST = 0xf9f0e1;
+const SELECTION_PAD = 1;
+
+/** Draws the cream selection outline around a layer's bounds with
+ * the current (zoom-compensated) stroke width. */
+export function paintSelectionOutline(
+  node: Graphics,
+  layer: Layer,
+  strokeWidth: number,
+) {
+  node.clear();
+  node.rect(
+    -SELECTION_PAD,
+    -SELECTION_PAD,
+    layer.width + SELECTION_PAD * 2,
+    layer.height + SELECTION_PAD * 2,
+  );
+  node.stroke({
+    color: SELECTION_COLOR,
+    width: strokeWidth,
+    alpha: 1,
+    alignment: 0.5,
+  });
+  node.x = layer.x;
+  node.y = layer.y;
+}
+
+/** Builds the pixel-grid Graphics once. Stroke stays at 0.1 canvas-px
+ * so it reads as a ~0.6 screen-px line at 6× zoom — visible but not
+ * mushy. Alpha starts at 0; Compositor fades it in when zoom ≥ 600%. */
+export function buildPixelGrid(canvasW: number, canvasH: number): Graphics {
+  const g = new Graphics();
+  g.label = "pixel-grid";
+  g.eventMode = "none";
+  for (let x = 0; x <= canvasW; x++) g.moveTo(x, 0).lineTo(x, canvasH);
+  for (let y = 0; y <= canvasH; y++) g.moveTo(0, y).lineTo(canvasW, y);
+  g.stroke({ color: BORDER_GHOST, alpha: 0.8, width: 0.1 });
+  g.alpha = 0;
+  return g;
+}

@@ -15,10 +15,13 @@ import {
   findLayerId,
   matchesType,
   paintNode,
+  paintSelectionOutline,
 } from "./sceneHelpers";
+import { buildScene } from "./buildScene";
 import { TOOLS_BY_ID } from "./tools/tools";
 import type { Tool } from "./tools/ToolTypes";
 import { domEventToCtx, pixiEventToCtx } from "./tools/inputDispatch";
+import { fadeAlphaTo } from "./pixelGridFade";
 
 // World is plenty bigger than the canvas so users can pan past the
 // edges into "space" and still land on a clean world-bg fill.
@@ -34,14 +37,7 @@ const MIN_SCALE = 0.1;
 const MAX_SCALE = 16;
 const ZOOM_ANIM_MS = 300;
 
-const SELECTION_COLOR = 0xf9f0e1;
 const SELECTION_WIDTH = 2;
-const SELECTION_PAD = 1;
-
-const BG_SPACE_0 = 0x050510;
-const CANVAS_SURFACE = 0x0a0a0f;
-const BORDER_GHOST = 0xf9f0e1;
-const BORDER_GHOST_ALPHA = 0.08;
 
 const PIXEL_GRID_ZOOM = 6; // show grid at zoom ≥ 600%
 const PIXEL_GRID_ALPHA = 0.35;
@@ -72,7 +68,6 @@ export class Compositor {
   private layerNodes = new Map<string, Container>();
   private selectionNodes = new Map<string, Graphics>();
   private activeDrag: Tool | null = null;
-  private gridFadeToken = 0;
 
   private unsubscribeDoc?: () => void;
   private unsubscribeUi?: () => void;
@@ -95,41 +90,22 @@ export class Compositor {
       .clampZoom({ minScale: MIN_SCALE, maxScale: MAX_SCALE });
     this.viewport.label = "viewport";
 
-    this.worldBg = new Graphics();
-    this.worldBg.rect(0, 0, WORLD_W, WORLD_H);
-    this.worldBg.fill({ color: BG_SPACE_0, alpha: 1 });
-    this.worldBg.eventMode = "none";
-
-    this.canvasGroup = new Container();
-    this.canvasGroup.label = "canvas-group";
-    this.canvasGroup.x = CANVAS_ORIGIN_X;
-    this.canvasGroup.y = CANVAS_ORIGIN_Y;
-    this.canvasGroup.eventMode = "static";
-
-    this.canvasFill = new Graphics();
-    this.canvasFill.rect(0, 0, CANVAS_W, CANVAS_H);
-    this.canvasFill.fill({ color: CANVAS_SURFACE, alpha: 1 });
-    this.canvasFill.stroke({
-      color: BORDER_GHOST,
-      alpha: BORDER_GHOST_ALPHA,
-      width: 1,
-      alignment: 0,
-    });
-    this.canvasFill.eventMode = "static";
-    this.canvasFill.label = "canvas-fill";
-
-    this.toolPreview = new Container();
-    this.toolPreview.label = "tool-preview";
-    this.toolPreview.eventMode = "none";
-
-    this.pixelGrid = buildPixelGrid();
+    const scene = buildScene(
+      CANVAS_W,
+      CANVAS_H,
+      WORLD_W,
+      WORLD_H,
+      CANVAS_ORIGIN_X,
+      CANVAS_ORIGIN_Y,
+    );
+    this.worldBg = scene.worldBg;
+    this.canvasGroup = scene.canvasGroup;
+    this.canvasFill = scene.canvasFill;
+    this.toolPreview = scene.toolPreview;
+    this.pixelGrid = scene.pixelGrid;
 
     this.viewport.addChild(this.worldBg);
     this.viewport.addChild(this.canvasGroup);
-    this.canvasGroup.addChild(this.canvasFill);
-    this.canvasGroup.addChild(this.pixelGrid);
-    this.canvasGroup.addChild(this.toolPreview);
-
     this.app.stage.addChild(this.viewport);
   }
 
@@ -417,59 +393,7 @@ export class Compositor {
 
   /** Fade the pixel grid in/out based on the current zoom threshold. */
   private updatePixelGrid() {
-    const target =
-      this.viewport.scale.x >= PIXEL_GRID_ZOOM ? PIXEL_GRID_ALPHA : 0;
-    if (this.pixelGrid.alpha === target) return;
-    const from = this.pixelGrid.alpha;
-    const token = ++this.gridFadeToken;
-    const start = performance.now();
-    const step = () => {
-      if (token !== this.gridFadeToken) return;
-      const t = Math.min(1, (performance.now() - start) / PIXEL_GRID_FADE_MS);
-      this.pixelGrid.alpha = from + (target - from) * t;
-      if (t < 1) requestAnimationFrame(step);
-      else this.pixelGrid.alpha = target;
-    };
-    requestAnimationFrame(step);
+    const on = this.viewport.scale.x >= PIXEL_GRID_ZOOM;
+    fadeAlphaTo(this.pixelGrid, on ? PIXEL_GRID_ALPHA : 0, PIXEL_GRID_FADE_MS);
   }
-}
-
-function buildPixelGrid(): Graphics {
-  // One Graphics holding every canvas-pixel grid line. Stroke width
-  // stays fixed in canvas space so we don't have to redraw on zoom.
-  // 0.1 canvas-px at 6× zoom = 0.6 screen-px — thin and readable.
-  const g = new Graphics();
-  g.label = "pixel-grid";
-  g.eventMode = "none";
-  for (let x = 0; x <= CANVAS_W; x++) {
-    g.moveTo(x, 0).lineTo(x, CANVAS_H);
-  }
-  for (let y = 0; y <= CANVAS_H; y++) {
-    g.moveTo(0, y).lineTo(CANVAS_W, y);
-  }
-  g.stroke({ color: BORDER_GHOST, alpha: 0.8, width: 0.1 });
-  g.alpha = 0;
-  return g;
-}
-
-function paintSelectionOutline(
-  node: Graphics,
-  layer: Layer,
-  strokeWidth: number,
-) {
-  node.clear();
-  node.rect(
-    -SELECTION_PAD,
-    -SELECTION_PAD,
-    layer.width + SELECTION_PAD * 2,
-    layer.height + SELECTION_PAD * 2,
-  );
-  node.stroke({
-    color: SELECTION_COLOR,
-    width: strokeWidth,
-    alpha: 1,
-    alignment: 0.5,
-  });
-  node.x = layer.x;
-  node.y = layer.y;
 }
