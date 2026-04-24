@@ -36,12 +36,13 @@ export function App() {
 }
 
 function EditorShell() {
+  const cursor = useUiStore(deriveCursor);
   return (
     <div style={editorGrid}>
       <TopBar />
       <div style={editorRow}>
         <ToolPalette />
-        <main style={canvasSurface} data-alive="canvas">
+        <main style={{ ...canvasSurface, cursor }} data-alive="canvas">
           <CompositorHost />
           <ZoomIndicator />
         </main>
@@ -50,6 +51,20 @@ function EditorShell() {
       <LayerPanel />
     </div>
   );
+}
+
+function deriveCursor(s: {
+  activeTool: "select" | "hand" | "rect";
+  isHandMode: boolean;
+  isPanActive: boolean;
+  hoveredLayerId: string | null;
+}): string {
+  if (s.isHandMode || s.activeTool === "hand") {
+    return s.isPanActive ? "grabbing" : "grab";
+  }
+  if (s.activeTool === "rect") return "crosshair";
+  if (s.activeTool === "select" && s.hoveredLayerId) return "move";
+  return "default";
 }
 
 function Nebula() {

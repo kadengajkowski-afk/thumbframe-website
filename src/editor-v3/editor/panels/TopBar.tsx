@@ -1,12 +1,10 @@
 import { type CSSProperties } from "react";
-import { nanoid } from "nanoid";
-import { history } from "@/lib/history";
 
 /**
- * Cycle 1 Day 3 TopBar. Sailship logo left, project name center,
- * "Ship it" button right (locked until Cycle 2), and a dev-only
- * "Add test rect" shortcut that the real Rectangle tool replaces
- * on Day 6.
+ * Cycle 1 Day 6 TopBar. Sailship logo left, project name center,
+ * "Ship it" button right (locked until Cycle 2). The dev-only
+ * "+ Add test rect" button retired now that the real rectangle
+ * tool ships in the left rail.
  */
 export function TopBar() {
   return (
@@ -16,15 +14,6 @@ export function TopBar() {
       </div>
       <div style={centerGroup}>
         <span style={projectName}>Untitled</span>
-        <button
-          type="button"
-          onClick={addTestRect}
-          style={devBtn}
-          data-testid="add-test-rect"
-          title="Dev only — removed Day 6"
-        >
-          + Add test rect
-        </button>
       </div>
       <div style={rightGroup}>
         <button
@@ -39,25 +28,6 @@ export function TopBar() {
       </div>
     </header>
   );
-}
-
-function addTestRect() {
-  const shortId = Math.random().toString(36).slice(2, 6);
-  const x = 80 + Math.floor(Math.random() * 1000);
-  const y = 80 + Math.floor(Math.random() * 480);
-  history.addLayer({
-    id: nanoid(),
-    type: "rect",
-    x,
-    y,
-    width: 100,
-    height: 80,
-    color: 0xf97316,
-    opacity: 1,
-    name: `Rect ${shortId}`,
-    hidden: false,
-    locked: false,
-  });
 }
 
 function Logo() {
@@ -142,21 +112,6 @@ const projectName: CSSProperties = {
   fontSize: 13,
   color: "var(--text-secondary)",
   letterSpacing: "0.01em",
-};
-
-const devBtn: CSSProperties = {
-  background: "transparent",
-  color: "var(--text-tertiary)",
-  border: "1px dashed var(--border-ghost)",
-  borderRadius: 5,
-  padding: "3px 8px",
-  fontSize: 11,
-  fontFamily: "var(--font-mono)",
-  letterSpacing: "0.02em",
-  cursor: "pointer",
-  opacity: 0.55,
-  transition:
-    "color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard)",
 };
 
 const shipItBtn: CSSProperties = {

@@ -52,6 +52,18 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
+  // Tool shortcuts — V/H/R. Skip when modifier keys are held (Cmd+V
+  // is paste) or when an editable target has focus (covered above).
+  if (!meta && !e.shiftKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === "v" || k === "h" || k === "r") {
+      e.preventDefault();
+      const tool = k === "v" ? "select" : k === "h" ? "hand" : "rect";
+      useUiStore.getState().setTool(tool);
+      return;
+    }
+  }
+
   // Undo / redo.
   if (meta && e.key.toLowerCase() === "z") {
     e.preventDefault();
@@ -83,11 +95,16 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Escape clears selection. Also blur the focused element — otherwise
-  // the LayerPanel row that originally received the click keeps its
-  // native :focus ring, which reads as a lingering "highlight" after
-  // the canvas outline is gone. (Day 2 bug.)
+  // Escape. First try to cancel an active tool drag (e.g. mid-draw
+  // rect). If there's nothing to cancel, clear selection and blur
+  // the focused element — otherwise the LayerPanel row that received
+  // the last click keeps its :focus ring, which reads as a lingering
+  // "highlight" after the canvas outline is gone. (Day 2 bug.)
   if (e.key === "Escape") {
+    if (getCurrentCompositor()?.cancelTool()) {
+      e.preventDefault();
+      return;
+    }
     if (useUiStore.getState().selectedLayerId) {
       e.preventDefault();
       useUiStore.getState().setSelectedLayerId(null);
