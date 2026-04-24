@@ -3,6 +3,20 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Design ideas from Kaden
+
+- **Tool palette unfurls like ship sails dropping.** When the left rail
+  first appears (end of ship-coming-alive transition), tool icons drop
+  in from the top one-by-one, staggered ~80ms apart, with a subtle
+  bounce at rest. Optional flourish: a thin vertical rope line draws
+  down the rail as each tool falls into place. Implement Day 5–6 when
+  the tool palette is actually built. Fits the sailship metaphor
+  perfectly — the ship comes alive, then the sails drop. Technical
+  notes: reuse `var(--ease-ship)` or a dedicated `--ease-bounce`
+  cubic-bezier (something like `cubic-bezier(0.34, 1.56, 0.64, 1)` for
+  a gentle overshoot). Respect `prefers-reduced-motion` by falling back
+  to a plain fade-in like ship-coming-alive does.
+
 ## Cycle 1 Day 1 — held back (date: 2026-04-23)
 
 - **Animated nebula background.** Day 1 ships a CSS layered-radial-gradient
