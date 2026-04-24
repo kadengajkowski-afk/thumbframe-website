@@ -1,13 +1,15 @@
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import { history } from "@/lib/history";
+import { BlendModeSelect } from "./BlendModeSelect";
+import { OpacityControl } from "./OpacityControl";
 import * as s from "./ContextPanel.styles";
+import "./blend-select.css";
 
 /**
- * Cycle 1 Day 3 ContextPanel. 280px wide. Empty state: "Select
- * something" italic centered tertiary. When a layer is selected,
- * show its name, a color swatch (picker lands Day 9), and a
- * stroke-coalesced opacity slider.
+ * Right-side contextual panel. Day 8: blend mode dropdown + pointer-
+ * driven OpacityControl. Shows primary-selected layer only; multi-
+ * select UI is a Cycle 2 concern.
  */
 export function ContextPanel() {
   const primarySelectedId = useUiStore((u) => u.selectedLayerIds[0] ?? null);
@@ -75,27 +77,20 @@ export function ContextPanel() {
       )}
 
       <section style={s.section}>
-        <div style={s.fieldHeader}>
-          <label style={s.fieldLabel} htmlFor="opacity-slider">
-            Opacity
-          </label>
-          <span style={s.fieldValue}>{Math.round(layer.opacity * 100)}%</span>
-        </div>
-        <input
-          id="opacity-slider"
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={Math.round(layer.opacity * 100)}
-          onPointerDown={() => history.beginStroke("Opacity")}
-          onPointerUp={() => history.endStroke()}
-          onPointerCancel={() => history.endStroke()}
-          onBlur={() => history.endStroke()}
-          onChange={(e) =>
-            history.setLayerOpacity(layer.id, Number(e.target.value) / 100)
-          }
-          style={s.slider}
+        <label style={s.fieldLabel}>Blend</label>
+        <BlendModeSelect
+          value={layer.blendMode}
+          onChange={(mode) => history.setLayerBlendMode(layer.id, mode)}
+        />
+      </section>
+
+      <section style={s.section}>
+        <label style={s.fieldLabel}>Opacity</label>
+        <OpacityControl
+          value={layer.opacity}
+          onChange={(v) => history.setLayerOpacity(layer.id, v)}
+          onBeginStroke={() => history.beginStroke("Opacity")}
+          onEndStroke={() => history.endStroke()}
         />
       </section>
     </aside>

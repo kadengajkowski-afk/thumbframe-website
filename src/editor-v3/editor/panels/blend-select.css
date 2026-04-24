@@ -1,0 +1,99 @@
+/* BlendModeSelect — custom dropdown styled to match Observatory. */
+
+.blend-select {
+  position: relative;
+}
+
+.blend-select__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-space-2);
+  border: 1px solid var(--border-ghost);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+.blend-select__trigger:hover,
+.blend-select__trigger[aria-expanded="true"] {
+  border-color: var(--border-ghost-hover);
+}
+
+.blend-select__chev {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  margin-left: 8px;
+}
+
+.blend-select__menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--bg-space-2);
+  border: 1px solid var(--border-ghost);
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 12;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  animation: blend-open 120ms var(--ease-standard) both;
+}
+
+@keyframes blend-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.blend-select__group {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0;
+}
+.blend-select__group + .blend-select__group {
+  border-top: 1px solid var(--border-ghost);
+  margin-top: 2px;
+  padding-top: 4px;
+}
+
+.blend-select__group-header {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 4px 8px 2px;
+}
+
+.blend-select__item {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
+}
+.blend-select__item:hover {
+  background: var(--border-ghost);
+  color: var(--text-primary);
+}
+.blend-select__item--active {
+  color: var(--accent-cream);
+}
