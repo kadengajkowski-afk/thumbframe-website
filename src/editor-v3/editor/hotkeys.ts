@@ -1,4 +1,5 @@
 import { history } from "@/lib/history";
+import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import { handleUploadedFile } from "@/lib/uploadFlow";
 import { getCurrentCompositor } from "./compositorRef";
@@ -96,6 +97,24 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
+  // Arrow-key nudge. Arrow = 1px, Shift+Arrow = 10px. Each press is
+  // a single history entry (even with multi-select) because we wrap
+  // in a stroke; holding the key produces one entry per auto-repeat
+  // keydown — that's what users expect from undo.
+  if (
+    !meta &&
+    (e.key === "ArrowUp" ||
+      e.key === "ArrowDown" ||
+      e.key === "ArrowLeft" ||
+      e.key === "ArrowRight")
+  ) {
+    const ids = useUiStore.getState().selectedLayerIds;
+    if (ids.length === 0) return;
+    e.preventDefault();
+    nudgeLayers(ids, e.key, e.shiftKey ? 10 : 1);
+    return;
+  }
+
   // Escape. First try to cancel an active tool drag (e.g. mid-draw
   // rect). If there's nothing to cancel, clear selection and blur
   // the focused element — otherwise the LayerPanel row that received
@@ -139,6 +158,19 @@ function handlePaste(e: ClipboardEvent) {
     void handleUploadedFile(file);
     return;
   }
+}
+
+function nudgeLayers(ids: readonly string[], arrow: string, step: number) {
+  const dx = arrow === "ArrowLeft" ? -step : arrow === "ArrowRight" ? step : 0;
+  const dy = arrow === "ArrowUp" ? -step : arrow === "ArrowDown" ? step : 0;
+  history.beginStroke(step === 1 ? "Nudge" : "Nudge (10px)");
+  const layers = useDocStore.getState().layers;
+  for (const id of ids) {
+    const layer = layers.find((l) => l.id === id);
+    if (!layer || layer.locked) continue;
+    history.moveLayer(id, layer.x + dx, layer.y + dy);
+  }
+  history.endStroke();
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
