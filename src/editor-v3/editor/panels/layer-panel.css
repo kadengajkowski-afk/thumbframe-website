@@ -150,3 +150,50 @@
   color: var(--accent-cream);
   background: var(--border-ghost);
 }
+
+/* Row meta (blend mode + non-default opacity hint). */
+.layer-row__meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  margin: 0 6px 0 auto;
+  white-space: nowrap;
+}
+
+/* Drop indicator lines while dragging. */
+.layer-row__drop {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  background: var(--accent-orange);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+.layer-row__drop--above { top: -1px; }
+.layer-row__drop--below { bottom: -1px; }
+
+.layer-row--dragging {
+  cursor: grabbing;
+}
+
+/* Rename input — sits in place of the .layer-row__name span. */
+.layer-row__rename {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-space-1);
+  border: 1px solid var(--border-ghost-hover);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 6px;
+  margin: 0;
+  height: 22px;
+}
+.layer-row__rename:focus {
+  outline: none;
+  border-color: var(--accent-orange);
+}
