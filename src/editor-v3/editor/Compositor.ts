@@ -4,6 +4,13 @@ import {
   Graphics,
   type FederatedPointerEvent,
 } from "pixi.js";
+// Defense in depth: main.tsx already imports this side-effect, but
+// doing it here guarantees the 8 advanced blend modes (overlay /
+// soft-light / hard-light / darken / lighten / color-dodge /
+// color-burn / difference) register whenever a Compositor loads —
+// tests don't route through main.tsx, and the registration populates
+// pixi.js's BLEND_MODE_FILTERS map that BlendModePipe reads.
+import "pixi.js/advanced-blend-modes";
 import { Viewport } from "pixi-viewport";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
