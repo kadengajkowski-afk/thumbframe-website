@@ -77,6 +77,52 @@ Promote to SCOPE.md only after 48 hours of consideration.
   Regression test: `__tests__/day3.test.tsx` "Escape nulls
   selectedLayerId and removes the outline."
 
+## Cycle 1 Day 6 — held back (date: 2026-04-23)
+
+- **Rope-line flourish on sail-drop.** Kaden's original DEFERRED note
+  mentioned a thin vertical --border-ghost rope that unfurls down the
+  rail as each tool lands. Skipped today because the core staggered
+  drop animation already sells the metaphor. Implementation: SVG line
+  behind the palette with stroke-dasharray/dashoffset keyframes timed
+  with the tool stagger. Worth ~20 minutes for the polish pass.
+
+- **Alt+drag from center feels invisible without center-marker.**
+  Rect tool's Alt modifier expands from the initial click point, but
+  without a visible anchor dot users can't tell it's working. Add a
+  1-px cream center crosshair on the preview when Alt is held.
+  Small, high-signal polish.
+
+- **Rotated layer hit-testing.** Layer nodes today are axis-aligned
+  (transform stays at x/y/width/height). Once rotation lands in a
+  later cycle, `findLayerId` via Pixi's hit-test still works —
+  Pixi does the math — but the selection outline draws an axis-
+  aligned rect, not the rotated bounds. Switch to a polygon outline
+  when rotation lands.
+
+- **Hand tool while already dragging a layer.** If the user starts
+  a Select drag, then presses Space, `isHandMode` toggles and the
+  viewport drag plugin swaps mouseButtons mid-gesture. The layer
+  drag stops working but isn't formally canceled — the Pixi nodes
+  stay at their drag position on docStore until pointerup fires.
+  Fix: Compositor.cancelTool on `isHandMode` true transition.
+
+- **`activeTool === 'hand'` drag cursor swap.** Pan-active cursor
+  swap ('grab' → 'grabbing') happens correctly via the viewport's
+  drag-start/end events; for Space-held hand mode it also works.
+  But the transition feels a bit abrupt because the selector
+  recomputes on every isPanActive change. Cosmetic.
+
+- **Locked layer drag silently no-ops.** SelectTool sets selection
+  but skips the drag state when `layer.locked`. No user-visible
+  feedback. Add a tiny horizontal shake on the layer row in the
+  LayerPanel when attempted. Low priority.
+
+- **Tooltip delay is hardcoded at 600ms.** Spec asked for 600ms.
+  Move to a `--motion-tooltip` token if we add more tooltips elsewhere.
+
+- **ToolPalette icon set is placeholder-grade.** Real tool iconography
+  lands Cycle 6 per the wider aesthetic pass.
+
 ## Cycle 1 Day 5 — held back (date: 2026-04-23)
 
 - **Pixel grid overlay at 600%+ zoom.** SCOPE lists it as Day 5 work;
