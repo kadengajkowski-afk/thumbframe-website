@@ -77,6 +77,51 @@ Promote to SCOPE.md only after 48 hours of consideration.
   Regression test: `__tests__/day3.test.tsx` "Escape nulls
   selectedLayerId and removes the outline."
 
+## Cycle 1 Day 8 — held back (date: 2026-04-23)
+
+- **Full 27-mode blend set.** Day 8 ships 12 of PixiJS v8's 27. The
+  remaining 15 (Dissolve, Linear Burn, Vivid Light, Hue, Saturation,
+  Color, Luminosity, etc.) are Cycle 2 Day 17 per spec.
+
+- **Screenshots dir in tests/__screenshots__ auto-generated on
+  failure.** Added `__screenshots__/` to .gitignore when it leaked
+  into the Day 8 commit. Vitest's browser provider writes PNGs on
+  assertion failure; keep them out of version control.
+
+- **Rename input doesn't persist cursor position on reopen.** Auto-
+  selects all on mount; re-entering edit mode always resets. Fine.
+
+- **Drag-reorder with arrows / keyboard.** @dnd-kit ships a
+  keyboardSensor we haven't wired. Cycle 2 a11y pass.
+
+- **Cross-row drag shows drop line on ONE neighbor,** not a floating
+  insertion bar. Visible but subtler than the Figma pattern. If
+  users miss it, swap to a portaled line tracking the cursor.
+
+- **OpacityControl shift-drag starts from click position when NOT
+  holding shift; switching to shift mid-drag teleports.** The
+  implementation does the right thing *at pointerdown* — mid-drag
+  shift presses mix modes. Easy to fix by re-recording startX on
+  modifier transitions. Low priority.
+
+- **Blend-mode dropdown doesn't close on Escape.** Only outside-click
+  closes. Add Escape handler + scroll-into-view for the active row
+  in the popover.
+
+- **LayerMeta annotation ("Overlay · 80%") truncates at row width.**
+  Today `white-space: nowrap` but width is finite. Long blend-mode
+  labels ("Vivid Light") + opacity collide with the icons. Day 17
+  when we ship the remaining blend modes.
+
+- **Multiply pixel test samples one pixel.** Good-enough spot check;
+  full scanline comparison would catch off-by-one rendering issues
+  but isn't worth the harness weight today.
+
+- **@dnd-kit adds ~40KB gzipped.** Reasonable for the functionality.
+  If bundle budget becomes tight at launch, a hand-rolled sortable
+  would shave it — but loses accessibility + autoscroll + overlay
+  features we get free.
+
 ## Cycle 1 Day 7 — held back (date: 2026-04-23)
 
 - **Arrow-repeat flood.** Spec asked for "one history entry per
