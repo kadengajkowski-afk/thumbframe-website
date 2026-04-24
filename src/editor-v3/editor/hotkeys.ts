@@ -44,11 +44,18 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Escape clears selection.
+  // Escape clears selection. Also blur the focused element — otherwise
+  // the LayerPanel row that originally received the click keeps its
+  // native :focus ring, which reads as a lingering "highlight" after
+  // the canvas outline is gone. (Day 2 bug.)
   if (e.key === "Escape") {
     if (useUiStore.getState().selectedLayerId) {
       e.preventDefault();
       useUiStore.getState().setSelectedLayerId(null);
+    }
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body) {
+      active.blur();
     }
     return;
   }
