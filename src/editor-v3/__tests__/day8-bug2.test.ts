@@ -41,6 +41,10 @@ function makeRect(id: string, color: number, x = 595, y = 315) {
     hidden: false,
     locked: false,
     blendMode: "normal" as const,
+    fillAlpha: 1,
+    strokeColor: 0x000000,
+    strokeWidth: 0,
+    strokeAlpha: 1,
   };
 }
 

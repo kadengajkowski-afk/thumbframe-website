@@ -116,6 +116,10 @@ describe("SelectTool drag coalesces to one history entry", () => {
       hidden: false,
       locked: false,
     blendMode: "normal" as const,
+    fillAlpha: 1,
+    strokeColor: 0x000000,
+    strokeWidth: 0,
+    strokeAlpha: 1,
     });
     expect(history.canUndo()).toBe(true);
     // One entry so far (the addLayer). Undo it and redo to land at

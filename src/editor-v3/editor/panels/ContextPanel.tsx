@@ -1,15 +1,19 @@
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import { history } from "@/lib/history";
+import { pixiToHex } from "@/lib/color";
 import { BlendModeSelect } from "./BlendModeSelect";
 import { OpacityControl } from "./OpacityControl";
+import { ColorSwatchButton } from "./ColorSwatchButton";
+import { StrokeWidthInput } from "./StrokeWidthInput";
 import * as s from "./ContextPanel.styles";
 import "./blend-select.css";
+import "./color-picker.css";
 
 /**
- * Right-side contextual panel. Day 8: blend mode dropdown + pointer-
- * driven OpacityControl. Shows primary-selected layer only; multi-
- * select UI is a Cycle 2 concern.
+ * Right-side contextual panel. Day 9: fill + stroke color pickers,
+ * live preview through the stroke-aware history setters, recents +
+ * last-fill persisted in uiStore / localStorage.
  */
 export function ContextPanel() {
   const selectedCount = useUiStore((u) => u.selectedLayerIds.length);
@@ -68,13 +72,63 @@ export function ContextPanel() {
         <section style={s.section}>
           <label style={s.fieldLabel}>Fill</label>
           <div style={s.fillRow}>
-            <button
-              type="button"
-              style={s.swatchBig(layer.color)}
-              aria-label={`Fill color ${hex(layer.color)}`}
-              title="Color picker opens Day 9"
+            <ColorSwatchButton
+              color={layer.color}
+              alpha={layer.fillAlpha}
+              label="Fill"
+              onBeginEdit={() => history.beginStroke("Fill")}
+              onChange={(color, alpha) => {
+                history.setLayerFillColor(layer.id, color);
+                history.setLayerFillAlpha(layer.id, alpha);
+              }}
+              onEndEdit={() => {
+                history.endStroke();
+                const hex = pixiToHex(
+                  (useDocStore
+                    .getState()
+                    .layers.find((l) => l.id === layer.id) as { color?: number })
+                    ?.color ?? layer.color,
+                );
+                useUiStore.getState().addRecentColor(hex);
+                useUiStore.getState().setLastFillColor(hex);
+              }}
             />
-            <code style={s.hexText}>#{hex(layer.color)}</code>
+            <code style={s.hexText}>{pixiToHex(layer.color).slice(1)}</code>
+          </div>
+        </section>
+      )}
+
+      {layer.type === "rect" && (
+        <section style={s.section}>
+          <label style={s.fieldLabel}>Stroke</label>
+          <div style={s.fillRow}>
+            <ColorSwatchButton
+              color={layer.strokeColor}
+              alpha={layer.strokeAlpha}
+              label="Stroke"
+              onBeginEdit={() => history.beginStroke("Stroke color")}
+              onChange={(color, alpha) => {
+                history.setLayerStrokeColor(layer.id, color);
+                history.setLayerStrokeAlpha(layer.id, alpha);
+              }}
+              onEndEdit={() => {
+                history.endStroke();
+                const hex = pixiToHex(
+                  (useDocStore
+                    .getState()
+                    .layers.find((l) => l.id === layer.id) as {
+                    strokeColor?: number;
+                  })?.strokeColor ?? layer.strokeColor,
+                );
+                useUiStore.getState().addRecentColor(hex);
+              }}
+            />
+            <StrokeWidthInput
+              value={layer.strokeWidth}
+              onBeginStroke={() => history.beginStroke("Stroke width")}
+              onChange={(v) => history.setLayerStrokeWidth(layer.id, v)}
+              onEndStroke={() => history.endStroke()}
+            />
           </div>
         </section>
       )}
@@ -109,8 +163,4 @@ export function ContextPanel() {
       </section>
     </aside>
   );
-}
-
-function hex(color: number): string {
-  return color.toString(16).padStart(6, "0").toUpperCase();
 }

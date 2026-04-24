@@ -3,6 +3,7 @@ import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import { getCurrentCompositor } from "@/editor/compositorRef";
 import { nanoid } from "nanoid";
+import { hexToPixi } from "@/lib/color";
 
 /**
  * Command registry. Every user-invokable action the editor exposes
@@ -72,15 +73,15 @@ function openFilePicker() {
 }
 
 function addRectAtCenter() {
-  // Spawn a 160×100 rect centered on the canvas. Uses the default
-  // fill color that RectTool's last-used fallback would pick up if
-  // it existed today. Cycle 2 replaces this with the active
-  // lastFillColor once color picker lands.
+  // Spawn a 160×100 rect centered on the canvas, picking up the
+  // last-used fill color from uiStore (set by the Day 9 color picker).
   const id = nanoid();
   const CANVAS_W = 1280;
   const CANVAS_H = 720;
   const w = 160;
   const h = 100;
+  const ui = useUiStore.getState();
+  const color = hexToPixi(ui.lastFillColor || "#F97316") || 0xf97316;
   history.addLayer({
     id,
     type: "rect",
@@ -88,14 +89,18 @@ function addRectAtCenter() {
     y: (CANVAS_H - h) / 2,
     width: w,
     height: h,
-    color: 0xf97316, // --accent-orange
+    color,
     opacity: 1,
     name: "Rectangle",
     hidden: false,
     locked: false,
     blendMode: "normal",
+    fillAlpha: 1,
+    strokeColor: 0x000000,
+    strokeWidth: 0,
+    strokeAlpha: 1,
   });
-  useUiStore.getState().setSelectedLayerIds([id]);
+  ui.setSelectedLayerIds([id]);
 }
 
 const COMMANDS: Command[] = [

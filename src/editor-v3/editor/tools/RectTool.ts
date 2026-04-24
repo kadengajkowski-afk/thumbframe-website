@@ -1,9 +1,11 @@
 import { Graphics } from "pixi.js";
 import { nanoid } from "nanoid";
 import { history } from "@/lib/history";
+import { useUiStore } from "@/state/uiStore";
+import { hexToPixi } from "@/lib/color";
 import type { Tool, ToolCtx } from "./ToolTypes";
 
-const DRAFT_COLOR = 0xf97316; // --accent-orange
+const DRAFT_FALLBACK_COLOR = 0xf97316; // --accent-orange
 const MIN_SIZE = 2;
 
 type Draft = {
@@ -12,7 +14,17 @@ type Draft = {
   shift: boolean;
   alt: boolean;
   preview: Graphics;
+  color: number;
 };
+
+function currentFillColor(): number {
+  const last = useUiStore.getState().lastFillColor;
+  if (!last) return DRAFT_FALLBACK_COLOR;
+  const n = hexToPixi(last);
+  return n === 0 && last.toUpperCase() !== "#000000"
+    ? DRAFT_FALLBACK_COLOR
+    : n;
+}
 
 /**
  * Click-drag to draw a rectangle. Shift = square, Alt = draw from
@@ -42,6 +54,7 @@ class RectToolImpl implements Tool {
       shift: ctx.shift,
       alt: ctx.alt,
       preview,
+      color: currentFillColor(),
     };
   }
 
@@ -53,7 +66,7 @@ class RectToolImpl implements Tool {
     const rect = resolveRect(this.draft);
     this.draft.preview.clear();
     this.draft.preview.rect(rect.x, rect.y, rect.w, rect.h);
-    this.draft.preview.fill({ color: DRAFT_COLOR, alpha: 1 });
+    this.draft.preview.fill({ color: this.draft.color, alpha: 1 });
   }
 
   onPointerUp(ctx: ToolCtx) {
@@ -62,6 +75,7 @@ class RectToolImpl implements Tool {
     this.draft.shift = ctx.shift;
     this.draft.alt = ctx.alt;
     const rect = resolveRect(this.draft);
+    const color = this.draft.color;
     this.clearDraft();
     if (rect.w < MIN_SIZE || rect.h < MIN_SIZE) return;
     history.addLayer({
@@ -71,12 +85,16 @@ class RectToolImpl implements Tool {
       y: rect.y,
       width: rect.w,
       height: rect.h,
-      color: DRAFT_COLOR,
+      color,
       opacity: 1,
       name: `Rect ${shortId()}`,
       hidden: false,
       locked: false,
       blendMode: "normal",
+      fillAlpha: 1,
+      strokeColor: 0x000000,
+      strokeWidth: 0,
+      strokeAlpha: 1,
     });
   }
 
