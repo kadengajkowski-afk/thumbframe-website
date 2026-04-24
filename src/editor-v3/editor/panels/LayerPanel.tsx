@@ -1,11 +1,13 @@
-import { type CSSProperties } from "react";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
+import { history } from "@/lib/history";
+import "./layer-panel.css";
 
 /**
- * Bottom layer panel. Reads docStore.layers, renders newest-on-top
- * (reversed visually from array order). Click a row to select;
- * click the selected row again to deselect.
+ * Cycle 1 Day 3 LayerPanel. Full width, 200px tall. Rows reverse the
+ * docStore.layers array so newest lands on top. Each row has a 16px
+ * swatch, layer name, visibility toggle (eye), lock toggle (padlock).
+ * Lock is cosmetic for Cycle 1 — tools don't check it yet.
  */
 export function LayerPanel() {
   const layers = useDocStore((s) => s.layers);
@@ -13,27 +15,63 @@ export function LayerPanel() {
   const setSelectedLayerId = useUiStore((s) => s.setSelectedLayerId);
 
   return (
-    <section style={panel} aria-label="Layers" data-alive="layerpanel">
-      <header style={panelHeader}>Layers</header>
+    <section className="layer-panel" aria-label="Layers" data-alive="layerpanel">
+      <header className="layer-panel__header">Layers</header>
       {layers.length === 0 ? (
-        <div style={hint}>Drop something here, or add from the toolbar.</div>
+        <div className="layer-panel__empty">
+          Drop something here, or add from the toolbar.
+        </div>
       ) : (
-        <ul style={list}>
+        <ul className="layer-panel__list">
           {[...layers].reverse().map((layer) => {
             const selected = layer.id === selectedLayerId;
+            const classes = [
+              "layer-row",
+              selected ? "layer-row--selected" : "",
+              layer.hidden ? "layer-row--hidden" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
             return (
               <li key={layer.id} style={{ listStyle: "none" }}>
-                <button
-                  type="button"
+                <div
+                  className={classes}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selected}
                   onClick={() =>
                     setSelectedLayerId(selected ? null : layer.id)
                   }
-                  aria-pressed={selected}
-                  style={selected ? rowSelected : row}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedLayerId(selected ? null : layer.id);
+                    }
+                  }}
                 >
-                  <span style={swatch(layer.color)} aria-hidden="true" />
-                  <span style={rowName}>{layer.name}</span>
-                </button>
+                  <span
+                    className="layer-row__swatch"
+                    style={{
+                      background: `#${layer.color.toString(16).padStart(6, "0")}`,
+                    }}
+                    aria-hidden="true"
+                  />
+                  <span className="layer-row__name">{layer.name}</span>
+                  <VisibilityToggle
+                    hidden={layer.hidden}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      history.toggleLayerVisibility(layer.id);
+                    }}
+                  />
+                  <LockToggle
+                    locked={layer.locked}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      history.toggleLayerLock(layer.id);
+                    }}
+                  />
+                </div>
               </li>
             );
           })}
@@ -43,75 +81,122 @@ export function LayerPanel() {
   );
 }
 
-const panel: CSSProperties = {
-  borderTop: "1px solid var(--rail-border)",
-  background: "var(--rail-bg)",
-  padding: "8px 12px",
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-  overflowY: "auto",
-  color: "var(--text-1)",
+type ToggleProps = {
+  onClick: (e: React.MouseEvent) => void;
 };
 
-const panelHeader: CSSProperties = {
-  fontSize: 11,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "var(--text-3)",
-  fontWeight: 500,
-};
+function VisibilityToggle({ hidden, onClick }: ToggleProps & { hidden: boolean }) {
+  return (
+    <button
+      type="button"
+      className={
+        "layer-row__toggle" +
+        (hidden ? "" : " layer-row__toggle--active")
+      }
+      onClick={onClick}
+      aria-label={hidden ? "Show layer" : "Hide layer"}
+      title={hidden ? "Show layer" : "Hide layer"}
+    >
+      {hidden ? <EyeOffIcon /> : <EyeIcon />}
+    </button>
+  );
+}
 
-const hint: CSSProperties = {
-  fontSize: 12,
-  color: "var(--text-3)",
-  paddingTop: 4,
-};
+function LockToggle({ locked, onClick }: ToggleProps & { locked: boolean }) {
+  return (
+    <button
+      type="button"
+      className={
+        "layer-row__toggle" +
+        (locked ? " layer-row__toggle--active" : "")
+      }
+      onClick={onClick}
+      aria-label={locked ? "Unlock layer" : "Lock layer"}
+      title={locked ? "Unlock layer" : "Lock layer"}
+    >
+      {locked ? <LockClosedIcon /> : <LockOpenIcon />}
+    </button>
+  );
+}
 
-const list: CSSProperties = {
-  margin: 0,
-  padding: 0,
-  display: "flex",
-  flexDirection: "column",
-  gap: 2,
-};
+function EyeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <path
+        d="M1 7 C 3 3, 11 3, 13 7 C 11 11, 3 11, 1 7 Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+      />
+      <circle cx="7" cy="7" r="2" fill="currentColor" />
+    </svg>
+  );
+}
 
-const row: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  width: "100%",
-  padding: "6px 8px",
-  borderRadius: 6,
-  border: "1px solid transparent",
-  background: "transparent",
-  color: "var(--text-1)",
-  fontSize: 13,
-  cursor: "pointer",
-  textAlign: "left",
-  transition: "background var(--motion-fast) var(--ease-out)",
-};
+function EyeOffIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <path
+        d="M1 7 C 3 3, 11 3, 13 7 C 11 11, 3 11, 1 7 Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+        opacity="0.6"
+      />
+      <line
+        x1="2"
+        y1="12"
+        x2="12"
+        y2="2"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
-const rowSelected: CSSProperties = {
-  ...row,
-  background: "rgba(249, 240, 225, 0.06)",
-  borderColor: "rgba(249, 240, 225, 0.18)",
-};
+function LockClosedIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <rect
+        x="3"
+        y="6"
+        width="8"
+        height="6"
+        rx="1"
+        fill="currentColor"
+      />
+      <path
+        d="M4.5 6 V4.5 a2.5 2.5 0 0 1 5 0 V6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+}
 
-const rowName: CSSProperties = {
-  flex: 1,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-function swatch(color: number): CSSProperties {
-  return {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
-    background: `#${color.toString(16).padStart(6, "0")}`,
-    border: "1px solid rgba(0,0,0,0.3)",
-    flexShrink: 0,
-  };
+function LockOpenIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <rect
+        x="3"
+        y="6"
+        width="8"
+        height="6"
+        rx="1"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+      />
+      <path
+        d="M4.5 6 V4.5 a2.5 2.5 0 0 1 5 0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+        opacity="0.6"
+      />
+    </svg>
+  );
 }

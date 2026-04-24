@@ -157,7 +157,7 @@ const editorGrid: React.CSSProperties = {
   width: "100%",
   height: "100%",
   display: "grid",
-  gridTemplateRows: "48px 1fr 160px",
+  gridTemplateRows: "48px 1fr 200px",
 };
 
 const editorRow: React.CSSProperties = {

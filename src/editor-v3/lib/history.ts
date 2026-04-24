@@ -85,6 +85,20 @@ export const history = {
     else commit("Opacity", run);
   },
 
+  toggleLayerVisibility(id: string) {
+    commit("Toggle visibility", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l) l.hidden = !l.hidden;
+    });
+  },
+
+  toggleLayerLock(id: string) {
+    commit("Toggle lock", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l) l.locked = !l.locked;
+    });
+  },
+
   beginStroke(label: string) {
     if (openStroke) return;
     openStroke = { label, startLayers: useDocStore.getState().layers };

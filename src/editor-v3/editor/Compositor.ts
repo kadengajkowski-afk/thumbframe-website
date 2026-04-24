@@ -53,8 +53,20 @@ export class Compositor {
 
     for (const layer of layers) {
       seenIds.add(layer.id);
-      let node = this.layerNodes.get(layer.id);
+      const existing = this.layerNodes.get(layer.id);
 
+      // Hidden layers: destroy any existing node. They reappear when
+      // `hidden` flips back to false because the next reconcile treats
+      // them as new layers.
+      if (layer.hidden) {
+        if (existing) {
+          existing.destroy();
+          this.layerNodes.delete(layer.id);
+        }
+        continue;
+      }
+
+      let node = existing;
       if (!node) {
         node = new Graphics();
         node.label = `layer:${layer.id}`;
@@ -88,7 +100,8 @@ export class Compositor {
       ? layers.find((l) => l.id === selectedId)
       : undefined;
 
-    if (!layer) {
+    // A hidden layer should not show a selection outline either.
+    if (!layer || layer.hidden) {
       if (this.selectionNode) {
         this.selectionNode.destroy();
         this.selectionNode = null;
