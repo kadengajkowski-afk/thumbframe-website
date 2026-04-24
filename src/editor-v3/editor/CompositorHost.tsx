@@ -8,9 +8,12 @@ import { setCurrentCompositor } from "./compositorRef";
  * Verify via React DevTools Profiler — dragging inside the viewport
  * must produce zero re-renders on this component.
  *
- * Owns: Pixi Application + Compositor lifecycle, the ResizeObserver
- * that feeds viewport sizing, and the compositorRef that exposes the
- * viewport to hotkeys + ZoomIndicator.
+ * Construction order is load-bearing: `new Compositor(app)` reads
+ * `app.screen` + `app.renderer.events`, which only exist AFTER
+ * `await app.init()` resolves. Creating the Compositor earlier
+ * throws "Cannot read properties of undefined (reading 'screen')"
+ * the first time something triggers a render path (e.g. uploading
+ * an image). The async IIFE below enforces the ordering.
  */
 export function CompositorHost() {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -20,9 +23,8 @@ export function CompositorHost() {
     if (!host) return;
 
     const app = new Application();
-    const compositor = new Compositor(app);
     let cancelled = false;
-    let initDone = false;
+    let compositor: Compositor | null = null;
     let ro: ResizeObserver | null = null;
 
     (async () => {
@@ -33,10 +35,14 @@ export function CompositorHost() {
         antialias: true,
       });
       if (cancelled) {
+        // Unmount fired while init was in flight (StrictMode double-
+        // mount lands here in dev). The cleanup below can't destroy
+        // what wasn't ready; we finish teardown here.
         app.destroy(true);
         return;
       }
-      initDone = true;
+
+      compositor = new Compositor(app);
       host.appendChild(app.canvas);
       app.canvas.style.display = "block";
 
@@ -45,14 +51,14 @@ export function CompositorHost() {
 
       // Size the viewport to the host's current dimensions before the
       // observer fires the first async callback — otherwise the canvas
-      // flashes the 1280×720 default from app.init for one frame.
+      // flashes the init default for one frame.
       const w = host.clientWidth;
       const h = host.clientHeight;
       if (w > 0 && h > 0) compositor.resize(w, h);
 
       ro = new ResizeObserver((entries) => {
         const entry = entries[0];
-        if (!entry) return;
+        if (!entry || !compositor) return;
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) compositor.resize(width, height);
       });
@@ -63,8 +69,10 @@ export function CompositorHost() {
       cancelled = true;
       ro?.disconnect();
       setCurrentCompositor(null);
-      compositor.stop();
-      if (initDone) {
+      // Only tear down if init completed. If compositor is still null
+      // the async IIFE's cancelled check will destroy the app itself.
+      if (compositor) {
+        compositor.stop();
         app.destroy(true, { children: true, texture: true });
       }
     };
