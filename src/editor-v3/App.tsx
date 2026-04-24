@@ -6,6 +6,7 @@ import { LayerPanel } from "@/editor/panels/LayerPanel";
 import { ContextPanel } from "@/editor/panels/ContextPanel";
 import { ShipComingAlive } from "@/editor/transitions/ShipComingAlive";
 import { installHotkeys } from "@/editor/hotkeys";
+import { ToastHost } from "@/toasts/Toast";
 
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
@@ -22,6 +23,7 @@ export function App() {
         empty={<EmptyState />}
         editor={<EditorShell />}
       />
+      <ToastHost />
     </div>
   );
 }

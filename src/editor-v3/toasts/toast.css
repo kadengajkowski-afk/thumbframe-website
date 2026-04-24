@@ -1,0 +1,55 @@
+/* Toast rack — bottom-center, slides up on mount. */
+
+.toast-rack {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: var(--bg-space-2);
+  color: var(--accent-cream);
+  border: 1px solid var(--border-ghost);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(0, 0, 0, 0.3);
+  max-width: 440px;
+  animation: toast-slide-up 240ms var(--ease-ship) both;
+}
+
+@keyframes toast-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: toast-fade-in 180ms linear both;
+  }
+  @keyframes toast-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
