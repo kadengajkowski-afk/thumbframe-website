@@ -9,4 +9,7 @@ export type Layer = {
   color: number; // 0xRRGGBB
   opacity: number; // 0..1
   name: string; // shown in LayerPanel
+  hidden: boolean; // visibility toggle (eye icon in LayerPanel)
+  locked: boolean; // lock toggle (padlock icon in LayerPanel). Cosmetic
+  // for Cycle 1 — tools don't honor `locked` yet.
 };

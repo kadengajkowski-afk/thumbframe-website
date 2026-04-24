@@ -48,6 +48,8 @@ function makeRect(id: string, overrides: Partial<{ name: string }> = {}) {
     color: 0xf97316,
     opacity: 1,
     name: overrides.name ?? `Rect ${id}`,
+    hidden: false,
+    locked: false,
   };
 }
 
