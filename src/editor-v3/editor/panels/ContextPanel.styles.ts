@@ -114,3 +114,22 @@ export function swatchBig(color: number): CSSProperties {
     padding: 0,
   };
 }
+
+// Image-layer placeholder in the layer-name row. Real thumbnail
+// rendering is DEFERRED.
+export const imageSwatch: CSSProperties = {
+  width: 12,
+  height: 12,
+  borderRadius: 3,
+  background:
+    "linear-gradient(135deg, var(--bg-space-2) 0%, var(--accent-navy) 100%)",
+  border: "1px solid var(--border-ghost)",
+  flexShrink: 0,
+};
+
+export const sourceMeta: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  color: "var(--text-secondary)",
+};

@@ -37,25 +37,42 @@ export function ContextPanel() {
       <header style={s.panelHeader}>Properties</header>
       <section style={s.section}>
         <div style={s.layerNameRow}>
-          <span style={s.swatch(layer.color)} aria-hidden="true" />
+          {layer.type === "rect" ? (
+            <span style={s.swatch(layer.color)} aria-hidden="true" />
+          ) : (
+            <span style={s.imageSwatch} aria-hidden="true" />
+          )}
           <span style={s.layerName} title={layer.name}>
             {layer.name}
           </span>
         </div>
       </section>
 
-      <section style={s.section}>
-        <label style={s.fieldLabel}>Fill</label>
-        <div style={s.fillRow}>
-          <button
-            type="button"
-            style={s.swatchBig(layer.color)}
-            aria-label={`Fill color ${hex(layer.color)}`}
-            title="Color picker opens Day 9"
-          />
-          <code style={s.hexText}>#{hex(layer.color)}</code>
-        </div>
-      </section>
+      {layer.type === "rect" && (
+        <section style={s.section}>
+          <label style={s.fieldLabel}>Fill</label>
+          <div style={s.fillRow}>
+            <button
+              type="button"
+              style={s.swatchBig(layer.color)}
+              aria-label={`Fill color ${hex(layer.color)}`}
+              title="Color picker opens Day 9"
+            />
+            <code style={s.hexText}>#{hex(layer.color)}</code>
+          </div>
+        </section>
+      )}
+
+      {layer.type === "image" && (
+        <section style={s.section}>
+          <label style={s.fieldLabel}>Source</label>
+          <div style={s.sourceMeta}>
+            <code style={s.hexText}>
+              {layer.naturalWidth} × {layer.naturalHeight}
+            </code>
+          </div>
+        </section>
+      )}
 
       <section style={s.section}>
         <div style={s.fieldHeader}>

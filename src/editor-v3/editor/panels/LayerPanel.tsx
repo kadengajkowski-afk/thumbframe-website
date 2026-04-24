@@ -52,7 +52,10 @@ export function LayerPanel() {
                   <span
                     className="layer-row__swatch"
                     style={{
-                      background: `#${layer.color.toString(16).padStart(6, "0")}`,
+                      background:
+                        layer.type === "rect"
+                          ? `#${layer.color.toString(16).padStart(6, "0")}`
+                          : "linear-gradient(135deg, var(--bg-space-2) 0%, var(--accent-navy) 100%)",
                     }}
                     aria-hidden="true"
                   />

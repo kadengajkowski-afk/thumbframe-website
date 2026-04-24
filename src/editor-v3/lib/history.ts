@@ -4,8 +4,16 @@ import {
   produceWithPatches,
   type Patch,
 } from "immer";
+import { nanoid } from "nanoid";
 import { useDocStore } from "@/state/docStore";
-import type { Layer } from "@/state/types";
+import type { ImageLayer, Layer } from "@/state/types";
+
+// Canvas logical size. Lives here until docStore gains a `canvas` field
+// (Cycle 2 when export + resize are in scope).
+const CANVAS_W = 1280;
+const CANVAS_H = 720;
+// Images bigger than the canvas scale down to this fraction.
+const CANVAS_FILL = 0.9;
 
 enablePatches();
 
@@ -57,6 +65,14 @@ export const history = {
     commit(`Add ${layer.name}`, (layers) => {
       layers.push(layer);
     });
+  },
+
+  addImageLayer(bitmap: ImageBitmap, name: string) {
+    const layer = buildImageLayer(bitmap, name);
+    commit(`Add ${layer.name}`, (layers) => {
+      layers.push(layer);
+    });
+    return layer;
   },
 
   deleteLayer(id: string) {
@@ -151,3 +167,37 @@ export const history = {
     setLayers([]);
   },
 };
+
+function buildImageLayer(bitmap: ImageBitmap, name: string): ImageLayer {
+  const natW = bitmap.width;
+  const natH = bitmap.height;
+
+  let width = natW;
+  let height = natH;
+  if (natW >= CANVAS_W || natH >= CANVAS_H) {
+    const scale = Math.min(
+      (CANVAS_W * CANVAS_FILL) / natW,
+      (CANVAS_H * CANVAS_FILL) / natH,
+    );
+    width = Math.round(natW * scale);
+    height = Math.round(natH * scale);
+  }
+  const x = Math.round((CANVAS_W - width) / 2);
+  const y = Math.round((CANVAS_H - height) / 2);
+
+  return {
+    id: nanoid(),
+    type: "image",
+    x,
+    y,
+    width,
+    height,
+    opacity: 1,
+    name,
+    hidden: false,
+    locked: false,
+    bitmap,
+    naturalWidth: natW,
+    naturalHeight: natH,
+  };
+}
