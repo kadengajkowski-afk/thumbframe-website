@@ -1,8 +1,11 @@
 import { history } from "@/lib/history";
 import { useUiStore } from "@/state/uiStore";
+import { handleUploadedFile } from "@/lib/uploadFlow";
 
 // Per CLAUDE.md: exactly ONE global keydown listener for the whole editor.
 // v1 had four overlapping listeners; that was a steady source of bugs.
+// Paste is a separate event type (`paste`), registered alongside so all
+// OS-input wiring lives in one file.
 
 let installed = false;
 
@@ -10,10 +13,28 @@ export function installHotkeys() {
   if (installed) return () => {};
   installed = true;
   window.addEventListener("keydown", handleKeydown);
+  window.addEventListener("paste", handlePaste as EventListener);
   return () => {
     window.removeEventListener("keydown", handleKeydown);
+    window.removeEventListener("paste", handlePaste as EventListener);
     installed = false;
   };
+}
+
+function handlePaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item) continue;
+    if (item.kind !== "file") continue;
+    if (!item.type.startsWith("image/")) continue;
+    const file = item.getAsFile();
+    if (!file) continue;
+    e.preventDefault();
+    void handleUploadedFile(file);
+    return;
+  }
 }
 
 function handleKeydown(e: KeyboardEvent) {

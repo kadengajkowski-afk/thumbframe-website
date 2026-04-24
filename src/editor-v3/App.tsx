@@ -5,6 +5,9 @@ import { TopBar } from "@/editor/panels/TopBar";
 import { LayerPanel } from "@/editor/panels/LayerPanel";
 import { ContextPanel } from "@/editor/panels/ContextPanel";
 import { ShipComingAlive } from "@/editor/transitions/ShipComingAlive";
+import { EmptyState } from "@/editor/EmptyState";
+import { DropZone } from "@/editor/DropZone";
+import { useDropTarget } from "@/editor/useDropTarget";
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 
@@ -12,6 +15,7 @@ import { ToastHost } from "@/toasts/Toast";
  * The ShipComingAlive wrapper owns the first-visit transition. */
 export function App() {
   const hasEntered = useUiStore((s) => s.hasEntered);
+  const dragActive = useDropTarget();
 
   useEffect(() => installHotkeys(), []);
 
@@ -23,28 +27,8 @@ export function App() {
         empty={<EmptyState />}
         editor={<EditorShell />}
       />
+      {dragActive && <DropZone />}
       <ToastHost />
-    </div>
-  );
-}
-
-function EmptyState() {
-  const setHasEntered = useUiStore((s) => s.setHasEntered);
-  return (
-    <div style={emptyWrap}>
-      <div style={ghostFrame} aria-hidden="true">
-        <div style={ghostInner} />
-      </div>
-      <div style={emptyCopy}>
-        <h1 style={h1}>Upload to set sail</h1>
-        <button
-          type="button"
-          onClick={() => setHasEntered(true)}
-          style={startBlankBtn}
-        >
-          or start blank →
-        </button>
-      </div>
     </div>
   );
 }
@@ -99,58 +83,6 @@ const nebula: React.CSSProperties = {
     "var(--bg-space-1)",
   pointerEvents: "none",
   zIndex: 0,
-};
-
-const emptyWrap: React.CSSProperties = {
-  position: "relative",
-  zIndex: 1,
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  gap: 36,
-};
-
-const ghostFrame: React.CSSProperties = {
-  width: "min(1152px, 80vw)",
-  aspectRatio: "16 / 9",
-  border: "1px dashed var(--ghost-stroke)",
-  background: "var(--ghost-fill)",
-  borderRadius: 10,
-  position: "relative",
-  boxShadow: "0 0 80px rgba(249, 240, 225, 0.04) inset",
-};
-
-const ghostInner: React.CSSProperties = {
-  position: "absolute",
-  inset: 18,
-  border: "1px dashed rgba(249, 240, 225, 0.06)",
-  borderRadius: 6,
-};
-
-const emptyCopy: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  gap: 10,
-};
-
-const h1: React.CSSProperties = {
-  fontSize: 22,
-  fontWeight: 500,
-  letterSpacing: "0.01em",
-  color: "var(--accent-cream)",
-  margin: 0,
-};
-
-const startBlankBtn: React.CSSProperties = {
-  background: "transparent",
-  border: "none",
-  color: "var(--text-2)",
-  fontSize: 13,
-  letterSpacing: "0.02em",
-  cursor: "pointer",
-  padding: "4px 8px",
-  transition: "color var(--motion-fast) var(--ease-out)",
 };
 
 const editorGrid: React.CSSProperties = {
