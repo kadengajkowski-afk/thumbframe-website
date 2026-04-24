@@ -7,7 +7,7 @@ import {
 import { nanoid } from "nanoid";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
-import type { ImageLayer, Layer } from "@/state/types";
+import type { BlendMode, ImageLayer, Layer } from "@/state/types";
 
 // Canvas logical size. Lives here until docStore gains a `canvas` field
 // (Cycle 2 when export + resize are in scope).
@@ -131,6 +131,24 @@ export const history = {
     });
   },
 
+  setLayerBlendMode(id: string, mode: BlendMode) {
+    commit("Blend mode", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l) l.blendMode = mode;
+    });
+  },
+
+  reorderLayer(id: string, toIndex: number) {
+    commit("Reorder layer", (layers) => {
+      const from = layers.findIndex((l) => l.id === id);
+      if (from < 0) return;
+      const clamped = Math.max(0, Math.min(layers.length - 1, toIndex));
+      if (from === clamped) return;
+      const [moved] = layers.splice(from, 1);
+      if (moved) layers.splice(clamped, 0, moved);
+    });
+  },
+
   beginStroke(label: string) {
     if (openStroke) return;
     openStroke = { label, startLayers: useDocStore.getState().layers };
@@ -212,6 +230,7 @@ function buildImageLayer(bitmap: ImageBitmap, name: string): ImageLayer {
     name,
     hidden: false,
     locked: false,
+    blendMode: "normal",
     bitmap,
     naturalWidth: natW,
     naturalHeight: natH,

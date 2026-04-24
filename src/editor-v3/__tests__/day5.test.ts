@@ -24,6 +24,7 @@ function makeRect(id: string) {
     name: `Rect ${id}`,
     hidden: false,
     locked: false,
+    blendMode: "normal" as const,
   };
 }
 

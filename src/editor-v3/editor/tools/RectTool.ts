@@ -76,6 +76,7 @@ class RectToolImpl implements Tool {
       name: `Rect ${shortId()}`,
       hidden: false,
       locked: false,
+      blendMode: "normal",
     });
   }
 

@@ -41,6 +41,10 @@ export function paintNode(node: Container, layer: Layer) {
   node.x = layer.x;
   node.y = layer.y;
   node.alpha = layer.opacity;
+  // Pixi v8 accepts the string blend-mode family via node.blendMode.
+  // Advanced modes (overlay, soft-light, etc.) need the
+  // 'pixi.js/advanced-blend-modes' side-effect — imported in main.tsx.
+  node.blendMode = layer.blendMode;
 
   if (layer.type === "rect") {
     const g = node as Graphics;

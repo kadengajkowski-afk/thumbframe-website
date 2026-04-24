@@ -23,6 +23,7 @@ function makeRect(id: string, overrides: Partial<{ x: number; y: number }> = {})
     name: `Rect ${id}`,
     hidden: false,
     locked: false,
+    blendMode: "normal" as const,
   };
 }
 
