@@ -58,16 +58,12 @@ describe("Esc clears selection (Day 2 regression)", () => {
     history.addLayer(makeRect("a"));
     useUiStore.getState().setSelectedLayerId("a");
     expect(useUiStore.getState().selectedLayerId).toBe("a");
-    expect(
-      app.stage.children.some((c) => c.label === "selection-outline"),
-    ).toBe(true);
+    expect(compositor.hasSelectionOutline()).toBe(true);
 
     dispatchKey("Escape");
 
     expect(useUiStore.getState().selectedLayerId).toBeNull();
-    expect(
-      app.stage.children.some((c) => c.label === "selection-outline"),
-    ).toBe(false);
+    expect(compositor.hasSelectionOutline()).toBe(false);
   });
 
   it("Escape with no selection is a no-op (doesn't add highlight)", () => {
@@ -77,9 +73,7 @@ describe("Esc clears selection (Day 2 regression)", () => {
     dispatchKey("Escape");
 
     expect(useUiStore.getState().selectedLayerId).toBeNull();
-    expect(
-      app.stage.children.some((c) => c.label === "selection-outline"),
-    ).toBe(false);
+    expect(compositor.hasSelectionOutline()).toBe(false);
   });
 });
 

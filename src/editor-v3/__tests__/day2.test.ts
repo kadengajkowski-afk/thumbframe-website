@@ -27,14 +27,12 @@ function tearDown({ app, compositor }: Editor) {
   app.destroy(true, { children: true, texture: true });
 }
 
-function layerNodeCount(app: Application): number {
-  // Everything except the selection outline counts as a layer node.
-  return app.stage.children.filter((c) => c.label !== "selection-outline")
-    .length;
+function layerNodeCount(editor: Editor): number {
+  return editor.compositor.nodes.size;
 }
 
-function hasSelectionOutline(app: Application): boolean {
-  return app.stage.children.some((c) => c.label === "selection-outline");
+function hasSelectionOutline(editor: Editor): boolean {
+  return editor.compositor.hasSelectionOutline();
 }
 
 function makeRect(id: string, overrides: Partial<{ name: string }> = {}) {
@@ -70,7 +68,7 @@ describe("docStore ↔ Compositor", () => {
     history.addLayer(makeRect("a"));
 
     expect(useDocStore.getState().layers).toHaveLength(1);
-    expect(layerNodeCount(editor.app)).toBe(1);
+    expect(layerNodeCount(editor)).toBe(1);
   });
 
   it("deleteLayer removes both the stage child and store entry", () => {
@@ -78,7 +76,7 @@ describe("docStore ↔ Compositor", () => {
     history.deleteLayer("a");
 
     expect(useDocStore.getState().layers).toHaveLength(0);
-    expect(layerNodeCount(editor.app)).toBe(0);
+    expect(layerNodeCount(editor)).toBe(0);
   });
 
   it("undo after delete restores the layer in store and stage", () => {
@@ -88,7 +86,7 @@ describe("docStore ↔ Compositor", () => {
 
     expect(useDocStore.getState().layers).toHaveLength(1);
     expect(useDocStore.getState().layers[0]?.id).toBe("a");
-    expect(layerNodeCount(editor.app)).toBe(1);
+    expect(layerNodeCount(editor)).toBe(1);
   });
 
   it("redo after undo re-applies the delete", () => {
@@ -98,29 +96,29 @@ describe("docStore ↔ Compositor", () => {
     history.redo();
 
     expect(useDocStore.getState().layers).toHaveLength(0);
-    expect(layerNodeCount(editor.app)).toBe(0);
+    expect(layerNodeCount(editor)).toBe(0);
   });
 
   it("selection outline appears when a layer is selected and vanishes when cleared", () => {
     history.addLayer(makeRect("a"));
 
-    expect(hasSelectionOutline(editor.app)).toBe(false);
+    expect(hasSelectionOutline(editor)).toBe(false);
 
     useUiStore.getState().setSelectedLayerId("a");
-    expect(hasSelectionOutline(editor.app)).toBe(true);
+    expect(hasSelectionOutline(editor)).toBe(true);
 
     useUiStore.getState().setSelectedLayerId(null);
-    expect(hasSelectionOutline(editor.app)).toBe(false);
+    expect(hasSelectionOutline(editor)).toBe(false);
   });
 
   it("deleting the selected layer via history also removes its outline", () => {
     history.addLayer(makeRect("a"));
     useUiStore.getState().setSelectedLayerId("a");
-    expect(hasSelectionOutline(editor.app)).toBe(true);
+    expect(hasSelectionOutline(editor)).toBe(true);
 
     history.deleteLayer("a");
     // Selection id stays 'a' until the UI clears it, but the Compositor
     // defends against a dangling id by not drawing the outline.
-    expect(hasSelectionOutline(editor.app)).toBe(false);
+    expect(hasSelectionOutline(editor)).toBe(false);
   });
 });

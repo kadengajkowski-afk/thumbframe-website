@@ -42,8 +42,12 @@ async function makeBitmap(w: number, h: number): Promise<ImageBitmap> {
   return await createImageBitmap(canvas);
 }
 
-function spriteCount(app: Application): number {
-  return app.stage.children.filter((c) => c instanceof Sprite).length;
+function spriteCount(compositor: Compositor): number {
+  let count = 0;
+  for (const node of compositor.nodes.values()) {
+    if (node instanceof Sprite) count++;
+  }
+  return count;
 }
 
 describe("lib/upload — validation + decode", () => {
@@ -103,7 +107,7 @@ describe("image layer render + auto-center", () => {
     history.addImageLayer(bmp, "tiny");
 
     expect(useDocStore.getState().layers).toHaveLength(1);
-    expect(spriteCount(app)).toBe(1);
+    expect(spriteCount(compositor)).toBe(1);
   });
 
   it("images smaller than the canvas keep natural size and center", async () => {
