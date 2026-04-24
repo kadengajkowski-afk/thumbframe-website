@@ -1,6 +1,12 @@
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import { history } from "@/lib/history";
+import {
+  EyeIcon,
+  EyeOffIcon,
+  LockClosedIcon,
+  LockOpenIcon,
+} from "./LayerPanel.icons";
 import "./layer-panel.css";
 
 /**
@@ -51,12 +57,7 @@ export function LayerPanel() {
                 >
                   <span
                     className="layer-row__swatch"
-                    style={{
-                      background:
-                        layer.type === "rect"
-                          ? `#${layer.color.toString(16).padStart(6, "0")}`
-                          : "linear-gradient(135deg, var(--bg-space-2) 0%, var(--accent-navy) 100%)",
-                    }}
+                    style={{ background: swatchBackground(layer) }}
                     aria-hidden="true"
                   />
                   <span className="layer-row__name">{layer.name}</span>
@@ -84,18 +85,28 @@ export function LayerPanel() {
   );
 }
 
-type ToggleProps = {
-  onClick: (e: React.MouseEvent) => void;
-};
+function swatchBackground(layer: {
+  type: "rect" | "image";
+  color?: number;
+}): string {
+  if (layer.type === "rect" && typeof layer.color === "number") {
+    return `#${layer.color.toString(16).padStart(6, "0")}`;
+  }
+  return "linear-gradient(135deg, var(--bg-space-2) 0%, var(--accent-navy) 100%)";
+}
 
-function VisibilityToggle({ hidden, onClick }: ToggleProps & { hidden: boolean }) {
+type ToggleProps = { onClick: (e: React.MouseEvent) => void };
+
+function VisibilityToggle({
+  hidden,
+  onClick,
+}: ToggleProps & { hidden: boolean }) {
+  const cls =
+    "layer-row__toggle" + (hidden ? "" : " layer-row__toggle--active");
   return (
     <button
       type="button"
-      className={
-        "layer-row__toggle" +
-        (hidden ? "" : " layer-row__toggle--active")
-      }
+      className={cls}
       onClick={onClick}
       aria-label={hidden ? "Show layer" : "Hide layer"}
       title={hidden ? "Show layer" : "Hide layer"}
@@ -105,101 +116,21 @@ function VisibilityToggle({ hidden, onClick }: ToggleProps & { hidden: boolean }
   );
 }
 
-function LockToggle({ locked, onClick }: ToggleProps & { locked: boolean }) {
+function LockToggle({
+  locked,
+  onClick,
+}: ToggleProps & { locked: boolean }) {
+  const cls =
+    "layer-row__toggle" + (locked ? " layer-row__toggle--active" : "");
   return (
     <button
       type="button"
-      className={
-        "layer-row__toggle" +
-        (locked ? " layer-row__toggle--active" : "")
-      }
+      className={cls}
       onClick={onClick}
       aria-label={locked ? "Unlock layer" : "Lock layer"}
       title={locked ? "Unlock layer" : "Lock layer"}
     >
       {locked ? <LockClosedIcon /> : <LockOpenIcon />}
     </button>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <path
-        d="M1 7 C 3 3, 11 3, 13 7 C 11 11, 3 11, 1 7 Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-      />
-      <circle cx="7" cy="7" r="2" fill="currentColor" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <path
-        d="M1 7 C 3 3, 11 3, 13 7 C 11 11, 3 11, 1 7 Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-        opacity="0.6"
-      />
-      <line
-        x1="2"
-        y1="12"
-        x2="12"
-        y2="2"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function LockClosedIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <rect
-        x="3"
-        y="6"
-        width="8"
-        height="6"
-        rx="1"
-        fill="currentColor"
-      />
-      <path
-        d="M4.5 6 V4.5 a2.5 2.5 0 0 1 5 0 V6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-      />
-    </svg>
-  );
-}
-
-function LockOpenIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <rect
-        x="3"
-        y="6"
-        width="8"
-        height="6"
-        rx="1"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-      />
-      <path
-        d="M4.5 6 V4.5 a2.5 2.5 0 0 1 5 0"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-        opacity="0.6"
-      />
-    </svg>
   );
 }
