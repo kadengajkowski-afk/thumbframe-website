@@ -44,7 +44,51 @@ Promote to SCOPE.md only after 48 hours of consideration.
   installed but not imported.** All in `package.json` per user's Day 1
   spec. Wire each on its scheduled day:
   - `nanoid` + `immer` — Day 6 (rect tool) / Day 8 (history)
+    (both wired Day 2 — `immer` for patch history, `nanoid` for layer ids
+    in the temporary "Add test rect" dev button.)
   - `tinykeys` — Day 8 (hotkeys)
   - `pixi-viewport` — Day 5 (pan/zoom)
   - `cmdk` — Day 10 (command palette)
   - `pixi-filters` — Cycle 2+ (filters)
+
+## Cycle 1 Day 2 — held back (date: 2026-04-23)
+
+- **Playwright smoke test.** SCOPE.md lists one smoke (boot → upload
+  → add rect → undo → assert). Skipped today at Kaden's request — he
+  can't manually verify the Playwright harness himself this cycle. The
+  Vitest browser-mode integration suite (6 tests, real PixiJS, real
+  WebGL) already covers docStore↔Compositor↔history at the module level.
+  Add the Playwright layer when upload lands Day 4, or at Cycle 1 cool-
+  down.
+
+- **Custom immer-patch `replacePatches` for selection sync.** Deleting
+  a selected layer via `history.deleteLayer(id)` leaves `uiStore.
+  selectedLayerId` pointing at a dead id. Compositor defends against
+  this (no outline drawn for a missing layer), so it's cosmetic — but
+  the stale id will surface once the rect tool (Day 6) tries to act on
+  "the selected layer." Clean answer: a tiny docStore subscriber that
+  nulls `selectedLayerId` when its layer disappears. Defer to Day 7
+  when the select tool owns selection end-to-end.
+
+- **Dev-only "Add test rect" button.** Lives in TopBar. Removed Day 6
+  when the real Rectangle tool ships on the left rail. Tracked as a
+  `data-testid="add-test-rect"` so a future smoke test can key on it.
+
+- **Vitest 4 deprecation warnings.** `@vitejs/plugin-react` 4.x sets
+  `esbuild.jsx` but Vite 6's Rolldown prefers `oxc`. Warnings are
+  cosmetic and the test suite passes. Either upgrade the plugin once
+  it ships a Rolldown-native release, or wait for Vitest 5. Noise, not
+  a bug.
+
+- **Directory-scoped `CLAUDE.md` files.** Day 1 deferred these; still
+  deferred after Day 2. The conventions in `docStore.ts`, `Compositor.
+  ts`, and `history.ts` are now real and documented in code comments,
+  but the canonical "here are the rules" files for `src/editor-v3/
+  state/`, `src/editor-v3/editor/`, etc. still aren't written. Add
+  when the second file lands in each directory — one tool in
+  `tools/` isn't a pattern yet.
+
+- **`--canvas-surface-dark` token → shared surface.** Defined in
+  `tokens.css` but only used by the editor shell's center div. Promote
+  once multi-surface preview (Cycle 3) needs the same base color on the
+  preview rack backdrop.
