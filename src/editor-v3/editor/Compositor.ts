@@ -1,4 +1,9 @@
-import { Application, Container, Graphics } from "pixi.js";
+import {
+  Application,
+  Container,
+  Graphics,
+  type FederatedPointerEvent,
+} from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
@@ -7,9 +12,13 @@ import {
   clamp,
   createNode,
   destroyNode,
+  findLayerId,
   matchesType,
   paintNode,
 } from "./sceneHelpers";
+import { TOOLS_BY_ID } from "./tools/tools";
+import type { Tool } from "./tools/ToolTypes";
+import { domEventToCtx, pixiEventToCtx } from "./tools/inputDispatch";
 
 // World is plenty bigger than the canvas so users can pan past the
 // edges into "space" and still land on a clean world-bg fill.
@@ -25,7 +34,7 @@ const MIN_SCALE = 0.1;
 const MAX_SCALE = 16;
 const ZOOM_ANIM_MS = 300;
 
-const SELECTION_COLOR = 0xf9f0e1; // --accent-cream
+const SELECTION_COLOR = 0xf9f0e1;
 const SELECTION_WIDTH = 2;
 const SELECTION_PAD = 1;
 
@@ -35,20 +44,17 @@ const BORDER_GHOST = 0xf9f0e1;
 const BORDER_GHOST_ALPHA = 0.08;
 
 /**
- * Owns the PixiJS scene graph and the pixi-viewport that hosts it.
+ * Owns the Pixi scene graph, the pixi-viewport hosting it, and the
+ * pointer-event dispatch to the active tool. Structure:
  *
- * Structure:
  *   app.stage
  *     └── viewport (pans + zooms)
- *           ├── worldBg       → fills the 4000×3000 world with space color
- *           └── canvasGroup   → centered 1280×720 group
- *                 ├── canvasFill   → the visible thumbnail surface
- *                 ├── layer nodes  → Graphics (rect) / Sprite (image)
- *                 └── selectionNode (when a layer is selected)
- *
- * Layer coords stay local to canvasGroup (0..CANVAS_W / 0..CANVAS_H),
- * so docStore positions are camera-independent. Pan/zoom only changes
- * the viewport transform; docStore never mutates from UI interactions.
+ *           ├── worldBg             fills world, --bg-space-0
+ *           └── canvasGroup         centered 1280×720, interactive
+ *                 ├── canvasFill    the thumbnail area, hit-testable
+ *                 ├── layer nodes   Graphics (rect) / Sprite (image)
+ *                 ├── toolPreview   in-progress draw overlay
+ *                 └── selectionNode on top
  */
 export class Compositor {
   app: Application;
@@ -57,8 +63,10 @@ export class Compositor {
   private canvasGroup: Container;
   private canvasFill: Graphics;
   private worldBg: Graphics;
+  private toolPreview: Container;
   private layerNodes = new Map<string, Container>();
   private selectionNode: Graphics | null = null;
+  private activeDrag: Tool | null = null;
 
   private unsubscribeDoc?: () => void;
   private unsubscribeUi?: () => void;
@@ -90,6 +98,7 @@ export class Compositor {
     this.canvasGroup.label = "canvas-group";
     this.canvasGroup.x = CANVAS_ORIGIN_X;
     this.canvasGroup.y = CANVAS_ORIGIN_Y;
+    this.canvasGroup.eventMode = "static";
 
     this.canvasFill = new Graphics();
     this.canvasFill.rect(0, 0, CANVAS_W, CANVAS_H);
@@ -100,12 +109,17 @@ export class Compositor {
       width: 1,
       alignment: 0,
     });
-    this.canvasFill.eventMode = "none";
+    this.canvasFill.eventMode = "static";
     this.canvasFill.label = "canvas-fill";
+
+    this.toolPreview = new Container();
+    this.toolPreview.label = "tool-preview";
+    this.toolPreview.eventMode = "none";
 
     this.viewport.addChild(this.worldBg);
     this.viewport.addChild(this.canvasGroup);
     this.canvasGroup.addChild(this.canvasFill);
+    this.canvasGroup.addChild(this.toolPreview);
 
     this.app.stage.addChild(this.viewport);
   }
@@ -117,21 +131,31 @@ export class Compositor {
     );
     this.unsubscribeUi = useUiStore.subscribe((state, prev) => {
       if (state.selectedLayerId !== prev.selectedLayerId) this.render();
-      if (state.isHandMode !== prev.isHandMode) {
-        this.applyHandMode(state.isHandMode);
+      const prevHand = prev.isHandMode || prev.activeTool === "hand";
+      const nextHand = state.isHandMode || state.activeTool === "hand";
+      if (prevHand !== nextHand) {
+        this.viewport.drag({ mouseButtons: nextHand ? "all" : "middle-right" });
       }
     });
 
-    // Keep uiStore.zoomScale in sync for ZoomIndicator.
     this.viewport.on("zoomed", () => {
       useUiStore.setState({ zoomScale: this.viewport.scale.x });
     });
-    // User-initiated pan/zoom exits fit mode. Programmatic calls set
-    // isFitMode explicitly, so these handlers can always clear it.
     const exitFit = () => useUiStore.setState({ isFitMode: false });
-    this.viewport.on("drag-start", exitFit);
+    this.viewport.on("drag-start", () => {
+      exitFit();
+      useUiStore.setState({ isPanActive: true });
+    });
+    this.viewport.on("drag-end", () => {
+      useUiStore.setState({ isPanActive: false });
+    });
     this.viewport.on("pinch-start", exitFit);
     this.viewport.on("wheel", exitFit);
+
+    // Tool input + hover tracking.
+    this.canvasGroup.on("pointerdown", this.onCanvasPointerDown);
+    this.canvasGroup.on("pointermove", this.onCanvasPointerHover);
+    this.canvasGroup.on("pointerleave", this.onCanvasPointerLeave);
 
     this.render();
   }
@@ -139,9 +163,8 @@ export class Compositor {
   stop() {
     this.unsubscribeDoc?.();
     this.unsubscribeUi?.();
-    this.layerNodes.forEach(destroyNode);
+    this.releaseWindowListeners();
     this.layerNodes.clear();
-    this.selectionNode?.destroy();
     this.selectionNode = null;
     this.viewport.destroy({ children: true });
   }
@@ -163,9 +186,8 @@ export class Compositor {
         scale,
         position: { x: WORLD_W / 2, y: WORLD_H / 2 },
         ease: "easeInOutSine",
-        callbackOnComplete: () => {
-          useUiStore.setState({ zoomScale: scale, isFitMode: true });
-        },
+        callbackOnComplete: () =>
+          useUiStore.setState({ zoomScale: scale, isFitMode: true }),
       });
     } else {
       this.viewport.setZoom(scale, true);
@@ -176,11 +198,7 @@ export class Compositor {
 
   zoomBy(factor: number) {
     const next = clamp(this.viewport.scale.x * factor, MIN_SCALE, MAX_SCALE);
-    this.viewport.animate({
-      time: 180,
-      scale: next,
-      ease: "easeOutSine",
-    });
+    this.viewport.animate({ time: 180, scale: next, ease: "easeOutSine" });
     useUiStore.setState({ zoomScale: next, isFitMode: false });
   }
 
@@ -192,9 +210,7 @@ export class Compositor {
         scale,
         position: { x: WORLD_W / 2, y: WORLD_H / 2 },
         ease: "easeInOutSine",
-        callbackOnComplete: () => {
-          useUiStore.setState({ zoomScale: scale });
-        },
+        callbackOnComplete: () => useUiStore.setState({ zoomScale: scale }),
       });
     } else {
       this.viewport.setZoom(scale, true);
@@ -202,6 +218,15 @@ export class Compositor {
       useUiStore.setState({ zoomScale: scale });
     }
     useUiStore.setState({ isFitMode: false });
+  }
+
+  /** Returns true if there was an active drag to cancel. */
+  cancelTool(): boolean {
+    if (!this.activeDrag) return false;
+    this.activeDrag.onCancel?.();
+    this.activeDrag = null;
+    this.releaseWindowListeners();
+    return true;
   }
 
   // ── Test-facing getters ────────────────────────────────────────────
@@ -214,18 +239,62 @@ export class Compositor {
     return this.selectionNode !== null;
   }
 
-  // ── Internals ──────────────────────────────────────────────────────
+  // ── Pointer dispatch ───────────────────────────────────────────────
+
+  private pixiCtx(e: FederatedPointerEvent) {
+    return pixiEventToCtx(e, this.viewport, this.toolPreview, CANVAS_ORIGIN_X, CANVAS_ORIGIN_Y);
+  }
+
+  private domCtx(e: PointerEvent) {
+    return domEventToCtx(e, this.app.canvas, this.viewport, this.toolPreview, CANVAS_ORIGIN_X, CANVAS_ORIGIN_Y);
+  }
+
+  private onCanvasPointerDown = (e: FederatedPointerEvent) => {
+    if (e.button !== 0) return;
+    const ui = useUiStore.getState();
+    if (ui.isHandMode || ui.activeTool === "hand") return;
+    const tool = TOOLS_BY_ID[ui.activeTool];
+    tool.onPointerDown?.(this.pixiCtx(e));
+    this.activeDrag = tool;
+    window.addEventListener("pointermove", this.onWindowPointerMove);
+    window.addEventListener("pointerup", this.onWindowPointerUp);
+  };
+
+  private onWindowPointerMove = (e: PointerEvent) => {
+    this.activeDrag?.onPointerMove?.(this.domCtx(e));
+  };
+
+  private onWindowPointerUp = (e: PointerEvent) => {
+    if (!this.activeDrag) return;
+    this.activeDrag.onPointerUp?.(this.domCtx(e));
+    this.activeDrag = null;
+    this.releaseWindowListeners();
+  };
+
+  private onCanvasPointerHover = (e: FederatedPointerEvent) => {
+    const id = findLayerId(e.target as Container);
+    if (useUiStore.getState().hoveredLayerId !== id) {
+      useUiStore.getState().setHoveredLayerId(id);
+    }
+  };
+
+  private onCanvasPointerLeave = () => {
+    if (useUiStore.getState().hoveredLayerId !== null) {
+      useUiStore.getState().setHoveredLayerId(null);
+    }
+  };
+
+  private releaseWindowListeners() {
+    window.removeEventListener("pointermove", this.onWindowPointerMove);
+    window.removeEventListener("pointerup", this.onWindowPointerUp);
+  }
+
+  // ── Rendering ──────────────────────────────────────────────────────
 
   private fitScale(): number {
     const sx = this.viewport.screenWidth / (CANVAS_W + FIT_PADDING * 2);
     const sy = this.viewport.screenHeight / (CANVAS_H + FIT_PADDING * 2);
     return clamp(Math.min(sx, sy), MIN_SCALE, MAX_SCALE);
-  }
-
-  private applyHandMode(isHand: boolean) {
-    this.viewport.drag({
-      mouseButtons: isHand ? "all" : "middle-right",
-    });
   }
 
   private render() {
@@ -270,9 +339,9 @@ export class Compositor {
       }
     }
 
-    if (this.selectionNode) {
-      this.canvasGroup.addChild(this.selectionNode);
-    }
+    // Keep preview + selection on top of any newly-added layers.
+    this.canvasGroup.addChild(this.toolPreview);
+    if (this.selectionNode) this.canvasGroup.addChild(this.selectionNode);
   }
 
   private renderSelection(selectedId: string | null) {
@@ -314,4 +383,3 @@ export class Compositor {
     node.y = layer.y;
   }
 }
-
