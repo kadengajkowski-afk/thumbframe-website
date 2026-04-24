@@ -54,7 +54,7 @@ export function LayerPanel() {
       <header className="layer-panel__header">Layers</header>
       {layers.length === 0 ? (
         <div className="layer-panel__empty">
-          Drop something here, or add from the toolbar.
+          Drop something here, or press R to draw a rectangle.
         </div>
       ) : (
         <DndContext

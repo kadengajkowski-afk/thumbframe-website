@@ -77,6 +77,50 @@ Promote to SCOPE.md only after 48 hours of consideration.
   Regression test: `__tests__/day3.test.tsx` "Escape nulls
   selectedLayerId and removes the outline."
 
+## Cycle 1 Day 8 bug fallout — investigation items (date: 2026-04-23)
+
+- **Advanced blend modes silently fall back to normal.** Day 8 Bug 2.
+  `import 'pixi.js/advanced-blend-modes'` exists in both `main.tsx`
+  and `Compositor.ts` and the extension registration code in
+  `init.mjs` does run — but PixiJS v8's BlendModePipe reads from a
+  `BLEND_MODE_FILTERS` map that isn't populated by the time a layer
+  Graphics renders. Symptoms: overlay / soft-light / hard-light /
+  darken / lighten / color-dodge / color-burn / difference all look
+  identical to Normal in both tests and (probably) production.
+  Hypothesis: rect Graphics may need to be wrapped in a RenderGroup
+  or rendered to texture to be eligible for the filter-based advanced
+  blend pipeline. Next debug step: set `isRenderGroup = true` on
+  either the layer node or the canvasGroup and retest.
+
+## Cycle 1 Day 10 — held back (date: 2026-04-23)
+
+- **Duplicate / reorder commands work on primary selected id only.**
+  Multi-select UI is Cycle 2, so single-select is fine. When multi
+  lands, update `reorderSelected` + `edit.duplicate` to walk the
+  full `selectedLayerIds` array.
+
+- **Add-rectangle command spawns with a hardcoded orange fill.**
+  Once Day 9's ColorPicker merges, swap to `uiStore.lastFillColor`
+  (already on main via Day 9's merge, but this branch didn't pick
+  it up yet — resolve when Day 9's branch and Day 10's branch
+  reconcile).
+
+- **Cmd+K toggle vs Cmd+K open.** The spec said "Opens on Cmd+K" but
+  toggling on the same chord is the prevailing industry convention
+  (Raycast, Figma, Linear). Kept toggle. Esc still closes.
+
+- **cmdk groups aren't scroll-into-view on arrow nav.** cmdk's
+  built-in nav scrolls the active row but the group header can end
+  up partially off-screen. Minor; swap for a `data-selected`
+  scrollIntoView effect if it bothers anyone.
+
+- **Palette doesn't show a "no hotkey" affordance for file.upload /
+  edit.duplicate (Cmd+D on Mac)** — each has its own hotkey but we
+  only show the `hotkey` field when set. Fine.
+
+- **Backdrop at 70% opacity** per spec. Blur at 6px to help the
+  palette pop. If perf on low-end GPUs suffers, drop blur first.
+
 ## Cycle 1 Day 8 — held back (date: 2026-04-23)
 
 - **Full 27-mode blend set.** Day 8 ships 12 of PixiJS v8's 27. The

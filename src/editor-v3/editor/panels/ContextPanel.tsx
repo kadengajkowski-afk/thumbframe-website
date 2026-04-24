@@ -12,6 +12,7 @@ import "./blend-select.css";
  * select UI is a Cycle 2 concern.
  */
 export function ContextPanel() {
+  const selectedCount = useUiStore((u) => u.selectedLayerIds.length);
   const primarySelectedId = useUiStore((u) => u.selectedLayerIds[0] ?? null);
   const layer = useDocStore(
     (d) => d.layers.find((l) => l.id === primarySelectedId) ?? null,
@@ -26,6 +27,19 @@ export function ContextPanel() {
       >
         <header style={s.panelHeader}>Properties</header>
         <div style={s.emptyHint}>Select something</div>
+      </aside>
+    );
+  }
+
+  if (selectedCount > 1) {
+    return (
+      <aside
+        style={s.panel}
+        aria-label="Layer properties"
+        data-alive="contextpanel"
+      >
+        <header style={s.panelHeader}>Properties</header>
+        <div style={s.emptyHint}>{selectedCount} selected</div>
       </aside>
     );
   }
