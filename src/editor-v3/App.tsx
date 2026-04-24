@@ -1,32 +1,39 @@
-import { useState } from "react";
+import { useEffect } from "react";
+import { useUiStore } from "@/state/uiStore";
 import { CompositorHost } from "@/editor/CompositorHost";
+import { TopBar } from "@/editor/panels/TopBar";
+import { LayerPanel } from "@/editor/panels/LayerPanel";
+import { ContextPanel } from "@/editor/panels/ContextPanel";
+import { installHotkeys } from "@/editor/hotkeys";
 
-/** Cycle 1 Day 1 shell: sailship empty state in a nebula. No tool palette yet. */
+/** Cycle 1 shell: empty state until hasEntered, then the editor grid. */
 export function App() {
-  const [started, setStarted] = useState(false);
+  const hasEntered = useUiStore((s) => s.hasEntered);
+
+  useEffect(() => installHotkeys(), []);
 
   return (
     <div style={shell}>
       <Nebula />
-
-      {!started ? (
-        <EmptyState onStartBlank={() => setStarted(true)} />
-      ) : (
-        <div style={canvasStage}>
-          <CompositorHost />
-        </div>
-      )}
+      {hasEntered ? <EditorShell /> : <EmptyState />}
     </div>
   );
 }
 
-function EmptyState({ onStartBlank }: { onStartBlank: () => void }) {
+function EmptyState() {
+  const setHasEntered = useUiStore((s) => s.setHasEntered);
   return (
     <div style={emptyWrap}>
-      <GhostlyCanvas />
+      <div style={ghostFrame} aria-hidden="true">
+        <div style={ghostInner} />
+      </div>
       <div style={emptyCopy}>
         <h1 style={h1}>Upload to set sail</h1>
-        <button type="button" onClick={onStartBlank} style={startBlankBtn}>
+        <button
+          type="button"
+          onClick={() => setHasEntered(true)}
+          style={startBlankBtn}
+        >
           or start blank →
         </button>
       </div>
@@ -34,18 +41,24 @@ function EmptyState({ onStartBlank }: { onStartBlank: () => void }) {
   );
 }
 
-/** Nebula background — layered radial gradients, static for Day 1. */
-function Nebula() {
-  return <div style={nebula} aria-hidden="true" />;
-}
-
-/** Ghostly 1280×720 frame. Scales down on small viewports via max-width. */
-function GhostlyCanvas() {
+function EditorShell() {
   return (
-    <div style={ghostFrame} aria-hidden="true">
-      <div style={ghostInner} />
+    <div style={editorGrid}>
+      <TopBar />
+      <div style={editorRow}>
+        <aside style={leftRail} aria-label="Tool palette placeholder" />
+        <main style={canvasSurface}>
+          <CompositorHost />
+        </main>
+        <ContextPanel />
+      </div>
+      <LayerPanel />
     </div>
   );
+}
+
+function Nebula() {
+  return <div style={nebula} aria-hidden="true" />;
 }
 
 // ── styles ──────────────────────────────────────────────────────────────────
@@ -124,15 +137,32 @@ const startBlankBtn: React.CSSProperties = {
   transition: "color var(--motion-fast) var(--ease-out)",
 };
 
-const canvasStage: React.CSSProperties = {
+const editorGrid: React.CSSProperties = {
   position: "relative",
   zIndex: 1,
+  width: "100%",
+  height: "100%",
+  display: "grid",
+  gridTemplateRows: "48px 1fr 160px",
+};
+
+const editorRow: React.CSSProperties = {
+  display: "flex",
+  minHeight: 0,
+};
+
+const leftRail: React.CSSProperties = {
+  width: 48,
+  background: "var(--rail-bg)",
+  borderRight: "1px solid var(--rail-border)",
+};
+
+const canvasSurface: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: "min(1152px, 80vw)",
-  aspectRatio: "16 / 9",
-  border: "1px solid var(--ghost-stroke)",
-  borderRadius: 10,
+  background: "var(--canvas-surface-dark)",
   overflow: "hidden",
 };

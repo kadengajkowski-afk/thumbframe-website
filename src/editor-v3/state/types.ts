@@ -7,4 +7,6 @@ export type Layer = {
   width: number;
   height: number;
   color: number; // 0xRRGGBB
+  opacity: number; // 0..1
+  name: string; // shown in LayerPanel
 };
