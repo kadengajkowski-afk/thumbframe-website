@@ -4,12 +4,9 @@ import {
   Graphics,
   type FederatedPointerEvent,
 } from "pixi.js";
-// Defense in depth: main.tsx already imports this side-effect, but
-// doing it here guarantees the 8 advanced blend modes (overlay /
-// soft-light / hard-light / darken / lighten / color-dodge /
-// color-burn / difference) register whenever a Compositor loads —
-// tests don't route through main.tsx, and the registration populates
-// pixi.js's BLEND_MODE_FILTERS map that BlendModePipe reads.
+// Defense in depth for advanced blend modes — tests don't route
+// through main.tsx. See DEFERRED: the registration populates
+// BLEND_MODE_FILTERS but rect Graphics may need RenderGroup wrapping.
 import "pixi.js/advanced-blend-modes";
 import { Viewport } from "pixi-viewport";
 import { useDocStore } from "@/state/docStore";
@@ -50,19 +47,10 @@ const PIXEL_GRID_ZOOM = 6; // show grid at zoom ≥ 600%
 const PIXEL_GRID_ALPHA = 0.35;
 const PIXEL_GRID_FADE_MS = 200;
 
-/**
- * Owns the Pixi scene graph, the pixi-viewport hosting it, and the
- * pointer-event dispatch to the active tool. Structure:
- *
- *   app.stage
- *     └── viewport (pans + zooms)
- *           ├── worldBg             fills world, --bg-space-0
- *           └── canvasGroup         centered 1280×720, interactive
- *                 ├── canvasFill    the thumbnail area, hit-testable
- *                 ├── layer nodes   Graphics (rect) / Sprite (image)
- *                 ├── toolPreview   in-progress draw overlay
- *                 └── selectionNode on top
- */
+/** Owns the Pixi scene graph, the pixi-viewport hosting it, and the
+ * pointer-event dispatch to the active tool. Scene: app.stage →
+ * viewport → (worldBg, canvasGroup → [canvasFill, layer nodes,
+ * toolPreview, selection nodes]). */
 export class Compositor {
   app: Application;
   viewport: Viewport;
@@ -342,12 +330,9 @@ export class Compositor {
       }
     }
 
-    // Pixi Container.addChild on an already-attached child moves it
-    // to the END. Re-attach every layer in docStore order so the
-    // scene-tree z-order matches the document (layers[0] = bottom,
-    // layers[N-1] = top). Without this, drag-reorder in LayerPanel
-    // updates docStore but not the visible stacking. Then preview +
-    // selection go on top.
+    // Re-attach layers in docStore order so Pixi render order tracks
+    // drag-reorder. addChild on an already-attached child moves it
+    // to the END. Preview + selection go last so they stay on top.
     for (const layer of layers) {
       const node = this.layerNodes.get(layer.id);
       if (node) this.canvasGroup.addChild(node);
