@@ -9,6 +9,7 @@ import { EmptyState } from "@/editor/EmptyState";
 import { DropZone } from "@/editor/DropZone";
 import { useDropTarget } from "@/editor/useDropTarget";
 import { ZoomIndicator } from "@/editor/ZoomIndicator";
+import { ToolPalette } from "@/editor/panels/ToolPalette";
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 
@@ -39,15 +40,7 @@ function EditorShell() {
     <div style={editorGrid}>
       <TopBar />
       <div style={editorRow}>
-        <aside
-          style={leftRail}
-          aria-label="Tool palette placeholder"
-          data-alive="leftrail"
-        >
-          <span style={leftRailHint} aria-hidden="true">
-            Tools arriving Cycle 1 Day 5
-          </span>
-        </aside>
+        <ToolPalette />
         <main style={canvasSurface} data-alive="canvas">
           <CompositorHost />
           <ZoomIndicator />
@@ -99,30 +92,6 @@ const editorGrid: React.CSSProperties = {
 const editorRow: React.CSSProperties = {
   display: "flex",
   minHeight: 0,
-};
-
-const leftRail: React.CSSProperties = {
-  width: 56,
-  background: "var(--bg-space-1)",
-  borderRight: "1px solid var(--border-ghost)",
-  position: "relative",
-  overflow: "hidden",
-};
-
-const leftRailHint: React.CSSProperties = {
-  position: "absolute",
-  top: 120,
-  left: "50%",
-  transform: "translateX(-50%) rotate(-90deg)",
-  transformOrigin: "center",
-  whiteSpace: "nowrap",
-  color: "var(--text-tertiary)",
-  opacity: 0.5,
-  fontFamily: "var(--font-mono)",
-  fontSize: 10,
-  letterSpacing: "0.12em",
-  textTransform: "uppercase",
-  pointerEvents: "none",
 };
 
 const canvasSurface: React.CSSProperties = {
