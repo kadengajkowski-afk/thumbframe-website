@@ -31,12 +31,12 @@ class SelectToolImpl implements Tool {
     const ui = useUiStore.getState();
 
     if (!hitLayerId) {
-      ui.setSelectedLayerId(null);
+      ui.setSelectedLayerIds([]);
       this.drag = null;
       return;
     }
 
-    ui.setSelectedLayerId(hitLayerId);
+    ui.setSelectedLayerIds([hitLayerId]);
 
     const layer = useDocStore.getState().layers.find((l) => l.id === hitLayerId);
     if (!layer || layer.locked) {
@@ -64,7 +64,7 @@ class SelectToolImpl implements Tool {
     );
   }
 
-  onPointerUp() {
+  onPointerUp(_ctx: ToolCtx) {
     if (!this.drag) return;
     history.endStroke();
     this.drag = null;

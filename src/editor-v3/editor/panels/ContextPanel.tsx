@@ -10,9 +10,9 @@ import * as s from "./ContextPanel.styles";
  * stroke-coalesced opacity slider.
  */
 export function ContextPanel() {
-  const selectedLayerId = useUiStore((u) => u.selectedLayerId);
+  const primarySelectedId = useUiStore((u) => u.selectedLayerIds[0] ?? null);
   const layer = useDocStore(
-    (d) => d.layers.find((l) => l.id === selectedLayerId) ?? null,
+    (d) => d.layers.find((l) => l.id === primarySelectedId) ?? null,
   );
 
   if (!layer) {

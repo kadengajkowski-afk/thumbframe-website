@@ -55,7 +55,7 @@ let editor: Editor;
 
 beforeEach(async () => {
   history._reset();
-  useUiStore.setState({ selectedLayerId: null });
+  useUiStore.setState({ selectedLayerIds: [] });
   editor = await makeEditor();
 });
 
@@ -104,16 +104,16 @@ describe("docStore ↔ Compositor", () => {
 
     expect(hasSelectionOutline(editor)).toBe(false);
 
-    useUiStore.getState().setSelectedLayerId("a");
+    useUiStore.getState().setSelectedLayerIds(["a"]);
     expect(hasSelectionOutline(editor)).toBe(true);
 
-    useUiStore.getState().setSelectedLayerId(null);
+    useUiStore.getState().setSelectedLayerIds([]);
     expect(hasSelectionOutline(editor)).toBe(false);
   });
 
   it("deleting the selected layer via history also removes its outline", () => {
     history.addLayer(makeRect("a"));
-    useUiStore.getState().setSelectedLayerId("a");
+    useUiStore.getState().setSelectedLayerIds(["a"]);
     expect(hasSelectionOutline(editor)).toBe(true);
 
     history.deleteLayer("a");

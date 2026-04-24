@@ -117,6 +117,13 @@ export const history = {
     });
   },
 
+  setLayerName(id: string, name: string) {
+    commit("Rename layer", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l) l.name = name;
+    });
+  },
+
   beginStroke(label: string) {
     if (openStroke) return;
     openStroke = { label, startLayers: useDocStore.getState().layers };

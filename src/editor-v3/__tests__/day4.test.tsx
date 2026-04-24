@@ -90,7 +90,7 @@ describe("image layer render + auto-center", () => {
   beforeEach(async () => {
     history._reset();
     _resetToasts();
-    useUiStore.setState({ selectedLayerId: null, hasEntered: false });
+    useUiStore.setState({ selectedLayerIds: [], hasEntered: false });
     app = new Application();
     await app.init({ width: 640, height: 360 });
     compositor = new Compositor(app);
@@ -138,7 +138,7 @@ describe("uploadFlow — first upload triggers ship-coming-alive", () => {
   beforeEach(async () => {
     history._reset();
     _resetToasts();
-    useUiStore.setState({ selectedLayerId: null, hasEntered: false });
+    useUiStore.setState({ selectedLayerIds: [], hasEntered: false });
     app = new Application();
     await app.init({ width: 640, height: 360 });
     compositor = new Compositor(app);

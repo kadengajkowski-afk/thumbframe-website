@@ -7,9 +7,12 @@ type UiState = {
   hasEntered: boolean;
   setHasEntered: (v: boolean) => void;
 
-  /** Currently selected layer id, or null. */
-  selectedLayerId: string | null;
-  setSelectedLayerId: (id: string | null) => void;
+  /** Currently-selected layer ids. Always an array — single-select is
+   * just [id] — so multi-select UI can land Cycle 2 without reshaping
+   * consumers. Order is insertion order; the first entry is the
+   * "primary" selection (what ContextPanel shows). */
+  selectedLayerIds: string[];
+  setSelectedLayerIds: (ids: string[]) => void;
 
   /** Active tool. 'hand' joins Day 6 alongside the rect tool. */
   activeTool: Tool;
@@ -46,8 +49,8 @@ export const useUiStore = create<UiState>()((set) => ({
   hasEntered: false,
   setHasEntered: (hasEntered) => set({ hasEntered }),
 
-  selectedLayerId: null,
-  setSelectedLayerId: (selectedLayerId) => set({ selectedLayerId }),
+  selectedLayerIds: [],
+  setSelectedLayerIds: (selectedLayerIds) => set({ selectedLayerIds }),
 
   activeTool: "select",
   setTool: (activeTool) => set({ activeTool }),

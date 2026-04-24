@@ -40,7 +40,7 @@ describe("Esc clears selection (Day 2 regression)", () => {
 
   beforeEach(async () => {
     history._reset();
-    useUiStore.setState({ selectedLayerId: null });
+    useUiStore.setState({ selectedLayerIds: [] });
     app = new Application();
     await app.init({ width: 640, height: 360 });
     compositor = new Compositor(app);
@@ -56,23 +56,23 @@ describe("Esc clears selection (Day 2 regression)", () => {
 
   it("Escape nulls selectedLayerId and removes the outline", () => {
     history.addLayer(makeRect("a"));
-    useUiStore.getState().setSelectedLayerId("a");
-    expect(useUiStore.getState().selectedLayerId).toBe("a");
+    useUiStore.getState().setSelectedLayerIds(["a"]);
+    expect(useUiStore.getState().selectedLayerIds[0] ?? null).toBe("a");
     expect(compositor.hasSelectionOutline()).toBe(true);
 
     dispatchKey("Escape");
 
-    expect(useUiStore.getState().selectedLayerId).toBeNull();
+    expect(useUiStore.getState().selectedLayerIds[0] ?? null).toBeNull();
     expect(compositor.hasSelectionOutline()).toBe(false);
   });
 
   it("Escape with no selection is a no-op (doesn't add highlight)", () => {
     history.addLayer(makeRect("a"));
-    expect(useUiStore.getState().selectedLayerId).toBeNull();
+    expect(useUiStore.getState().selectedLayerIds[0] ?? null).toBeNull();
 
     dispatchKey("Escape");
 
-    expect(useUiStore.getState().selectedLayerId).toBeNull();
+    expect(useUiStore.getState().selectedLayerIds[0] ?? null).toBeNull();
     expect(compositor.hasSelectionOutline()).toBe(false);
   });
 });

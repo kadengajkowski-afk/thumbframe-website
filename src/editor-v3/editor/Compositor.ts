@@ -43,6 +43,10 @@ const CANVAS_SURFACE = 0x0a0a0f;
 const BORDER_GHOST = 0xf9f0e1;
 const BORDER_GHOST_ALPHA = 0.08;
 
+const PIXEL_GRID_ZOOM = 6; // show grid at zoom ≥ 600%
+const PIXEL_GRID_ALPHA = 0.35;
+const PIXEL_GRID_FADE_MS = 200;
+
 /**
  * Owns the Pixi scene graph, the pixi-viewport hosting it, and the
  * pointer-event dispatch to the active tool. Structure:
@@ -64,9 +68,11 @@ export class Compositor {
   private canvasFill: Graphics;
   private worldBg: Graphics;
   private toolPreview: Container;
+  private pixelGrid: Graphics;
   private layerNodes = new Map<string, Container>();
-  private selectionNode: Graphics | null = null;
+  private selectionNodes = new Map<string, Graphics>();
   private activeDrag: Tool | null = null;
+  private gridFadeToken = 0;
 
   private unsubscribeDoc?: () => void;
   private unsubscribeUi?: () => void;
@@ -116,9 +122,12 @@ export class Compositor {
     this.toolPreview.label = "tool-preview";
     this.toolPreview.eventMode = "none";
 
+    this.pixelGrid = buildPixelGrid();
+
     this.viewport.addChild(this.worldBg);
     this.viewport.addChild(this.canvasGroup);
     this.canvasGroup.addChild(this.canvasFill);
+    this.canvasGroup.addChild(this.pixelGrid);
     this.canvasGroup.addChild(this.toolPreview);
 
     this.app.stage.addChild(this.viewport);
@@ -130,7 +139,7 @@ export class Compositor {
       () => this.render(),
     );
     this.unsubscribeUi = useUiStore.subscribe((state, prev) => {
-      if (state.selectedLayerId !== prev.selectedLayerId) this.render();
+      if (state.selectedLayerIds !== prev.selectedLayerIds) this.render();
       const prevHand = prev.isHandMode || prev.activeTool === "hand";
       const nextHand = state.isHandMode || state.activeTool === "hand";
       if (prevHand !== nextHand) {
@@ -140,6 +149,8 @@ export class Compositor {
 
     this.viewport.on("zoomed", () => {
       useUiStore.setState({ zoomScale: this.viewport.scale.x });
+      this.refreshSelectionStroke();
+      this.updatePixelGrid();
     });
     const exitFit = () => useUiStore.setState({ isFitMode: false });
     this.viewport.on("drag-start", () => {
@@ -165,7 +176,7 @@ export class Compositor {
     this.unsubscribeUi?.();
     this.releaseWindowListeners();
     this.layerNodes.clear();
-    this.selectionNode = null;
+    this.selectionNodes.clear();
     this.viewport.destroy({ children: true });
   }
 
@@ -236,7 +247,18 @@ export class Compositor {
   }
 
   hasSelectionOutline(): boolean {
-    return this.selectionNode !== null;
+    return this.selectionNodes.size > 0;
+  }
+
+  /** Test hook — the visual stroke width applied to selection outlines
+   * at the current zoom (2 / viewport.scale). */
+  selectionStrokeWidth(): number {
+    return SELECTION_WIDTH / this.viewport.scale.x;
+  }
+
+  /** Test hook — current pixel-grid alpha (0 when hidden). */
+  pixelGridAlpha(): number {
+    return this.pixelGrid.alpha;
   }
 
   // ── Pointer dispatch ───────────────────────────────────────────────
@@ -299,7 +321,7 @@ export class Compositor {
 
   private render() {
     this.reconcileLayers(useDocStore.getState().layers);
-    this.renderSelection(useUiStore.getState().selectedLayerId);
+    this.renderSelection(useUiStore.getState().selectedLayerIds);
   }
 
   private reconcileLayers(layers: Layer[]) {
@@ -341,45 +363,113 @@ export class Compositor {
 
     // Keep preview + selection on top of any newly-added layers.
     this.canvasGroup.addChild(this.toolPreview);
-    if (this.selectionNode) this.canvasGroup.addChild(this.selectionNode);
+    for (const node of this.selectionNodes.values()) {
+      this.canvasGroup.addChild(node);
+    }
   }
 
-  private renderSelection(selectedId: string | null) {
+  private renderSelection(ids: string[]) {
     const layers = useDocStore.getState().layers;
-    const layer = selectedId
-      ? layers.find((l) => l.id === selectedId)
-      : undefined;
+    const want = new Set(ids);
 
-    if (!layer || layer.hidden) {
-      if (this.selectionNode) {
-        this.selectionNode.destroy();
-        this.selectionNode = null;
+    // Drop outlines for ids no longer selected.
+    for (const [id, node] of this.selectionNodes) {
+      if (!want.has(id)) {
+        node.destroy();
+        this.selectionNodes.delete(id);
       }
-      return;
     }
 
-    if (!this.selectionNode) {
-      this.selectionNode = new Graphics();
-      this.selectionNode.label = "selection-outline";
-      this.selectionNode.eventMode = "none";
-      this.canvasGroup.addChild(this.selectionNode);
+    const strokeWidth = SELECTION_WIDTH / this.viewport.scale.x;
+    for (const id of ids) {
+      const layer = layers.find((l) => l.id === id);
+      if (!layer || layer.hidden) {
+        const stale = this.selectionNodes.get(id);
+        if (stale) {
+          stale.destroy();
+          this.selectionNodes.delete(id);
+        }
+        continue;
+      }
+      let node = this.selectionNodes.get(id);
+      if (!node) {
+        node = new Graphics();
+        node.label = "selection-outline";
+        node.eventMode = "none";
+        this.canvasGroup.addChild(node);
+        this.selectionNodes.set(id, node);
+      }
+      paintSelectionOutline(node, layer, strokeWidth);
     }
-
-    const node = this.selectionNode;
-    node.clear();
-    node.rect(
-      -SELECTION_PAD,
-      -SELECTION_PAD,
-      layer.width + SELECTION_PAD * 2,
-      layer.height + SELECTION_PAD * 2,
-    );
-    node.stroke({
-      color: SELECTION_COLOR,
-      width: SELECTION_WIDTH,
-      alpha: 1,
-      alignment: 0.5,
-    });
-    node.x = layer.x;
-    node.y = layer.y;
   }
+
+  /** Called on viewport zoom changes. Redraws outlines with a new
+   * stroke width so the outline always reads as 2 screen-pixels. */
+  private refreshSelectionStroke() {
+    const layers = useDocStore.getState().layers;
+    const strokeWidth = SELECTION_WIDTH / this.viewport.scale.x;
+    for (const [id, node] of this.selectionNodes) {
+      const layer = layers.find((l) => l.id === id);
+      if (!layer) continue;
+      paintSelectionOutline(node, layer, strokeWidth);
+    }
+  }
+
+  /** Fade the pixel grid in/out based on the current zoom threshold. */
+  private updatePixelGrid() {
+    const target =
+      this.viewport.scale.x >= PIXEL_GRID_ZOOM ? PIXEL_GRID_ALPHA : 0;
+    if (this.pixelGrid.alpha === target) return;
+    const from = this.pixelGrid.alpha;
+    const token = ++this.gridFadeToken;
+    const start = performance.now();
+    const step = () => {
+      if (token !== this.gridFadeToken) return;
+      const t = Math.min(1, (performance.now() - start) / PIXEL_GRID_FADE_MS);
+      this.pixelGrid.alpha = from + (target - from) * t;
+      if (t < 1) requestAnimationFrame(step);
+      else this.pixelGrid.alpha = target;
+    };
+    requestAnimationFrame(step);
+  }
+}
+
+function buildPixelGrid(): Graphics {
+  // One Graphics holding every canvas-pixel grid line. Stroke width
+  // stays fixed in canvas space so we don't have to redraw on zoom.
+  // 0.1 canvas-px at 6× zoom = 0.6 screen-px — thin and readable.
+  const g = new Graphics();
+  g.label = "pixel-grid";
+  g.eventMode = "none";
+  for (let x = 0; x <= CANVAS_W; x++) {
+    g.moveTo(x, 0).lineTo(x, CANVAS_H);
+  }
+  for (let y = 0; y <= CANVAS_H; y++) {
+    g.moveTo(0, y).lineTo(CANVAS_W, y);
+  }
+  g.stroke({ color: BORDER_GHOST, alpha: 0.8, width: 0.1 });
+  g.alpha = 0;
+  return g;
+}
+
+function paintSelectionOutline(
+  node: Graphics,
+  layer: Layer,
+  strokeWidth: number,
+) {
+  node.clear();
+  node.rect(
+    -SELECTION_PAD,
+    -SELECTION_PAD,
+    layer.width + SELECTION_PAD * 2,
+    layer.height + SELECTION_PAD * 2,
+  );
+  node.stroke({
+    color: SELECTION_COLOR,
+    width: strokeWidth,
+    alpha: 1,
+    alignment: 0.5,
+  });
+  node.x = layer.x;
+  node.y = layer.y;
 }

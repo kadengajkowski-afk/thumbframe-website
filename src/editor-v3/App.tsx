@@ -53,12 +53,14 @@ function EditorShell() {
   );
 }
 
-function deriveCursor(s: {
+type CursorShape = {
   activeTool: "select" | "hand" | "rect";
   isHandMode: boolean;
   isPanActive: boolean;
   hoveredLayerId: string | null;
-}): string {
+};
+
+function deriveCursor(s: CursorShape): string {
   if (s.isHandMode || s.activeTool === "hand") {
     return s.isPanActive ? "grabbing" : "grab";
   }

@@ -85,13 +85,14 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Delete / Backspace — drop the selected layer.
+  // Delete / Backspace — drop all selected layers. history.deleteLayer
+  // also clears each id from uiStore.selectedLayerIds, so no explicit
+  // selection reset needed here.
   if (e.key === "Delete" || e.key === "Backspace") {
-    const id = useUiStore.getState().selectedLayerId;
-    if (!id) return;
+    const ids = useUiStore.getState().selectedLayerIds;
+    if (ids.length === 0) return;
     e.preventDefault();
-    history.deleteLayer(id);
-    useUiStore.getState().setSelectedLayerId(null);
+    for (const id of ids) history.deleteLayer(id);
     return;
   }
 
@@ -105,9 +106,9 @@ function handleKeydown(e: KeyboardEvent) {
       e.preventDefault();
       return;
     }
-    if (useUiStore.getState().selectedLayerId) {
+    if (useUiStore.getState().selectedLayerIds.length > 0) {
       e.preventDefault();
-      useUiStore.getState().setSelectedLayerId(null);
+      useUiStore.getState().setSelectedLayerIds([]);
     }
     const active = document.activeElement;
     if (active instanceof HTMLElement && active !== document.body) {

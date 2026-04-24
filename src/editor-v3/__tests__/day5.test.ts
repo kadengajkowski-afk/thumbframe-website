@@ -34,7 +34,7 @@ describe("viewport — pan, zoom, fit", () => {
   beforeEach(async () => {
     history._reset();
     useUiStore.setState({
-      selectedLayerId: null,
+      selectedLayerIds: [],
       isFitMode: true,
       zoomScale: 1,
       isHandMode: false,

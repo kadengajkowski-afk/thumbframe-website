@@ -52,6 +52,21 @@ export function LockClosedIcon() {
   );
 }
 
+export function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <path
+        d="M3 4 H11 M5.5 4 V2.5 h3 V4 M4 4 L4.5 12 a1 1 0 0 0 1 1 h3 a1 1 0 0 0 1 -1 L10 4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function LockOpenIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">

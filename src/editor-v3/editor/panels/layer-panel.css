@@ -124,3 +124,29 @@
 .layer-row__toggle--active {
   color: var(--accent-cream);
 }
+
+.layer-row__delete {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+  opacity: 0;
+  transition:
+    opacity var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
+}
+.layer-row:hover .layer-row__delete {
+  opacity: 1;
+}
+.layer-row__delete:hover {
+  color: var(--accent-cream);
+  background: var(--border-ghost);
+}

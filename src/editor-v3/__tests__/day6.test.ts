@@ -41,7 +41,7 @@ describe("RectTool", () => {
 
   beforeEach(() => {
     history._reset();
-    useUiStore.setState({ selectedLayerId: null, activeTool: "rect" });
+    useUiStore.setState({ selectedLayerIds: [], activeTool: "rect" });
     preview = new Container();
   });
 
@@ -98,7 +98,7 @@ describe("RectTool", () => {
 describe("SelectTool drag coalesces to one history entry", () => {
   beforeEach(() => {
     history._reset();
-    useUiStore.setState({ selectedLayerId: null, activeTool: "select" });
+    useUiStore.setState({ selectedLayerIds: [], activeTool: "select" });
   });
 
   it("full drag (down → move many → up) = 1 undo entry", () => {

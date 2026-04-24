@@ -6,6 +6,7 @@ import {
   EyeOffIcon,
   LockClosedIcon,
   LockOpenIcon,
+  TrashIcon,
 } from "./LayerPanel.icons";
 import "./layer-panel.css";
 
@@ -17,8 +18,8 @@ import "./layer-panel.css";
  */
 export function LayerPanel() {
   const layers = useDocStore((s) => s.layers);
-  const selectedLayerId = useUiStore((s) => s.selectedLayerId);
-  const setSelectedLayerId = useUiStore((s) => s.setSelectedLayerId);
+  const selectedIds = useUiStore((s) => s.selectedLayerIds);
+  const setSelectedLayerIds = useUiStore((s) => s.setSelectedLayerIds);
 
   return (
     <section className="layer-panel" aria-label="Layers" data-alive="layerpanel">
@@ -30,7 +31,7 @@ export function LayerPanel() {
       ) : (
         <ul className="layer-panel__list">
           {[...layers].reverse().map((layer) => {
-            const selected = layer.id === selectedLayerId;
+            const selected = selectedIds.includes(layer.id);
             const classes = [
               "layer-row",
               selected ? "layer-row--selected" : "",
@@ -38,6 +39,8 @@ export function LayerPanel() {
             ]
               .filter(Boolean)
               .join(" ");
+            const toggleSelect = () =>
+              setSelectedLayerIds(selected ? [] : [layer.id]);
             return (
               <li key={layer.id} style={{ listStyle: "none" }}>
                 <div
@@ -45,13 +48,11 @@ export function LayerPanel() {
                   role="button"
                   tabIndex={0}
                   aria-pressed={selected}
-                  onClick={() =>
-                    setSelectedLayerId(selected ? null : layer.id)
-                  }
+                  onClick={toggleSelect}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      setSelectedLayerId(selected ? null : layer.id);
+                      toggleSelect();
                     }
                   }}
                 >
@@ -73,6 +74,12 @@ export function LayerPanel() {
                     onClick={(e) => {
                       e.stopPropagation();
                       history.toggleLayerLock(layer.id);
+                    }}
+                  />
+                  <DeleteButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      history.deleteLayer(layer.id);
                     }}
                   />
                 </div>
@@ -131,6 +138,20 @@ function LockToggle({
       title={locked ? "Unlock layer" : "Lock layer"}
     >
       {locked ? <LockClosedIcon /> : <LockOpenIcon />}
+    </button>
+  );
+}
+
+function DeleteButton({ onClick }: ToggleProps) {
+  return (
+    <button
+      type="button"
+      className="layer-row__delete"
+      onClick={onClick}
+      aria-label="Delete layer"
+      title="Delete layer"
+    >
+      <TrashIcon />
     </button>
   );
 }
