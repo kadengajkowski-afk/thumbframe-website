@@ -42,6 +42,10 @@ type UiState = {
    * 'move' cursor on select-tool hover. */
   hoveredLayerId: string | null;
   setHoveredLayerId: (id: string | null) => void;
+
+  /** Day 10: command-palette open state. Cmd+K toggles. */
+  commandPaletteOpen: boolean;
+  setCommandPaletteOpen: (v: boolean) => void;
 };
 
 /** UI-only flags. Document state lives in docStore. Do not cross streams. */
@@ -69,4 +73,7 @@ export const useUiStore = create<UiState>()((set) => ({
 
   hoveredLayerId: null,
   setHoveredLayerId: (hoveredLayerId) => set({ hoveredLayerId }),
+
+  commandPaletteOpen: false,
+  setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
 }));

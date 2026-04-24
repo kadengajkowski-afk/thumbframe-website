@@ -10,6 +10,7 @@ import { DropZone } from "@/editor/DropZone";
 import { useDropTarget } from "@/editor/useDropTarget";
 import { ZoomIndicator } from "@/editor/ZoomIndicator";
 import { ToolPalette } from "@/editor/panels/ToolPalette";
+import { CommandPalette } from "@/editor/CommandPalette";
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 
@@ -30,6 +31,7 @@ export function App() {
         editor={<EditorShell />}
       />
       {dragActive && <DropZone />}
+      <CommandPalette />
       <ToastHost />
     </div>
   );

@@ -2,12 +2,12 @@ import { history } from "@/lib/history";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import { handleUploadedFile } from "@/lib/uploadFlow";
+import { runCommand } from "@/lib/commands";
 import { getCurrentCompositor } from "./compositorRef";
 
 // Per CLAUDE.md: exactly ONE global keydown listener for the whole editor.
-// v1 had four overlapping listeners; that was a steady source of bugs.
-// keyup + paste are separate event types, registered alongside so all
-// OS-input wiring lives in this one module.
+// Hotkeys dispatch via runCommand(id) where possible so the keyboard
+// and the command palette share a single source of truth.
 
 let installed = false;
 
@@ -29,78 +29,112 @@ function handleKeydown(e: KeyboardEvent) {
   if (isEditableTarget(e.target)) return;
 
   const meta = e.metaKey || e.ctrlKey;
+  const ui = useUiStore.getState();
 
-  // Zoom shortcuts. Cmd+= / Cmd+- / Cmd+0 / Cmd+1. Cmd+= also fires as
-  // "+" on some keyboards; accept both.
+  // Cmd+K / Ctrl+K → command palette (toggle). Works whether palette
+  // is open or closed.
+  if (meta && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    ui.setCommandPaletteOpen(!ui.commandPaletteOpen);
+    return;
+  }
+  // When the palette is open, let cmdk own the keyboard.
+  if (ui.commandPaletteOpen) return;
+
+  // Zoom shortcuts.
   if (meta && (e.key === "=" || e.key === "+")) {
     e.preventDefault();
-    getCurrentCompositor()?.zoomBy(1.2);
+    runCommand("view.zoom-in");
     return;
   }
   if (meta && e.key === "-") {
     e.preventDefault();
-    getCurrentCompositor()?.zoomBy(1 / 1.2);
+    runCommand("view.zoom-out");
     return;
   }
   if (meta && e.key === "0") {
     e.preventDefault();
-    getCurrentCompositor()?.fit(true);
+    runCommand("view.fit");
     return;
   }
   if (meta && e.key === "1") {
     e.preventDefault();
-    getCurrentCompositor()?.setZoomPercent(100, true);
+    runCommand("view.100");
     return;
   }
 
-  // Tool shortcuts — V/H/R. Skip when modifier keys are held (Cmd+V
-  // is paste) or when an editable target has focus (covered above).
+  // Tool shortcuts — V/H/R. Skip when modifier keys are held
+  // (Cmd+V is paste) or when an editable target has focus.
   if (!meta && !e.shiftKey && !e.altKey) {
     const k = e.key.toLowerCase();
-    if (k === "v" || k === "h" || k === "r") {
+    if (k === "v") {
       e.preventDefault();
-      const tool = k === "v" ? "select" : k === "h" ? "hand" : "rect";
-      useUiStore.getState().setTool(tool);
+      runCommand("tool.select");
       return;
     }
+    if (k === "h") {
+      e.preventDefault();
+      runCommand("tool.hand");
+      return;
+    }
+    if (k === "r") {
+      e.preventDefault();
+      runCommand("tool.rect");
+      return;
+    }
+  }
+
+  // Duplicate: Cmd+D.
+  if (meta && !e.shiftKey && e.key.toLowerCase() === "d") {
+    e.preventDefault();
+    runCommand("edit.duplicate");
+    return;
   }
 
   // Undo / redo.
   if (meta && e.key.toLowerCase() === "z") {
     e.preventDefault();
-    if (e.shiftKey) history.redo();
-    else history.undo();
+    if (e.shiftKey) runCommand("edit.redo");
+    else runCommand("edit.undo");
     return;
   }
   if (meta && e.key.toLowerCase() === "y") {
     e.preventDefault();
-    history.redo();
+    runCommand("edit.redo");
     return;
   }
 
-  // Space-hold → temporary hand mode. Skip key-repeat so we don't thrash
-  // the viewport plugin on every auto-repeat tick.
+  // Layer reorder: [ / ] (and Shift variants).
+  if (!meta && e.key === "[") {
+    e.preventDefault();
+    runCommand(e.shiftKey ? "layer.send-to-back" : "layer.send-backward");
+    return;
+  }
+  if (!meta && e.key === "]") {
+    e.preventDefault();
+    runCommand(e.shiftKey ? "layer.bring-to-front" : "layer.bring-forward");
+    return;
+  }
+
+  // Space-hold → temporary hand mode.
   if (e.code === "Space" && !e.repeat) {
     e.preventDefault();
     useUiStore.getState().setHandMode(true);
     return;
   }
 
-  // Delete / Backspace — drop all selected layers. history.deleteLayer
-  // also clears each id from uiStore.selectedLayerIds, so no explicit
-  // selection reset needed here.
+  // Delete / Backspace.
   if (e.key === "Delete" || e.key === "Backspace") {
     const ids = useUiStore.getState().selectedLayerIds;
     if (ids.length === 0) return;
     e.preventDefault();
-    for (const id of ids) history.deleteLayer(id);
+    runCommand("edit.delete");
     return;
   }
 
-  // Arrow-key nudge. Arrow = 1px, Shift+Arrow = 10px. Each press is
-  // a single history entry (even with multi-select) because we wrap
-  // in a stroke; holding the key produces one entry per auto-repeat
-  // keydown — that's what users expect from undo.
+  // Arrow nudge. One history entry per keypress (even with multi-
+  // select) via a wrapping stroke; holding produces one entry per
+  // auto-repeat keydown per spec.
   if (
     !meta &&
     (e.key === "ArrowUp" ||
@@ -115,11 +149,7 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Escape. First try to cancel an active tool drag (e.g. mid-draw
-  // rect). If there's nothing to cancel, clear selection and blur
-  // the focused element — otherwise the LayerPanel row that received
-  // the last click keeps its :focus ring, which reads as a lingering
-  // "highlight" after the canvas outline is gone. (Day 2 bug.)
+  // Escape — cancel active tool drag, else clear selection.
   if (e.key === "Escape") {
     if (getCurrentCompositor()?.cancelTool()) {
       e.preventDefault();
@@ -127,7 +157,7 @@ function handleKeydown(e: KeyboardEvent) {
     }
     if (useUiStore.getState().selectedLayerIds.length > 0) {
       e.preventDefault();
-      useUiStore.getState().setSelectedLayerIds([]);
+      runCommand("edit.deselect");
     }
     const active = document.activeElement;
     if (active instanceof HTMLElement && active !== document.body) {
@@ -140,7 +170,6 @@ function handleKeydown(e: KeyboardEvent) {
 function handleKeyup(e: KeyboardEvent) {
   if (e.code === "Space") {
     useUiStore.getState().setHandMode(false);
-    return;
   }
 }
 

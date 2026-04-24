@@ -1,0 +1,132 @@
+/* Command palette — centered modal over a dim backdrop. */
+
+.cmd-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 16, 0.7);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  z-index: 200;
+  animation: cmd-fade-in 120ms ease-out;
+}
+
+@keyframes cmd-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cmd {
+  width: min(600px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-space-2);
+  border: 1px solid var(--border-ghost);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  animation: cmd-rise 140ms var(--ease-standard);
+}
+
+@keyframes cmd-rise {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cmd__input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-ghost);
+  color: var(--text-primary);
+  font-size: 15px;
+  padding: 14px 18px;
+  outline: none;
+  font-family: var(--font-ui);
+}
+.cmd__input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.cmd__list {
+  overflow-y: auto;
+  max-height: 60vh;
+  padding: 6px;
+}
+
+.cmd__group {
+  padding: 6px 2px;
+}
+
+.cmd__group [cmdk-group-heading] {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 6px 10px 4px;
+}
+
+.cmd__empty {
+  padding: 22px 16px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-style: italic;
+  text-align: center;
+}
+
+.cmd__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.cmd__item[data-selected="true"] {
+  background: var(--accent-orange);
+  color: var(--bg-space-0);
+  border-color: var(--accent-orange);
+}
+
+.cmd__item[data-selected="true"] .cmd__hotkey {
+  color: var(--bg-space-0);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.cmd__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd__hotkey {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-ghost);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 12px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}

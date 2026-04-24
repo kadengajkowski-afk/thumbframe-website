@@ -149,6 +149,32 @@ export const history = {
     });
   },
 
+  /** Clone `id` into a new layer offset by +20px. Selects the dup.
+   * Returns the new layer's id (or null if `id` wasn't found). */
+  duplicateLayer(id: string): string | null {
+    const current = useDocStore.getState().layers;
+    const source = current.find((l) => l.id === id);
+    if (!source) return null;
+    const newId = nanoid();
+    // ImageLayer carries a non-plain ImageBitmap — share the same
+    // reference, which is fine because layers are append-only and we
+    // never mutate a bitmap through the layer.
+    const copy: Layer = {
+      ...source,
+      id: newId,
+      x: source.x + 20,
+      y: source.y + 20,
+      name: `${source.name} copy`,
+    };
+    commit(`Duplicate ${source.name}`, (layers) => {
+      const idx = layers.findIndex((l) => l.id === id);
+      if (idx < 0) return;
+      layers.splice(idx + 1, 0, copy);
+    });
+    useUiStore.getState().setSelectedLayerIds([newId]);
+    return newId;
+  },
+
   beginStroke(label: string) {
     if (openStroke) return;
     openStroke = { label, startLayers: useDocStore.getState().layers };
