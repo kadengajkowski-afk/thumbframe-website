@@ -138,6 +138,51 @@ export const history = {
     });
   },
 
+  setLayerFillColor(id: string, color: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "rect") l.color = color;
+    };
+    if (openStroke) mutate(run);
+    else commit("Fill color", run);
+  },
+
+  setLayerFillAlpha(id: string, alpha: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "rect") l.fillAlpha = alpha;
+    };
+    if (openStroke) mutate(run);
+    else commit("Fill alpha", run);
+  },
+
+  setLayerStrokeColor(id: string, color: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "rect") l.strokeColor = color;
+    };
+    if (openStroke) mutate(run);
+    else commit("Stroke color", run);
+  },
+
+  setLayerStrokeWidth(id: string, width: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "rect") l.strokeWidth = width;
+    };
+    if (openStroke) mutate(run);
+    else commit("Stroke width", run);
+  },
+
+  setLayerStrokeAlpha(id: string, alpha: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "rect") l.strokeAlpha = alpha;
+    };
+    if (openStroke) mutate(run);
+    else commit("Stroke alpha", run);
+  },
+
   reorderLayer(id: string, toIndex: number) {
     commit("Reorder layer", (layers) => {
       const from = layers.findIndex((l) => l.id === id);

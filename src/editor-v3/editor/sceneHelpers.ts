@@ -50,7 +50,15 @@ export function paintNode(node: Container, layer: Layer) {
     const g = node as Graphics;
     g.clear();
     g.rect(0, 0, layer.width, layer.height);
-    g.fill({ color: layer.color, alpha: 1 });
+    g.fill({ color: layer.color, alpha: layer.fillAlpha });
+    if (layer.strokeWidth > 0) {
+      g.stroke({
+        color: layer.strokeColor,
+        width: layer.strokeWidth,
+        alpha: layer.strokeAlpha,
+        alignment: 0.5,
+      });
+    }
     return;
   }
 

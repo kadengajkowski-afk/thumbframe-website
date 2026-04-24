@@ -24,6 +24,10 @@ function makeRect(id: string, overrides: Partial<{ x: number; y: number }> = {})
     hidden: false,
     locked: false,
     blendMode: "normal" as const,
+    fillAlpha: 1,
+    strokeColor: 0x000000,
+    strokeWidth: 0,
+    strokeAlpha: 1,
   };
 }
 
