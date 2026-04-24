@@ -23,6 +23,13 @@ type Entry = {
 let undoStack: Entry[] = [];
 let redoStack: Entry[] = [];
 
+// Stroke coalescing: `beginStroke` captures the layer list snapshot; any
+// history setters called while a stroke is open mutate docStore directly
+// (no undo entry per tick). `endStroke` pushes ONE entry covering the
+// full delta. Used by the opacity slider so dragging doesn't create 100
+// history entries.
+let openStroke: { label: string; startLayers: Layer[] } | null = null;
+
 function setLayers(next: Layer[]) {
   useDocStore.setState({ layers: next });
 }
@@ -35,6 +42,14 @@ function commit(label: string, mutator: (draft: Layer[]) => void) {
   undoStack.push({ patches, inverse, label });
   if (undoStack.length > MAX_HISTORY) undoStack.shift();
   redoStack = [];
+}
+
+// Used during an open stroke: applies the change to docStore without
+// pushing anything onto the history stacks.
+function mutate(mutator: (draft: Layer[]) => void) {
+  const current = useDocStore.getState().layers;
+  const [next] = produceWithPatches(current, mutator);
+  setLayers(next);
 }
 
 export const history = {
@@ -59,6 +74,37 @@ export const history = {
         layer.y = y;
       }
     });
+  },
+
+  setLayerOpacity(id: string, opacity: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l) l.opacity = opacity;
+    };
+    if (openStroke) mutate(run);
+    else commit("Opacity", run);
+  },
+
+  beginStroke(label: string) {
+    if (openStroke) return;
+    openStroke = { label, startLayers: useDocStore.getState().layers };
+  },
+
+  endStroke() {
+    if (!openStroke) return;
+    const { label, startLayers } = openStroke;
+    const endLayers = useDocStore.getState().layers;
+    openStroke = null;
+    if (startLayers === endLayers) return;
+    // Coarse patch: replace the full layer list. Fine for Cycle 1; we
+    // can emit per-field patches once more setters are stroke-aware.
+    const patches: Patch[] = [{ op: "replace", path: [], value: endLayers }];
+    const inverse: Patch[] = [
+      { op: "replace", path: [], value: startLayers },
+    ];
+    undoStack.push({ patches, inverse, label });
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack = [];
   },
 
   undo() {
@@ -87,6 +133,7 @@ export const history = {
   _reset() {
     undoStack = [];
     redoStack = [];
+    openStroke = null;
     setLayers([]);
   },
 };
