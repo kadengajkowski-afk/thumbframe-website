@@ -77,6 +77,53 @@ Promote to SCOPE.md only after 48 hours of consideration.
   Regression test: `__tests__/day3.test.tsx` "Escape nulls
   selectedLayerId and removes the outline."
 
+## Cycle 1 Day 5 — held back (date: 2026-04-23)
+
+- **Pixel grid overlay at 600%+ zoom.** SCOPE lists it as Day 5 work;
+  pulled out today because the new viewport needs a week of bake
+  before we layer a pattern renderer on top. Pattern: a Graphics or
+  a RenderTexture tiled over the canvas surface that only paints
+  when `viewport.scale.x >= 6`. Target Day 7 after the rect tool
+  lands (so we can eyeball pixel alignment on real rects).
+
+- **Constant-pixel selection outline.** Today the 2px cream outline
+  lives inside canvasGroup and scales with zoom — looks thin at 400%
+  and chunky at 25%. Fix: render outline on app.stage directly,
+  subscribe to `viewport.on('moved'|'zoomed')`, and project the
+  selected layer's world bounds to screen coords each frame. Not
+  worth today's budget — aesthetic, not functional.
+
+- **Initial-mount flicker when viewport is smaller than 1280×720.**
+  Pixi's first render fires before ResizeObserver's first callback,
+  so the canvas briefly shows the 1280×720 default. The manual
+  `compositor.resize()` call right after `app.canvas` append covers
+  the common case but a very large canvas on a very small laptop
+  can still flicker. Fix: hide the Pixi canvas until the first
+  ResizeObserver callback lands (`opacity: 0` → `1` on first tick).
+
+- **Space + left-drag prevents layer click interactions.** When
+  isHandMode is true, all three mouse buttons pan. Once tools land
+  Day 6, need to disable hand mode during an active tool drag (or
+  reserve Space for hand only, not overlay onto left). Defer until
+  the tool system makes the right abstraction obvious.
+
+- **Viewport decelerate feels too floaty at 0.1 scale.** When very
+  zoomed out and the user flings, the decelerate momentum carries
+  the viewport past the world bounds repeatedly. Consider tuning
+  `decelerate({ friction: 0.92 })` or adding a soft bounce at world
+  edges. Aesthetic.
+
+- **`viewport.animate()` does not update `uiStore.zoomScale` during
+  the animation** — it fires only `zoomed` events on completion in
+  the current pixi-viewport build, so the ZoomIndicator jumps rather
+  than counting up smoothly. Workaround: a requestAnimationFrame
+  loop while animating. Not important enough today.
+
+- **pixi-viewport peer version drift.** Installed 6.0.3 resolves
+  against pixi.js 8.16; compat works but the `events: EventSystem`
+  option is typed against PIXI v7's EventSystem class in some
+  paths. If we bump PIXI, retest viewport construction first.
+
 ## Cycle 1 Day 4 — held back (date: 2026-04-23)
 
 - **ImageBitmap.close() on layer removal.** Compositor destroys Sprite +
