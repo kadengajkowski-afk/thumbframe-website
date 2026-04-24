@@ -21,7 +21,7 @@ export function TopBar() {
           onClick={addTestRect}
           style={devBtn}
           data-testid="add-test-rect"
-          title="Dev shortcut — will be replaced by the Rectangle tool on Day 6"
+          title="Dev only — removed Day 6"
         >
           + Add test rect
         </button>
@@ -154,8 +154,9 @@ const devBtn: CSSProperties = {
   fontFamily: "var(--font-mono)",
   letterSpacing: "0.02em",
   cursor: "pointer",
+  opacity: 0.55,
   transition:
-    "color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard)",
+    "color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard)",
 };
 
 const shipItBtn: CSSProperties = {
