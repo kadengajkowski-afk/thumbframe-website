@@ -335,7 +335,16 @@ export class Compositor {
       }
     }
 
-    // Keep preview + selection on top of any newly-added layers.
+    // Pixi Container.addChild on an already-attached child moves it
+    // to the END. Re-attach every layer in docStore order so the
+    // scene-tree z-order matches the document (layers[0] = bottom,
+    // layers[N-1] = top). Without this, drag-reorder in LayerPanel
+    // updates docStore but not the visible stacking. Then preview +
+    // selection go on top.
+    for (const layer of layers) {
+      const node = this.layerNodes.get(layer.id);
+      if (node) this.canvasGroup.addChild(node);
+    }
     this.canvasGroup.addChild(this.toolPreview);
     for (const node of this.selectionNodes.values()) {
       this.canvasGroup.addChild(node);
