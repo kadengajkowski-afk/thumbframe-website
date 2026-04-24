@@ -8,6 +8,7 @@ import { ShipComingAlive } from "@/editor/transitions/ShipComingAlive";
 import { EmptyState } from "@/editor/EmptyState";
 import { DropZone } from "@/editor/DropZone";
 import { useDropTarget } from "@/editor/useDropTarget";
+import { ZoomIndicator } from "@/editor/ZoomIndicator";
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 
@@ -49,6 +50,7 @@ function EditorShell() {
         </aside>
         <main style={canvasSurface} data-alive="canvas">
           <CompositorHost />
+          <ZoomIndicator />
         </main>
         <ContextPanel />
       </div>
@@ -127,8 +129,9 @@ const canvasSurface: React.CSSProperties = {
   flex: 1,
   minWidth: 0,
   display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "var(--canvas-surface-dark)",
+  alignItems: "stretch",
+  justifyContent: "stretch",
+  background: "var(--bg-space-0)",
   overflow: "hidden",
+  position: "relative",
 };

@@ -1,0 +1,77 @@
+/* ZoomIndicator — bottom-right of the canvas surface. */
+
+.zoom-indicator {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 4;
+  font-family: var(--font-mono);
+}
+
+.zoom-indicator__display {
+  background: transparent;
+  border: 1px solid var(--border-ghost);
+  color: var(--text-tertiary);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+  min-width: 56px;
+  font-variant-numeric: tabular-nums;
+}
+.zoom-indicator__display:hover,
+.zoom-indicator__display[aria-expanded="true"] {
+  color: var(--text-primary);
+  background: var(--bg-space-2);
+  border-color: var(--border-ghost-hover);
+}
+
+.zoom-indicator__menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-space-2);
+  border: 1px solid var(--border-ghost);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 92px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+  animation: zoom-indicator-open 120ms var(--ease-standard) both;
+}
+
+@keyframes zoom-indicator-open {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.zoom-indicator__item {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+.zoom-indicator__item:hover {
+  background: var(--border-ghost);
+  color: var(--text-primary);
+}
