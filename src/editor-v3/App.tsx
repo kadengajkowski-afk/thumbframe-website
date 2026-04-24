@@ -56,7 +56,11 @@ function EditorShell() {
           style={leftRail}
           aria-label="Tool palette placeholder"
           data-alive="leftrail"
-        />
+        >
+          <span style={leftRailHint} aria-hidden="true">
+            Tools arriving Cycle 1 Day 5
+          </span>
+        </aside>
         <main style={canvasSurface} data-alive="canvas">
           <CompositorHost />
         </main>
@@ -162,9 +166,27 @@ const editorRow: React.CSSProperties = {
 };
 
 const leftRail: React.CSSProperties = {
-  width: 48,
-  background: "var(--rail-bg)",
-  borderRight: "1px solid var(--rail-border)",
+  width: 56,
+  background: "var(--bg-space-1)",
+  borderRight: "1px solid var(--border-ghost)",
+  position: "relative",
+  overflow: "hidden",
+};
+
+const leftRailHint: React.CSSProperties = {
+  position: "absolute",
+  top: 120,
+  left: "50%",
+  transform: "translateX(-50%) rotate(-90deg)",
+  transformOrigin: "center",
+  whiteSpace: "nowrap",
+  color: "var(--text-tertiary)",
+  opacity: 0.5,
+  fontFamily: "var(--font-mono)",
+  fontSize: 10,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  pointerEvents: "none",
 };
 
 const canvasSurface: React.CSSProperties = {
