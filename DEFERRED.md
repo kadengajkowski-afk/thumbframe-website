@@ -77,6 +77,53 @@ Promote to SCOPE.md only after 48 hours of consideration.
   Regression test: `__tests__/day3.test.tsx` "Escape nulls
   selectedLayerId and removes the outline."
 
+## Cycle 1 Day 4 — held back (date: 2026-04-23)
+
+- **ImageBitmap.close() on layer removal.** Compositor destroys Sprite +
+  Texture + TextureSource on reconcile, but the underlying ImageBitmap
+  that landed on the layer via `history.addImageLayer` is never
+  explicitly `.close()`d. GC reclaims eventually, but for a user who
+  adds + removes dozens of large images per session the deferred
+  release can spike memory. Wire a cleanup path once history start
+  evicting the redo stack on new commits.
+
+- **Real thumbnails in LayerPanel + ContextPanel rows.** Today image
+  layers show a space-to-navy gradient square. Proper thumbnails:
+  `createObjectURL(blob)` from the ImageBitmap → `<img src>` in the
+  swatch. Needs blob retention or re-encode, so paired with the
+  persistence work (Cycle 2).
+
+- **HEIC / HEIF support.** v1 had a Safari-only HEIC gate. v3 Day 4
+  rejects HEIC outright (MIME `image/heic` not in allowlist). Add
+  when demand surfaces — most YouTubers don't ship HEIC thumbs.
+
+- **Multi-file drop / multi-paste.** `firstImageFile` picks the first
+  image and ignores the rest. Batched add (with history coalescing)
+  is Cycle 2 territory — the UX question of "add four or replace
+  one" needs a decision first.
+
+- **Replace-existing-image flow.** Today every upload creates a new
+  layer. If a user drops onto a selected image layer, it should
+  probably replace the bitmap in place (preserving transform). Cycle
+  2 when image layers grow transform handles.
+
+- **Auto-size constants live in lib/history.ts.** `CANVAS_W`, `CANVAS_H`,
+  `CANVAS_FILL` are hardcoded. Move into docStore.canvas once
+  export + resize land (Cycle 2).
+
+- **Large-file decode progress.** 25MB files can take 500–1500ms to
+  decode on slower machines. No spinner today — the UI just stalls.
+  Add a "decoding…" toast or a skeleton placeholder layer if users
+  notice.
+
+- **Clipboard paste from Chrome DevTools focus.** If the focused
+  element is inside a DevTools panel or an iframe, `paste` events
+  land there, not on our window. Low-priority; real paste from Finder
+  / Preview / browser works.
+
+- **Duplicate deprecation noise in Vitest.** Still there (vite-react
+  plugin esbuild vs oxc). Not a Day 4 regression. Tracked Day 3.
+
 ## Cycle 1 Day 3 — held back (date: 2026-04-23)
 
 - **Self-hosted Inter + Geist Mono.** Day 3 loads both via Google

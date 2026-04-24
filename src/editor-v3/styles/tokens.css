@@ -91,3 +91,14 @@ button {
   outline-offset: 2px;
   border-radius: 3px;
 }
+
+/* Global utility keyframes. Named so inline `animation:` references
+ * resolve — e.g. DropZone's fade-in. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
