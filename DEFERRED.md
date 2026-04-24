@@ -51,21 +51,70 @@ Promote to SCOPE.md only after 48 hours of consideration.
   - `cmdk` — Day 10 (command palette)
   - `pixi-filters` — Cycle 2+ (filters)
 
-## Cycle 1 Day 3 — fix at start of day (date: 2026-04-23)
+## Cycle 1 Day 3 — fix at start of day (date: 2026-04-23) — RESOLVED
 
 - **Esc highlights the selected layer instead of clearing it.** Day 2
-  bug. `hotkeys.ts` calls `setSelectedLayerId(null)` on Escape, and
-  Compositor removes the outline when id is null — but in the browser
-  the observed behavior is the outline appearing/brightening on Esc,
-  not vanishing. Likely culprits: (a) Escape is being swallowed by a
-  focused `<button>` in LayerPanel whose native :focus ring reads as
-  "highlight," (b) StrictMode dev-only duplicate listener still bound
-  after a cancelled mount, or (c) Esc is re-firing the last click
-  because `button` elements treat Esc as activation in some browsers.
-  First move: reproduce in prod build (`npm run build && npm run
-  preview`) to rule out StrictMode, then add `e.stopPropagation()` +
-  blur the active element inside the Esc branch. Fix before any other
-  Day 3 work.
+  bug. Root cause (a): the LayerPanel row was a `<button>` and clicking
+  it left a native :focus ring that read as a lingering highlight even
+  after the canvas outline cleared. Fix in `hotkeys.ts` Esc branch:
+  blur the active element after nulling `selectedLayerId`. LayerPanel
+  was also refactored to a `role="button"` div in Day 3 Step 7, which
+  side-steps the specific :focus style that triggered the confusion.
+  Regression test: `__tests__/day3.test.tsx` "Escape nulls
+  selectedLayerId and removes the outline."
+
+## Cycle 1 Day 3 — held back (date: 2026-04-23)
+
+- **Self-hosted Inter + Geist Mono.** Day 3 loads both via Google
+  Fonts `<link>` so we get variable-weight quickly. For EU privacy +
+  offline dev, bundle the woff2 under `/fonts/` with `font-display:
+  swap` and drop the Google preconnect. Size-wise: Inter variable
+  (300–700) ≈ 60KB woff2; Geist Mono (400–600) ≈ 40KB woff2. Do the
+  self-host pass once the font pairing is settled.
+
+- **Stroke coalescing granularity.** `history.endStroke()` emits a
+  single replace-patch covering the full layers array. Correct but
+  wasteful — the diff is "layer X opacity 0.42 → 0.66." Emit per-
+  field patches when more stroke-aware setters arrive (position
+  drag, resize, color picker scrub). Day 6–8 territory.
+
+- **Opacity slider via keyboard arrows creates one history entry
+  per keystroke.** Arrow keys on a range input don't fire pointer
+  events, so `beginStroke`/`endStroke` never wrap them. Either (a)
+  wrap in keydown→beginStroke and use a debounced idle-timer to
+  endStroke, or (b) treat each arrow press as its own commit (what
+  happens today). Low-priority; Day 9 when the contextual panel grows
+  more scrubbable fields.
+
+- **`IS_REACT_ACT_ENVIRONMENT` warning in tests.** Vitest browser
+  mode doesn't set the global that React 18/19 looks for to consider
+  the runner an "act-safe" environment. Tests still pass — warnings
+  are noise. One-line fix in a vitest setup file:
+  `globalThis.IS_REACT_ACT_ENVIRONMENT = true;`
+
+- **Canvas scale animation scales the container, not the pixi
+  canvas itself.** The 0.95 → 1.0 scale is applied to the `<main>`
+  wrapper; the Pixi `<canvas>` sits inside at a fixed 1280×720 and
+  the wrapper's transform scales it visually. Good enough for a
+  first-paint animation. Once pan/zoom lands Day 5 we'll want the
+  scale to target the viewport transform instead so it composes
+  with user zoom.
+
+- **"+ Add test rect" button removal.** Still slated for Day 6 when
+  the left-rail Rectangle tool ships. Data-testid is in place so a
+  smoke test can grep for it in the meantime.
+
+- **Color picker.** Scheduled Day 9. Today the ContextPanel fill
+  swatch is a non-interactive button with a title hint.
+
+- **Lock enforcement in tools.** `layer.locked` is recorded but no
+  tool blocks on it yet (there are no tools). Select / Rect tools
+  on Day 5–7 need to consult `locked` before starting a drag.
+
+- **Dead token aliases in `tokens.css`.** `--text-1/2/3`, `--rail-bg`,
+  `--rail-border`, `--ease-out`, `--motion-fast-old` are there for
+  back-compat with any stragglers. Audit after Day 5 and delete
+  anything no code reads.
 
 ## Cycle 1 Day 2 — held back (date: 2026-04-23)
 
