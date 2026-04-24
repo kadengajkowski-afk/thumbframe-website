@@ -83,13 +83,15 @@ export const history = {
   },
 
   moveLayer(id: string, x: number, y: number) {
-    commit("Move layer", (layers) => {
+    const run = (layers: Layer[]) => {
       const layer = layers.find((l) => l.id === id);
       if (layer) {
         layer.x = x;
         layer.y = y;
       }
-    });
+    };
+    if (openStroke) mutate(run);
+    else commit("Move layer", run);
   },
 
   setLayerOpacity(id: string, opacity: number) {
