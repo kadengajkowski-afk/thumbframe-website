@@ -17,6 +17,67 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 Day 11 — held back (date: 2026-04-24)
+
+- **Selection outline stays axis-aligned for ellipses.** Today the
+  cream selection rectangle is the bounding box of the ellipse. Reads
+  fine because the box is exactly the layer's `width × height`, but a
+  rounded outline that hugs the ellipse itself would feel a touch
+  more "of the shape". Fix: in `paintSelectionOutline`, branch on
+  layer.type and draw .ellipse(...) with the same SELECTION_PAD. Held
+  back because rotation lands later (Cycle 2+) and the outline math
+  needs a rotation pass anyway — fold both into one polish commit.
+
+- **Hit-testing on the ellipse uses the bounding box, not the path.**
+  The Pixi Graphics' default hit-test treats the rendered region as
+  hittable, but a click in the corner of the bounding box (outside
+  the inscribed ellipse) still selects the layer because the layer
+  node's transform/eventMode lights up the whole bounds. To get
+  pixel-accurate hits, set `hitArea = new Ellipse(rx, ry, rx, ry)`
+  on the node in `createNode`. Skipped today because (a) Day 11 only
+  needs draw + render, (b) rect uses bounds-hit too so the behavior
+  is consistent with the existing tool, and (c) the cleaner ellipse
+  hitArea will need touching when rotation lands anyway.
+
+- **EllipseTool / RectTool share ~100 lines of resolveBox + draft
+  state.** Both tools click-drag a bounding box, support Shift = lock
+  ratio, Alt = from center. A `BoxDraftTool` mixin or a function-style
+  helper that emits the ToolCtx → box could cut this. Held back
+  because (a) two implementations is still fine, the rule of three
+  hasn't fired, (b) text tool (Day 12) uses the same pattern but with
+  font-aware sizing — wait until then to see the seam. Premature
+  abstraction risk.
+
+- **No center-marker visualization for Alt-from-center.** Same as
+  RectTool's DEFERRED note from Day 6 — Alt+drag expands from the
+  initial click but without a visible anchor dot the user can't tell
+  it's working. Bundle the fix with the rect tool's center-marker.
+
+- **Ellipse Graphics may not RenderGroup-wrap for advanced blend
+  modes.** Day 8 Bug 2 (still open in DEFERRED) — advanced blend
+  modes silently fall back to normal because rect Graphics aren't
+  RenderGroups. Ellipse inherits the same path. When the rect fix
+  lands (try `isRenderGroup = true` on the layer node), apply it to
+  ellipse in the same commit since both go through createNode's
+  Graphics branch.
+
+- **Layer panel ellipse swatch is a CSS circle, not a true ellipse
+  preview.** Today the swatch is a 16×16 round disc filled with the
+  layer color. If the user drew a 4:1 wide ellipse, the swatch still
+  reads as a circle. Real preview would need an SVG with the actual
+  width/height ratio. Cycle 2 polish.
+
+- **Keep the "Add ellipse" command palette entry deferred.** Today
+  the palette only exposes `tool.ellipse` (switches to the tool).
+  An `layer.add-ellipse` parallel to `layer.add-rect` would spawn a
+  centered 100×100 ellipse on Enter. Add when it's clear users want
+  that workflow — for now the tool flow + click-drag is fewer steps.
+
+- **No constrained ratio beyond 1:1.** Shift = circle today. A
+  golden-ratio or 16:9 constraint would be useful for thumbnail
+  framing but isn't worth the modifier-key real estate. Wait for
+  user signal.
+
 ## Cycle 1 Day 1 — held back (date: 2026-04-23)
 
 - **Animated nebula background.** Day 1 ships a CSS layered-radial-gradient
