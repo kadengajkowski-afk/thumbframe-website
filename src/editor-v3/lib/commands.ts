@@ -109,6 +109,7 @@ const COMMANDS: Command[] = [
   { id: "tool.hand", label: "Hand tool", section: "Tools", hotkey: "H", aliases: ["pan"], run: () => useUiStore.getState().setTool("hand") },
   { id: "tool.rect", label: "Rectangle tool", section: "Tools", hotkey: "R", aliases: ["square"], run: () => useUiStore.getState().setTool("rect") },
   { id: "tool.ellipse", label: "Ellipse tool", section: "Tools", hotkey: "O", aliases: ["circle", "oval"], run: () => useUiStore.getState().setTool("ellipse") },
+  { id: "tool.text", label: "Text tool", section: "Tools", hotkey: "T", aliases: ["text", "type", "letter"], run: () => useUiStore.getState().setTool("text") },
 
   // Edit
   { id: "edit.undo", label: "Undo", section: "Edit", hotkey: "Cmd+Z", run: () => history.undo() },

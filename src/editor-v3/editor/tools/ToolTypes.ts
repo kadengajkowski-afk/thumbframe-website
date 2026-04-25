@@ -12,7 +12,9 @@ export type ToolCtx = {
   shift: boolean;
   alt: boolean;
   meta: boolean;
-  detail: number;
+  /** MouseEvent.detail (click count). Optional — older tools don't
+   * read it; defaults to 1 when missing. */
+  detail?: number;
   target: Container | null;
   preview: Container;
 };

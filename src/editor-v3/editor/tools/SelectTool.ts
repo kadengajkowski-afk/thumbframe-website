@@ -47,7 +47,7 @@ class SelectToolImpl implements Tool {
     // Double-click on a text layer enters inline-edit mode. Skip the
     // drag — the textarea overlay takes over until the user commits
     // or cancels.
-    if (ctx.detail >= 2 && layer.type === "text") {
+    if ((ctx.detail ?? 1) >= 2 && layer.type === "text") {
       ui.setEditingTextLayerId(hitLayerId);
       this.drag = null;
       return;

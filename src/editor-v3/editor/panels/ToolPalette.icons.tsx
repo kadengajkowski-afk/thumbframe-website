@@ -9,6 +9,7 @@ export function ToolIcon({ id }: { id: ToolId }) {
   if (id === "select") return <SelectIcon />;
   if (id === "hand") return <HandIcon />;
   if (id === "ellipse") return <EllipseIcon />;
+  if (id === "text") return <TextIcon />;
   return <RectIcon />;
 }
 
@@ -65,6 +66,25 @@ function RectIcon() {
         fill="none"
         stroke="currentColor"
         strokeWidth="1.4"
+      />
+    </svg>
+  );
+}
+
+function TextIcon() {
+  return (
+    <svg
+      width={ICON_SIZE}
+      height={ICON_SIZE}
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+    >
+      <path
+        d="M3 5 H17 M10 5 V16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
       />
     </svg>
   );

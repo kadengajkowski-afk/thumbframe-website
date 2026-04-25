@@ -62,12 +62,14 @@ function ActiveEditor({ layerId }: { layerId: string }) {
 
   // Re-paint when the font lands so the textarea metrics line up
   // with the rendered Pixi text after commit.
+  const fontFamily = layer && layer.type === "text" ? layer.fontFamily : null;
+  const fontWeight = layer && layer.type === "text" ? layer.fontWeight : null;
   useEffect(() => {
-    if (!layer || layer.type !== "text") return;
-    void ensureFontLoaded(layer.fontFamily, layer.fontWeight).then(() => {
+    if (!fontFamily || fontWeight == null) return;
+    void ensureFontLoaded(fontFamily, fontWeight).then(() => {
       setTick((n) => n + 1);
     });
-  }, [layer?.fontFamily, layer?.fontWeight]);
+  }, [fontFamily, fontWeight]);
 
   if (!layer || layer.type !== "text") return null;
 
