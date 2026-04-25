@@ -56,7 +56,7 @@ function EditorShell() {
 }
 
 type CursorShape = {
-  activeTool: "select" | "hand" | "rect";
+  activeTool: "select" | "hand" | "rect" | "ellipse";
   isHandMode: boolean;
   isPanActive: boolean;
   hoveredLayerId: string | null;
