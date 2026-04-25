@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent, type CSSProperties } from "react";
+import { type CSSProperties } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { handleUploadedFile } from "@/lib/uploadFlow";
 
@@ -7,35 +7,40 @@ import { handleUploadedFile } from "@/lib/uploadFlow";
  * a secondary link starts a blank canvas. Drag-drop and paste work here
  * too — the window-level handlers in App route through the same upload
  * flow regardless of whether this component is mounted.
+ *
+ * The file input is created-on-click via DOM, NOT a persistent
+ * <input ref={...} />. Day 12 introduced a (still-unidentified)
+ * regression where the persistent-input pattern + .click() failed to
+ * open the OS picker — the user-gesture chain was breaking somewhere
+ * between the React onClick fire and the ref's input.click(). The
+ * createElement-then-click pattern (same one used by the command-
+ * palette upload that DID keep working through Day 12) does not have
+ * the regression. Keep both empty-state and palette uploads on the
+ * same path so a single fix covers both.
  */
 export function EmptyState() {
   const setHasEntered = useUiStore((s) => s.setHasEntered);
-  const fileRef = useRef<HTMLInputElement>(null);
 
-  const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    // Clear the input so picking the same file twice still fires.
-    e.target.value = "";
-    if (file) await handleUploadedFile(file);
-  };
+  function openPicker() {
+    if (typeof document === "undefined") return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/png,image/jpeg,image/webp,image/gif";
+    input.style.display = "none";
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      input.remove();
+      if (file) await handleUploadedFile(file);
+    });
+    document.body.appendChild(input);
+    input.click();
+  }
 
   return (
     <div style={wrap}>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
-        onChange={onPick}
-        style={{ display: "none" }}
-        aria-hidden="true"
-      />
       <button
         type="button"
-        onClick={() => {
-          console.log("[ES/uploadBtn] clicked, fileRef=", !!fileRef.current);
-          fileRef.current?.click();
-          console.log("[ES/uploadBtn] post-click() dispatched");
-        }}
+        onClick={openPicker}
         style={uploadTarget}
         aria-label="Upload to set sail — opens file picker"
       >

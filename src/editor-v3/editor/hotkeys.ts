@@ -184,7 +184,6 @@ function handleKeyup(e: KeyboardEvent) {
 }
 
 function handlePaste(e: ClipboardEvent) {
-  console.log("[PASTE] target=", (e.target as HTMLElement)?.tagName, "items=", e.clipboardData?.items?.length);
   const items = e.clipboardData?.items;
   if (!items) return;
   for (let i = 0; i < items.length; i++) {

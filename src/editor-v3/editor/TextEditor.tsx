@@ -23,8 +23,6 @@ export function TextEditor() {
   const layer = useDocStore((d) =>
     d.layers.find((l) => l.id === editingId && l.type === "text"),
   );
-  // DIAGNOSTIC — remove after bug closed.
-  console.log("[TE/render] editingId=", editingId, "layerFound=", !!layer);
   if (!editingId || !layer || layer.type !== "text") return null;
   return <ActiveEditor key={editingId} layerId={editingId} />;
 }
@@ -57,11 +55,9 @@ function ActiveEditor({ layerId }: { layerId: string }) {
   // something") is fully selected — first keystroke replaces it.
   useLayoutEffect(() => {
     const ta = taRef.current;
-    console.log("[TE/useLayoutEffect] ta=", !!ta);
     if (!ta) return;
     ta.focus();
     ta.select();
-    console.log("[TE/useLayoutEffect] focus called, activeElement=", document.activeElement?.tagName, "isTa=", document.activeElement === ta);
   }, []);
 
   // Re-paint when the font lands so the textarea metrics line up
@@ -83,7 +79,6 @@ function ActiveEditor({ layerId }: { layerId: string }) {
   const scale = compositor.viewportScale;
 
   function commit() {
-    console.log("[TE/commit] called", new Error().stack);
     const trimmed = draft.trim();
     const original = layer && layer.type === "text" ? layer.text : "";
     const ui = useUiStore.getState();
@@ -96,7 +91,6 @@ function ActiveEditor({ layerId }: { layerId: string }) {
   }
 
   function cancel() {
-    console.log("[TE/cancel] called", new Error().stack);
     // Cancel mirrors commit but doesn't push the draft. If the layer
     // still has the placeholder text from a fresh placement, dropping
     // it tidies up — otherwise leave the original untouched.
@@ -105,6 +99,33 @@ function ActiveEditor({ layerId }: { layerId: string }) {
     if (layer && layer.type === "text" && layer.text === PLACEHOLDER_TEXT_VALUE) {
       history.deleteLayer(layerId);
     }
+  }
+
+  /** Day 12 bug: the original click that placed the text was still
+   * resolving when the textarea mounted + focused. The Pixi canvas's
+   * pointer-event flow caused focus to bounce back to body in the same
+   * tick, firing onBlur on the freshly mounted textarea, which fired
+   * commit(), which cleared editingTextLayerId, which unmounted the
+   * textarea — all before the user could press a key.
+   *
+   * Fix: gate commit on relatedTarget. If focus jumped to body / null
+   * (phantom blur from canvas / Pixi event chain), refocus the textarea
+   * instead of committing. Real user-driven blurs (clicking the font
+   * dropdown, the layer panel, etc.) carry a non-null relatedTarget. */
+  function onBlurGuarded(e: React.FocusEvent<HTMLTextAreaElement>) {
+    const next = e.relatedTarget as HTMLElement | null;
+    const inEditor = next && (
+      next === taRef.current || taRef.current?.contains(next)
+    );
+    if (inEditor) return;
+    if (!next) {
+      // Phantom blur — refocus on next microtask so the canvas's
+      // event chain finishes first.
+      const ta = taRef.current;
+      if (ta) queueMicrotask(() => ta.focus());
+      return;
+    }
+    commit();
   }
 
   const style: CSSProperties = {
@@ -143,7 +164,7 @@ function ActiveEditor({ layerId }: { layerId: string }) {
       ref={taRef}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
+      onBlur={onBlurGuarded}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
