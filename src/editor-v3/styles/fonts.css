@@ -1,0 +1,56 @@
+/* Day 12: 6 OFL display fonts bundled in /public/fonts. Latin subset
+ * only (the 25-30 font expansion + extended Unicode subsets land
+ * Day 13). License: see /fonts/OFL.txt.
+ *
+ * font-display: block — flash of fallback while a user is typing into
+ * a text layer would be jarring. We accept the brief blank-then-render
+ * because the textarea overlay shows what they're typing, and the Pixi
+ * Text node behind it stays alpha=0 during the edit. */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: block;
+  src: url("/fonts/Inter.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Anton";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/Anton.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Bebas Neue";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/BebasNeue.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Archivo Black";
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+  src: url("/fonts/ArchivoBlack.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: block;
+  src: url("/fonts/Oswald.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Permanent Marker";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/PermanentMarker.woff2") format("woff2");
+}
