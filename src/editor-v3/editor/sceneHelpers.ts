@@ -3,9 +3,13 @@ import {
   Graphics,
   ImageSource,
   Sprite,
+  Text,
+  TextStyle,
   Texture,
 } from "pixi.js";
-import type { Layer } from "@/state/types";
+import { ensureFontLoaded } from "@/lib/fonts";
+import { history } from "@/lib/history";
+import type { Layer, TextLayer } from "@/state/types";
 
 /** Helpers split out of Compositor so the class body stays under
  * the 400-line file ceiling as the tool-dispatch wiring grows. */
@@ -18,6 +22,7 @@ export function matchesType(node: Container, layer: Layer): boolean {
   if (layer.type === "rect" || layer.type === "ellipse") {
     return node instanceof Graphics;
   }
+  if (layer.type === "text") return node instanceof Text;
   return node instanceof Sprite;
 }
 
@@ -27,6 +32,13 @@ export function createNode(layer: Layer): Container {
     g.label = `layer:${layer.id}`;
     g.eventMode = "static";
     return g;
+  }
+  if (layer.type === "text") {
+    const t = new Text({ text: layer.text, style: textStyle(layer) });
+    t.label = `layer:${layer.id}`;
+    t.eventMode = "static";
+    t.resolution = 2;
+    return t;
   }
   // OffscreenCanvas → ImageSource → Texture — the path v1 proved against
   // PixiJS v8's batcher. Texture.from(bitmap) can report alphaMode:null
@@ -73,9 +85,67 @@ export function paintNode(node: Container, layer: Layer) {
     return;
   }
 
+  if (layer.type === "text") {
+    const t = node as Text;
+    t.text = layer.text;
+    t.style = textStyle(layer);
+    // Auto-resize: write the rendered bounds back into docStore so
+    // selection / drag / hit-test all use the actual text dimensions.
+    // Width/height changes are non-history (derived state) — see
+    // history.setLayerSize.
+    const w = Math.ceil(t.width);
+    const h = Math.ceil(t.height);
+    if (w !== layer.width || h !== layer.height) {
+      history.setLayerSize(layer.id, w, h);
+    }
+    // First-render-with-fallback guard: if the font isn't loaded yet,
+    // kick the load and re-paint when it lands. Cached, so this is
+    // a no-op after the first hit per font+weight.
+    if (
+      typeof document !== "undefined" &&
+      document.fonts &&
+      !document.fonts.check(`${layer.fontWeight} 16px "${layer.fontFamily}"`)
+    ) {
+      ensureFontLoaded(layer.fontFamily, layer.fontWeight).then(() => {
+        // Re-style on the loaded face. We're outside the reconcile loop
+        // so build a fresh TextStyle on the same node.
+        if (!t.destroyed) {
+          t.style = textStyle(layer);
+          const w2 = Math.ceil(t.width);
+          const h2 = Math.ceil(t.height);
+          if (w2 !== layer.width || h2 !== layer.height) {
+            history.setLayerSize(layer.id, w2, h2);
+          }
+        }
+      });
+    }
+    return;
+  }
+
   const s = node as Sprite;
   s.width = layer.width;
   s.height = layer.height;
+}
+
+function textStyle(layer: TextLayer): TextStyle {
+  const opts: ConstructorParameters<typeof TextStyle>[0] = {
+    fontFamily: [layer.fontFamily, "system-ui", "sans-serif"],
+    fontSize: layer.fontSize,
+    fontWeight: String(layer.fontWeight) as TextStyle["fontWeight"],
+    fontStyle: layer.fontStyle,
+    align: layer.align,
+    fill: { color: layer.color, alpha: layer.fillAlpha },
+    lineHeight: layer.lineHeight * layer.fontSize,
+    letterSpacing: layer.letterSpacing,
+  };
+  if (layer.strokeWidth > 0) {
+    opts.stroke = {
+      color: layer.strokeColor,
+      width: layer.strokeWidth,
+      alpha: layer.strokeAlpha,
+    };
+  }
+  return new TextStyle(opts);
 }
 
 export function destroyNode(node: Container) {

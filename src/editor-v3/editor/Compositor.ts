@@ -12,15 +12,12 @@ import { Viewport } from "pixi-viewport";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import type { Layer } from "@/state/types";
+import { clamp, findLayerId } from "./sceneHelpers";
 import {
-  clamp,
-  createNode,
-  destroyNode,
-  findLayerId,
-  matchesType,
-  paintNode,
-  paintSelectionOutline,
-} from "./sceneHelpers";
+  reconcileLayers,
+  refreshSelectionStroke,
+  renderSelection,
+} from "./sceneReconcile";
 import { buildScene } from "./buildScene";
 import { TOOLS_BY_ID } from "./tools/tools";
 import type { Tool } from "./tools/ToolTypes";
@@ -111,6 +108,7 @@ export class Compositor {
     );
     this.unsubscribeUi = useUiStore.subscribe((state, prev) => {
       if (state.selectedLayerIds !== prev.selectedLayerIds) this.render();
+      if (state.editingTextLayerId !== prev.editingTextLayerId) this.render();
       const prevHand = prev.isHandMode || prev.activeTool === "hand";
       const nextHand = state.isHandMode || state.activeTool === "hand";
       if (prevHand !== nextHand) {
@@ -198,6 +196,24 @@ export class Compositor {
     useUiStore.setState({ zoomScale: scale });
     this.refreshSelectionStroke();
     this.updatePixelGrid();
+  }
+
+  /** Project a canvas-local point (0..CANVAS_W, 0..CANVAS_H) into
+   * screen-space (CSS pixels relative to the viewport canvas). Used
+   * by the inline text editor to position a DOM <textarea> on top of
+   * the live Pixi node. */
+  canvasToScreen(point: { x: number; y: number }): { x: number; y: number } {
+    const screen = this.viewport.toScreen(
+      point.x + CANVAS_ORIGIN_X,
+      point.y + CANVAS_ORIGIN_Y,
+    );
+    return { x: screen.x, y: screen.y };
+  }
+
+  /** Returns the current viewport scale — DOM overlays multiply by
+   * this to size text correctly at any zoom. */
+  get viewportScale(): number {
+    return this.viewport.scale.x;
   }
 
   /** Returns true if there was an active drag to cancel. */
@@ -289,105 +305,35 @@ export class Compositor {
   }
 
   private render() {
-    this.reconcileLayers(useDocStore.getState().layers);
-    this.renderSelection(useUiStore.getState().selectedLayerIds);
+    const ui = useUiStore.getState();
+    reconcileLayers(this.scene(), useDocStore.getState().layers, ui.editingTextLayerId);
+    renderSelection(
+      this.scene(),
+      this.viewport,
+      useDocStore.getState().layers,
+      ui.selectedLayerIds,
+      SELECTION_WIDTH,
+    );
   }
 
-  private reconcileLayers(layers: Layer[]) {
-    const seenIds = new Set<string>();
-
-    for (const layer of layers) {
-      seenIds.add(layer.id);
-      let node = this.layerNodes.get(layer.id);
-
-      if (layer.hidden) {
-        if (node) {
-          destroyNode(node);
-          this.layerNodes.delete(layer.id);
-        }
-        continue;
-      }
-
-      if (node && !matchesType(node, layer)) {
-        destroyNode(node);
-        this.layerNodes.delete(layer.id);
-        node = undefined;
-      }
-
-      if (!node) {
-        node = createNode(layer);
-        this.layerNodes.set(layer.id, node);
-        this.canvasGroup.addChild(node);
-      }
-
-      paintNode(node, layer);
-    }
-
-    for (const [id, node] of this.layerNodes) {
-      if (!seenIds.has(id)) {
-        destroyNode(node);
-        this.layerNodes.delete(id);
-      }
-    }
-
-    // Re-attach layers in docStore order so Pixi render order tracks
-    // drag-reorder. addChild on an already-attached child moves it
-    // to the END. Preview + selection go last so they stay on top.
-    for (const layer of layers) {
-      const node = this.layerNodes.get(layer.id);
-      if (node) this.canvasGroup.addChild(node);
-    }
-    this.canvasGroup.addChild(this.toolPreview);
-    for (const node of this.selectionNodes.values()) {
-      this.canvasGroup.addChild(node);
-    }
-  }
-
-  private renderSelection(ids: string[]) {
-    const layers = useDocStore.getState().layers;
-    const want = new Set(ids);
-
-    // Drop outlines for ids no longer selected.
-    for (const [id, node] of this.selectionNodes) {
-      if (!want.has(id)) {
-        node.destroy();
-        this.selectionNodes.delete(id);
-      }
-    }
-
-    const strokeWidth = SELECTION_WIDTH / this.viewport.scale.x;
-    for (const id of ids) {
-      const layer = layers.find((l) => l.id === id);
-      if (!layer || layer.hidden) {
-        const stale = this.selectionNodes.get(id);
-        if (stale) {
-          stale.destroy();
-          this.selectionNodes.delete(id);
-        }
-        continue;
-      }
-      let node = this.selectionNodes.get(id);
-      if (!node) {
-        node = new Graphics();
-        node.label = "selection-outline";
-        node.eventMode = "none";
-        this.canvasGroup.addChild(node);
-        this.selectionNodes.set(id, node);
-      }
-      paintSelectionOutline(node, layer, strokeWidth);
-    }
+  private scene() {
+    return {
+      layerNodes: this.layerNodes,
+      selectionNodes: this.selectionNodes,
+      canvasGroup: this.canvasGroup,
+      toolPreview: this.toolPreview,
+    };
   }
 
   /** Called on viewport zoom changes. Redraws outlines with a new
    * stroke width so the outline always reads as 2 screen-pixels. */
   private refreshSelectionStroke() {
-    const layers = useDocStore.getState().layers;
-    const strokeWidth = SELECTION_WIDTH / this.viewport.scale.x;
-    for (const [id, node] of this.selectionNodes) {
-      const layer = layers.find((l) => l.id === id);
-      if (!layer) continue;
-      paintSelectionOutline(node, layer, strokeWidth);
-    }
+    refreshSelectionStroke(
+      this.scene(),
+      this.viewport,
+      useDocStore.getState().layers,
+      SELECTION_WIDTH,
+    );
   }
 
   /** Fade the pixel grid in/out based on the current zoom threshold. */

@@ -1,12 +1,18 @@
 import { create } from "zustand";
 import { normalizeHex } from "@/lib/color";
 
-export type Tool = "select" | "hand" | "rect" | "ellipse";
+export type Tool = "select" | "hand" | "rect" | "ellipse" | "text";
 
 const RECENT_COLORS_KEY = "thumbframe:recent-colors";
 const LAST_FILL_KEY = "thumbframe:last-fill";
+const LAST_FONT_FAMILY_KEY = "thumbframe:last-font-family";
+const LAST_FONT_SIZE_KEY = "thumbframe:last-font-size";
+const LAST_FONT_WEIGHT_KEY = "thumbframe:last-font-weight";
 const MAX_RECENT = 8;
 const DEFAULT_FILL = "#F97316";
+const DEFAULT_FONT_FAMILY = "Inter";
+const DEFAULT_FONT_SIZE = 96;
+const DEFAULT_FONT_WEIGHT = 700;
 
 type UiState = {
   hasEntered: boolean;
@@ -46,6 +52,22 @@ type UiState = {
   /** Day 10: command-palette open state. Cmd+K toggles. */
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (v: boolean) => void;
+
+  /** Day 12: id of the text layer currently in inline-edit mode.
+   * Compositor reads this to alpha-out the Pixi node while the
+   * positioned <textarea> overlay covers it. Null = no edit. */
+  editingTextLayerId: string | null;
+  setEditingTextLayerId: (id: string | null) => void;
+
+  /** Day 12: most-recent font + weight + size, persisted to local-
+   * storage so newly placed text layers pick up where the user left
+   * off (parallels lastFillColor). */
+  lastFontFamily: string;
+  setLastFontFamily: (family: string) => void;
+  lastFontSize: number;
+  setLastFontSize: (size: number) => void;
+  lastFontWeight: number;
+  setLastFontWeight: (weight: number) => void;
 };
 
 /** UI-only flags. Document state lives in docStore. Do not cross streams. */
@@ -97,7 +119,55 @@ export const useUiStore = create<UiState>()((set) => ({
 
   commandPaletteOpen: false,
   setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
+
+  editingTextLayerId: null,
+  setEditingTextLayerId: (editingTextLayerId) => set({ editingTextLayerId }),
+
+  lastFontFamily: loadString(LAST_FONT_FAMILY_KEY, DEFAULT_FONT_FAMILY),
+  setLastFontFamily: (family) => {
+    persistString(LAST_FONT_FAMILY_KEY, family);
+    set({ lastFontFamily: family });
+  },
+  lastFontSize: loadNumber(LAST_FONT_SIZE_KEY, DEFAULT_FONT_SIZE),
+  setLastFontSize: (size) => {
+    persistString(LAST_FONT_SIZE_KEY, String(size));
+    set({ lastFontSize: size });
+  },
+  lastFontWeight: loadNumber(LAST_FONT_WEIGHT_KEY, DEFAULT_FONT_WEIGHT),
+  setLastFontWeight: (weight) => {
+    persistString(LAST_FONT_WEIGHT_KEY, String(weight));
+    set({ lastFontWeight: weight });
+  },
 }));
+
+function loadString(key: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  try {
+    return window.localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function loadNumber(key: string, fallback: number): number {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistString(key: string, value: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // private mode / quota
+  }
+}
 
 // ── localStorage helpers ─────────────────────────────────────────────
 
