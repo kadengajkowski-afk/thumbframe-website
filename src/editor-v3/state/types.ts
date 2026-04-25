@@ -1,6 +1,6 @@
 /** Layer schema per docs/spikes/react-pixi-wiring.md. Cycle 1 Day 4
  * introduced image layers (discriminated union on `type`). Day 8
- * adds `blendMode` to both variants. */
+ * adds `blendMode` to both variants. Cycle 2 Day 11 adds ellipse. */
 
 export type BlendMode =
   | "normal"
@@ -43,6 +43,20 @@ export type RectLayer = BaseLayer & {
   strokeAlpha: number;
 };
 
+/** Ellipse inscribed in the bounding box (x, y, width, height). x/y =
+ * top-left of the bounding box (consistent with rect). The ellipse
+ * geometry — cx, cy, rx, ry — is derived inside the Graphics in
+ * sceneHelpers.paintNode, so layer fields stay box-shaped and the
+ * select/move/resize/reorder/blend code paths apply unchanged. */
+export type EllipseLayer = BaseLayer & {
+  type: "ellipse";
+  color: number;
+  fillAlpha: number;
+  strokeColor: number;
+  strokeWidth: number;
+  strokeAlpha: number;
+};
+
 export type ImageLayer = BaseLayer & {
   type: "image";
   bitmap: ImageBitmap;
@@ -50,4 +64,4 @@ export type ImageLayer = BaseLayer & {
   naturalHeight: number;
 };
 
-export type Layer = RectLayer | ImageLayer;
+export type Layer = RectLayer | EllipseLayer | ImageLayer;
