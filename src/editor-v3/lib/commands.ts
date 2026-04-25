@@ -59,7 +59,20 @@ function openFilePicker() {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "image/png,image/jpeg,image/webp,image/gif";
-  input.style.display = "none";
+  // Day-12 bug. display:none inputs are silently rejected by Chrome
+  // for programmatic .click() — the OS picker doesn't open. Use the
+  // visually-hidden pattern instead. This path works today via the
+  // command palette, but use the same shape as EmptyState so a future
+  // browser update doesn't break this too.
+  input.style.position = "absolute";
+  input.style.width = "1px";
+  input.style.height = "1px";
+  input.style.padding = "0";
+  input.style.margin = "-1px";
+  input.style.overflow = "hidden";
+  input.style.clip = "rect(0, 0, 0, 0)";
+  input.style.whiteSpace = "nowrap";
+  input.style.border = "0";
   input.addEventListener("change", async () => {
     const file = input.files?.[0];
     if (file) {

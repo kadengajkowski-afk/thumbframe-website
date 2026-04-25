@@ -38,8 +38,8 @@ export function EmptyState() {
         type="file"
         accept="image/png,image/jpeg,image/webp,image/gif"
         onChange={onPick}
-        style={{ display: "none" }}
         aria-hidden="true"
+        style={visuallyHidden}
       />
       <button
         type="button"
@@ -109,6 +109,23 @@ const heading: CSSProperties = {
   letterSpacing: "0.01em",
   color: "var(--accent-cream)",
   margin: 0,
+};
+
+/** Day-12 bug fix. display:none inputs were silently rejected by
+ * Chrome's user-activation tracker for programmatic .click() — the
+ * picker would not open. The visually-hidden pattern keeps the
+ * element in the layout tree but invisible + non-interactive, which
+ * Chrome accepts. */
+const visuallyHidden: CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap",
+  border: 0,
 };
 
 const startBlank: CSSProperties = {
