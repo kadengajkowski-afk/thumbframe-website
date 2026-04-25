@@ -6,6 +6,7 @@ import { BlendModeSelect } from "./BlendModeSelect";
 import { OpacityControl } from "./OpacityControl";
 import { ColorSwatchButton } from "./ColorSwatchButton";
 import { StrokeWidthInput } from "./StrokeWidthInput";
+import { TextProperties } from "./TextProperties";
 import * as s from "./ContextPanel.styles";
 import "./blend-select.css";
 import "./color-picker.css";
@@ -61,6 +62,8 @@ export function ContextPanel() {
             <span style={s.swatch(layer.color)} aria-hidden="true" />
           ) : layer.type === "ellipse" ? (
             <span style={s.swatchEllipse(layer.color)} aria-hidden="true" />
+          ) : layer.type === "text" ? (
+            <span style={s.swatchText(layer.color)} aria-hidden="true">T</span>
           ) : (
             <span style={s.imageSwatch} aria-hidden="true" />
           )}
@@ -70,7 +73,9 @@ export function ContextPanel() {
         </div>
       </section>
 
-      {(layer.type === "rect" || layer.type === "ellipse") && (
+      {layer.type === "text" && <TextProperties layer={layer} />}
+
+      {(layer.type === "rect" || layer.type === "ellipse" || layer.type === "text") && (
         <section style={s.section}>
           <label style={s.fieldLabel}>Fill</label>
           <div style={s.fillRow}>
@@ -100,7 +105,7 @@ export function ContextPanel() {
         </section>
       )}
 
-      {(layer.type === "rect" || layer.type === "ellipse") && (
+      {(layer.type === "rect" || layer.type === "ellipse" || layer.type === "text") && (
         <section style={s.section}>
           <label style={s.fieldLabel}>Stroke</label>
           <div style={s.fillRow}>

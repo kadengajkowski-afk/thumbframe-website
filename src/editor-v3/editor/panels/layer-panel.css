@@ -98,6 +98,18 @@
   border-radius: 50%;
 }
 
+.layer-row__swatch--text {
+  background: transparent;
+  border: 1px solid var(--border-ghost);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
+}
+
 .layer-row__name {
   flex: 1;
   overflow: hidden;

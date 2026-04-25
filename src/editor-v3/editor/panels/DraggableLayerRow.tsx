@@ -85,11 +85,18 @@ export function DraggableLayerRow({ layer, selected, onSelect }: Props) {
         <span
           className={
             "layer-row__swatch" +
-            (layer.type === "ellipse" ? " layer-row__swatch--ellipse" : "")
+            (layer.type === "ellipse" ? " layer-row__swatch--ellipse" : "") +
+            (layer.type === "text" ? " layer-row__swatch--text" : "")
           }
-          style={{ background: swatchBackground(layer) }}
+          style={
+            layer.type === "text"
+              ? { color: `#${layer.color.toString(16).padStart(6, "0")}` }
+              : { background: swatchBackground(layer) }
+          }
           aria-hidden="true"
-        />
+        >
+          {layer.type === "text" ? "T" : null}
+        </span>
         {renaming ? (
           <RenameInput
             initialValue={layer.name}

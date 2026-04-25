@@ -114,6 +114,25 @@ export function swatchEllipse(color: number): CSSProperties {
   };
 }
 
+export function swatchText(color: number): CSSProperties {
+  return {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    background: "transparent",
+    color: `#${color.toString(16).padStart(6, "0")}`,
+    border: "1px solid var(--border-ghost)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontFamily: "var(--font-mono)",
+    fontWeight: 700,
+    fontSize: 11,
+    flexShrink: 0,
+    lineHeight: 1,
+  };
+}
+
 export function swatchBig(color: number): CSSProperties {
   return {
     width: 28,
