@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { CompositorHost } from "@/editor/CompositorHost";
+import { TextEditor } from "@/editor/TextEditor";
 import { TopBar } from "@/editor/panels/TopBar";
 import { LayerPanel } from "@/editor/panels/LayerPanel";
 import { ContextPanel } from "@/editor/panels/ContextPanel";
@@ -46,6 +47,7 @@ function EditorShell() {
         <ToolPalette />
         <main style={{ ...canvasSurface, cursor }} data-alive="canvas">
           <CompositorHost />
+          <TextEditor />
           <ZoomIndicator />
         </main>
         <ContextPanel />
