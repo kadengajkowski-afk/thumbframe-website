@@ -1,16 +1,18 @@
 import type { Container } from "pixi.js";
 
-export type ToolId = "select" | "hand" | "rect" | "ellipse";
+export type ToolId = "select" | "hand" | "rect" | "ellipse" | "text";
 
 /** Canvas-local coords (0..CANVAS_W, 0..CANVAS_H) + modifier state +
  * the Pixi hit target and the shared tool-preview container. Tools
- * treat ctx as read-only per-event snapshot. */
+ * treat ctx as read-only per-event snapshot. `detail` mirrors
+ * MouseEvent.detail (2 = double-click) so tools can branch on it. */
 export type ToolCtx = {
   canvasPoint: { x: number; y: number };
   button: number;
   shift: boolean;
   alt: boolean;
   meta: boolean;
+  detail: number;
   target: Container | null;
   preview: Container;
 };

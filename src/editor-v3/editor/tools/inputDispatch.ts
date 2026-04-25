@@ -20,6 +20,7 @@ export function pixiEventToCtx(
     shift: e.shiftKey,
     alt: e.altKey,
     meta: e.ctrlKey || e.metaKey,
+    detail: e.detail ?? 1,
     target: e.target as Container | null,
     preview,
   };
@@ -44,6 +45,7 @@ export function domEventToCtx(
     shift: e.shiftKey,
     alt: e.altKey,
     meta: e.ctrlKey || e.metaKey,
+    detail: e.detail ?? 1,
     target: null,
     preview,
   };
