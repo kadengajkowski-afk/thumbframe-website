@@ -132,10 +132,17 @@ export class Compositor {
     this.viewport.on("pinch-start", exitFit);
     this.viewport.on("wheel", exitFit);
 
-    // Tool input + hover tracking.
-    this.canvasGroup.on("pointerdown", this.onCanvasPointerDown);
-    this.canvasGroup.on("pointermove", this.onCanvasPointerHover);
-    this.canvasGroup.on("pointerleave", this.onCanvasPointerLeave);
+    // Tool input + hover tracking. Listen at the viewport level so
+    // clicks land regardless of whether the user hit the canvas-fill
+    // area or the surrounding "space" worldBg — the text tool would
+    // otherwise silently no-op on clicks outside the 1280×720 canvas.
+    // The Compositor's findLayerId(target) walk handles the routing
+    // (worldBg / canvasFill targets resolve to no layer; layer nodes
+    // resolve to their id), so the existing tool dispatch code works
+    // unchanged.
+    this.viewport.on("pointerdown", this.onCanvasPointerDown);
+    this.viewport.on("pointermove", this.onCanvasPointerHover);
+    this.viewport.on("pointerleave", this.onCanvasPointerLeave);
 
     this.render();
   }

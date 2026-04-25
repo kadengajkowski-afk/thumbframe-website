@@ -30,7 +30,11 @@ export function buildScene(
   const worldBg = new Graphics();
   worldBg.rect(0, 0, worldW, worldH);
   worldBg.fill({ color: BG_SPACE_0, alpha: 1 });
-  worldBg.eventMode = "none";
+  // Day 12 bug fix: needs to be pickable so clicks in the dark "space"
+  // surrounding the 1280×720 canvas-fill area still bubble to the
+  // viewport-level pointerdown listener. Otherwise the text tool only
+  // fires when the user happens to click inside the canvas-fill rect.
+  worldBg.eventMode = "static";
 
   const canvasGroup = new Container();
   canvasGroup.label = "canvas-group";
