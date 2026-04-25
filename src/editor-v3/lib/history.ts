@@ -7,7 +7,13 @@ import {
 import { nanoid } from "nanoid";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
-import type { BlendMode, ImageLayer, Layer } from "@/state/types";
+import type {
+  BlendMode,
+  FontStyle,
+  ImageLayer,
+  Layer,
+  TextAlign,
+} from "@/state/types";
 
 // Canvas logical size. Lives here until docStore gains a `canvas` field
 // (Cycle 2 when export + resize are in scope).
@@ -141,7 +147,7 @@ export const history = {
   setLayerFillColor(id: string, color: number) {
     const run = (layers: Layer[]) => {
       const l = layers.find((x) => x.id === id);
-      if (l && (l.type === "rect" || l.type === "ellipse")) l.color = color;
+      if (l && (l.type === "rect" || l.type === "ellipse" || l.type === "text")) l.color = color;
     };
     if (openStroke) mutate(run);
     else commit("Fill color", run);
@@ -150,7 +156,7 @@ export const history = {
   setLayerFillAlpha(id: string, alpha: number) {
     const run = (layers: Layer[]) => {
       const l = layers.find((x) => x.id === id);
-      if (l && (l.type === "rect" || l.type === "ellipse")) l.fillAlpha = alpha;
+      if (l && (l.type === "rect" || l.type === "ellipse" || l.type === "text")) l.fillAlpha = alpha;
     };
     if (openStroke) mutate(run);
     else commit("Fill alpha", run);
@@ -159,7 +165,7 @@ export const history = {
   setLayerStrokeColor(id: string, color: number) {
     const run = (layers: Layer[]) => {
       const l = layers.find((x) => x.id === id);
-      if (l && (l.type === "rect" || l.type === "ellipse")) l.strokeColor = color;
+      if (l && (l.type === "rect" || l.type === "ellipse" || l.type === "text")) l.strokeColor = color;
     };
     if (openStroke) mutate(run);
     else commit("Stroke color", run);
@@ -168,7 +174,7 @@ export const history = {
   setLayerStrokeWidth(id: string, width: number) {
     const run = (layers: Layer[]) => {
       const l = layers.find((x) => x.id === id);
-      if (l && (l.type === "rect" || l.type === "ellipse")) l.strokeWidth = width;
+      if (l && (l.type === "rect" || l.type === "ellipse" || l.type === "text")) l.strokeWidth = width;
     };
     if (openStroke) mutate(run);
     else commit("Stroke width", run);
@@ -177,10 +183,87 @@ export const history = {
   setLayerStrokeAlpha(id: string, alpha: number) {
     const run = (layers: Layer[]) => {
       const l = layers.find((x) => x.id === id);
-      if (l && (l.type === "rect" || l.type === "ellipse")) l.strokeAlpha = alpha;
+      if (l && (l.type === "rect" || l.type === "ellipse" || l.type === "text")) l.strokeAlpha = alpha;
     };
     if (openStroke) mutate(run);
     else commit("Stroke alpha", run);
+  },
+
+  // ── Text-layer setters ──────────────────────────────────────────────
+
+  setText(id: string, text: string) {
+    commit("Edit text", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.text = text;
+    });
+  },
+
+  setFontFamily(id: string, fontFamily: string) {
+    commit("Font", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.fontFamily = fontFamily;
+    });
+  },
+
+  setFontSize(id: string, fontSize: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.fontSize = fontSize;
+    };
+    if (openStroke) mutate(run);
+    else commit("Font size", run);
+  },
+
+  setFontWeight(id: string, fontWeight: number) {
+    commit("Font weight", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.fontWeight = fontWeight;
+    });
+  },
+
+  setFontStyle(id: string, fontStyle: FontStyle) {
+    commit("Italic", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.fontStyle = fontStyle;
+    });
+  },
+
+  setTextAlign(id: string, align: TextAlign) {
+    commit("Text align", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.align = align;
+    });
+  },
+
+  setLineHeight(id: string, lineHeight: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.lineHeight = lineHeight;
+    };
+    if (openStroke) mutate(run);
+    else commit("Line height", run);
+  },
+
+  setLetterSpacing(id: string, letterSpacing: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.letterSpacing = letterSpacing;
+    };
+    if (openStroke) mutate(run);
+    else commit("Letter spacing", run);
+  },
+
+  /** Compositor-driven auto-resize. Writes layer.width / height after
+   * Pixi Text measures its bounds. Skips history (size is derived
+   * state, not a user edit) by mutating directly. */
+  setLayerSize(id: string, width: number, height: number) {
+    mutate((layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l) {
+        l.width = width;
+        l.height = height;
+      }
+    });
   },
 
   reorderLayer(id: string, toIndex: number) {

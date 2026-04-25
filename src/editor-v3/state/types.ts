@@ -1,6 +1,7 @@
 /** Layer schema per docs/spikes/react-pixi-wiring.md. Cycle 1 Day 4
  * introduced image layers (discriminated union on `type`). Day 8
- * adds `blendMode` to both variants. Cycle 2 Day 11 adds ellipse. */
+ * adds `blendMode` to all variants. Cycle 2 Day 11 adds ellipse;
+ * Day 12 adds text. */
 
 export type BlendMode =
   | "normal"
@@ -64,4 +65,40 @@ export type ImageLayer = BaseLayer & {
   naturalHeight: number;
 };
 
-export type Layer = RectLayer | EllipseLayer | ImageLayer;
+export type TextAlign = "left" | "center" | "right";
+export type FontStyle = "normal" | "italic";
+/** Day 12 ships 6 OFL fonts. Day 13 expands to ~25-30. The literal
+ * union exists for the ContextPanel font dropdown; loose strings are
+ * accepted on the layer so we don't churn the schema each font drop. */
+export const BUNDLED_FONTS = [
+  "Inter",
+  "Anton",
+  "Bebas Neue",
+  "Archivo Black",
+  "Oswald",
+  "Permanent Marker",
+] as const;
+export type BundledFont = (typeof BUNDLED_FONTS)[number];
+
+/** Auto-sized text box. width/height are written by Compositor after
+ * the Pixi Text node measures itself — they exist on the layer so
+ * selection / drag / hit-test / reorder code paths reuse rect logic. */
+export type TextLayer = BaseLayer & {
+  type: "text";
+  text: string;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: number;
+  fontStyle: FontStyle;
+  align: TextAlign;
+  /** Fill color, 0xRRGGBB. */
+  color: number;
+  fillAlpha: number;
+  strokeColor: number;
+  strokeWidth: number;
+  strokeAlpha: number;
+  lineHeight: number;
+  letterSpacing: number;
+};
+
+export type Layer = RectLayer | EllipseLayer | TextLayer | ImageLayer;
