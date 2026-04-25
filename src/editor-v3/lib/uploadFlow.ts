@@ -6,6 +6,7 @@ import {
   loadImageFromFile,
 } from "@/lib/upload";
 import { useUiStore } from "@/state/uiStore";
+import { useDocStore } from "@/state/docStore";
 import { toast } from "@/toasts/toastStore";
 
 /**
@@ -16,16 +17,20 @@ import { toast } from "@/toasts/toastStore";
  * Error toasts use Observatory voice (direct you, no "Oops"/"Sorry").
  */
 export async function handleUploadedFile(file: File): Promise<void> {
+  console.log("[UPLOAD] handleUploadedFile name=", file.name, "size=", file.size, "type=", file.type);
   try {
     const bitmap = await loadImageFromFile(file);
+    console.log("[UPLOAD] decoded bitmap=", bitmap.width, "x", bitmap.height);
     const baseName = displayName(file.name);
     history.addImageLayer(bitmap, baseName);
+    console.log("[UPLOAD] layer added; total layers=", useDocStore.getState().layers.length);
 
     const ui = useUiStore.getState();
     if (!ui.hasEntered) {
       ui.setHasEntered(true);
     }
   } catch (err) {
+    console.log("[UPLOAD] error", err);
     if (err instanceof UnsupportedFormatError) {
       toast("That one won't stick — try PNG, JPG, or WEBP.");
       return;

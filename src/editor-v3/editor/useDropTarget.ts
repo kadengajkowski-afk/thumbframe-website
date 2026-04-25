@@ -16,6 +16,7 @@ export function useDropTarget(): boolean {
       e.dataTransfer?.types?.includes("Files") ?? false;
 
     const onEnter = (e: DragEvent) => {
+      console.log("[DROP/enter] types=", e.dataTransfer?.types);
       if (!looksLikeFileDrag(e)) return;
       e.preventDefault();
       counter++;
@@ -35,11 +36,13 @@ export function useDropTarget(): boolean {
     };
 
     const onDrop = async (e: DragEvent) => {
+      console.log("[DROP/drop] dataTransfer=", !!e.dataTransfer, "files.len=", e.dataTransfer?.files?.length);
       if (!e.dataTransfer) return;
       e.preventDefault();
       counter = 0;
       setActive(false);
       const file = firstImageFile(e.dataTransfer.files);
+      console.log("[DROP/drop] firstImageFile=", file?.name);
       if (file) await handleUploadedFile(file);
     };
 

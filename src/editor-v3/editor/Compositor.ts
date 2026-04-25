@@ -108,7 +108,10 @@ export class Compositor {
     );
     this.unsubscribeUi = useUiStore.subscribe((state, prev) => {
       if (state.selectedLayerIds !== prev.selectedLayerIds) this.render();
-      if (state.editingTextLayerId !== prev.editingTextLayerId) this.render();
+      if (state.editingTextLayerId !== prev.editingTextLayerId) {
+        console.log("[CP/uiSub] editingTextLayerId", prev.editingTextLayerId, "->", state.editingTextLayerId);
+        this.render();
+      }
       const prevHand = prev.isHandMode || prev.activeTool === "hand";
       const nextHand = state.isHandMode || state.activeTool === "hand";
       if (prevHand !== nextHand) {

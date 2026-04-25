@@ -23,6 +23,8 @@ export function TextEditor() {
   const layer = useDocStore((d) =>
     d.layers.find((l) => l.id === editingId && l.type === "text"),
   );
+  // DIAGNOSTIC — remove after bug closed.
+  console.log("[TE/render] editingId=", editingId, "layerFound=", !!layer);
   if (!editingId || !layer || layer.type !== "text") return null;
   return <ActiveEditor key={editingId} layerId={editingId} />;
 }
@@ -55,9 +57,11 @@ function ActiveEditor({ layerId }: { layerId: string }) {
   // something") is fully selected — first keystroke replaces it.
   useLayoutEffect(() => {
     const ta = taRef.current;
+    console.log("[TE/useLayoutEffect] ta=", !!ta);
     if (!ta) return;
     ta.focus();
     ta.select();
+    console.log("[TE/useLayoutEffect] focus called, activeElement=", document.activeElement?.tagName, "isTa=", document.activeElement === ta);
   }, []);
 
   // Re-paint when the font lands so the textarea metrics line up

@@ -31,6 +31,7 @@ class TextToolImpl implements Tool {
   cursor = "text";
 
   onPointerDown(ctx: ToolCtx) {
+    console.log("[TT/onPointerDown] fired at", ctx.canvasPoint, "target=", (ctx.target as { label?: string })?.label);
     const ui = useUiStore.getState();
     const hitId = findLayerId(ctx.target);
     if (hitId) {
@@ -73,6 +74,7 @@ class TextToolImpl implements Tool {
     });
     ui.setSelectedLayerIds([id]);
     ui.setEditingTextLayerId(id);
+    console.log("[TT/onPointerDown] post-set editingTextLayerId=", useUiStore.getState().editingTextLayerId);
   }
 }
 

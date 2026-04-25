@@ -55,12 +55,14 @@ function reorderSelected(target: "forward" | "backward" | "front" | "back") {
 }
 
 function openFilePicker() {
+  console.log("[FP/open] called");
   if (typeof document === "undefined") return;
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "image/png,image/jpeg,image/webp,image/gif";
   input.style.display = "none";
   input.addEventListener("change", async () => {
+    console.log("[FP/change] file=", input.files?.[0]?.name);
     const file = input.files?.[0];
     if (file) {
       const { handleUploadedFile } = await import("@/lib/uploadFlow");
@@ -70,6 +72,7 @@ function openFilePicker() {
   });
   document.body.appendChild(input);
   input.click();
+  console.log("[FP/open] click() dispatched");
 }
 
 function addRectAtCenter() {
