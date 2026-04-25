@@ -82,6 +82,11 @@ function handleKeydown(e: KeyboardEvent) {
       runCommand("tool.rect");
       return;
     }
+    if (k === "o") {
+      e.preventDefault();
+      runCommand("tool.ellipse");
+      return;
+    }
   }
 
   // Duplicate: Cmd+D.

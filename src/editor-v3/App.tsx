@@ -66,7 +66,7 @@ function deriveCursor(s: CursorShape): string {
   if (s.isHandMode || s.activeTool === "hand") {
     return s.isPanActive ? "grabbing" : "grab";
   }
-  if (s.activeTool === "rect") return "crosshair";
+  if (s.activeTool === "rect" || s.activeTool === "ellipse") return "crosshair";
   if (s.activeTool === "select" && s.hoveredLayerId) return "move";
   return "default";
 }

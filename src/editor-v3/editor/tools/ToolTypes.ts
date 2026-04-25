@@ -1,6 +1,6 @@
 import type { Container } from "pixi.js";
 
-export type ToolId = "select" | "hand" | "rect";
+export type ToolId = "select" | "hand" | "rect" | "ellipse";
 
 /** Canvas-local coords (0..CANVAS_W, 0..CANVAS_H) + modifier state +
  * the Pixi hit target and the shared tool-preview container. Tools

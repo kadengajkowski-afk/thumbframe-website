@@ -8,6 +8,7 @@ const ICON_SIZE = 20;
 export function ToolIcon({ id }: { id: ToolId }) {
   if (id === "select") return <SelectIcon />;
   if (id === "hand") return <HandIcon />;
+  if (id === "ellipse") return <EllipseIcon />;
   return <RectIcon />;
 }
 
@@ -61,6 +62,27 @@ function RectIcon() {
         width="12"
         height="10"
         rx="1"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+      />
+    </svg>
+  );
+}
+
+function EllipseIcon() {
+  return (
+    <svg
+      width={ICON_SIZE}
+      height={ICON_SIZE}
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+    >
+      <ellipse
+        cx="10"
+        cy="10"
+        rx="6"
+        ry="5"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.4"

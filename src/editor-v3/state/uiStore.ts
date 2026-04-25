@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { normalizeHex } from "@/lib/color";
 
-export type Tool = "select" | "hand" | "rect";
+export type Tool = "select" | "hand" | "rect" | "ellipse";
 
 const RECENT_COLORS_KEY = "thumbframe:recent-colors";
 const LAST_FILL_KEY = "thumbframe:last-fill";
