@@ -59,6 +59,8 @@ export function ContextPanel() {
         <div style={s.layerNameRow}>
           {layer.type === "rect" ? (
             <span style={s.swatch(layer.color)} aria-hidden="true" />
+          ) : layer.type === "ellipse" ? (
+            <span style={s.swatchEllipse(layer.color)} aria-hidden="true" />
           ) : (
             <span style={s.imageSwatch} aria-hidden="true" />
           )}
@@ -68,7 +70,7 @@ export function ContextPanel() {
         </div>
       </section>
 
-      {layer.type === "rect" && (
+      {(layer.type === "rect" || layer.type === "ellipse") && (
         <section style={s.section}>
           <label style={s.fieldLabel}>Fill</label>
           <div style={s.fillRow}>
@@ -98,7 +100,7 @@ export function ContextPanel() {
         </section>
       )}
 
-      {layer.type === "rect" && (
+      {(layer.type === "rect" || layer.type === "ellipse") && (
         <section style={s.section}>
           <label style={s.fieldLabel}>Stroke</label>
           <div style={s.fillRow}>

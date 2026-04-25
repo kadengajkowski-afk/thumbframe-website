@@ -94,6 +94,10 @@
   flex-shrink: 0;
 }
 
+.layer-row__swatch--ellipse {
+  border-radius: 50%;
+}
+
 .layer-row__name {
   flex: 1;
   overflow: hidden;

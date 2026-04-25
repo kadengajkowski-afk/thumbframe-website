@@ -83,7 +83,10 @@ export function DraggableLayerRow({ layer, selected, onSelect }: Props) {
         }}
       >
         <span
-          className="layer-row__swatch"
+          className={
+            "layer-row__swatch" +
+            (layer.type === "ellipse" ? " layer-row__swatch--ellipse" : "")
+          }
           style={{ background: swatchBackground(layer) }}
           aria-hidden="true"
         />
@@ -136,7 +139,7 @@ export function DraggableLayerRow({ layer, selected, onSelect }: Props) {
 }
 
 function swatchBackground(layer: Layer): string {
-  if (layer.type === "rect") {
+  if (layer.type === "rect" || layer.type === "ellipse") {
     return `#${layer.color.toString(16).padStart(6, "0")}`;
   }
   return "linear-gradient(135deg, var(--bg-space-2) 0%, var(--accent-navy) 100%)";

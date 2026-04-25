@@ -103,6 +103,17 @@ export function swatch(color: number): CSSProperties {
   };
 }
 
+export function swatchEllipse(color: number): CSSProperties {
+  return {
+    width: 12,
+    height: 12,
+    borderRadius: "50%",
+    background: `#${color.toString(16).padStart(6, "0")}`,
+    border: "1px solid rgba(0,0,0,0.25)",
+    flexShrink: 0,
+  };
+}
+
 export function swatchBig(color: number): CSSProperties {
   return {
     width: 28,
