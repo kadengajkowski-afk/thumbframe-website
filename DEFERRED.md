@@ -17,6 +17,129 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 Day 12 — held back (date: 2026-04-24)
+
+- **Selection outline tracks the rendered text bounds via auto-
+  resize, but doesn't account for the Pixi Text padding.** Pixi v8's
+  Text adds a small internal padding (a few px) around the rendered
+  glyph for descender clearance. Today the layer width/height we
+  write back is `Math.ceil(t.width / t.height)` straight from Pixi —
+  so the selection outline traces the bounds box including that
+  padding. Visually it reads "a hair too generous" on most fonts.
+  Fix: subtract the measured padding before writing setLayerSize, or
+  keep it but call out the padding to the selection-outline drawer.
+  Held until rotation lands so the outline pass touches both at once.
+
+- **Pixel-grid hit-test for text Graphics may miss small glyphs.**
+  Compositor's findLayerId walks parents via `target.label`, which
+  works fine for clicks INSIDE the glyph fills. But Pixi Text's
+  hit-test uses its bounding box, not the glyph silhouette. So a
+  click in white space INSIDE a "T" still selects the layer. Same
+  behaviour as rect/ellipse — keep until shape-aware hit-testing
+  lands wholesale.
+
+- **Inline-edit textarea positioning lags by one frame on viewport
+  pan/zoom.** TextEditor subscribes to viewport 'moved' / 'zoomed'
+  and bumps a counter to re-render. The re-render reads
+  compositor.canvasToScreen, which uses viewport.toScreen — accurate
+  but the React render queue makes the textarea visibly trail the
+  underlying canvas by ~16ms during a fast drag-pan. Fix would be a
+  raf loop or a CSS transform-only update. Cosmetic; real users
+  rarely pan during a text edit.
+
+- **Textarea uses CSS \`transform: scale()\` to track viewport zoom.**
+  Sub-pixel rounding on the scaled textarea means the cursor caret
+  doesn't always land where the rendered Pixi text says it should.
+  Most visible at zoom > 200% with non-integer scale. Acceptable for
+  Day 12; the cleaner fix is to render the textarea at the layer's
+  actual screen-space size + computed font-size (already-scaled),
+  not transform-scaled.
+
+- **Default placement uses naive cursor-point top-left, not visual
+  center.** TextTool plants the layer at \`{ x: ctx.canvasPoint.x,
+  y: ctx.canvasPoint.y }\` — top-left of the bounding box. Most
+  editors center on the cursor. Easy fix once Compositor's first-
+  paint auto-resize lands so we know the bounds before the user can
+  see them. Keep simple for now.
+
+- **Font dropdown shows family name in its own face — but the
+  weight dropdown doesn't.** Each <option> in font-family applies
+  fontFamily inline; the weight options are plain. Could style each
+  weight option to show in its own weight (font-weight: \${w}) for a
+  preview. Tiny polish.
+
+- **No font fallback chain inside Pixi.** Pixi Text accepts a font
+  family string. We pass `[layer.fontFamily, "system-ui", "sans-
+  serif"]` so a missing face falls back to the system font. But Pixi
+  doesn't actually walk the array — it picks the first. The CSS-
+  side fallback ('system-ui' in our `font-family` arg) is what
+  catches it during the brief window before document.fonts.load
+  resolves. This is fine because of font-display: block + the
+  re-render-on-font-load hook, but worth a comment somewhere.
+
+- **Italic toggle button uses a literal <em>I</em> as glyph.** Not
+  using a real italic icon. Cosmetic; replaceable when the Cycle 6
+  iconography pass lands.
+
+- **No subscript/superscript / strikethrough / underline.** Spec
+  didn't ask for them. Decoration toggles are a Cycle 3+ ask
+  (text-decoration on Pixi Text is non-trivial — needs custom
+  underline geometry).
+
+- **Shift+Enter inserts a newline; plain Enter does too.** The
+  textarea is multi-line by default. Most thumbnail text is one
+  line — could swap to a single-line input until the user explicitly
+  wants multi-line. Held: users sometimes do want multi-line, easier
+  to allow than to gate.
+
+- **Delete + Backspace inside the textarea delete characters, but
+  the global hotkey for \"delete selected layer\" doesn't fire.** This
+  is correct (isEditableTarget gate in hotkeys.ts). Worth confirming
+  in a dedicated test once we wire the textarea-aware shortcut
+  permitlist.
+
+- **Empty placement keeps the placeholder visible until first
+  keystroke.** Today: click → \"Type something\" appears, fully
+  selected. First keystroke replaces it. If the user immediately
+  presses Esc, the layer is auto-deleted (placeholder text === reserved
+  sentinel). If they click outside without typing, the placeholder
+  text COMMITS (because it's not empty). Could fix by also dropping
+  on first-blur-without-edit. Held; the behaviour matches Figma's
+  text tool.
+
+- **Auto-resize loop guard.** paintNode writes \`history.setLayerSize\`
+  which triggers another docStore subscription tick → another
+  paintNode → another measure. Pixi rounds to integers, so the
+  measured value stabilizes after one tick (the second paint sees
+  width === measured-width and skips the write). If a font ever
+  produces non-integer widths, this could oscillate. The guard:
+  \`if (w !== layer.width || h !== layer.height) setLayerSize(...)\`.
+  Today it's stable for the 6 bundled fonts.
+
+- **uiStore lastFont* persistence has no migration story.** If we
+  later remove a bundled font, loadString will return its name and
+  the next text-tool placement will fail to render that family
+  (falls back to system-ui). Add a sanity check against the
+  BUNDLED_FONTS list at load time. Day 13.
+
+- **TextProperties.tsx is at ~250 lines (file-level).** Under the
+  400 file ceiling. Component bodies (TextProperties + AlignGroup)
+  are well under the 200 component ceiling. Room to grow but worth
+  splitting per-section (FontField / SizeField / WeightField /
+  StyleField / SpacingFields) once the OpenType axis controls
+  arrive in v3.1.
+
+- **No drag-resize handles on text bounding box.** Rect / ellipse
+  don't have them either yet; arrives with the unified resize-
+  handle pass (post-rotation work). Keyboard arrow nudging works
+  via the Day 7 hotkey, since text layers carry x/y like everything
+  else.
+
+- **Stroke alignment for text is implicit Pixi default (outside).**
+  Looks fine on display weights but on light fonts the stroke can
+  swamp the glyph. Could add a stroke-alignment dropdown but spec
+  didn't ask for one.
+
 ## Cycle 2 Day 11 — held back (date: 2026-04-24)
 
 - **Selection outline stays axis-aligned for ellipses.** Today the
