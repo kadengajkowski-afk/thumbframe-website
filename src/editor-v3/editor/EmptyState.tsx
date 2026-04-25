@@ -31,7 +31,11 @@ export function EmptyState() {
       />
       <button
         type="button"
-        onClick={() => fileRef.current?.click()}
+        onClick={() => {
+          console.log("[ES/uploadBtn] clicked, fileRef=", !!fileRef.current);
+          fileRef.current?.click();
+          console.log("[ES/uploadBtn] post-click() dispatched");
+        }}
         style={uploadTarget}
         aria-label="Upload to set sail — opens file picker"
       >

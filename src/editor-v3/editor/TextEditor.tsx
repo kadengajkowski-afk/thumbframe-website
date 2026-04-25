@@ -83,6 +83,7 @@ function ActiveEditor({ layerId }: { layerId: string }) {
   const scale = compositor.viewportScale;
 
   function commit() {
+    console.log("[TE/commit] called", new Error().stack);
     const trimmed = draft.trim();
     const original = layer && layer.type === "text" ? layer.text : "";
     const ui = useUiStore.getState();
@@ -95,6 +96,7 @@ function ActiveEditor({ layerId }: { layerId: string }) {
   }
 
   function cancel() {
+    console.log("[TE/cancel] called", new Error().stack);
     // Cancel mirrors commit but doesn't push the draft. If the layer
     // still has the placeholder text from a fresh placement, dropping
     // it tidies up — otherwise leave the original untouched.
