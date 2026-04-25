@@ -15,12 +15,14 @@ export function clamp(v: number, min: number, max: number): number {
 }
 
 export function matchesType(node: Container, layer: Layer): boolean {
-  if (layer.type === "rect") return node instanceof Graphics;
+  if (layer.type === "rect" || layer.type === "ellipse") {
+    return node instanceof Graphics;
+  }
   return node instanceof Sprite;
 }
 
 export function createNode(layer: Layer): Container {
-  if (layer.type === "rect") {
+  if (layer.type === "rect" || layer.type === "ellipse") {
     const g = new Graphics();
     g.label = `layer:${layer.id}`;
     g.eventMode = "static";
@@ -46,10 +48,19 @@ export function paintNode(node: Container, layer: Layer) {
   // 'pixi.js/advanced-blend-modes' side-effect — imported in main.tsx.
   node.blendMode = layer.blendMode;
 
-  if (layer.type === "rect") {
+  if (layer.type === "rect" || layer.type === "ellipse") {
     const g = node as Graphics;
     g.clear();
-    g.rect(0, 0, layer.width, layer.height);
+    if (layer.type === "ellipse") {
+      // Draw the ellipse inside the bounding box. cx/cy + rx/ry come
+      // from width/height; layer.x / layer.y already place the box
+      // top-left so the path coords stay local.
+      const rx = layer.width / 2;
+      const ry = layer.height / 2;
+      g.ellipse(rx, ry, rx, ry);
+    } else {
+      g.rect(0, 0, layer.width, layer.height);
+    }
     g.fill({ color: layer.color, alpha: layer.fillAlpha });
     if (layer.strokeWidth > 0) {
       g.stroke({
