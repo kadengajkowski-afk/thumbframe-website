@@ -1,4 +1,4 @@
-import { type CSSProperties } from "react";
+import { useRef, type ChangeEvent, type CSSProperties } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { handleUploadedFile } from "@/lib/uploadFlow";
 
@@ -8,39 +8,42 @@ import { handleUploadedFile } from "@/lib/uploadFlow";
  * too — the window-level handlers in App route through the same upload
  * flow regardless of whether this component is mounted.
  *
- * The file input is created-on-click via DOM, NOT a persistent
- * <input ref={...} />. Day 12 introduced a (still-unidentified)
- * regression where the persistent-input pattern + .click() failed to
- * open the OS picker — the user-gesture chain was breaking somewhere
- * between the React onClick fire and the ref's input.click(). The
- * createElement-then-click pattern (same one used by the command-
- * palette upload that DID keep working through Day 12) does not have
- * the regression. Keep both empty-state and palette uploads on the
- * same path so a single fix covers both.
+ * Uses a persistent <input ref={...} /> + .click() on the ref. Day 12
+ * tried switching to a create-on-click DOM pattern (same as
+ * lib/commands.openFilePicker) thinking it'd dodge a user-activation
+ * issue. Empirically, Chrome rejected .click() on the freshly-appended
+ * input from this specific path even though the synchronous chain was
+ * intact (probe confirmed openPicker ran AND the input was created;
+ * only the OS dialog was suppressed). The persistent-input pattern
+ * carries activation correctly. lib/commands.openFilePicker still uses
+ * create-on-click and works because its activation source is the cmdk
+ * palette item, not the empty-state button — different code path,
+ * different verdict from the activation tracker.
  */
 export function EmptyState() {
   const setHasEntered = useUiStore((s) => s.setHasEntered);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  function openPicker() {
-    if (typeof document === "undefined") return;
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/png,image/jpeg,image/webp,image/gif";
-    input.style.display = "none";
-    input.addEventListener("change", async () => {
-      const file = input.files?.[0];
-      input.remove();
-      if (file) await handleUploadedFile(file);
-    });
-    document.body.appendChild(input);
-    input.click();
-  }
+  const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Clear the input so picking the same file twice still fires.
+    e.target.value = "";
+    if (file) await handleUploadedFile(file);
+  };
 
   return (
     <div style={wrap}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        onChange={onPick}
+        style={{ display: "none" }}
+        aria-hidden="true"
+      />
       <button
         type="button"
-        onClick={openPicker}
+        onClick={() => fileRef.current?.click()}
         style={uploadTarget}
         aria-label="Upload to set sail — opens file picker"
       >

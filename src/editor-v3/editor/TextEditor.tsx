@@ -53,11 +53,24 @@ function ActiveEditor({ layerId }: { layerId: string }) {
 
   // Auto-focus + select-all on mount so the placeholder ("Type
   // something") is fully selected — first keystroke replaces it.
+  //
+  // Day 12 fix: defer to requestAnimationFrame. A synchronous focus
+  // in useLayoutEffect runs INSIDE the same task as the placement
+  // click. The browser's native focus management for that click
+  // (canvas isn't focusable → focus to body) can then clobber our
+  // call within the same tick. By the next frame, the click chain
+  // has fully resolved and our focus sticks. preventScroll keeps the
+  // outer page from jumping when the textarea sits below the fold.
   useLayoutEffect(() => {
     const ta = taRef.current;
     if (!ta) return;
-    ta.focus();
-    ta.select();
+    const id = requestAnimationFrame(() => {
+      ta.focus({ preventScroll: true });
+      ta.select();
+      // DIAGNOSTIC — remove after bug closed.
+      console.log("[TE/rAF-focus] activeElement=", document.activeElement?.tagName, "isTa=", document.activeElement === ta);
+    });
+    return () => cancelAnimationFrame(id);
   }, []);
 
   // Re-paint when the font lands so the textarea metrics line up
