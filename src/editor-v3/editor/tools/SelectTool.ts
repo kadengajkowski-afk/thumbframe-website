@@ -51,13 +51,36 @@ class SelectToolImpl implements Tool {
     const hitLayerId = findLayerId(ctx.target);
     const ui = useUiStore.getState();
 
+    // ── Empty-canvas click ──────────────────────────────────────────
+    // Plain click clears selection; shift-click is a no-op (per spec —
+    // shift-clicking blank space shouldn't drop the existing selection
+    // mid-multi-select). Marquee selection ships in commit 2.
     if (!hitLayerId) {
-      ui.setSelectedLayerIds([]);
+      if (!ctx.shift) ui.setSelectedLayerIds([]);
       this.drag = null;
       return;
     }
 
-    ui.setSelectedLayerIds([hitLayerId]);
+    // ── Shift-click on a layer: toggle membership ───────────────────
+    if (ctx.shift) {
+      const current = ui.selectedLayerIds;
+      const next = current.includes(hitLayerId)
+        ? current.filter((id) => id !== hitLayerId)
+        : [...current, hitLayerId];
+      ui.setSelectedLayerIds(next);
+      // Shift-click never starts a drag — the user is selecting, not
+      // moving. Match Figma / Sketch behavior.
+      this.drag = null;
+      return;
+    }
+
+    // ── Plain click on a layer ──────────────────────────────────────
+    // If the layer is ALREADY part of a multi-selection, preserve the
+    // selection so the user can drag the whole group with a plain
+    // click on any member. Otherwise replace selection with just it.
+    if (!ui.selectedLayerIds.includes(hitLayerId)) {
+      ui.setSelectedLayerIds([hitLayerId]);
+    }
 
     const layer = useDocStore.getState().layers.find((l) => l.id === hitLayerId);
     if (!layer || layer.locked) {
