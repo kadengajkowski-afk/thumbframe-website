@@ -9,6 +9,7 @@ const LAST_FONT_FAMILY_KEY = "thumbframe:last-font-family";
 const LAST_FONT_SIZE_KEY = "thumbframe:last-font-size";
 const LAST_FONT_WEIGHT_KEY = "thumbframe:last-font-weight";
 const RECENT_FONTS_KEY = "thumbframe:recent-fonts";
+const SMART_GUIDES_KEY = "thumbframe:smart-guides-enabled";
 const MAX_RECENT = 8;
 const MAX_RECENT_FONTS = 6;
 const DEFAULT_FILL = "#F97316";
@@ -76,6 +77,11 @@ type UiState = {
    * group at the top of the font picker. */
   recentFonts: string[];
   addRecentFont: (family: string) => void;
+
+  /** Day 14: master toggle for smart-guides-during-drag. Default on;
+   * persisted to localStorage. Cmd+\ flips it. */
+  smartGuidesEnabled: boolean;
+  setSmartGuidesEnabled: (v: boolean) => void;
 };
 
 /** UI-only flags. Document state lives in docStore. Do not cross streams. */
@@ -159,12 +165,29 @@ export const useUiStore = create<UiState>()((set) => ({
       persistRecentFonts(dedup);
       return { recentFonts: dedup };
     }),
+
+  smartGuidesEnabled: loadBool(SMART_GUIDES_KEY, true),
+  setSmartGuidesEnabled: (v) => {
+    persistString(SMART_GUIDES_KEY, v ? "1" : "0");
+    set({ smartGuidesEnabled: v });
+  },
 }));
 
 function loadString(key: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;
   try {
     return window.localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function loadBool(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return raw === "1" || raw === "true";
   } catch {
     return fallback;
   }
