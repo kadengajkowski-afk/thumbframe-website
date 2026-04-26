@@ -4,6 +4,7 @@ import { history } from "@/lib/history";
 import { useUiStore } from "@/state/uiStore";
 import { FONT_REGISTRY, snapWeight } from "@/lib/fonts";
 import * as s from "./ContextPanel.styles";
+import { TextEffects } from "./TextEffects";
 
 /**
  * Text-specific section of the ContextPanel. Keeps the rect/ellipse
@@ -148,6 +149,8 @@ export function TextProperties({ layer }: { layer: TextLayer }) {
           <span style={s.hexText}>px</span>
         </div>
       </section>
+
+      <TextEffects layer={layer} />
     </>
   );
 }

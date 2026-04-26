@@ -6,10 +6,25 @@ import {
   Text,
   TextStyle,
   Texture,
+  type Filter,
 } from "pixi.js";
+import { DropShadowFilter, GlowFilter } from "pixi-filters";
 import { ensureFontLoaded } from "@/lib/fonts";
 import { history } from "@/lib/history";
 import type { Layer, TextLayer } from "@/state/types";
+import { TEXT_EFFECT_DEFAULTS } from "@/state/types";
+
+/** Per-node filter cache so DropShadow / Glow instances aren't
+ * allocated on every paint tick (a slider scrub fires hundreds of
+ * paints/sec). WeakMap auto-cleans when the node is destroyed. */
+type TextFilterCache = {
+  shadow?: DropShadowFilter;
+  glow?: GlowFilter;
+  /** Last-applied filters array — so we only reassign node.filters
+   * when the active set CHANGES, not every paint. */
+  activeKey?: string;
+};
+const textFilterCache = new WeakMap<Text, TextFilterCache>();
 
 /** Helpers split out of Compositor so the class body stays under
  * the 400-line file ceiling as the tool-dispatch wiring grows. */
@@ -89,6 +104,7 @@ export function paintNode(node: Container, layer: Layer) {
     const t = node as Text;
     t.text = layer.text;
     t.style = textStyle(layer);
+    applyTextEffects(t, layer);
     // Auto-resize: write the rendered bounds back into docStore so
     // selection / drag / hit-test all use the actual text dimensions.
     // Width/height changes are non-history (derived state) — see
@@ -125,6 +141,55 @@ export function paintNode(node: Container, layer: Layer) {
   const s = node as Sprite;
   s.width = layer.width;
   s.height = layer.height;
+}
+
+/** Reconcile shadow + glow filters onto a Text node. Mutates the
+ * filters in place (cheap on slider scrub) and only reassigns the
+ * `filters` array when the active set toggles. Filter chain order:
+ * DropShadow first → text receives shadow behind it; Glow second →
+ * glow surrounds the resulting text+shadow composite. */
+function applyTextEffects(t: Text, layer: TextLayer) {
+  const D = TEXT_EFFECT_DEFAULTS;
+  const shadowOn = layer.shadowEnabled ?? D.shadowEnabled;
+  const glowOn = layer.glowEnabled ?? D.glowEnabled;
+
+  let cache = textFilterCache.get(t);
+  if (!cache) {
+    cache = {};
+    textFilterCache.set(t, cache);
+  }
+
+  if (shadowOn) {
+    if (!cache.shadow) cache.shadow = new DropShadowFilter();
+    const f = cache.shadow;
+    f.color = layer.shadowColor ?? D.shadowColor;
+    f.alpha = layer.shadowAlpha ?? D.shadowAlpha;
+    f.blur = layer.shadowBlur ?? D.shadowBlur;
+    f.offsetX = layer.shadowOffsetX ?? D.shadowOffsetX;
+    f.offsetY = layer.shadowOffsetY ?? D.shadowOffsetY;
+  }
+
+  if (glowOn) {
+    if (!cache.glow) cache.glow = new GlowFilter();
+    const f = cache.glow;
+    f.color = layer.glowColor ?? D.glowColor;
+    f.alpha = layer.glowAlpha ?? D.glowAlpha;
+    f.distance = layer.glowDistance ?? D.glowDistance;
+    f.quality = layer.glowQuality ?? D.glowQuality;
+    f.outerStrength = layer.glowOuterStrength ?? D.glowOuterStrength;
+    f.innerStrength = layer.glowInnerStrength ?? D.glowInnerStrength;
+  }
+
+  // Only reassign the filters array when the active set changes —
+  // Pixi treats a new array reference as a topology change.
+  const key = `${shadowOn ? "s" : ""}${glowOn ? "g" : ""}`;
+  if (cache.activeKey !== key) {
+    const next: Filter[] = [];
+    if (shadowOn && cache.shadow) next.push(cache.shadow);
+    if (glowOn && cache.glow) next.push(cache.glow);
+    t.filters = next.length > 0 ? next : null;
+    cache.activeKey = key;
+  }
 }
 
 function textStyle(layer: TextLayer): TextStyle {
