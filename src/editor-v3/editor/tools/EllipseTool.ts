@@ -3,6 +3,8 @@ import { nanoid } from "nanoid";
 import { history } from "@/lib/history";
 import { useUiStore } from "@/state/uiStore";
 import { hexToPixi } from "@/lib/color";
+import { getCurrentCompositor } from "../compositorRef";
+import { snapDrawPointer } from "./snapDrawPointer";
 import type { Tool, ToolCtx } from "./ToolTypes";
 
 const DRAFT_FALLBACK_COLOR = 0xf97316; // --accent-orange
@@ -15,6 +17,7 @@ type Draft = {
   alt: boolean;
   preview: Graphics;
   color: number;
+  wasSnapped: boolean;
 };
 
 function currentFillColor(): number {
@@ -54,14 +57,21 @@ class EllipseToolImpl implements Tool {
       alt: ctx.alt,
       preview,
       color: currentFillColor(),
+      wasSnapped: false,
     };
   }
 
   onPointerMove(ctx: ToolCtx) {
     if (!this.draft) return;
-    this.draft.last = { ...ctx.canvasPoint };
+    const snap = snapDrawPointer(
+      ctx.canvasPoint,
+      { shift: ctx.shift, alt: ctx.alt },
+      this.draft.wasSnapped,
+    );
+    this.draft.last = snap.point;
     this.draft.shift = ctx.shift;
     this.draft.alt = ctx.alt;
+    this.draft.wasSnapped = snap.snapped;
     const box = resolveBox(this.draft);
     this.draft.preview.clear();
     const rx = box.w / 2;
@@ -72,12 +82,18 @@ class EllipseToolImpl implements Tool {
 
   onPointerUp(ctx: ToolCtx) {
     if (!this.draft) return;
-    this.draft.last = { ...ctx.canvasPoint };
+    const snap = snapDrawPointer(
+      ctx.canvasPoint,
+      { shift: ctx.shift, alt: ctx.alt },
+      this.draft.wasSnapped,
+    );
+    this.draft.last = snap.point;
     this.draft.shift = ctx.shift;
     this.draft.alt = ctx.alt;
     const box = resolveBox(this.draft);
     const color = this.draft.color;
     this.clearDraft();
+    getCurrentCompositor()?.clearGuides();
     if (box.w < MIN_SIZE || box.h < MIN_SIZE) return;
     history.addLayer({
       id: nanoid(),
@@ -101,6 +117,7 @@ class EllipseToolImpl implements Tool {
 
   onCancel() {
     this.clearDraft();
+    getCurrentCompositor()?.clearGuides();
   }
 
   private clearDraft() {

@@ -3,6 +3,8 @@ import { nanoid } from "nanoid";
 import { history } from "@/lib/history";
 import { useUiStore } from "@/state/uiStore";
 import { hexToPixi } from "@/lib/color";
+import { getCurrentCompositor } from "../compositorRef";
+import { snapDrawPointer } from "./snapDrawPointer";
 import type { Tool, ToolCtx } from "./ToolTypes";
 
 const DRAFT_FALLBACK_COLOR = 0xf97316; // --accent-orange
@@ -15,6 +17,10 @@ type Draft = {
   alt: boolean;
   preview: Graphics;
   color: number;
+  /** Tracks whether the LAST onPointerMove tick engaged a snap, so
+   * the tactile flash only fires on the first tick of an engagement
+   * — see SelectTool for the same pattern. */
+  wasSnapped: boolean;
 };
 
 function currentFillColor(): number {
@@ -55,14 +61,21 @@ class RectToolImpl implements Tool {
       alt: ctx.alt,
       preview,
       color: currentFillColor(),
+      wasSnapped: false,
     };
   }
 
   onPointerMove(ctx: ToolCtx) {
     if (!this.draft) return;
-    this.draft.last = { ...ctx.canvasPoint };
+    const snap = snapDrawPointer(
+      ctx.canvasPoint,
+      { shift: ctx.shift, alt: ctx.alt },
+      this.draft.wasSnapped,
+    );
+    this.draft.last = snap.point;
     this.draft.shift = ctx.shift;
     this.draft.alt = ctx.alt;
+    this.draft.wasSnapped = snap.snapped;
     const rect = resolveRect(this.draft);
     this.draft.preview.clear();
     this.draft.preview.rect(rect.x, rect.y, rect.w, rect.h);
@@ -71,12 +84,18 @@ class RectToolImpl implements Tool {
 
   onPointerUp(ctx: ToolCtx) {
     if (!this.draft) return;
-    this.draft.last = { ...ctx.canvasPoint };
+    const snap = snapDrawPointer(
+      ctx.canvasPoint,
+      { shift: ctx.shift, alt: ctx.alt },
+      this.draft.wasSnapped,
+    );
+    this.draft.last = snap.point;
     this.draft.shift = ctx.shift;
     this.draft.alt = ctx.alt;
     const rect = resolveRect(this.draft);
     const color = this.draft.color;
     this.clearDraft();
+    getCurrentCompositor()?.clearGuides();
     if (rect.w < MIN_SIZE || rect.h < MIN_SIZE) return;
     history.addLayer({
       id: nanoid(),
@@ -100,6 +119,7 @@ class RectToolImpl implements Tool {
 
   onCancel() {
     this.clearDraft();
+    getCurrentCompositor()?.clearGuides();
   }
 
   private clearDraft() {
