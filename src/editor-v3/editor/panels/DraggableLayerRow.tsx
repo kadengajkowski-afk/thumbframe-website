@@ -23,7 +23,10 @@ import { RenameInput } from "./RenameInput";
 type Props = {
   layer: Layer;
   selected: boolean;
-  onSelect: () => void;
+  /** Day 15: receives the click modifiers so the parent panel can
+   * branch on shift (range select) / cmd or ctrl (toggle membership)
+   * / plain (replace). Keyboard activation passes both flags as false. */
+  onSelect: (mods: { shift: boolean; meta: boolean }) => void;
 };
 
 export function DraggableLayerRow({ layer, selected, onSelect }: Props) {
@@ -74,11 +77,11 @@ export function DraggableLayerRow({ layer, selected, onSelect }: Props) {
         role="button"
         tabIndex={0}
         aria-pressed={selected}
-        onClick={onSelect}
+        onClick={(e) => onSelect({ shift: e.shiftKey, meta: e.ctrlKey || e.metaKey })}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            onSelect();
+            onSelect({ shift: false, meta: false });
           }
         }}
       >

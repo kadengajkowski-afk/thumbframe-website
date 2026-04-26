@@ -17,6 +17,174 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 Day 15.5 — groups (date: 2026-04-25, NEEDS FULL DAY)
+
+**Day 15.5 — needs full day, do not combine with other work.**
+
+Day 15 shipped multi-select / marquee / multi-drag / multi-delete /
+multi-duplicate / MultiSelectPanel / LayerPanel multi-select. Groups
+were sliced off because they're a fundamental schema change with high
+blast radius across the layer model, hit-test, drag pipeline, smart-
+guides, LayerPanel, and Compositor reconciliation. Slicing saved
+Day 15 from breaking when groups inevitably regress something.
+
+Scope when Day 15.5 lands:
+
+- **GroupLayer schema** — new `type: 'group'` variant in the Layer
+  discriminated union, with `children: Layer[]`. Recursive type.
+  Children carry x/y RELATIVE to the group's origin (matches Pixi
+  Container's parent-relative scene graph naturally).
+
+- **Cmd+G groupLayers(ids)** — wraps 2+ selected layers into a new
+  GroupLayer. Children's x/y rebased to group origin. Group bounds =
+  union of children's pre-rebase bounds.
+
+- **Cmd+Shift+G ungroupLayers(id)** — children rebased back to
+  canvas-space, promoted to top-level. Group disposed.
+
+- **Flat groups only** — nested groups out of scope until proven
+  needed. Schema allows them (children: Layer[] includes GroupLayer)
+  but the UI + Cmd+G enforce flat depth.
+
+- **Compositor recursive reconciliation** — paintNode walks into
+  groups, creates a Pixi Container for each group + child nodes
+  inside. Children inherit the group's transform (Pixi gives this
+  for free with the parent-relative scene graph).
+
+- **Hit-test enter / exit** — uiStore.activeGroupId. By default a
+  click on a child returns the group's id. Double-click on a group
+  enters it (sets activeGroupId), then clicks select children. Esc
+  exits the group. findLayerId walks parents until it hits the
+  topmost layer-labeled container that ISN'T inside the active
+  group.
+
+- **Group-level transforms** — opacity / visibility / lock / blend
+  on the group cascade to all children at render time. Per-child
+  transforms still work when the user enters the group.
+
+- **moveLayer / deleteLayer / etc. recursive lookup** — replace
+  `layers.find(l => l.id === id)` everywhere with a recursive
+  `findLayer(layers, id)` helper that walks into groups.
+
+- **Smart guides treat the group as a single shape** — same union-
+  bounds logic Day 15's multi-drag uses, applied to group children.
+
+- **LayerPanel tree UI** — expand/collapse arrow, indented children
+  (visual only — drag-between-groups deferred until a layout-tree
+  model is in place), default collapsed. Selecting an expanded
+  child selects ONLY the child, not the parent.
+
+- **Tests** — Cmd+G creates the group + children moved in,
+  Cmd+Shift+G promotes back, hit-test selects group / child correctly
+  with / without activeGroupId, recursive findLayer works for arbitrary
+  depth.
+
+Risk areas:
+1. Coordinate-space rebase on group/ungroup is the main fragility.
+2. Recursive reconciliation reorders the existing flat-walk pattern.
+3. Selection rendering needs to know whether a group is "entered" so
+   the union outline draws around the group OR the individual
+   children depending on context.
+4. Smart-guides + multi-drag interaction with grouped selections.
+
+Estimated 4-6 hours focused work. Do NOT combine with other day
+work — landing groups + something else in the same merge will make
+the regression source unclear if anything breaks.
+
+## Cycle 2 Day 15 — held back (date: 2026-04-25)
+
+- **Selection-outline render shows ONE union outline when 2+ selected**
+  per spec, dropping per-layer outlines. Some users prefer Figma's
+  "individual outlines + union bbox both" look. Easy to swap if
+  feedback comes back: render per-layer first, then a union outline
+  on top — both branches in renderSelection. Held until a designer
+  weighs in.
+
+- **Marquee starts from any empty-canvas pointerdown.** Doesn't
+  branch on whether the active tool is Select — RectTool /
+  EllipseTool / TextTool all draw on empty canvas instead. The
+  marquee path lives in SelectTool only, so this is correct, but
+  worth noting that switching to those tools and clicking on empty
+  canvas does the tool's draw, not a marquee.
+
+- **Marquee uses partial-overlap intersection (any overlap counts).**
+  Figma + Sketch use this convention. Some users (Photoshop habit)
+  expect "fully contained only" — could add a Shift / Alt modifier
+  swap if anyone asks.
+
+- **Marquee outline isn't dashed.** Spec said "1px dashed" but Pixi
+  Graphics doesn't have a built-in dash style — would need a custom
+  shader or per-segment manual draw. Solid outline is acceptable;
+  add dashing once the same pattern is needed for the layout-guide
+  feature later.
+
+- **Smart guides during multi-drag use the union bbox as the snap
+  subject.** Inner edges of moving members don't snap to one another.
+  Some users want to see "this layer aligns to the canvas centerline
+  while the other one stays free" type interactions — that needs
+  per-member snapping with priority resolution. Out of scope.
+
+- **MultiSelectPanel "Mixed" applies to opacity + blend only.**
+  Could extend to fill/stroke when 2+ layers of the SAME type are
+  selected (rect + rect, text + text). Held — adds branching for
+  marginal utility; user can always select one layer at a time to
+  edit type-specific properties.
+
+- **LayerPanel range select uses the visual (reversed) order.**
+  Correct per spec. shiftAnchorRef is layer id, not display index,
+  so reordering between range selects re-anchors correctly. The
+  anchor isn't cleared on selection-replace by the canvas — could
+  be confusing if the user clicks a canvas layer (canvas path
+  doesn't update the LayerPanel anchor) then shift-clicks in the
+  panel. Acceptable; the anchor ref is local to LayerPanel.
+
+- **history.deleteLayers selection cleanup is the same shape as
+  deleteLayer's** — stripped from selectedLayerIds. Doesn't touch
+  hoveredLayerId or editingTextLayerId — those are cleaned up on
+  the next render tick by the existing guard paths.
+
+- **history.duplicateLayers walks back-to-front** so each splice's
+  insert position remains valid. If two source ids are adjacent, the
+  copies still land sequentially.
+
+- **MultiSelectPanel "Reset" on Mixed opacity sets all to 100%.**
+  Arbitrary choice — could just as easily reset to "the most-common
+  value" or "the first selected layer's value". 100% is the most
+  common user intent ("just make them all visible"). Bikeshed.
+
+- **applyOpacity / applyBlend / etc. iterate selection in a loop.**
+  N setLayerOpacity calls inside one stroke. Fine for small N but
+  if multi-select grows to 100+ layers, batching directly via a
+  custom history method would be cheaper. Defer until a real perf
+  signal.
+
+- **Locked layers still appear in the LayerPanel as selectable.**
+  Drag is blocked at the canvas level (SelectTool filters them at
+  pointerdown), but they can still be selected via panel click +
+  cmd-clicked into a multi-selection. The MultiSelectPanel's
+  delete-all + lock toggle still operate on them — debatable but
+  matches Figma's "locked is a soft hint" model.
+
+- **Multi-drag drops locked members from the MOVE set but keeps
+  them in the SELECTION.** Selection state and "what's actually
+  draggable" diverge for that one tick. Worth a UX think when
+  resize handles land Day 16.
+
+- **Selection toggle on the canvas via shift-click doesn't update
+  LayerPanel's shiftAnchorRef.** Range-shift in the panel after
+  canvas-shift may anchor from a stale id. Acceptable — they're
+  separate selection surfaces and most users don't switch between
+  them mid-multi-select.
+
+- **history.ts had to be split** to stay under the 400-line ceiling.
+  Now: history.ts (core) + history.text.ts (text + effect setters)
+  + buildImageLayer.ts (image factory). Public history is merged via
+  Object.assign so callers see one API. Internal commit / mutate /
+  isStrokeOpen exposed via _historyInternals — accessed lazily inside
+  text.ts methods to dodge circular-import init order. Future
+  setter additions should go in the text.ts module if they're
+  text-related, otherwise consider a third split.
+
 ## Cycle 2 Day 14 — held back (date: 2026-04-25)
 
 - **Snap doesn't preview the would-be position before pointerup.**

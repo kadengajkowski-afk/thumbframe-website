@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -21,11 +22,22 @@ import "./layer-panel.css";
  * visually-topmost layer renders first (Figma/Photoshop convention).
  * The display-index ↔ array-index translation happens in
  * handleDragEnd so DraggableLayerRow can stay oblivious to it.
+ *
+ * Day 15 multi-select rules — applied to row clicks via the modifier
+ * flags forwarded from DraggableLayerRow:
+ *   - plain          → replace selection with just this row
+ *   - cmd / ctrl     → toggle this row's membership (preserve rest)
+ *   - shift          → select range from anchor to this row (visual
+ *                      order — same row order the panel renders)
+ *
+ * The shift-anchor is the most-recently single-clicked row id, kept
+ * in a ref so range selects don't drift when re-renders happen.
  */
 export function LayerPanel() {
   const layers = useDocStore((s) => s.layers);
   const selectedIds = useUiStore((s) => s.selectedLayerIds);
   const setSelectedLayerIds = useUiStore((s) => s.setSelectedLayerIds);
+  const shiftAnchorRef = useRef<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -33,6 +45,34 @@ export function LayerPanel() {
 
   const reversed = [...layers].reverse();
   const reversedIds = reversed.map((l) => l.id);
+
+  function handleRowSelect(layerId: string, mods: { shift: boolean; meta: boolean }) {
+    if (mods.shift && shiftAnchorRef.current && shiftAnchorRef.current !== layerId) {
+      // Range select — visual (reversed) order. Pick every id between
+      // the anchor and the click, inclusive of both ends.
+      const a = reversedIds.indexOf(shiftAnchorRef.current);
+      const b = reversedIds.indexOf(layerId);
+      if (a >= 0 && b >= 0) {
+        const lo = Math.min(a, b);
+        const hi = Math.max(a, b);
+        setSelectedLayerIds(reversedIds.slice(lo, hi + 1));
+        return;
+      }
+    }
+    if (mods.meta) {
+      // Toggle membership.
+      setSelectedLayerIds(
+        selectedIds.includes(layerId)
+          ? selectedIds.filter((id) => id !== layerId)
+          : [...selectedIds, layerId],
+      );
+      shiftAnchorRef.current = layerId;
+      return;
+    }
+    // Plain click — replace selection.
+    setSelectedLayerIds([layerId]);
+    shiftAnchorRef.current = layerId;
+  }
 
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e;
@@ -72,11 +112,7 @@ export function LayerPanel() {
                   key={layer.id}
                   layer={layer}
                   selected={selectedIds.includes(layer.id)}
-                  onSelect={() =>
-                    setSelectedLayerIds(
-                      selectedIds.includes(layer.id) ? [] : [layer.id],
-                    )
-                  }
+                  onSelect={(mods) => handleRowSelect(layer.id, mods)}
                 />
               ))}
             </ul>
