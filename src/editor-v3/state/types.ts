@@ -67,18 +67,51 @@ export type ImageLayer = BaseLayer & {
 
 export type TextAlign = "left" | "center" | "right";
 export type FontStyle = "normal" | "italic";
-/** Day 12 ships 6 OFL fonts. Day 13 expands to ~25-30. The literal
- * union exists for the ContextPanel font dropdown; loose strings are
- * accepted on the layer so we don't churn the schema each font drop. */
+/** Day 12 shipped 6 OFL fonts; Day 13 expands to 25 across six
+ * categories. The literal union exists for the font picker; loose
+ * strings are accepted on the layer so we don't churn the schema
+ * each font drop. */
 export const BUNDLED_FONTS = [
+  // Sans
   "Inter",
+  "Roboto",
+  "Montserrat",
+  "Poppins",
+  "Lato",
+  "Open Sans",
+  "Raleway",
+  "Source Sans 3",
+  "Nunito",
+  "Work Sans",
+  "Rubik",
+  // Serif
+  "DM Serif Display",
+  "Playfair Display",
+  "Merriweather",
+  "Lora",
+  // Display
   "Anton",
   "Bebas Neue",
   "Archivo Black",
   "Oswald",
+  "Bangers",
+  "Russo One",
+  "Squada One",
+  "Black Ops One",
+  // Handwritten
   "Permanent Marker",
+  // Pixel / retro
+  "Press Start 2P",
 ] as const;
 export type BundledFont = (typeof BUNDLED_FONTS)[number];
+
+export type FontCategory =
+  | "sans"
+  | "serif"
+  | "display"
+  | "handwritten"
+  | "pixel"
+  | "mono";
 
 /** Day 13 — extra strokes layered behind the primary text for the
  * chunky YouTube-thumbnail outline look. The single stroke
