@@ -13,6 +13,7 @@ import type {
   ImageLayer,
   Layer,
   TextAlign,
+  TextLayerPatch,
   TextStrokeStack,
 } from "@/state/types";
 import { MAX_TEXT_STROKES } from "@/state/types";
@@ -394,6 +395,18 @@ export const history = {
     };
     if (openStroke) mutate(run);
     else commit("Edit stroke", run);
+  },
+
+  /** Day 13: apply a text-style preset in ONE history entry. The
+   * `patch` is shallow-merged onto the layer; arrays in the patch
+   * (e.g. `strokes`) replace whole. Use this instead of calling
+   * many setters in a loop — that would push N history entries. */
+  applyTextPreset(id: string, patch: Partial<TextLayerPatch>, label: string) {
+    commit(label, (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (!l || l.type !== "text") return;
+      Object.assign(l, patch);
+    });
   },
 
   /** Compositor-driven auto-resize. Writes layer.width / height after

@@ -6,6 +6,7 @@ import { snapWeight, getFontMeta } from "@/lib/fonts";
 import * as s from "./ContextPanel.styles";
 import { TextEffects } from "./TextEffects";
 import { FontPicker } from "./FontPicker";
+import { TextPresets } from "./TextPresets";
 
 /**
  * Text-specific section of the ContextPanel. Keeps the rect/ellipse
@@ -27,6 +28,7 @@ export function TextProperties({ layer }: { layer: TextLayer }) {
 
   return (
     <>
+      <TextPresets layer={layer} />
       <section style={s.section}>
         <label style={s.fieldLabel}>Font</label>
         <FontPicker

@@ -198,4 +198,14 @@ export const TEXT_EFFECT_DEFAULTS = {
 } as const;
 export const MAX_TEXT_STROKES = 3;
 
+/** Subset of TextLayer fields that can be batch-applied via
+ * history.applyTextPreset. Excludes id / type / position / size /
+ * geometry; presets only restyle, never reposition. */
+export type TextLayerPatch = Partial<
+  Omit<
+    TextLayer,
+    "id" | "type" | "x" | "y" | "width" | "height" | "name" | "hidden" | "locked"
+  >
+>;
+
 export type Layer = RectLayer | EllipseLayer | TextLayer | ImageLayer;
