@@ -80,9 +80,25 @@ export const BUNDLED_FONTS = [
 ] as const;
 export type BundledFont = (typeof BUNDLED_FONTS)[number];
 
+/** Day 13 — extra strokes layered behind the primary text for the
+ * chunky YouTube-thumbnail outline look. The single stroke
+ * (strokeColor/Width/Alpha) carried over from Day 12 stays as the
+ * "primary" stroke (innermost). Each entry in `strokes` renders as a
+ * separate Text node sitting BEHIND the primary, with progressively
+ * thicker strokes — outermost first. Capped at 3. */
+export type TextStrokeStack = {
+  color: number;
+  width: number;
+  alpha: number;
+};
+
 /** Auto-sized text box. width/height are written by Compositor after
  * the Pixi Text node measures itself — they exist on the layer so
- * selection / drag / hit-test / reorder code paths reuse rect logic. */
+ * selection / drag / hit-test / reorder code paths reuse rect logic.
+ *
+ * Day 13 additions: shadow*, glow*, and `strokes`. All optional —
+ * pre-Day-13 layers in the wild (and tests) keep working because
+ * read sites default at point of use. */
 export type TextLayer = BaseLayer & {
   type: "text";
   text: string;
@@ -99,6 +115,54 @@ export type TextLayer = BaseLayer & {
   strokeAlpha: number;
   lineHeight: number;
   letterSpacing: number;
+  // ── Day 13: drop shadow ────────────────────────────────────────
+  shadowEnabled?: boolean;
+  /** 0xRRGGBB. */
+  shadowColor?: number;
+  /** 0..1. */
+  shadowAlpha?: number;
+  /** 0..50, in canvas px. */
+  shadowBlur?: number;
+  /** -50..50, in canvas px. */
+  shadowOffsetX?: number;
+  /** -50..50, in canvas px. */
+  shadowOffsetY?: number;
+  // ── Day 13: outer glow ─────────────────────────────────────────
+  glowEnabled?: boolean;
+  /** 0xRRGGBB. */
+  glowColor?: number;
+  /** 0..1. */
+  glowAlpha?: number;
+  /** 0..50, in canvas px. */
+  glowDistance?: number;
+  /** 0.1..1 — higher = smoother + slower. */
+  glowQuality?: number;
+  /** 0..10. */
+  glowOuterStrength?: number;
+  /** 0..10. */
+  glowInnerStrength?: number;
+  // ── Day 13: stacked strokes (outer rings) ──────────────────────
+  strokes?: TextStrokeStack[];
 };
+
+/** Defaults for Day 13 text-effect fields. Used at every read site so
+ * pre-existing layers without these fields render cleanly. */
+export const TEXT_EFFECT_DEFAULTS = {
+  shadowEnabled: false,
+  shadowColor: 0x000000,
+  shadowAlpha: 0.5,
+  shadowBlur: 4,
+  shadowOffsetX: 4,
+  shadowOffsetY: 4,
+  glowEnabled: false,
+  glowColor: 0xffffff,
+  glowAlpha: 0.7,
+  glowDistance: 8,
+  glowQuality: 0.5,
+  glowOuterStrength: 2,
+  glowInnerStrength: 0,
+  strokes: [] as TextStrokeStack[],
+} as const;
+export const MAX_TEXT_STROKES = 3;
 
 export type Layer = RectLayer | EllipseLayer | TextLayer | ImageLayer;

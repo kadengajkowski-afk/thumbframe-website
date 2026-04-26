@@ -13,7 +13,9 @@ import type {
   ImageLayer,
   Layer,
   TextAlign,
+  TextStrokeStack,
 } from "@/state/types";
+import { MAX_TEXT_STROKES } from "@/state/types";
 
 // Canvas logical size. Lives here until docStore gains a `canvas` field
 // (Cycle 2 when export + resize are in scope).
@@ -251,6 +253,147 @@ export const history = {
     };
     if (openStroke) mutate(run);
     else commit("Letter spacing", run);
+  },
+
+  // ── Day 13: drop shadow ──────────────────────────────────────────────
+  setShadowEnabled(id: string, enabled: boolean) {
+    commit(enabled ? "Enable shadow" : "Disable shadow", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.shadowEnabled = enabled;
+    });
+  },
+
+  setShadowColor(id: string, color: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.shadowColor = color;
+    };
+    if (openStroke) mutate(run);
+    else commit("Shadow color", run);
+  },
+
+  setShadowAlpha(id: string, alpha: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.shadowAlpha = alpha;
+    };
+    if (openStroke) mutate(run);
+    else commit("Shadow opacity", run);
+  },
+
+  setShadowBlur(id: string, blur: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.shadowBlur = blur;
+    };
+    if (openStroke) mutate(run);
+    else commit("Shadow blur", run);
+  },
+
+  setShadowOffset(id: string, offsetX: number, offsetY: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") {
+        l.shadowOffsetX = offsetX;
+        l.shadowOffsetY = offsetY;
+      }
+    };
+    if (openStroke) mutate(run);
+    else commit("Shadow offset", run);
+  },
+
+  // ── Day 13: outer glow ───────────────────────────────────────────────
+  setGlowEnabled(id: string, enabled: boolean) {
+    commit(enabled ? "Enable glow" : "Disable glow", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.glowEnabled = enabled;
+    });
+  },
+
+  setGlowColor(id: string, color: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.glowColor = color;
+    };
+    if (openStroke) mutate(run);
+    else commit("Glow color", run);
+  },
+
+  setGlowAlpha(id: string, alpha: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.glowAlpha = alpha;
+    };
+    if (openStroke) mutate(run);
+    else commit("Glow opacity", run);
+  },
+
+  setGlowDistance(id: string, distance: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.glowDistance = distance;
+    };
+    if (openStroke) mutate(run);
+    else commit("Glow distance", run);
+  },
+
+  setGlowQuality(id: string, quality: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.glowQuality = quality;
+    };
+    if (openStroke) mutate(run);
+    else commit("Glow quality", run);
+  },
+
+  setGlowOuterStrength(id: string, strength: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.glowOuterStrength = strength;
+    };
+    if (openStroke) mutate(run);
+    else commit("Glow outer strength", run);
+  },
+
+  setGlowInnerStrength(id: string, strength: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l && l.type === "text") l.glowInnerStrength = strength;
+    };
+    if (openStroke) mutate(run);
+    else commit("Glow inner strength", run);
+  },
+
+  // ── Day 13: stacked strokes (multi-stroke wiring lands commit 3) ────
+  addStroke(id: string, stroke: TextStrokeStack) {
+    commit("Add stroke", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (!l || l.type !== "text") return;
+      const stack = l.strokes ?? [];
+      if (stack.length >= MAX_TEXT_STROKES) return;
+      l.strokes = [...stack, stroke];
+    });
+  },
+
+  removeStroke(id: string, index: number) {
+    commit("Remove stroke", (layers) => {
+      const l = layers.find((x) => x.id === id);
+      if (!l || l.type !== "text" || !l.strokes) return;
+      if (index < 0 || index >= l.strokes.length) return;
+      l.strokes = l.strokes.filter((_, i) => i !== index);
+    });
+  },
+
+  setStroke(id: string, index: number, patch: Partial<TextStrokeStack>) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (!l || l.type !== "text" || !l.strokes) return;
+      const cur = l.strokes[index];
+      if (!cur) return;
+      l.strokes[index] = { ...cur, ...patch };
+    };
+    if (openStroke) mutate(run);
+    else commit("Edit stroke", run);
   },
 
   /** Compositor-driven auto-resize. Writes layer.width / height after
