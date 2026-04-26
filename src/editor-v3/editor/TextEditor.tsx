@@ -35,7 +35,9 @@ function ActiveEditor({ layerId }: { layerId: string }) {
     layer && layer.type === "text" ? layer.text : "",
   );
   const [, setTick] = useState(0);
+  const [measuredWidth, setMeasuredWidth] = useState(0);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const mirrorRef = useRef<HTMLDivElement>(null);
 
   // Keep the overlay aligned through pan/zoom by re-rendering on
   // viewport movement.
@@ -67,11 +69,24 @@ function ActiveEditor({ layerId }: { layerId: string }) {
     const id = requestAnimationFrame(() => {
       ta.focus({ preventScroll: true });
       ta.select();
-      // DIAGNOSTIC — remove after bug closed.
-      console.log("[TE/rAF-focus] activeElement=", document.activeElement?.tagName, "isTa=", document.activeElement === ta);
     });
     return () => cancelAnimationFrame(id);
   }, []);
+
+  // Measure the rendered text via a hidden mirror that carries the
+  // EXACT same font properties as the textarea. The textarea's own
+  // intrinsic width comes from `cols`, which can't shrink-fit text —
+  // so we set width explicitly from the mirror's offsetWidth.
+  useLayoutEffect(() => {
+    if (mirrorRef.current) setMeasuredWidth(mirrorRef.current.offsetWidth);
+  }, [
+    draft,
+    layer?.type === "text" ? layer.fontFamily : null,
+    layer?.type === "text" ? layer.fontSize : null,
+    layer?.type === "text" ? layer.fontWeight : null,
+    layer?.type === "text" ? layer.fontStyle : null,
+    layer?.type === "text" ? layer.letterSpacing : null,
+  ]);
 
   // Re-paint when the font lands so the textarea metrics line up
   // with the rendered Pixi text after commit.
@@ -141,59 +156,86 @@ function ActiveEditor({ layerId }: { layerId: string }) {
     commit();
   }
 
+  const lineHeightPx = layer.fontSize * layer.lineHeight;
+  const lineCount = Math.max(1, draft.split("\n").length);
+  // Caret needs a sliver of room past the last glyph so it doesn't get
+  // clipped by overflow:hidden. Scale with font size.
+  const caretAllowance = Math.max(2, Math.ceil(layer.fontSize * 0.1));
+  const minWidth = Math.max(8, Math.ceil(layer.fontSize * 0.5));
+
+  // Shared font properties — must match between mirror and textarea
+  // OR width measurement will lie. Same values feed Pixi's TextStyle
+  // in sceneHelpers.ts (fontFamily fallback, fontSize, weight, style,
+  // letterSpacing, lineHeight = layer.lineHeight * layer.fontSize).
+  const fontProps: CSSProperties = {
+    fontFamily: `"${layer.fontFamily}", system-ui, sans-serif`,
+    fontSize: `${layer.fontSize}px`,
+    fontWeight: layer.fontWeight,
+    fontStyle: layer.fontStyle,
+    lineHeight: `${lineHeightPx}px`,
+    letterSpacing: `${layer.letterSpacing}px`,
+    whiteSpace: "pre",
+    padding: 0,
+    margin: 0,
+    border: "none",
+    boxSizing: "content-box",
+  };
+
   const style: CSSProperties = {
+    ...fontProps,
     position: "absolute",
     top: screen.y,
     left: screen.x,
     transformOrigin: "top left",
     transform: `scale(${scale})`,
-    fontFamily: `"${layer.fontFamily}", system-ui, sans-serif`,
-    fontSize: `${layer.fontSize}px`,
-    fontWeight: layer.fontWeight,
-    fontStyle: layer.fontStyle,
     color: pixiToHex(layer.color),
     opacity: layer.fillAlpha,
     textAlign: layer.align,
-    lineHeight: layer.lineHeight,
-    letterSpacing: `${layer.letterSpacing}px`,
     background: "transparent",
-    border: "1px dashed var(--accent-orange)",
     outline: "none",
-    padding: "2px 4px",
-    margin: "-3px -5px",
-    minWidth: 60,
-    minHeight: layer.fontSize * layer.lineHeight,
-    width: "auto",
+    width: Math.max(measuredWidth + caretAllowance, minWidth),
+    height: lineCount * lineHeightPx,
     resize: "none",
     overflow: "hidden",
-    whiteSpace: "pre",
     zIndex: 30,
-    boxSizing: "content-box",
     pointerEvents: "auto",
   };
 
+  const mirrorStyle: CSSProperties = {
+    ...fontProps,
+    position: "absolute",
+    visibility: "hidden",
+    pointerEvents: "none",
+    top: -9999,
+    left: -9999,
+    display: "inline-block",
+  };
+
   return (
-    <textarea
-      ref={taRef}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={onBlurGuarded}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          // Stop the global hotkey from also firing.
-          e.stopPropagation();
-          cancel();
-        } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-          e.preventDefault();
-          e.stopPropagation();
-          commit();
-        }
-      }}
-      style={style}
-      rows={1}
-      cols={1}
-      data-text-editor="true"
-    />
+    <>
+      <div ref={mirrorRef} style={mirrorStyle} aria-hidden="true">
+        {draft || " "}
+      </div>
+      <textarea
+        ref={taRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={onBlurGuarded}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            cancel();
+          } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            e.stopPropagation();
+            commit();
+          }
+        }}
+        style={style}
+        rows={1}
+        data-text-editor="true"
+      />
+    </>
   );
 }
