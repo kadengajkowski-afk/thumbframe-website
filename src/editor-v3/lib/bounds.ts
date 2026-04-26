@@ -56,3 +56,34 @@ export function canvasBounds(width: number, height: number): LayerBounds {
     height,
   };
 }
+
+/** Day 15 — union AABB of multiple layers. Used by the selection-
+ * outline renderer when 2+ layers are selected (one outline wraps
+ * the whole group) and by SelectTool's multi-drag start capture.
+ * Returns null when the input list is empty. */
+export function unionBounds(layers: readonly Layer[]): LayerBounds | null {
+  if (layers.length === 0) return null;
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const l of layers) {
+    const b = layerBounds(l);
+    if (b.left < left) left = b.left;
+    if (b.top < top) top = b.top;
+    if (b.right > right) right = b.right;
+    if (b.bottom > bottom) bottom = b.bottom;
+  }
+  const width = right - left;
+  const height = bottom - top;
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width,
+    height,
+    centerX: left + width / 2,
+    centerY: top + height / 2,
+  };
+}

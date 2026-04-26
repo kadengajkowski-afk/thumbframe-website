@@ -345,6 +345,32 @@ export function paintSelectionOutline(
   node.y = layer.y;
 }
 
+/** Day 15: outline wrapping the union AABB of a multi-selection.
+ * Same cream stroke as the per-layer outline so the read is
+ * consistent — the only visual difference is one outline covering
+ * the whole group instead of N. */
+export function paintUnionOutline(
+  node: Graphics,
+  union: { left: number; top: number; width: number; height: number },
+  strokeWidth: number,
+) {
+  node.clear();
+  node.rect(
+    -SELECTION_PAD,
+    -SELECTION_PAD,
+    union.width + SELECTION_PAD * 2,
+    union.height + SELECTION_PAD * 2,
+  );
+  node.stroke({
+    color: SELECTION_COLOR,
+    width: strokeWidth,
+    alpha: 1,
+    alignment: 0.5,
+  });
+  node.x = union.left;
+  node.y = union.top;
+}
+
 /** Builds the pixel-grid Graphics once. Stroke stays at 0.1 canvas-px
  * so it reads as a ~0.6 screen-px line at 6× zoom — visible but not
  * mushy. Alpha starts at 0; Compositor fades it in when zoom ≥ 600%. */

@@ -372,6 +372,7 @@ export class Compositor {
       this.scene(),
       this.viewport,
       useDocStore.getState().layers,
+      useUiStore.getState().selectedLayerIds,
       SELECTION_WIDTH,
     );
   }

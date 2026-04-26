@@ -8,14 +8,18 @@ import { findLayerId } from "../sceneHelpers";
 import { getCurrentCompositor } from "../compositorRef";
 import type { Tool, ToolCtx } from "./ToolTypes";
 
+type DragLayerStart = { id: string; x: number; y: number };
+
 type DragState = {
-  layerId: string;
+  /** Start positions of every layer being moved. For a single-select
+   * drag this has one entry; for a multi-select drag it has all
+   * non-locked selected layers. Locked layers in the selection are
+   * filtered out at pointerdown so the drag works on the rest. */
+  starts: DragLayerStart[];
   startPoint: { x: number; y: number };
-  startX: number;
-  startY: number;
-  /** True after the first move tick that engaged a snap — used so
-   * the tactile "click" alpha bump only fires on the FIRST tick the
-   * snap engaged, not every subsequent tick that re-engages it. */
+  /** Subject's union bounds at drag start — used so smart-guides snap
+   * the WHOLE group's bbox against other layers, not each member. */
+  startUnion: { left: number; top: number; right: number; bottom: number };
   wasSnapped: boolean;
 };
 
@@ -129,14 +133,37 @@ class SelectToolImpl implements Tool {
       return;
     }
 
+    // Capture starting positions for every non-locked selected layer.
+    // Multi-drag = the same dx/dy applied to each on every tick.
+    const docLayers = useDocStore.getState().layers;
+    const movingIds = ui.selectedLayerIds.length > 0 ? ui.selectedLayerIds : [hitLayerId];
+    const starts: DragLayerStart[] = [];
+    let unionLeft = Infinity;
+    let unionTop = Infinity;
+    let unionRight = -Infinity;
+    let unionBottom = -Infinity;
+    for (const id of movingIds) {
+      const l = docLayers.find((x) => x.id === id);
+      if (!l || l.locked) continue;
+      starts.push({ id, x: l.x, y: l.y });
+      const b = layerBounds(l);
+      if (b.left < unionLeft) unionLeft = b.left;
+      if (b.top < unionTop) unionTop = b.top;
+      if (b.right > unionRight) unionRight = b.right;
+      if (b.bottom > unionBottom) unionBottom = b.bottom;
+    }
+    if (starts.length === 0) {
+      this.drag = null;
+      return;
+    }
+
     this.drag = {
-      layerId: hitLayerId,
+      starts,
       startPoint: { ...ctx.canvasPoint },
-      startX: layer.x,
-      startY: layer.y,
+      startUnion: { left: unionLeft, top: unionTop, right: unionRight, bottom: unionBottom },
       wasSnapped: false,
     };
-    history.beginStroke("Move layer");
+    history.beginStroke(starts.length === 1 ? "Move layer" : `Move ${starts.length} layers`);
   }
 
   onPointerMove(ctx: ToolCtx) {
@@ -146,10 +173,8 @@ class SelectToolImpl implements Tool {
       return;
     }
     if (!this.drag) return;
-    const dx = ctx.canvasPoint.x - this.drag.startPoint.x;
-    const dy = ctx.canvasPoint.y - this.drag.startPoint.y;
-    let nextX = this.drag.startX + dx;
-    let nextY = this.drag.startY + dy;
+    let dx = ctx.canvasPoint.x - this.drag.startPoint.x;
+    let dy = ctx.canvasPoint.y - this.drag.startPoint.y;
 
     const ui = useUiStore.getState();
     const enabled = ui.smartGuidesEnabled && !ctx.shift;
@@ -157,42 +182,48 @@ class SelectToolImpl implements Tool {
 
     if (enabled && compositor) {
       const layers = useDocStore.getState().layers;
-      const moving = layers.find((l) => l.id === this.drag!.layerId);
-      if (moving) {
-        // Subject bounds at the candidate (pre-snap) position.
-        const subject = {
-          ...layerBounds(moving),
-          left: nextX,
-          right: nextX + moving.width,
-          top: nextY,
-          bottom: nextY + moving.height,
-          centerX: nextX + moving.width / 2,
-          centerY: nextY + moving.height / 2,
-        };
-        const others = layers
-          .filter((l) => l.id !== this.drag!.layerId && !l.hidden)
-          .map(layerBounds);
-        const canvas = canvasBounds(CANVAS_W, CANVAS_H);
-        const threshold = SNAP_THRESHOLD_SCREEN_PX / compositor.viewportScale;
-        const snap = computeSnap(subject, others, canvas, {
-          threshold,
-          spacingOnly: ctx.alt,
-        });
-        nextX += snap.dx;
-        nextY += snap.dy;
-        const snappedThisTick = snap.guides.length > 0;
-        const flash = snappedThisTick && !this.drag.wasSnapped;
-        compositor.setGuides(snap.guides, flash);
-        this.drag.wasSnapped = snappedThisTick;
-      }
+      const movingSet = new Set(this.drag.starts.map((s) => s.id));
+      // Subject = the union bbox shifted by the candidate dx/dy.
+      // Smart guides snap the WHOLE group as one shape (not each
+      // member) so the inner edges of the selected layers don't try
+      // to align to one another.
+      const u = this.drag.startUnion;
+      const w = u.right - u.left;
+      const h = u.bottom - u.top;
+      const subject = {
+        left: u.left + dx,
+        top: u.top + dy,
+        right: u.right + dx,
+        bottom: u.bottom + dy,
+        centerX: u.left + dx + w / 2,
+        centerY: u.top + dy + h / 2,
+        width: w,
+        height: h,
+      };
+      const others = layers
+        .filter((l) => !movingSet.has(l.id) && !l.hidden)
+        .map(layerBounds);
+      const canvas = canvasBounds(CANVAS_W, CANVAS_H);
+      const threshold = SNAP_THRESHOLD_SCREEN_PX / compositor.viewportScale;
+      const snap = computeSnap(subject, others, canvas, {
+        threshold,
+        spacingOnly: ctx.alt,
+      });
+      dx += snap.dx;
+      dy += snap.dy;
+      const snappedThisTick = snap.guides.length > 0;
+      const flash = snappedThisTick && !this.drag.wasSnapped;
+      compositor.setGuides(snap.guides, flash);
+      this.drag.wasSnapped = snappedThisTick;
     } else {
-      // Snapping disabled (Shift held, or master toggle off, or no
-      // compositor in test) — clear any guides from a prior tick.
       if (this.drag.wasSnapped) compositor?.clearGuides();
       this.drag.wasSnapped = false;
     }
 
-    history.moveLayer(this.drag.layerId, nextX, nextY);
+    // Apply the (possibly snap-adjusted) delta to every layer in the drag.
+    for (const s of this.drag.starts) {
+      history.moveLayer(s.id, s.x + dx, s.y + dy);
+    }
   }
 
   onPointerUp(_ctx: ToolCtx) {
@@ -215,10 +246,10 @@ class SelectToolImpl implements Tool {
       return;
     }
     if (!this.drag) return;
-    // Revert to the pre-drag position, then close the stroke. Because
-    // startLayers === endLayers now, endStroke is a no-op — the
-    // canceled drag never touches the undo stack.
-    history.moveLayer(this.drag.layerId, this.drag.startX, this.drag.startY);
+    // Revert every moved layer to its pre-drag position, then close
+    // the stroke. With startLayers === endLayers now, endStroke is a
+    // no-op — the canceled drag never touches the undo stack.
+    for (const s of this.drag.starts) history.moveLayer(s.id, s.x, s.y);
     history.endStroke();
     getCurrentCompositor()?.clearGuides();
     this.drag = null;

@@ -7,23 +7,9 @@ import {
 import { nanoid } from "nanoid";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
-import type {
-  BlendMode,
-  FontStyle,
-  ImageLayer,
-  Layer,
-  TextAlign,
-  TextLayerPatch,
-  TextStrokeStack,
-} from "@/state/types";
-import { MAX_TEXT_STROKES } from "@/state/types";
-
-// Canvas logical size. Lives here until docStore gains a `canvas` field
-// (Cycle 2 when export + resize are in scope).
-const CANVAS_W = 1280;
-const CANVAS_H = 720;
-// Images bigger than the canvas scale down to this fraction.
-const CANVAS_FILL = 0.9;
+import type { BlendMode, Layer } from "@/state/types";
+import { textHistory } from "./history.text";
+import { buildImageLayer } from "./buildImageLayer";
 
 enablePatches();
 
@@ -70,7 +56,17 @@ function mutate(mutator: (draft: Layer[]) => void) {
   setLayers(next);
 }
 
-export const history = {
+/** Day 15 split: shared by lib/history.text.ts so the text-effect
+ * setters can route through the same commit / mutate / openStroke
+ * machinery without duplicating it. Internal use only — not part of
+ * the public history API. */
+export const _historyInternals = {
+  commit,
+  mutate,
+  isStrokeOpen: () => openStroke !== null,
+};
+
+const baseHistory = {
   addLayer(layer: Layer) {
     commit(`Add ${layer.name}`, (layers) => {
       layers.push(layer);
@@ -95,6 +91,25 @@ export const history = {
     const ui = useUiStore.getState();
     if (ui.selectedLayerIds.includes(id)) {
       ui.setSelectedLayerIds(ui.selectedLayerIds.filter((x) => x !== id));
+    }
+  },
+
+  /** Day 15: batch delete — ONE history entry covering all removals.
+   * Calling deleteLayer in a loop would push N entries; this folds the
+   * splice for every id into a single immer block. */
+  deleteLayers(ids: readonly string[]) {
+    if (ids.length === 0) return;
+    const set = new Set(ids);
+    commit(ids.length === 1 ? "Delete layer" : `Delete ${ids.length} layers`, (layers) => {
+      // Walk back-to-front so splices don't invalidate later indices.
+      for (let i = layers.length - 1; i >= 0; i--) {
+        if (set.has(layers[i]!.id)) layers.splice(i, 1);
+      }
+    });
+    const ui = useUiStore.getState();
+    const remaining = ui.selectedLayerIds.filter((id) => !set.has(id));
+    if (remaining.length !== ui.selectedLayerIds.length) {
+      ui.setSelectedLayerIds(remaining);
     }
   },
 
@@ -192,222 +207,8 @@ export const history = {
     else commit("Stroke alpha", run);
   },
 
-  // ── Text-layer setters ──────────────────────────────────────────────
-
-  setText(id: string, text: string) {
-    commit("Edit text", (layers) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.text = text;
-    });
-  },
-
-  setFontFamily(id: string, fontFamily: string) {
-    commit("Font", (layers) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.fontFamily = fontFamily;
-    });
-  },
-
-  setFontSize(id: string, fontSize: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.fontSize = fontSize;
-    };
-    if (openStroke) mutate(run);
-    else commit("Font size", run);
-  },
-
-  setFontWeight(id: string, fontWeight: number) {
-    commit("Font weight", (layers) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.fontWeight = fontWeight;
-    });
-  },
-
-  setFontStyle(id: string, fontStyle: FontStyle) {
-    commit("Italic", (layers) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.fontStyle = fontStyle;
-    });
-  },
-
-  setTextAlign(id: string, align: TextAlign) {
-    commit("Text align", (layers) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.align = align;
-    });
-  },
-
-  setLineHeight(id: string, lineHeight: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.lineHeight = lineHeight;
-    };
-    if (openStroke) mutate(run);
-    else commit("Line height", run);
-  },
-
-  setLetterSpacing(id: string, letterSpacing: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.letterSpacing = letterSpacing;
-    };
-    if (openStroke) mutate(run);
-    else commit("Letter spacing", run);
-  },
-
-  // ── Day 13: drop shadow ──────────────────────────────────────────────
-  setShadowEnabled(id: string, enabled: boolean) {
-    commit(enabled ? "Enable shadow" : "Disable shadow", (layers) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.shadowEnabled = enabled;
-    });
-  },
-
-  setShadowColor(id: string, color: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.shadowColor = color;
-    };
-    if (openStroke) mutate(run);
-    else commit("Shadow color", run);
-  },
-
-  setShadowAlpha(id: string, alpha: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.shadowAlpha = alpha;
-    };
-    if (openStroke) mutate(run);
-    else commit("Shadow opacity", run);
-  },
-
-  setShadowBlur(id: string, blur: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.shadowBlur = blur;
-    };
-    if (openStroke) mutate(run);
-    else commit("Shadow blur", run);
-  },
-
-  setShadowOffset(id: string, offsetX: number, offsetY: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") {
-        l.shadowOffsetX = offsetX;
-        l.shadowOffsetY = offsetY;
-      }
-    };
-    if (openStroke) mutate(run);
-    else commit("Shadow offset", run);
-  },
-
-  // ── Day 13: outer glow ───────────────────────────────────────────────
-  setGlowEnabled(id: string, enabled: boolean) {
-    commit(enabled ? "Enable glow" : "Disable glow", (layers) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.glowEnabled = enabled;
-    });
-  },
-
-  setGlowColor(id: string, color: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.glowColor = color;
-    };
-    if (openStroke) mutate(run);
-    else commit("Glow color", run);
-  },
-
-  setGlowAlpha(id: string, alpha: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.glowAlpha = alpha;
-    };
-    if (openStroke) mutate(run);
-    else commit("Glow opacity", run);
-  },
-
-  setGlowDistance(id: string, distance: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.glowDistance = distance;
-    };
-    if (openStroke) mutate(run);
-    else commit("Glow distance", run);
-  },
-
-  setGlowQuality(id: string, quality: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.glowQuality = quality;
-    };
-    if (openStroke) mutate(run);
-    else commit("Glow quality", run);
-  },
-
-  setGlowOuterStrength(id: string, strength: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.glowOuterStrength = strength;
-    };
-    if (openStroke) mutate(run);
-    else commit("Glow outer strength", run);
-  },
-
-  setGlowInnerStrength(id: string, strength: number) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (l && l.type === "text") l.glowInnerStrength = strength;
-    };
-    if (openStroke) mutate(run);
-    else commit("Glow inner strength", run);
-  },
-
-  // ── Day 13: stacked strokes (multi-stroke wiring lands commit 3) ────
-  addStroke(id: string, stroke: TextStrokeStack) {
-    commit("Add stroke", (layers) => {
-      const l = layers.find((x) => x.id === id);
-      if (!l || l.type !== "text") return;
-      const stack = l.strokes ?? [];
-      if (stack.length >= MAX_TEXT_STROKES) return;
-      l.strokes = [...stack, stroke];
-    });
-  },
-
-  removeStroke(id: string, index: number) {
-    commit("Remove stroke", (layers) => {
-      const l = layers.find((x) => x.id === id);
-      if (!l || l.type !== "text" || !l.strokes) return;
-      if (index < 0 || index >= l.strokes.length) return;
-      l.strokes = l.strokes.filter((_, i) => i !== index);
-    });
-  },
-
-  setStroke(id: string, index: number, patch: Partial<TextStrokeStack>) {
-    const run = (layers: Layer[]) => {
-      const l = layers.find((x) => x.id === id);
-      if (!l || l.type !== "text" || !l.strokes) return;
-      const cur = l.strokes[index];
-      if (!cur) return;
-      l.strokes[index] = { ...cur, ...patch };
-    };
-    if (openStroke) mutate(run);
-    else commit("Edit stroke", run);
-  },
-
-  /** Day 13: apply a text-style preset in ONE history entry. The
-   * `patch` is shallow-merged onto the layer; arrays in the patch
-   * (e.g. `strokes`) replace whole. Use this instead of calling
-   * many setters in a loop — that would push N history entries. */
-  applyTextPreset(id: string, patch: Partial<TextLayerPatch>, label: string) {
-    commit(label, (layers) => {
-      const l = layers.find((x) => x.id === id);
-      if (!l || l.type !== "text") return;
-      Object.assign(l, patch);
-    });
-  },
+  // ── Text-layer setters live in lib/history.text.ts (Day 12+13) ──
+  // Spread back in below the `history` export so callers see one API.
 
   /** Compositor-driven auto-resize. Writes layer.width / height after
    * Pixi Text measures its bounds. Skips history (size is derived
@@ -457,6 +258,45 @@ export const history = {
     });
     useUiStore.getState().setSelectedLayerIds([newId]);
     return newId;
+  },
+
+  /** Day 15: batch duplicate — ONE history entry, all duplicates
+   * inserted right after their source, selection switches to the new
+   * copies. Returns the new ids in source order. */
+  duplicateLayers(ids: readonly string[]): string[] {
+    if (ids.length === 0) return [];
+    const current = useDocStore.getState().layers;
+    // Pre-compute the source-id → new-id mapping in stable order so
+    // the immer mutator doesn't re-derive anything from random order.
+    const sources: { src: Layer; newId: string }[] = [];
+    for (const id of ids) {
+      const src = current.find((l) => l.id === id);
+      if (src) sources.push({ src, newId: nanoid() });
+    }
+    if (sources.length === 0) return [];
+    commit(
+      sources.length === 1 ? `Duplicate ${sources[0]!.src.name}` : `Duplicate ${sources.length} layers`,
+      (layers) => {
+        // Walk back-to-front so each splice's insert position remains
+        // valid for the next one.
+        for (let i = sources.length - 1; i >= 0; i--) {
+          const { src, newId } = sources[i]!;
+          const idx = layers.findIndex((l) => l.id === src.id);
+          if (idx < 0) continue;
+          const copy: Layer = {
+            ...src,
+            id: newId,
+            x: src.x + 20,
+            y: src.y + 20,
+            name: `${src.name} copy`,
+          };
+          layers.splice(idx + 1, 0, copy);
+        }
+      },
+    );
+    const newIds = sources.map((s) => s.newId);
+    useUiStore.getState().setSelectedLayerIds(newIds);
+    return newIds;
   },
 
   beginStroke(label: string) {
@@ -512,37 +352,11 @@ export const history = {
   },
 };
 
-function buildImageLayer(bitmap: ImageBitmap, name: string): ImageLayer {
-  const natW = bitmap.width;
-  const natH = bitmap.height;
+// Day 13 text-effect setters live in lib/history.text.ts to keep
+// this file under the 400-line ceiling. Folded back into the public
+// `history` object so callers see one merged API.
+export const history: typeof baseHistory & typeof textHistory = Object.assign(
+  baseHistory,
+  textHistory,
+);
 
-  let width = natW;
-  let height = natH;
-  if (natW >= CANVAS_W || natH >= CANVAS_H) {
-    const scale = Math.min(
-      (CANVAS_W * CANVAS_FILL) / natW,
-      (CANVAS_H * CANVAS_FILL) / natH,
-    );
-    width = Math.round(natW * scale);
-    height = Math.round(natH * scale);
-  }
-  const x = Math.round((CANVAS_W - width) / 2);
-  const y = Math.round((CANVAS_H - height) / 2);
-
-  return {
-    id: nanoid(),
-    type: "image",
-    x,
-    y,
-    width,
-    height,
-    opacity: 1,
-    name,
-    hidden: false,
-    locked: false,
-    blendMode: "normal",
-    bitmap,
-    naturalWidth: natW,
-    naturalHeight: natH,
-  };
-}

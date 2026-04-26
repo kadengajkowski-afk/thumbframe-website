@@ -127,8 +127,8 @@ const COMMANDS: Command[] = [
   // Edit
   { id: "edit.undo", label: "Undo", section: "Edit", hotkey: "Cmd+Z", run: () => history.undo() },
   { id: "edit.redo", label: "Redo", section: "Edit", hotkey: "Cmd+Shift+Z", run: () => history.redo() },
-  { id: "edit.delete", label: "Delete selected", section: "Edit", hotkey: "Del", aliases: ["remove"], run: () => { for (const id of selectedIds()) history.deleteLayer(id); } },
-  { id: "edit.duplicate", label: "Duplicate selected", section: "Edit", hotkey: "Cmd+D", aliases: ["clone"], run: withSelected((id) => void history.duplicateLayer(id)) },
+  { id: "edit.delete", label: "Delete selected", section: "Edit", hotkey: "Del", aliases: ["remove"], run: () => history.deleteLayers(selectedIds()) },
+  { id: "edit.duplicate", label: "Duplicate selected", section: "Edit", hotkey: "Cmd+D", aliases: ["clone"], run: () => { void history.duplicateLayers(selectedIds()); } },
   { id: "edit.deselect", label: "Deselect all", section: "Edit", hotkey: "Esc", run: () => useUiStore.getState().setSelectedLayerIds([]) },
 
   // Layer

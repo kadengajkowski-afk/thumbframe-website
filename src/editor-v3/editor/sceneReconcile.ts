@@ -1,13 +1,20 @@
 import { Container, Graphics } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import type { Layer } from "@/state/types";
+import { unionBounds } from "@/lib/bounds";
 import {
   createNode,
   destroyNode,
   matchesType,
   paintNode,
   paintSelectionOutline,
+  paintUnionOutline,
 } from "./sceneHelpers";
+
+/** Synthetic id used as the key for the multi-select union outline.
+ * Layers can't take this id (nanoid never produces a 2-char string with
+ * underscores) so it never collides with a real layer's outline. */
+const UNION_OUTLINE_ID = "__union";
 
 /** Layer + selection reconciliation extracted from Compositor so the
  * class body stays inside the 400-line ceiling as the text-editing
@@ -88,8 +95,47 @@ export function renderSelection(
   ids: string[],
   selectionWidth: number,
 ) {
-  const want = new Set(ids);
+  const strokeWidth = selectionWidth / viewport.scale.x;
 
+  // Resolve to actual visible layers — drop hidden / missing ids so
+  // the outline doesn't try to paint against something the user
+  // can't see.
+  const selected = ids
+    .map((id) => layers.find((l) => l.id === id))
+    .filter((l): l is Layer => !!l && !l.hidden);
+
+  // ── Multi-select: ONE outline wrapping the union AABB ───────────
+  if (selected.length >= 2) {
+    // Drop any per-layer outlines from a prior single-select tick.
+    for (const [id, node] of scene.selectionNodes) {
+      if (id !== UNION_OUTLINE_ID) {
+        node.destroy();
+        scene.selectionNodes.delete(id);
+      }
+    }
+    const union = unionBounds(selected);
+    if (!union) return;
+    let node = scene.selectionNodes.get(UNION_OUTLINE_ID);
+    if (!node) {
+      node = new Graphics();
+      node.label = "selection-outline-union";
+      node.eventMode = "none";
+      scene.canvasGroup.addChild(node);
+      scene.selectionNodes.set(UNION_OUTLINE_ID, node);
+    }
+    paintUnionOutline(node, union, strokeWidth);
+    return;
+  }
+
+  // ── Single-select (or none): per-layer outlines ─────────────────
+  // Drop the union outline if the selection just shrank to ≤1.
+  const unionNode = scene.selectionNodes.get(UNION_OUTLINE_ID);
+  if (unionNode) {
+    unionNode.destroy();
+    scene.selectionNodes.delete(UNION_OUTLINE_ID);
+  }
+
+  const want = new Set(ids);
   for (const [id, node] of scene.selectionNodes) {
     if (!want.has(id)) {
       node.destroy();
@@ -97,24 +143,14 @@ export function renderSelection(
     }
   }
 
-  const strokeWidth = selectionWidth / viewport.scale.x;
-  for (const id of ids) {
-    const layer = layers.find((l) => l.id === id);
-    if (!layer || layer.hidden) {
-      const stale = scene.selectionNodes.get(id);
-      if (stale) {
-        stale.destroy();
-        scene.selectionNodes.delete(id);
-      }
-      continue;
-    }
-    let node = scene.selectionNodes.get(id);
+  for (const layer of selected) {
+    let node = scene.selectionNodes.get(layer.id);
     if (!node) {
       node = new Graphics();
       node.label = "selection-outline";
       node.eventMode = "none";
       scene.canvasGroup.addChild(node);
-      scene.selectionNodes.set(id, node);
+      scene.selectionNodes.set(layer.id, node);
     }
     paintSelectionOutline(node, layer, strokeWidth);
   }
@@ -124,9 +160,21 @@ export function refreshSelectionStroke(
   scene: ReconcileScene,
   viewport: Viewport,
   layers: Layer[],
+  selectedIds: readonly string[],
   selectionWidth: number,
 ) {
   const strokeWidth = selectionWidth / viewport.scale.x;
+  // Union outline path — recompute from the current selection.
+  const unionNode = scene.selectionNodes.get(UNION_OUTLINE_ID);
+  if (unionNode) {
+    const selected = selectedIds
+      .map((id) => layers.find((l) => l.id === id))
+      .filter((l): l is Layer => !!l && !l.hidden);
+    const union = unionBounds(selected);
+    if (union) paintUnionOutline(unionNode, union, strokeWidth);
+    return;
+  }
+  // Per-layer outlines.
   for (const [id, node] of scene.selectionNodes) {
     const layer = layers.find((l) => l.id === id);
     if (!layer) continue;
