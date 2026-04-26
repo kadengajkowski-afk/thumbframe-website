@@ -129,6 +129,15 @@ function handleKeydown(e: KeyboardEvent) {
   // (Undo / redo handled above the editable-target gate so value
   // inputs don't swallow Cmd+Z / Cmd+Shift+Z / Cmd+Y.)
 
+  // Day 14: Cmd+\ toggles smart guides. Backslash is harmless in
+  // every other input context (no native default action across
+  // browsers / OSes), so it's safe to bind globally.
+  if (meta && e.key === "\\") {
+    e.preventDefault();
+    runCommand("toggle.smart-guides");
+    return;
+  }
+
   // Layer reorder: [ / ] (and Shift variants).
   if (!meta && e.key === "[") {
     e.preventDefault();
