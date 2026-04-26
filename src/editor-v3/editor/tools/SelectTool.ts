@@ -1,3 +1,4 @@
+import { Graphics } from "pixi.js";
 import { history } from "@/lib/history";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
@@ -17,6 +18,23 @@ type DragState = {
    * snap engaged, not every subsequent tick that re-engages it. */
   wasSnapped: boolean;
 };
+
+type MarqueeState = {
+  start: { x: number; y: number };
+  last: { x: number; y: number };
+  /** Selection at the time the marquee began — used as the "base" so
+   * shift-marquee adds to it instead of replacing it. */
+  baseSelection: readonly string[];
+  preview: Graphics;
+  additive: boolean;
+};
+
+const MARQUEE_FILL = 0xf97316; // --accent-orange
+const MARQUEE_FILL_ALPHA = 0.15;
+const MARQUEE_STROKE_ALPHA = 0.8;
+/** Marquee stroke in screen-space pixels — divided by viewport scale
+ * at draw time so it stays 1px thick at any zoom. */
+const MARQUEE_STROKE_SCREEN_PX = 1;
 
 /** Snap threshold in screen-space pixels. Caller divides by viewport
  * scale to get world-space, so feel stays constant under zoom. */
@@ -46,16 +64,30 @@ class SelectToolImpl implements Tool {
   cursor = "default";
 
   private drag: DragState | null = null;
+  private marquee: MarqueeState | null = null;
 
   onPointerDown(ctx: ToolCtx) {
     const hitLayerId = findLayerId(ctx.target);
     const ui = useUiStore.getState();
 
-    // ── Empty-canvas click ──────────────────────────────────────────
-    // Plain click clears selection; shift-click is a no-op (per spec —
-    // shift-clicking blank space shouldn't drop the existing selection
-    // mid-multi-select). Marquee selection ships in commit 2.
+    // ── Empty-canvas click → start marquee ──────────────────────────
+    // Plain marquee replaces selection on pointerup; shift-marquee
+    // adds to existing selection. Locked + hidden layers are excluded
+    // at pointerup hit-test time.
     if (!hitLayerId) {
+      const preview = new Graphics();
+      preview.eventMode = "none";
+      ctx.preview.addChild(preview);
+      this.marquee = {
+        start: { ...ctx.canvasPoint },
+        last: { ...ctx.canvasPoint },
+        baseSelection: ctx.shift ? ui.selectedLayerIds : [],
+        preview,
+        additive: ctx.shift,
+      };
+      // Plain click on empty canvas clears the selection now (so the
+      // user sees feedback immediately even before they drag); shift
+      // preserves the existing selection as a base for marquee adds.
       if (!ctx.shift) ui.setSelectedLayerIds([]);
       this.drag = null;
       return;
@@ -108,6 +140,11 @@ class SelectToolImpl implements Tool {
   }
 
   onPointerMove(ctx: ToolCtx) {
+    if (this.marquee) {
+      this.marquee.last = { ...ctx.canvasPoint };
+      this.paintMarquee();
+      return;
+    }
     if (!this.drag) return;
     const dx = ctx.canvasPoint.x - this.drag.startPoint.x;
     const dy = ctx.canvasPoint.y - this.drag.startPoint.y;
@@ -159,6 +196,10 @@ class SelectToolImpl implements Tool {
   }
 
   onPointerUp(_ctx: ToolCtx) {
+    if (this.marquee) {
+      this.commitMarquee();
+      return;
+    }
     if (!this.drag) return;
     history.endStroke();
     getCurrentCompositor()?.clearGuides();
@@ -166,6 +207,13 @@ class SelectToolImpl implements Tool {
   }
 
   onCancel() {
+    if (this.marquee) {
+      this.clearMarquee();
+      // Restore the selection that existed when the marquee began.
+      useUiStore.getState().setSelectedLayerIds([...this.marquee.baseSelection]);
+      this.marquee = null;
+      return;
+    }
     if (!this.drag) return;
     // Revert to the pre-drag position, then close the stroke. Because
     // startLayers === endLayers now, endStroke is a no-op — the
@@ -174,6 +222,60 @@ class SelectToolImpl implements Tool {
     history.endStroke();
     getCurrentCompositor()?.clearGuides();
     this.drag = null;
+  }
+
+  private paintMarquee() {
+    const m = this.marquee!;
+    const x = Math.min(m.start.x, m.last.x);
+    const y = Math.min(m.start.y, m.last.y);
+    const w = Math.abs(m.last.x - m.start.x);
+    const h = Math.abs(m.last.y - m.start.y);
+    const compositor = getCurrentCompositor();
+    const strokeWidth = compositor
+      ? MARQUEE_STROKE_SCREEN_PX / compositor.viewportScale
+      : MARQUEE_STROKE_SCREEN_PX;
+    m.preview.clear();
+    m.preview.rect(x, y, w, h);
+    m.preview.fill({ color: MARQUEE_FILL, alpha: MARQUEE_FILL_ALPHA });
+    m.preview.stroke({
+      color: MARQUEE_FILL,
+      width: strokeWidth,
+      alpha: MARQUEE_STROKE_ALPHA,
+    });
+  }
+
+  private commitMarquee() {
+    const m = this.marquee!;
+    const x = Math.min(m.start.x, m.last.x);
+    const y = Math.min(m.start.y, m.last.y);
+    const w = Math.abs(m.last.x - m.start.x);
+    const h = Math.abs(m.last.y - m.start.y);
+    // Pick layers whose bounding box INTERSECTS the marquee — partial
+    // overlap counts (matches Figma / Sketch). Locked + hidden layers
+    // are excluded so the user can't accidentally pick them up.
+    const layers = useDocStore.getState().layers;
+    const picked: string[] = [];
+    for (const l of layers) {
+      if (l.hidden || l.locked) continue;
+      const b = layerBounds(l);
+      if (b.right < x) continue;
+      if (b.left > x + w) continue;
+      if (b.bottom < y) continue;
+      if (b.top > y + h) continue;
+      picked.push(l.id);
+    }
+    // Combine with the base selection (preserving order) when additive.
+    const next = m.additive
+      ? [...m.baseSelection, ...picked.filter((id) => !m.baseSelection.includes(id))]
+      : picked;
+    useUiStore.getState().setSelectedLayerIds(next);
+    this.clearMarquee();
+    this.marquee = null;
+  }
+
+  private clearMarquee() {
+    if (!this.marquee) return;
+    this.marquee.preview.destroy();
   }
 }
 
