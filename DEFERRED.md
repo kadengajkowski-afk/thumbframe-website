@@ -17,6 +17,99 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 Day 14 — held back (date: 2026-04-25)
+
+- **Snap doesn't preview the would-be position before pointerup.**
+  Today the layer position commits through history.moveLayer on
+  every snap — the user sees the snapped position, but the
+  document state mid-drag holds the snapped value, not the cursor
+  delta. Acceptable since beginStroke/endStroke wrap the whole
+  drag into one undo entry, but a future "ghost preview" mode
+  could show both the cursor's raw target AND the snapped position
+  side-by-side. Cycle 3 polish.
+
+- **Threshold is fixed at 6 screen-px.** Some users prefer tighter
+  (4px) for fine work, others looser (8-10px) for chunky drag.
+  Should expose as a uiStore field with a slider in Settings later.
+  Single hardcoded constant in SelectTool.SNAP_THRESHOLD_SCREEN_PX
+  + snapDrawPointer.SNAP_THRESHOLD_SCREEN_PX (duplicated — single
+  source when settings UI lands).
+
+- **Equal-spacing axis tolerance is 2 world px.** Tight — works
+  for mouse-placed thumbnail layers but might miss visually-aligned
+  layers that landed on .5-pixel positions via the resize handles
+  that don't exist yet. Loosen to ROW_ALIGN_EPSILON = 4 if the
+  Day 16 resize work generates fractional bounds.
+
+- **Canvas dimensions are hardcoded (1280×720).** Both SelectTool,
+  snapDrawPointer, and the Compositor's CANVAS_W/H constants
+  carry duplicated literals. When canvas resize lands (Cycle 2
+  export) all three paths should read from docStore.canvas.
+
+- **No snap to text baselines.** Text layer bounds come from the
+  Day 12 auto-resize box, which includes the descender padding —
+  so two text layers on the "same baseline" align by descender,
+  not by typographic baseline. Real designers will want baseline
+  alignment as the primary text-row snap. Needs a baselineY field
+  on TextLayer, computed from font metrics. Day 18+ when proper
+  text rotation lands.
+
+- **No snap to other selected layer when moving as a group.**
+  Multi-select drag is Cycle 2; once it lands, the snap engine
+  should treat the moving group's union bounds as one subject so
+  the inner layers don't try to snap to each other.
+
+- **Distance label only on canvas-edge snaps.** Spec said
+  exactly that, but a real spacing distance ("48px gap") on the
+  equal-spacing markers would be more informative than the bare
+  "==" symbol. Cycle 3.
+
+- **Distance label position is naive.** Sits 6 screen-px past the
+  start of the line — which can land off-canvas if the subject is
+  near the canvas edge that the guide spans to. Should clamp the
+  label to the visible viewport bounds. Cosmetic.
+
+- **Distance label text rendering uses Pixi Text scaled by
+  1/viewport.scale.** At deep zoom levels (≥800%) Pixi's text
+  rendering produces a sub-pixel-blurry result because the
+  underlying texture was rasterized at a lower base size. Setting
+  resolution = 2 helps. Truly sharp would require a DOM overlay
+  for the label, projected through canvasToScreen — bigger
+  refactor than commit 7's scope.
+
+- **Snap "click" flash uses fadeAlphaTo over 80ms but the alpha
+  also gates the entire layer, not just the freshly-engaged guide.**
+  If the user is holding a snap and the engine emits a different
+  guide (e.g. they slid from edge-snap to center-snap on the same
+  axis), the new guide doesn't flash because wasSnapped is still
+  true. Could track per-guide-fingerprint flashes. Low signal.
+
+- **snapDrawPointer treats the cursor as a 0×0 box.** Means RectTool
+  and EllipseTool only snap their TRAILING edge — the start point
+  captured at pointerdown doesn't snap. Most users prefer this
+  (the start lands where they clicked); but a "snap both edges"
+  mode would be nice for layouts. Cycle 3.
+
+- **Cmd+\\ chord — backslash on a non-English layout.** Chosen
+  because it has no native input action across browsers/OSes;
+  but on AZERTY/JIS the physical key sits in a different spot.
+  Add a settings-screen rebind once that's a thing.
+
+- **No "snap engaged" haptic / sound.** The 80ms alpha flash is
+  the only feedback. A subtle click sound + WebHID rumble would
+  reinforce the snap moment for users who can hear/feel them.
+  Deferred — the animation alone reads strongly enough.
+
+- **Hidden layers are excluded from `others` (correct), but locked
+  layers stay (correct — they're visually present).** No edge
+  case for a locked + hidden layer (it's just hidden). Worth a
+  test eventually if locked-only layers behave weirdly.
+
+- **Compositor.guides is a Graphics with Text children.** Works
+  because Graphics extends Container in Pixi v8, but a future
+  Pixi version might not be as forgiving. If the API breaks, swap
+  guides to a plain Container holding Graphics + Text siblings.
+
 ## Cycle 2 Day 13 — held back (date: 2026-04-25)
 
 - **Filter chain order is fixed at DropShadow → Glow.** The user
