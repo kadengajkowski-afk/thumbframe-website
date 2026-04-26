@@ -120,3 +120,77 @@ Oswald
 
 Permanent Marker
   Copyright (c) 2011 by Font Diner, Inc DBA Sideshow
+
+==========================================================================
+DAY 13 ADDITIONS
+==========================================================================
+
+Roboto
+  Copyright 2011 The Roboto Project Authors
+  (https://github.com/googlefonts/roboto-3-classic)
+
+Montserrat
+  Copyright 2011 The Montserrat Project Authors
+  (https://github.com/JulietaUla/Montserrat)
+
+Poppins
+  Copyright 2014-2021 Indian Type Foundry, Jonny Pinhorn,
+  Ninad Kale (https://github.com/itfoundry/Poppins)
+
+Lato
+  Copyright (c) 2010-2015 by tyPoland Lukasz Dziedzic
+  (lato@latofonts.com)
+
+Open Sans
+  Copyright 2020 The Open Sans Project Authors
+  (https://github.com/googlefonts/opensans)
+
+Raleway
+  Copyright (c) 2010-2012 The League of Movable Type
+  (https://github.com/impallari/Raleway)
+
+Source Sans 3
+  Copyright 2010-2020 Adobe (http://www.adobe.com/), with
+  Reserved Font Name 'Source'.
+
+Nunito
+  Copyright 2014 The Nunito Project Authors
+  (https://github.com/googlefonts/nunito)
+
+Work Sans
+  Copyright 2019 The Work Sans Project Authors
+  (https://github.com/weiweihuanghuang/Work-Sans)
+
+Rubik
+  Copyright 2015 The Rubik Project Authors
+  (https://github.com/googlefonts/rubik)
+
+DM Serif Display
+  Copyright 2014-2017 Indian Type Foundry (info@indiantypefoundry.com)
+
+Playfair Display
+  Copyright 2017 The Playfair Project Authors
+  (https://github.com/clauseggers/Playfair)
+
+Merriweather
+  Copyright 2016 The Merriweather Project Authors
+  (https://github.com/SorkinType/Merriweather)
+
+Lora
+  Copyright 2011 The Lora Project Authors
+  (https://github.com/cyrealtype/Lora-Cyrillic)
+
+Bangers
+  Copyright (c) 2011, Vernon Adams (vern@newtypography.co.uk)
+
+Russo One
+  Copyright (c) 2011, Jovanny Lemonad (lemonad@jovanny.ru)
+
+Squada One
+  Copyright (c) 2011 The Squada One Project Authors
+
+Black Ops One
+  Copyright (c) 2011, Tyler Finck (hello@sursly.com)
+
+Press Start 2P
+  Copyright (c) 2011, Cody "CodeMan38" Boisclair (cody@zone38.net)

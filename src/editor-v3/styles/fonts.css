@@ -1,11 +1,12 @@
-/* Day 12: 6 OFL display fonts bundled in /public/fonts. Latin subset
- * only (the 25-30 font expansion + extended Unicode subsets land
- * Day 13). License: see /fonts/OFL.txt.
+/* Day 12 + Day 13: 25 OFL display + body fonts bundled in /public/
+ * fonts/. Latin subset only. License: see /fonts/OFL.txt.
  *
  * font-display: block — flash of fallback while a user is typing into
  * a text layer would be jarring. We accept the brief blank-then-render
  * because the textarea overlay shows what they're typing, and the Pixi
  * Text node behind it stays alpha=0 during the edit. */
+
+/* ── Day 12 (sans / display) ───────────────────────────────────── */
 
 @font-face {
   font-family: "Inter";
@@ -53,4 +54,228 @@
   font-weight: 400;
   font-display: block;
   src: url("/fonts/PermanentMarker.woff2") format("woff2");
+}
+
+/* ── Day 13 — sans (variable axes where Google exposes them) ───── */
+
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url("/fonts/Roboto.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url("/fonts/Montserrat.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Open Sans";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: block;
+  src: url("/fonts/OpenSans.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Raleway";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url("/fonts/Raleway.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Source Sans 3";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: block;
+  src: url("/fonts/SourceSans3.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Nunito";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: block;
+  src: url("/fonts/Nunito.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Work Sans";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url("/fonts/WorkSans.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Rubik";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: block;
+  src: url("/fonts/Rubik.woff2") format("woff2");
+}
+
+/* Lato — three static weights (Google doesn't expose a variable axis). */
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/Lato-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/Lato-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+  src: url("/fonts/Lato-900.woff2") format("woff2");
+}
+
+/* Poppins — five static weights (Google doesn't expose a variable axis). */
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 300;
+  font-display: block;
+  src: url("/fonts/Poppins-300.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/Poppins-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url("/fonts/Poppins-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/Poppins-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+  src: url("/fonts/Poppins-900.woff2") format("woff2");
+}
+
+/* ── Day 13 — serif ────────────────────────────────────────────── */
+
+@font-face {
+  font-family: "DM Serif Display";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/DMSerifDisplay.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Playfair Display";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: block;
+  src: url("/fonts/PlayfairDisplay.woff2") format("woff2");
+}
+
+/* Merriweather — four static weights. */
+@font-face {
+  font-family: "Merriweather";
+  font-style: normal;
+  font-weight: 300;
+  font-display: block;
+  src: url("/fonts/Merriweather-300.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Merriweather";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/Merriweather-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Merriweather";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/Merriweather-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Merriweather";
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+  src: url("/fonts/Merriweather-900.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Lora";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url("/fonts/Lora.woff2") format("woff2");
+}
+
+/* ── Day 13 — display (single weight) ──────────────────────────── */
+
+@font-face {
+  font-family: "Bangers";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/Bangers.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Russo One";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/RussoOne.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Squada One";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/SquadaOne.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Black Ops One";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/BlackOpsOne.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Press Start 2P";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/PressStart2P.woff2") format("woff2");
 }
