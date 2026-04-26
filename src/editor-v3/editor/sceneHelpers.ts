@@ -11,12 +11,14 @@ import {
 import { DropShadowFilter, GlowFilter } from "pixi-filters";
 import { ensureFontLoaded } from "@/lib/fonts";
 import { history } from "@/lib/history";
-import type { Layer, TextLayer } from "@/state/types";
+import type { Layer, TextLayer, TextStrokeStack } from "@/state/types";
 import { TEXT_EFFECT_DEFAULTS } from "@/state/types";
 
 /** Per-node filter cache so DropShadow / Glow instances aren't
  * allocated on every paint tick (a slider scrub fires hundreds of
- * paints/sec). WeakMap auto-cleans when the node is destroyed. */
+ * paints/sec). WeakMap auto-cleans when the node is destroyed. Keyed
+ * by the layer's outer Container — filters live on the container so
+ * shadow + glow encompass every child (primary + stacked strokes). */
 type TextFilterCache = {
   shadow?: DropShadowFilter;
   glow?: GlowFilter;
@@ -24,7 +26,7 @@ type TextFilterCache = {
    * when the active set CHANGES, not every paint. */
   activeKey?: string;
 };
-const textFilterCache = new WeakMap<Text, TextFilterCache>();
+const textFilterCache = new WeakMap<Container, TextFilterCache>();
 
 /** Helpers split out of Compositor so the class body stays under
  * the 400-line file ceiling as the tool-dispatch wiring grows. */
@@ -37,7 +39,17 @@ export function matchesType(node: Container, layer: Layer): boolean {
   if (layer.type === "rect" || layer.type === "ellipse") {
     return node instanceof Graphics;
   }
-  if (layer.type === "text") return node instanceof Text;
+  if (layer.type === "text") {
+    // Text layer nodes are PLAIN Containers carrying 1+ Text children
+    // (1 primary + N stacked-stroke siblings). A bare Text instance
+    // is the pre-Day-13 shape; reject it so the reconciler rebuilds.
+    return (
+      node instanceof Container &&
+      !(node instanceof Text) &&
+      !(node instanceof Graphics) &&
+      !(node instanceof Sprite)
+    );
+  }
   return node instanceof Sprite;
 }
 
@@ -49,11 +61,17 @@ export function createNode(layer: Layer): Container {
     return g;
   }
   if (layer.type === "text") {
-    const t = new Text({ text: layer.text, style: textStyle(layer) });
-    t.label = `layer:${layer.id}`;
-    t.eventMode = "static";
-    t.resolution = 2;
-    return t;
+    // Container wraps the primary Text + any stacked-stroke siblings.
+    // The label lives on the container so findLayerId — which walks
+    // parents up — resolves clicks on inner Text children to this id.
+    const c = new Container();
+    c.label = `layer:${layer.id}`;
+    c.eventMode = "static";
+    const primary = new Text({ text: layer.text, style: textStyle(layer) });
+    primary.eventMode = "static";
+    primary.resolution = 2;
+    c.addChild(primary);
+    return c;
   }
   // OffscreenCanvas → ImageSource → Texture — the path v1 proved against
   // PixiJS v8's batcher. Texture.from(bitmap) can report alphaMode:null
@@ -101,40 +119,9 @@ export function paintNode(node: Container, layer: Layer) {
   }
 
   if (layer.type === "text") {
-    const t = node as Text;
-    t.text = layer.text;
-    t.style = textStyle(layer);
-    applyTextEffects(t, layer);
-    // Auto-resize: write the rendered bounds back into docStore so
-    // selection / drag / hit-test all use the actual text dimensions.
-    // Width/height changes are non-history (derived state) — see
-    // history.setLayerSize.
-    const w = Math.ceil(t.width);
-    const h = Math.ceil(t.height);
-    if (w !== layer.width || h !== layer.height) {
-      history.setLayerSize(layer.id, w, h);
-    }
-    // First-render-with-fallback guard: if the font isn't loaded yet,
-    // kick the load and re-paint when it lands. Cached, so this is
-    // a no-op after the first hit per font+weight.
-    if (
-      typeof document !== "undefined" &&
-      document.fonts &&
-      !document.fonts.check(`${layer.fontWeight} 16px "${layer.fontFamily}"`)
-    ) {
-      ensureFontLoaded(layer.fontFamily, layer.fontWeight).then(() => {
-        // Re-style on the loaded face. We're outside the reconcile loop
-        // so build a fresh TextStyle on the same node.
-        if (!t.destroyed) {
-          t.style = textStyle(layer);
-          const w2 = Math.ceil(t.width);
-          const h2 = Math.ceil(t.height);
-          if (w2 !== layer.width || h2 !== layer.height) {
-            history.setLayerSize(layer.id, w2, h2);
-          }
-        }
-      });
-    }
+    const c = node as Container;
+    paintTextLayer(c, layer);
+    applyTextEffects(c, layer);
     return;
   }
 
@@ -143,20 +130,103 @@ export function paintNode(node: Container, layer: Layer) {
   s.height = layer.height;
 }
 
-/** Reconcile shadow + glow filters onto a Text node. Mutates the
- * filters in place (cheap on slider scrub) and only reassigns the
- * `filters` array when the active set toggles. Filter chain order:
- * DropShadow first → text receives shadow behind it; Glow second →
- * glow surrounds the resulting text+shadow composite. */
-function applyTextEffects(t: Text, layer: TextLayer) {
+/** Reconcile a text-layer Container's children (1 primary Text + N
+ * stacked-stroke siblings) and write the primary's bounds back to
+ * docStore. Children list, front-to-back in render order:
+ *   children[0]                 = strokes[N-1] (outermost, drawn first)
+ *   children[1]                 = strokes[N-2]
+ *   ...
+ *   children[N-1]               = strokes[0]   (innermost extra)
+ *   children[N]                 = primary      (drawn last, on top)
+ *
+ * Stack strokes are stroke-only renders of the same text — same font,
+ * same content — so they trace concentric outlines behind the primary.
+ * Each stack child uses fill = stroke color (alpha = stroke alpha) so
+ * the widened stroke reads as a solid chunky shape. */
+function paintTextLayer(c: Container, layer: TextLayer) {
+  const stack = layer.strokes ?? [];
+  const desiredChildCount = stack.length + 1;
+
+  // Reconcile child count. Trim from the front (outermost) so the
+  // primary always stays at the back of the array (children[last]).
+  while (c.children.length > desiredChildCount) {
+    const front = c.children[0];
+    if (!front) break;
+    c.removeChild(front);
+    front.destroy({ children: true, texture: true, textureSource: true });
+  }
+  while (c.children.length < desiredChildCount) {
+    const t = new Text({ text: layer.text, style: textStyle(layer) });
+    t.eventMode = "static";
+    t.resolution = 2;
+    // addChildAt(node, 0) puts it at the back of the render order so
+    // existing children — including the primary at position N-1 —
+    // shift to higher indices and stay on top.
+    c.addChildAt(t, 0);
+  }
+
+  // Paint each stack child (children[0..N-1]) with its corresponding
+  // stroke spec. Index mapping: children[i] ↔ strokes[N-1 - i].
+  for (let i = 0; i < stack.length; i++) {
+    const child = c.children[i] as Text;
+    const spec = stack[stack.length - 1 - i]!;
+    child.text = layer.text;
+    child.style = stackStrokeStyle(layer, spec);
+  }
+
+  // Paint the primary (last child) — fill + primary stroke.
+  const primary = c.children[c.children.length - 1] as Text;
+  primary.text = layer.text;
+  primary.style = textStyle(layer);
+
+  // Auto-resize uses the PRIMARY bounds, not the container bounds —
+  // selection outline / hit-test / drag should track the core text,
+  // not the chunky outer-stroke extent.
+  const w = Math.ceil(primary.width);
+  const h = Math.ceil(primary.height);
+  if (w !== layer.width || h !== layer.height) {
+    history.setLayerSize(layer.id, w, h);
+  }
+
+  // First-render-with-fallback guard: if the font isn't loaded yet,
+  // kick the load and re-paint each child when it lands.
+  if (
+    typeof document !== "undefined" &&
+    document.fonts &&
+    !document.fonts.check(`${layer.fontWeight} 16px "${layer.fontFamily}"`)
+  ) {
+    ensureFontLoaded(layer.fontFamily, layer.fontWeight).then(() => {
+      if (primary.destroyed) return;
+      primary.style = textStyle(layer);
+      for (let i = 0; i < stack.length; i++) {
+        const child = c.children[i] as Text | undefined;
+        if (!child || child.destroyed) continue;
+        const spec = stack[stack.length - 1 - i]!;
+        child.style = stackStrokeStyle(layer, spec);
+      }
+      const w2 = Math.ceil(primary.width);
+      const h2 = Math.ceil(primary.height);
+      if (w2 !== layer.width || h2 !== layer.height) {
+        history.setLayerSize(layer.id, w2, h2);
+      }
+    });
+  }
+}
+
+/** Reconcile shadow + glow filters onto a text-layer Container.
+ * Mutates the filter instances in place (cheap on slider scrub) and
+ * only reassigns the `filters` array when the active set toggles.
+ * Filter chain order: DropShadow first → text receives shadow behind
+ * it; Glow second → glow surrounds the text+shadow composite. */
+function applyTextEffects(c: Container, layer: TextLayer) {
   const D = TEXT_EFFECT_DEFAULTS;
   const shadowOn = layer.shadowEnabled ?? D.shadowEnabled;
   const glowOn = layer.glowEnabled ?? D.glowEnabled;
 
-  let cache = textFilterCache.get(t);
+  let cache = textFilterCache.get(c);
   if (!cache) {
     cache = {};
-    textFilterCache.set(t, cache);
+    textFilterCache.set(c, cache);
   }
 
   if (shadowOn) {
@@ -187,9 +257,27 @@ function applyTextEffects(t: Text, layer: TextLayer) {
     const next: Filter[] = [];
     if (shadowOn && cache.shadow) next.push(cache.shadow);
     if (glowOn && cache.glow) next.push(cache.glow);
-    t.filters = next.length > 0 ? next : null;
+    c.filters = next.length > 0 ? next : null;
     cache.activeKey = key;
   }
+}
+
+/** Style for a stack-stroke Text child — same font/metrics as the
+ * primary, with both fill AND stroke set to the spec's color so the
+ * widened glyph reads as a solid chunky shape. The primary text
+ * draws on top, so this child only contributes the outer ring. */
+function stackStrokeStyle(layer: TextLayer, spec: TextStrokeStack): TextStyle {
+  return new TextStyle({
+    fontFamily: [layer.fontFamily, "system-ui", "sans-serif"],
+    fontSize: layer.fontSize,
+    fontWeight: String(layer.fontWeight) as TextStyle["fontWeight"],
+    fontStyle: layer.fontStyle,
+    align: layer.align,
+    fill: { color: spec.color, alpha: spec.alpha },
+    stroke: { color: spec.color, width: spec.width, alpha: spec.alpha },
+    lineHeight: layer.lineHeight * layer.fontSize,
+    letterSpacing: layer.letterSpacing,
+  });
 }
 
 function textStyle(layer: TextLayer): TextStyle {

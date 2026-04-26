@@ -223,8 +223,13 @@ describe("Compositor renders text + auto-resizes layer", () => {
     // the microtask + paint a tick.
     await new Promise((r) => setTimeout(r, 0));
 
+    // Day 13: text-layer node is a Container wrapping the primary
+    // Text + any stacked-stroke children.
     const node = compositor.nodes.get("txt");
-    expect(node).toBeInstanceOf(Text);
+    expect(node).toBeInstanceOf(Container);
+    expect(node).not.toBeInstanceOf(Text);
+    const primary = (node as Container).children.at(-1);
+    expect(primary).toBeInstanceOf(Text);
     const after = selectText()!;
     expect(after.width).toBeGreaterThan(40);
     expect(after.height).toBeGreaterThan(20);
@@ -298,8 +303,11 @@ describe("Compositor renders text + auto-resizes layer", () => {
     history.setFontFamily("txt", "Anton");
     history.setFontWeight("txt", 400);
     await new Promise((r) => setTimeout(r, 0));
-    const node = compositor.nodes.get("txt") as Text;
-    const family = node.style.fontFamily;
+    // Day 13: text-layer node is now a Container; primary Text is the
+    // last child (siblings are stacked-stroke renders behind it).
+    const container = compositor.nodes.get("txt") as Container;
+    const primary = container.children[container.children.length - 1] as Text;
+    const family = primary.style.fontFamily;
     const familyStr = Array.isArray(family) ? family.join(",") : String(family);
     expect(familyStr.toLowerCase()).toContain("anton");
   });
@@ -334,8 +342,9 @@ describe("Compositor renders text + auto-resizes layer", () => {
     await new Promise((r) => setTimeout(r, 0));
     history.setFontSize("txt", 96);
     await new Promise((r) => setTimeout(r, 0));
-    const node = compositor.nodes.get("txt") as Text;
-    expect(node.style.fontSize).toBe(96);
+    const container = compositor.nodes.get("txt") as Container;
+    const primary = container.children[container.children.length - 1] as Text;
+    expect(primary.style.fontSize).toBe(96);
   });
 
   it("stroke renders on text — pixel sample at glyph edge matches stroke color", async () => {
