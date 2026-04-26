@@ -26,9 +26,34 @@ export function installHotkeys() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  const meta = e.metaKey || e.ctrlKey;
+
+  // Undo / redo run BEFORE the editable-target gate so they reach
+  // the document even when a value input (number/color/range/etc.)
+  // has focus — those inputs have no useful native undo stack and
+  // would otherwise swallow Cmd+Z, leaving stroke / shadow / glow
+  // edits effectively unundoable. We still defer to the browser
+  // when focus sits on a real text input (textarea / contentEditable
+  // / type=text etc.) — the user is mid-typing and probably wants
+  // to undo their typing.
+  if (meta && e.key.toLowerCase() === "z" && !hasNativeUndo(e.target)) {
+    e.preventDefault();
+    // Blur the value input so subsequent keystrokes don't keep
+    // bouncing off it with stale focus.
+    if (e.target instanceof HTMLElement) e.target.blur();
+    if (e.shiftKey) runCommand("edit.redo");
+    else runCommand("edit.undo");
+    return;
+  }
+  if (meta && e.key.toLowerCase() === "y" && !hasNativeUndo(e.target)) {
+    e.preventDefault();
+    if (e.target instanceof HTMLElement) e.target.blur();
+    runCommand("edit.redo");
+    return;
+  }
+
   if (isEditableTarget(e.target)) return;
 
-  const meta = e.metaKey || e.ctrlKey;
   const ui = useUiStore.getState();
 
   // Cmd+K / Ctrl+K → command palette (toggle). Works whether palette
@@ -101,18 +126,8 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Undo / redo.
-  if (meta && e.key.toLowerCase() === "z") {
-    e.preventDefault();
-    if (e.shiftKey) runCommand("edit.redo");
-    else runCommand("edit.undo");
-    return;
-  }
-  if (meta && e.key.toLowerCase() === "y") {
-    e.preventDefault();
-    runCommand("edit.redo");
-    return;
-  }
+  // (Undo / redo handled above the editable-target gate so value
+  // inputs don't swallow Cmd+Z / Cmd+Shift+Z / Cmd+Y.)
 
   // Layer reorder: [ / ] (and Shift variants).
   if (!meta && e.key === "[") {
@@ -217,4 +232,25 @@ function isEditableTarget(target: EventTarget | null): boolean {
   if (target.isContentEditable) return true;
   const tag = target.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+/** True when the focused input is hosting EDITABLE TEXT and would
+ * benefit from the browser's native undo stack — text-style <input>,
+ * <textarea>, contentEditable. Returns false for value inputs
+ * (number/color/range/checkbox/etc.) and <select>, where there's no
+ * useful native undo and document Cmd+Z should still pass through. */
+function hasNativeUndo(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (target.tagName === "TEXTAREA") return true;
+  if (target.tagName !== "INPUT") return false;
+  const type = (target as HTMLInputElement).type.toLowerCase();
+  return (
+    type === "text" ||
+    type === "search" ||
+    type === "url" ||
+    type === "tel" ||
+    type === "email" ||
+    type === "password"
+  );
 }
