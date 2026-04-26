@@ -17,6 +17,103 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 Day 13 — held back (date: 2026-04-25)
+
+- **Filter chain order is fixed at DropShadow → Glow.** The user
+  can't reorder; if you want the glow to appear *behind* the shadow
+  (so the shadow casts onto the glow halo) there's no toggle.
+  Acceptable for now — no thumbnail editor I've seen exposes this
+  knob — but worth a "swap order" checkbox if a designer asks.
+
+- **Filter quality scales with display zoom.** DropShadowFilter and
+  GlowFilter render at the canvas resolution, then upscale with the
+  viewport. At 600% zoom the blur looks slightly mushy. Right fix is
+  a resolution prop that tracks `compositor.viewportScale`, but the
+  perf cost of re-rendering the filter every zoom tick is non-trivial.
+  Cosmetic; revisit when export lands.
+
+- **Multi-stroke stack alignment is implicit Pixi default.** Each
+  stack stroke uses Pixi's default stroke alignment (outer). For very
+  thin fonts the outer alignment can look weirdly bulbous on
+  rounded corners. Could add a `strokeAlignment` field to
+  TextStrokeStack but spec didn't ask. Cycle 3 polish.
+
+- **Stack-stroke fill = stroke color.** Sets fill alpha = stroke
+  alpha so the widened glyph reads as a solid chunky shape. If a
+  user wants a hollow ring (stroke only, transparent interior),
+  there's no toggle today. Add `solid: boolean` to TextStrokeStack
+  if requested.
+
+- **Per-stroke color picker is the native <input type=color>.** No
+  alpha channel, no recent-colors row, no eyedropper integration.
+  Day 9's ColorSwatchButton has all of those — wire it in once the
+  presets surface settles. Held to keep commit 6 inside the file
+  ceiling.
+
+- **TextPresets thumbnails are pure CSS text "Aa" tiles.** No
+  preview of the actual stroke/shadow/glow effect — just the font.
+  Real thumbnails would need a tiny Pixi-rendered snapshot per
+  preset. Cycle 3+ when we have the export pipeline.
+
+- **Preset count caps at 5.** Spec said 5; that's exactly what
+  shipped. The preset list is a const inside TextPresets.tsx, easy
+  to extend. Likely a place we'll add user-saved styles in v3.1.
+
+- **FontPicker doesn't preload fonts on popover open.** Each row
+  hover triggers ensureFontLoaded for that family's first weight,
+  but the initial render shows ~25 family-name rows in their own
+  faces — first paint, only the already-loaded fonts render in the
+  right face. Could preload all 25 on popover-first-open. Held —
+  the network burst would hurt low-bandwidth users for a marginal
+  visual gain (preloadBundledFonts still runs at app boot).
+
+- **FontPicker keyboard nav not wired.** Arrow keys / Enter don't
+  navigate the list — only mouse + click. Add roving tabindex when
+  a11y pass lands.
+
+- **FontPicker recents are layer-agnostic.** Switching layers doesn't
+  change the recents list. Probably correct — recents reflect "fonts
+  the user reaches for", not per-layer history — but worth flagging.
+
+- **Lato + Poppins + Merriweather + Lato bundle as multiple woff2
+  files,** not a single file. The CSS @font-face declarations cover
+  each weight. Bundle size hit is ~50-100KB more than necessary
+  vs. a true variable file. Google doesn't expose a wght axis for
+  these on CSS2; revisit if Google ships variable variants.
+
+- **font-display: block for all 25.** Day 12 chose `block` to avoid
+  flash-of-fallback during text typing. Acceptable cost is a brief
+  blank during initial load. If launch metrics show layout shift
+  complaints, switch the body fonts (Inter, Roboto, Open Sans) to
+  `swap` and keep `block` only for the chunky display faces where
+  fallback metrics differ wildly.
+
+- **DM Serif Display, Bangers, Press Start 2P don't snap weights.**
+  They're single-weight (400). The picker disables the weight
+  select correctly via `disabled={weights.length === 1}`. Worth
+  confirming on every new font drop.
+
+- **fetch-fonts.mjs is committed but not in CI.** It's a one-time
+  author script — not idempotent in the sense of "always rerun";
+  idempotent in "skip if file exists." If a contributor wants to
+  add fonts they just edit the FONTS list and re-run. Could move
+  to a `pnpm fonts:fetch` script in package.json once we have
+  more fonts than the spec.
+
+- **OFL.txt copyright lines were captured from each font's GitHub
+  repo HEAD.** Some entries (Russo One / Squada One / Black Ops One)
+  have terse single-line notices that may not be the canonical
+  license preamble. If the SIL OFL audit ever bites us we should
+  paste the full LICENSE.txt from each repo. Held — the OFL only
+  requires the notice "be easily viewed by the user" and our
+  bundled OFL.txt covers the legal preamble.
+
+- **TextPresets uses Object.assign-on-immer-draft pattern.** Works
+  for shallow patches; if a preset ever needs to MERGE strokes
+  (e.g. "add an extra stroke to the existing stack") it would need
+  a smarter merge. Today every preset replaces strokes wholesale,
+  which is fine.
+
 ## Cycle 2 Day 12 — held back (date: 2026-04-24)
 
 - **Selection outline tracks the rendered text bounds via auto-
