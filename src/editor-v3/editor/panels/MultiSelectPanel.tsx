@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import { history } from "@/lib/history";
@@ -12,11 +13,20 @@ import * as s from "./ContextPanel.styles";
  * delete. Each "shared" value reads as the common value when every
  * selected layer agrees, or "Mixed" when they differ. Setting a
  * value applies to ALL selected layers via the existing per-layer
- * setters wrapped in beginStroke/endStroke for one undo entry. */
+ * setters wrapped in beginStroke/endStroke for one undo entry.
+ *
+ * Day 15 bug fix: never select a derived array (e.g. .filter()) from
+ * Zustand — that returns a fresh reference per call, defeats the
+ * default `===` snapshot equality, and triggers the
+ * "getSnapshot should be cached" infinite-loop warning. Pull the
+ * stable `layers` + `selectedLayerIds` references from the stores and
+ * derive in useMemo, keyed off the input identities. */
 export function MultiSelectPanel() {
   const ids = useUiStore((u) => u.selectedLayerIds);
-  const layers = useDocStore((d) =>
-    d.layers.filter((l) => ids.includes(l.id)),
+  const allLayers = useDocStore((d) => d.layers);
+  const layers = useMemo(
+    () => allLayers.filter((l) => ids.includes(l.id)),
+    [allLayers, ids],
   );
 
   if (layers.length < 2) return null;

@@ -6,28 +6,16 @@ import type {
   TextStrokeStack,
 } from "@/state/types";
 import { MAX_TEXT_STROKES } from "@/state/types";
-import { _historyInternals } from "./history";
+import { commit, isStrokeOpen, mutate } from "./history.internal";
 
-/** Day 13 text-effect setters split out of lib/history.ts so the main
- * file stays under the 400-line ceiling. These all route through the
- * same commit / mutate / openStroke machinery as the rest of history —
- * exposed via _historyInternals — so stroke coalescing (slider scrub
- * → one history entry) works identically.
- *
- * The internals are accessed PER CALL (not destructured at module
- * init) because lib/history.ts imports this file too — at module-init
- * time `_historyInternals` is the partial / undefined binding from
- * the still-loading history.ts. By the time these methods are CALLED,
- * both modules have finished evaluating. */
+/** Day 13 text-effect setters split out of lib/history.ts so the
+ * main file stays under the 400-line ceiling. The shared
+ * commit / mutate / openStroke machinery lives in history.internal
+ * (Day 15 split) so this file and history.ts both import from there
+ * — neither imports the other, no circular dep. */
 
-function commit(label: string, mutator: (draft: Layer[]) => void) {
-  _historyInternals.commit(label, mutator);
-}
-function mutate(mutator: (draft: Layer[]) => void) {
-  _historyInternals.mutate(mutator);
-}
 function strokeAware(label: string, run: (layers: Layer[]) => void) {
-  if (_historyInternals.isStrokeOpen()) mutate(run);
+  if (isStrokeOpen()) mutate(run);
   else commit(label, run);
 }
 

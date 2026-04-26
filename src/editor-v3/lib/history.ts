@@ -1,70 +1,21 @@
-import {
-  applyPatches,
-  enablePatches,
-  produceWithPatches,
-  type Patch,
-} from "immer";
 import { nanoid } from "nanoid";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import type { BlendMode, Layer } from "@/state/types";
 import { textHistory } from "./history.text";
 import { buildImageLayer } from "./buildImageLayer";
-
-enablePatches();
-
-const MAX_HISTORY = 100;
-
-type Entry = {
-  patches: Patch[];
-  inverse: Patch[];
-  label: string;
-};
-
-// Stacks live at module scope: one editor instance per tab, and Zustand
-// is the only source of document truth — the stacks just replay patches
-// against docStore. No parallel state, no window globals.
-let undoStack: Entry[] = [];
-let redoStack: Entry[] = [];
-
-// Stroke coalescing: `beginStroke` captures the layer list snapshot; any
-// history setters called while a stroke is open mutate docStore directly
-// (no undo entry per tick). `endStroke` pushes ONE entry covering the
-// full delta. Used by the opacity slider so dragging doesn't create 100
-// history entries.
-let openStroke: { label: string; startLayers: Layer[] } | null = null;
-
-function setLayers(next: Layer[]) {
-  useDocStore.setState({ layers: next });
-}
-
-function commit(label: string, mutator: (draft: Layer[]) => void) {
-  const current = useDocStore.getState().layers;
-  const [next, patches, inverse] = produceWithPatches(current, mutator);
-  if (patches.length === 0) return;
-  setLayers(next);
-  undoStack.push({ patches, inverse, label });
-  if (undoStack.length > MAX_HISTORY) undoStack.shift();
-  redoStack = [];
-}
-
-// Used during an open stroke: applies the change to docStore without
-// pushing anything onto the history stacks.
-function mutate(mutator: (draft: Layer[]) => void) {
-  const current = useDocStore.getState().layers;
-  const [next] = produceWithPatches(current, mutator);
-  setLayers(next);
-}
-
-/** Day 15 split: shared by lib/history.text.ts so the text-effect
- * setters can route through the same commit / mutate / openStroke
- * machinery without duplicating it. Internal use only — not part of
- * the public history API. */
-export const _historyInternals = {
+import {
+  beginStroke,
+  canRedo,
+  canUndo,
   commit,
+  endStroke,
+  isStrokeOpen,
   mutate,
-  isStrokeOpen: () => openStroke !== null,
-};
+  redo,
+  undo,
+  _resetInternals,
+} from "./history.internal";
 
 const baseHistory = {
   addLayer(layer: Layer) {
@@ -121,7 +72,7 @@ const baseHistory = {
         layer.y = y;
       }
     };
-    if (openStroke) mutate(run);
+    if (isStrokeOpen()) mutate(run);
     else commit("Move layer", run);
   },
 
@@ -130,7 +81,7 @@ const baseHistory = {
       const l = layers.find((x) => x.id === id);
       if (l) l.opacity = opacity;
     };
-    if (openStroke) mutate(run);
+    if (isStrokeOpen()) mutate(run);
     else commit("Opacity", run);
   },
 
@@ -167,7 +118,7 @@ const baseHistory = {
       const l = layers.find((x) => x.id === id);
       if (l && (l.type === "rect" || l.type === "ellipse" || l.type === "text")) l.color = color;
     };
-    if (openStroke) mutate(run);
+    if (isStrokeOpen()) mutate(run);
     else commit("Fill color", run);
   },
 
@@ -176,7 +127,7 @@ const baseHistory = {
       const l = layers.find((x) => x.id === id);
       if (l && (l.type === "rect" || l.type === "ellipse" || l.type === "text")) l.fillAlpha = alpha;
     };
-    if (openStroke) mutate(run);
+    if (isStrokeOpen()) mutate(run);
     else commit("Fill alpha", run);
   },
 
@@ -185,7 +136,7 @@ const baseHistory = {
       const l = layers.find((x) => x.id === id);
       if (l && (l.type === "rect" || l.type === "ellipse" || l.type === "text")) l.strokeColor = color;
     };
-    if (openStroke) mutate(run);
+    if (isStrokeOpen()) mutate(run);
     else commit("Stroke color", run);
   },
 
@@ -194,7 +145,7 @@ const baseHistory = {
       const l = layers.find((x) => x.id === id);
       if (l && (l.type === "rect" || l.type === "ellipse" || l.type === "text")) l.strokeWidth = width;
     };
-    if (openStroke) mutate(run);
+    if (isStrokeOpen()) mutate(run);
     else commit("Stroke width", run);
   },
 
@@ -203,7 +154,7 @@ const baseHistory = {
       const l = layers.find((x) => x.id === id);
       if (l && (l.type === "rect" || l.type === "ellipse" || l.type === "text")) l.strokeAlpha = alpha;
     };
-    if (openStroke) mutate(run);
+    if (isStrokeOpen()) mutate(run);
     else commit("Stroke alpha", run);
   },
 
@@ -299,57 +250,15 @@ const baseHistory = {
     return newIds;
   },
 
-  beginStroke(label: string) {
-    if (openStroke) return;
-    openStroke = { label, startLayers: useDocStore.getState().layers };
-  },
-
-  endStroke() {
-    if (!openStroke) return;
-    const { label, startLayers } = openStroke;
-    const endLayers = useDocStore.getState().layers;
-    openStroke = null;
-    if (startLayers === endLayers) return;
-    // Coarse patch: replace the full layer list. Fine for Cycle 1; we
-    // can emit per-field patches once more setters are stroke-aware.
-    const patches: Patch[] = [{ op: "replace", path: [], value: endLayers }];
-    const inverse: Patch[] = [
-      { op: "replace", path: [], value: startLayers },
-    ];
-    undoStack.push({ patches, inverse, label });
-    if (undoStack.length > MAX_HISTORY) undoStack.shift();
-    redoStack = [];
-  },
-
-  undo() {
-    const entry = undoStack.pop();
-    if (!entry) return;
-    setLayers(applyPatches(useDocStore.getState().layers, entry.inverse));
-    redoStack.push(entry);
-  },
-
-  redo() {
-    const entry = redoStack.pop();
-    if (!entry) return;
-    setLayers(applyPatches(useDocStore.getState().layers, entry.patches));
-    undoStack.push(entry);
-  },
-
-  canUndo() {
-    return undoStack.length > 0;
-  },
-
-  canRedo() {
-    return redoStack.length > 0;
-  },
+  beginStroke,
+  endStroke,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
 
   /** Testing hook: wipe stacks + reset docStore. Do not call in prod. */
-  _reset() {
-    undoStack = [];
-    redoStack = [];
-    openStroke = null;
-    setLayers([]);
-  },
+  _reset: _resetInternals,
 };
 
 // Day 13 text-effect setters live in lib/history.text.ts to keep
