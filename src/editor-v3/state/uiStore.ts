@@ -8,7 +8,9 @@ const LAST_FILL_KEY = "thumbframe:last-fill";
 const LAST_FONT_FAMILY_KEY = "thumbframe:last-font-family";
 const LAST_FONT_SIZE_KEY = "thumbframe:last-font-size";
 const LAST_FONT_WEIGHT_KEY = "thumbframe:last-font-weight";
+const RECENT_FONTS_KEY = "thumbframe:recent-fonts";
 const MAX_RECENT = 8;
+const MAX_RECENT_FONTS = 6;
 const DEFAULT_FILL = "#F97316";
 const DEFAULT_FONT_FAMILY = "Inter";
 const DEFAULT_FONT_SIZE = 96;
@@ -68,6 +70,12 @@ type UiState = {
   setLastFontSize: (size: number) => void;
   lastFontWeight: number;
   setLastFontWeight: (weight: number) => void;
+
+  /** Day 13: most-recent font families (most recent first), capped at
+   * MAX_RECENT_FONTS, mirrored to localStorage. Drives the "Recent"
+   * group at the top of the font picker. */
+  recentFonts: string[];
+  addRecentFont: (family: string) => void;
 };
 
 /** UI-only flags. Document state lives in docStore. Do not cross streams. */
@@ -138,6 +146,19 @@ export const useUiStore = create<UiState>()((set) => ({
     persistString(LAST_FONT_WEIGHT_KEY, String(weight));
     set({ lastFontWeight: weight });
   },
+
+  recentFonts: loadRecentFonts(),
+  addRecentFont: (family) =>
+    set((state) => {
+      const trimmed = family.trim();
+      if (!trimmed) return {};
+      const dedup = [
+        trimmed,
+        ...state.recentFonts.filter((f) => f !== trimmed),
+      ].slice(0, MAX_RECENT_FONTS);
+      persistRecentFonts(dedup);
+      return { recentFonts: dedup };
+    }),
 }));
 
 function loadString(key: string, fallback: string): string {
@@ -211,6 +232,30 @@ function persistLastFillColor(hex: string) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(LAST_FILL_KEY, hex);
+  } catch {
+    // swallow
+  }
+}
+
+function loadRecentFonts(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_FONTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((f): f is string => typeof f === "string")
+      .slice(0, MAX_RECENT_FONTS);
+  } catch {
+    return [];
+  }
+}
+
+function persistRecentFonts(fonts: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(RECENT_FONTS_KEY, JSON.stringify(fonts));
   } catch {
     // swallow
   }

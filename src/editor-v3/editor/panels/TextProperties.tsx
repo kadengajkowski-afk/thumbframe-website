@@ -2,9 +2,10 @@ import type { CSSProperties } from "react";
 import type { TextLayer, TextAlign } from "@/state/types";
 import { history } from "@/lib/history";
 import { useUiStore } from "@/state/uiStore";
-import { FONT_REGISTRY, snapWeight } from "@/lib/fonts";
+import { snapWeight, getFontMeta } from "@/lib/fonts";
 import * as s from "./ContextPanel.styles";
 import { TextEffects } from "./TextEffects";
+import { FontPicker } from "./FontPicker";
 
 /**
  * Text-specific section of the ContextPanel. Keeps the rect/ellipse
@@ -21,32 +22,25 @@ import { TextEffects } from "./TextEffects";
  * picks up where the user left off.
  */
 export function TextProperties({ layer }: { layer: TextLayer }) {
-  const meta = FONT_REGISTRY.find((f) => f.family === layer.fontFamily);
+  const meta = getFontMeta(layer.fontFamily);
   const weights = meta?.weights ?? [400];
 
   return (
     <>
       <section style={s.section}>
         <label style={s.fieldLabel}>Font</label>
-        <select
-          style={fontSelect}
+        <FontPicker
           value={layer.fontFamily}
-          onChange={(e) => {
-            const family = e.target.value;
+          onChange={(family) => {
             history.setFontFamily(layer.id, family);
             const snapped = snapWeight(family, layer.fontWeight);
             if (snapped !== layer.fontWeight) {
               history.setFontWeight(layer.id, snapped);
             }
             useUiStore.getState().setLastFontFamily(family);
+            useUiStore.getState().addRecentFont(family);
           }}
-        >
-          {FONT_REGISTRY.map((f) => (
-            <option key={f.family} value={f.family} style={{ fontFamily: f.family }}>
-              {f.family}
-            </option>
-          ))}
-        </select>
+        />
       </section>
 
       <section style={s.section}>
