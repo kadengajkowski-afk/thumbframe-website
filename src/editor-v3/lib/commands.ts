@@ -154,6 +154,44 @@ const COMMANDS: Command[] = [
 
   // Canvas
   { id: "canvas.deselect", label: "Deselect all", section: "Canvas", run: () => useUiStore.getState().setSelectedLayerIds([]) },
+
+  // Day 14 dev hook — temporary verification of the smart-guides
+  // render layer before the SelectTool/RectTool/EllipseTool wiring
+  // (slice B) lands. Removed at commit 7. Generates a sample of every
+  // guide kind at fixed canvas-space positions so Kaden can confirm
+  // colors / dashing / equal-spacing markers in browser.
+  {
+    id: "dev.show-test-guides",
+    label: "Show test smart-guides",
+    section: "Canvas",
+    aliases: ["debug guides", "fake guides"],
+    run: () => {
+      getCurrentCompositor()?.setGuides(
+        [
+          // Vertical edge-align line
+          { kind: "edge-align", axis: "x", pos: 320, start: 100, end: 600 },
+          // Horizontal canvas-edge line
+          { kind: "canvas-edge", axis: "y", pos: 360, start: 100, end: 1180 },
+          // Equal-spacing marker (X axis, two gaps)
+          {
+            kind: "equal-spacing",
+            axis: "x",
+            gaps: [
+              { center: 200, cross: 200, width: 80 },
+              { center: 400, cross: 200, width: 80 },
+            ],
+          },
+        ],
+        true,
+      );
+    },
+  },
+  {
+    id: "dev.clear-test-guides",
+    label: "Clear test smart-guides",
+    section: "Canvas",
+    run: () => getCurrentCompositor()?.clearGuides(),
+  },
 ];
 
 export function listCommands(): readonly Command[] {

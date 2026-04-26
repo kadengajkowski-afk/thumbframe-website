@@ -23,6 +23,8 @@ import { TOOLS_BY_ID } from "./tools/tools";
 import type { Tool } from "./tools/ToolTypes";
 import { domEventToCtx, pixiEventToCtx } from "./tools/inputDispatch";
 import { fadeAlphaTo } from "./pixelGridFade";
+import { paintGuides, clearGuides } from "./guideRenderer";
+import type { Guide } from "@/lib/smartGuides";
 
 // World is plenty bigger than the canvas so users can pan past the
 // edges into "space" and still land on a clean world-bg fill.
@@ -39,6 +41,9 @@ const MAX_SCALE = 16;
 const ZOOM_ANIM_MS = 300;
 
 const SELECTION_WIDTH = 2;
+/** Smart-guide line width in screen pixels — scaled down by 1/zoom
+ * at draw time so a single screen-px line shows at any zoom. */
+const GUIDE_SCREEN_WIDTH = 1;
 
 const PIXEL_GRID_ZOOM = 6; // show grid at zoom ≥ 600%
 const PIXEL_GRID_ALPHA = 0.35;
@@ -57,6 +62,11 @@ export class Compositor {
   private worldBg: Graphics;
   private toolPreview: Container;
   private pixelGrid: Graphics;
+  private guides: Graphics;
+  /** Last-applied guide list — kept so a viewport zoom can re-paint
+   * with a new scale-compensated stroke width without the caller
+   * having to re-supply the guides. Empty array = no active snap. */
+  private currentGuides: readonly Guide[] = [];
   private layerNodes = new Map<string, Container>();
   private selectionNodes = new Map<string, Graphics>();
   private activeDrag: Tool | null = null;
@@ -95,6 +105,7 @@ export class Compositor {
     this.canvasFill = scene.canvasFill;
     this.toolPreview = scene.toolPreview;
     this.pixelGrid = scene.pixelGrid;
+    this.guides = scene.guides;
 
     this.viewport.addChild(this.worldBg);
     this.viewport.addChild(this.canvasGroup);
@@ -120,6 +131,7 @@ export class Compositor {
       useUiStore.setState({ zoomScale: this.viewport.scale.x });
       this.refreshSelectionStroke();
       this.updatePixelGrid();
+      this.refreshGuides();
     });
     const exitFit = () => useUiStore.setState({ isFitMode: false });
     this.viewport.on("drag-start", () => {
@@ -253,6 +265,27 @@ export class Compositor {
     return this.pixelGrid.alpha;
   }
 
+  /** Day 14: replace the active smart-guide set. `flash` true means
+   * a snap just engaged → brief alpha bump (tactile "click"). Empty
+   * array clears the layer (without fade — use clearGuides() for
+   * the fade-out variant on pointerup). */
+  setGuides(guides: readonly Guide[], flash = false): void {
+    this.currentGuides = guides;
+    paintGuides(this.guides, guides, this.guideStrokeWidth(), flash);
+  }
+
+  /** Fade the smart-guides out — call on pointerup so the lines
+   * linger briefly instead of vanishing instantly. */
+  clearGuides(): void {
+    this.currentGuides = [];
+    clearGuides(this.guides);
+  }
+
+  /** Test hook — current smart-guide alpha (0 when faded). */
+  guidesAlpha(): number {
+    return this.guides.alpha;
+  }
+
   // ── Pointer dispatch ───────────────────────────────────────────────
 
   private pixiCtx(e: FederatedPointerEvent) {
@@ -347,5 +380,16 @@ export class Compositor {
   private updatePixelGrid() {
     const on = this.viewport.scale.x >= PIXEL_GRID_ZOOM;
     fadeAlphaTo(this.pixelGrid, on ? PIXEL_GRID_ALPHA : 0, PIXEL_GRID_FADE_MS);
+  }
+
+  /** Re-paint guides on a viewport zoom change so the stroke width
+   * stays at 1 screen-px. No-op when no snap is currently active. */
+  private refreshGuides() {
+    if (this.currentGuides.length === 0) return;
+    paintGuides(this.guides, this.currentGuides, this.guideStrokeWidth(), false);
+  }
+
+  private guideStrokeWidth(): number {
+    return GUIDE_SCREEN_WIDTH / this.viewport.scale.x;
   }
 }

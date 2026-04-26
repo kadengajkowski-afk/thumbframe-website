@@ -17,6 +17,7 @@ export type SceneBundle = {
   canvasFill: Graphics;
   toolPreview: Container;
   pixelGrid: Graphics;
+  guides: Graphics;
 };
 
 export function buildScene(
@@ -60,9 +61,18 @@ export function buildScene(
 
   const pixelGrid = buildPixelGrid(canvasW, canvasH);
 
+  // Day 14: smart-guide layer. Lives ABOVE toolPreview so guides
+  // float over an in-progress rect/ellipse draft. Initial alpha 0 —
+  // guideRenderer.paintGuides bumps it as soon as any guide lands.
+  const guides = new Graphics();
+  guides.label = "smart-guides";
+  guides.eventMode = "none";
+  guides.alpha = 0;
+
   canvasGroup.addChild(canvasFill);
   canvasGroup.addChild(pixelGrid);
   canvasGroup.addChild(toolPreview);
+  canvasGroup.addChild(guides);
 
-  return { worldBg, canvasGroup, canvasFill, toolPreview, pixelGrid };
+  return { worldBg, canvasGroup, canvasFill, toolPreview, pixelGrid, guides };
 }
