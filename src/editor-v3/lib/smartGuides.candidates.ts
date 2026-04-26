@@ -21,24 +21,32 @@ export function canvasCandidatesX(
   s: LayerBounds,
   c: LayerBounds,
 ): SnapCandidate[] {
-  const lines: { pos: number; subjectPos: number }[] = [
-    { pos: c.left, subjectPos: s.left },
-    { pos: c.right, subjectPos: s.right },
-    { pos: c.centerX, subjectPos: s.centerX },
+  // Each entry carries an optional label = distance from the
+  // subject's OPPOSITE edge to the corresponding canvas edge. Gives
+  // the user situational awareness — "snapped to the left, with
+  // 320px room on the right". Center snap has no useful label.
+  const lines: { pos: number; subjectPos: number; label: string | null }[] = [
+    { pos: c.left, subjectPos: s.left, label: `${Math.round(c.right - s.right)}px` },
+    { pos: c.right, subjectPos: s.right, label: `${Math.round(s.left - c.left)}px` },
+    { pos: c.centerX, subjectPos: s.centerX, label: null },
   ];
-  return lines.map(({ pos, subjectPos }) => mkCanvasCandidate(s, c, pos, subjectPos, "x"));
+  return lines.map(({ pos, subjectPos, label }) =>
+    mkCanvasCandidate(s, c, pos, subjectPos, "x", label),
+  );
 }
 
 export function canvasCandidatesY(
   s: LayerBounds,
   c: LayerBounds,
 ): SnapCandidate[] {
-  const lines: { pos: number; subjectPos: number }[] = [
-    { pos: c.top, subjectPos: s.top },
-    { pos: c.bottom, subjectPos: s.bottom },
-    { pos: c.centerY, subjectPos: s.centerY },
+  const lines: { pos: number; subjectPos: number; label: string | null }[] = [
+    { pos: c.top, subjectPos: s.top, label: `${Math.round(c.bottom - s.bottom)}px` },
+    { pos: c.bottom, subjectPos: s.bottom, label: `${Math.round(s.top - c.top)}px` },
+    { pos: c.centerY, subjectPos: s.centerY, label: null },
   ];
-  return lines.map(({ pos, subjectPos }) => mkCanvasCandidate(s, c, pos, subjectPos, "y"));
+  return lines.map(({ pos, subjectPos, label }) =>
+    mkCanvasCandidate(s, c, pos, subjectPos, "y", label),
+  );
 }
 
 export function centerCandidatesX(
@@ -112,13 +120,12 @@ function mkCanvasCandidate(
   pos: number,
   subjectPos: number,
   axis: "x" | "y",
+  label: string | null,
 ): SnapCandidate {
   const delta = pos - subjectPos;
-  return {
-    abs: Math.abs(delta),
-    delta,
-    guide: spanGuide("canvas-edge", axis, pos, s, c),
-  };
+  const guide = spanGuide("canvas-edge", axis, pos, s, c);
+  if (label && guide.kind === "canvas-edge") guide.label = label;
+  return { abs: Math.abs(delta), delta, guide };
 }
 
 /** Build an edge-align or canvas-edge guide whose span covers the
