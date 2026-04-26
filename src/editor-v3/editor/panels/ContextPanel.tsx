@@ -7,6 +7,7 @@ import { OpacityControl } from "./OpacityControl";
 import { ColorSwatchButton } from "./ColorSwatchButton";
 import { StrokeWidthInput } from "./StrokeWidthInput";
 import { TextProperties } from "./TextProperties";
+import { MultiSelectPanel } from "./MultiSelectPanel";
 import * as s from "./ContextPanel.styles";
 import "./blend-select.css";
 import "./color-picker.css";
@@ -37,16 +38,7 @@ export function ContextPanel() {
   }
 
   if (selectedCount > 1) {
-    return (
-      <aside
-        style={s.panel}
-        aria-label="Layer properties"
-        data-alive="contextpanel"
-      >
-        <header style={s.panelHeader}>Properties</header>
-        <div style={s.emptyHint}>{selectedCount} selected</div>
-      </aside>
-    );
+    return <MultiSelectPanel />;
   }
 
   return (
