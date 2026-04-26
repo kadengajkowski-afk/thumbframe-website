@@ -1,15 +1,23 @@
-import type { CSSProperties } from "react";
+import { useState } from "react";
 import type { TextLayer } from "@/state/types";
 import { MAX_TEXT_STROKES, TEXT_EFFECT_DEFAULTS } from "@/state/types";
 import { history } from "@/lib/history";
 import { hexToPixi, pixiToHex } from "@/lib/color";
-import * as s from "./ContextPanel.styles";
+import {
+  Section,
+  EffectRow,
+  NumberInput,
+  effectColumn,
+  colorField,
+  removeButton,
+  addButton,
+} from "./TextEffects.shared";
 
-/** Day 13 commit 2: minimal shadow + glow controls so the filter
- * pipeline (sceneHelpers.applyTextEffects → DropShadowFilter +
- * GlowFilter) is verifiable in browser. Commit 6 adds collapsible
- * sections, summaries, and color pickers, and folds in the strokes
- * (multi-stroke) controls once commit 3 lands. */
+/** Day 13 commit 6 — collapsible Drop Shadow / Outer Glow / Strokes
+ * sections for text layers. Section state is local React (collapsed/
+ * expanded is ephemeral UI; doesn't need uiStore persistence). Each
+ * header shows a one-line summary when collapsed so the user can scan
+ * which effects are active without opening every section. */
 export function TextEffects({ layer }: { layer: TextLayer }) {
   return (
     <>
@@ -20,230 +28,210 @@ export function TextEffects({ layer }: { layer: TextLayer }) {
   );
 }
 
+// ── Drop shadow ───────────────────────────────────────────────────────
+
 function ShadowSection({ layer }: { layer: TextLayer }) {
   const D = TEXT_EFFECT_DEFAULTS;
   const enabled = layer.shadowEnabled ?? D.shadowEnabled;
+  const blur = layer.shadowBlur ?? D.shadowBlur;
+  const offX = layer.shadowOffsetX ?? D.shadowOffsetX;
+  const offY = layer.shadowOffsetY ?? D.shadowOffsetY;
+  const summary = enabled ? `${blur}px blur · ${offX},${offY}` : "off";
+  const [open, setOpen] = useState(enabled);
+
   return (
-    <section style={s.section}>
-      <label style={s.fieldLabel}>
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => history.setShadowEnabled(layer.id, e.target.checked)}
-          style={{ marginRight: 6 }}
-        />
-        Shadow
-      </label>
-      {enabled && (
-        <div style={effectColumn}>
-          <EffectRow label="Blur">
-            <input
-              type="number"
-              min={0}
-              max={50}
-              step={0.5}
-              value={Number((layer.shadowBlur ?? D.shadowBlur).toFixed(1))}
-              onChange={(e) => {
-                const v = clamp(Number(e.target.value), 0, 50);
-                if (Number.isFinite(v)) history.setShadowBlur(layer.id, v);
-              }}
-              style={numField}
-            />
-          </EffectRow>
-          <EffectRow label="Offset X">
-            <input
-              type="number"
-              min={-50}
-              max={50}
-              step={1}
-              value={Math.round(layer.shadowOffsetX ?? D.shadowOffsetX)}
-              onChange={(e) => {
-                const v = clamp(Number(e.target.value), -50, 50);
-                if (Number.isFinite(v)) {
-                  history.setShadowOffset(
-                    layer.id,
-                    v,
-                    layer.shadowOffsetY ?? D.shadowOffsetY,
-                  );
-                }
-              }}
-              style={numField}
-            />
-          </EffectRow>
-          <EffectRow label="Offset Y">
-            <input
-              type="number"
-              min={-50}
-              max={50}
-              step={1}
-              value={Math.round(layer.shadowOffsetY ?? D.shadowOffsetY)}
-              onChange={(e) => {
-                const v = clamp(Number(e.target.value), -50, 50);
-                if (Number.isFinite(v)) {
-                  history.setShadowOffset(
-                    layer.id,
-                    layer.shadowOffsetX ?? D.shadowOffsetX,
-                    v,
-                  );
-                }
-              }}
-              style={numField}
-            />
-          </EffectRow>
-          <EffectRow label="Opacity">
-            <input
-              type="number"
-              min={0}
-              max={1}
-              step={0.05}
-              value={Number((layer.shadowAlpha ?? D.shadowAlpha).toFixed(2))}
-              onChange={(e) => {
-                const v = clamp(Number(e.target.value), 0, 1);
-                if (Number.isFinite(v)) history.setShadowAlpha(layer.id, v);
-              }}
-              style={numField}
-            />
-          </EffectRow>
-        </div>
-      )}
-    </section>
+    <Section
+      title="Shadow"
+      summary={summary}
+      open={open}
+      onToggle={() => setOpen((o) => !o)}
+      enabled={enabled}
+      onEnableChange={(v) => {
+        history.setShadowEnabled(layer.id, v);
+        if (v) setOpen(true);
+      }}
+    >
+      <div style={effectColumn}>
+        <EffectRow label="Color">
+          <input
+            type="color"
+            value={pixiToHex(layer.shadowColor ?? D.shadowColor)}
+            onChange={(e) => history.setShadowColor(layer.id, hexToPixi(e.target.value))}
+            style={colorField}
+          />
+        </EffectRow>
+        <EffectRow label="Opacity">
+          <NumberInput
+            min={0}
+            max={1}
+            step={0.05}
+            value={layer.shadowAlpha ?? D.shadowAlpha}
+            onCommit={(v) => history.setShadowAlpha(layer.id, v)}
+            decimals={2}
+          />
+        </EffectRow>
+        <EffectRow label="Blur">
+          <NumberInput
+            min={0}
+            max={50}
+            step={0.5}
+            value={blur}
+            onCommit={(v) => history.setShadowBlur(layer.id, v)}
+            decimals={1}
+            suffix="px"
+          />
+        </EffectRow>
+        <EffectRow label="Offset X">
+          <NumberInput
+            min={-50}
+            max={50}
+            step={1}
+            value={offX}
+            onCommit={(v) => history.setShadowOffset(layer.id, v, offY)}
+            decimals={0}
+            suffix="px"
+          />
+        </EffectRow>
+        <EffectRow label="Offset Y">
+          <NumberInput
+            min={-50}
+            max={50}
+            step={1}
+            value={offY}
+            onCommit={(v) => history.setShadowOffset(layer.id, offX, v)}
+            decimals={0}
+            suffix="px"
+          />
+        </EffectRow>
+      </div>
+    </Section>
   );
 }
+
+// ── Outer glow ────────────────────────────────────────────────────────
 
 function GlowSection({ layer }: { layer: TextLayer }) {
   const D = TEXT_EFFECT_DEFAULTS;
   const enabled = layer.glowEnabled ?? D.glowEnabled;
+  const distance = layer.glowDistance ?? D.glowDistance;
+  const outer = layer.glowOuterStrength ?? D.glowOuterStrength;
+  const summary = enabled ? `${distance}px · ${outer.toFixed(1)} outer` : "off";
+  const [open, setOpen] = useState(enabled);
+
   return (
-    <section style={s.section}>
-      <label style={s.fieldLabel}>
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => history.setGlowEnabled(layer.id, e.target.checked)}
-          style={{ marginRight: 6 }}
-        />
-        Glow
-      </label>
-      {enabled && (
-        <div style={effectColumn}>
-          <EffectRow label="Distance">
-            <input
-              type="number"
-              min={0}
-              max={50}
-              step={0.5}
-              value={Number((layer.glowDistance ?? D.glowDistance).toFixed(1))}
-              onChange={(e) => {
-                const v = clamp(Number(e.target.value), 0, 50);
-                if (Number.isFinite(v)) history.setGlowDistance(layer.id, v);
-              }}
-              style={numField}
-            />
-          </EffectRow>
-          <EffectRow label="Outer">
-            <input
-              type="number"
-              min={0}
-              max={10}
-              step={0.25}
-              value={Number(
-                (layer.glowOuterStrength ?? D.glowOuterStrength).toFixed(2),
-              )}
-              onChange={(e) => {
-                const v = clamp(Number(e.target.value), 0, 10);
-                if (Number.isFinite(v)) history.setGlowOuterStrength(layer.id, v);
-              }}
-              style={numField}
-            />
-          </EffectRow>
-          <EffectRow label="Inner">
-            <input
-              type="number"
-              min={0}
-              max={10}
-              step={0.25}
-              value={Number(
-                (layer.glowInnerStrength ?? D.glowInnerStrength).toFixed(2),
-              )}
-              onChange={(e) => {
-                const v = clamp(Number(e.target.value), 0, 10);
-                if (Number.isFinite(v)) history.setGlowInnerStrength(layer.id, v);
-              }}
-              style={numField}
-            />
-          </EffectRow>
-          <EffectRow label="Quality">
-            <input
-              type="number"
-              min={0.1}
-              max={1}
-              step={0.1}
-              value={Number((layer.glowQuality ?? D.glowQuality).toFixed(2))}
-              onChange={(e) => {
-                const v = clamp(Number(e.target.value), 0.1, 1);
-                if (Number.isFinite(v)) history.setGlowQuality(layer.id, v);
-              }}
-              style={numField}
-            />
-          </EffectRow>
-          <EffectRow label="Opacity">
-            <input
-              type="number"
-              min={0}
-              max={1}
-              step={0.05}
-              value={Number((layer.glowAlpha ?? D.glowAlpha).toFixed(2))}
-              onChange={(e) => {
-                const v = clamp(Number(e.target.value), 0, 1);
-                if (Number.isFinite(v)) history.setGlowAlpha(layer.id, v);
-              }}
-              style={numField}
-            />
-          </EffectRow>
-        </div>
-      )}
-    </section>
+    <Section
+      title="Glow"
+      summary={summary}
+      open={open}
+      onToggle={() => setOpen((o) => !o)}
+      enabled={enabled}
+      onEnableChange={(v) => {
+        history.setGlowEnabled(layer.id, v);
+        if (v) setOpen(true);
+      }}
+    >
+      <div style={effectColumn}>
+        <EffectRow label="Color">
+          <input
+            type="color"
+            value={pixiToHex(layer.glowColor ?? D.glowColor)}
+            onChange={(e) => history.setGlowColor(layer.id, hexToPixi(e.target.value))}
+            style={colorField}
+          />
+        </EffectRow>
+        <EffectRow label="Opacity">
+          <NumberInput
+            min={0}
+            max={1}
+            step={0.05}
+            value={layer.glowAlpha ?? D.glowAlpha}
+            onCommit={(v) => history.setGlowAlpha(layer.id, v)}
+            decimals={2}
+          />
+        </EffectRow>
+        <EffectRow label="Distance">
+          <NumberInput
+            min={0}
+            max={50}
+            step={0.5}
+            value={distance}
+            onCommit={(v) => history.setGlowDistance(layer.id, v)}
+            decimals={1}
+            suffix="px"
+          />
+        </EffectRow>
+        <EffectRow label="Outer">
+          <NumberInput
+            min={0}
+            max={10}
+            step={0.25}
+            value={outer}
+            onCommit={(v) => history.setGlowOuterStrength(layer.id, v)}
+            decimals={2}
+          />
+        </EffectRow>
+        <EffectRow label="Inner">
+          <NumberInput
+            min={0}
+            max={10}
+            step={0.25}
+            value={layer.glowInnerStrength ?? D.glowInnerStrength}
+            onCommit={(v) => history.setGlowInnerStrength(layer.id, v)}
+            decimals={2}
+          />
+        </EffectRow>
+        <EffectRow label="Quality">
+          <NumberInput
+            min={0.1}
+            max={1}
+            step={0.1}
+            value={layer.glowQuality ?? D.glowQuality}
+            onCommit={(v) => history.setGlowQuality(layer.id, v)}
+            decimals={2}
+          />
+        </EffectRow>
+      </div>
+    </Section>
   );
 }
+
+// ── Stacked strokes ───────────────────────────────────────────────────
 
 function StrokesSection({ layer }: { layer: TextLayer }) {
   const strokes = layer.strokes ?? [];
   const canAdd = strokes.length < MAX_TEXT_STROKES;
+  const summary = strokes.length === 0 ? "off" : `${strokes.length}/${MAX_TEXT_STROKES}`;
+  const [open, setOpen] = useState(strokes.length > 0);
 
   return (
-    <section style={s.section}>
-      <label style={s.fieldLabel}>
-        Stacked strokes ({strokes.length}/{MAX_TEXT_STROKES})
-      </label>
+    <Section
+      title="Strokes"
+      summary={summary}
+      open={open}
+      onToggle={() => setOpen((o) => !o)}
+    >
       <div style={effectColumn}>
         {strokes.map((stroke, i) => (
-          <div key={i} style={effectRow}>
-            <span style={effectRowLabel}>#{i + 1}</span>
+          <div key={i} style={strokeRow}>
+            <span style={strokeRowLabel}>#{i + 1}</span>
             <input
               type="color"
               value={pixiToHex(stroke.color)}
               onChange={(e) =>
-                history.setStroke(layer.id, i, {
-                  color: hexToPixi(e.target.value),
-                })
+                history.setStroke(layer.id, i, { color: hexToPixi(e.target.value) })
               }
               style={colorField}
               title="Color"
             />
-            <input
-              type="number"
+            <NumberInput
               min={1}
               max={50}
               step={1}
-              value={Math.round(stroke.width)}
-              onChange={(e) => {
-                const v = clamp(Number(e.target.value), 1, 50);
-                if (Number.isFinite(v)) {
-                  history.setStroke(layer.id, i, { width: v });
-                }
-              }}
-              style={numField}
-              title="Width (px)"
+              value={stroke.width}
+              onCommit={(v) => history.setStroke(layer.id, i, { width: v })}
+              decimals={0}
+              suffix="px"
+              compact
             />
             <button
               type="button"
@@ -259,8 +247,6 @@ function StrokesSection({ layer }: { layer: TextLayer }) {
           <button
             type="button"
             onClick={() => {
-              // Each new stroke defaults a few px wider than the
-              // previous one so the stack reads as concentric rings.
               const last = strokes[strokes.length - 1];
               const nextWidth = last ? Math.min(50, last.width + 4) : 4;
               history.addStroke(layer.id, {
@@ -268,6 +254,7 @@ function StrokesSection({ layer }: { layer: TextLayer }) {
                 width: nextWidth,
                 alpha: 1,
               });
+              setOpen(true);
             }}
             style={addButton}
           >
@@ -275,90 +262,18 @@ function StrokesSection({ layer }: { layer: TextLayer }) {
           </button>
         )}
       </div>
-    </section>
+    </Section>
   );
 }
 
-function EffectRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={effectRow}>
-      <span style={effectRowLabel}>{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-const numField: CSSProperties = {
-  width: 64,
-  height: 28,
-  padding: "0 8px",
-  background: "var(--bg-space-2)",
-  color: "var(--text-primary)",
-  border: "1px solid var(--border-ghost)",
-  borderRadius: 4,
-  fontSize: 13,
-  fontFamily: "var(--font-mono)",
-};
-
-const effectColumn: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-  marginTop: 6,
-  paddingLeft: 22,
-};
-
-const effectRow: CSSProperties = {
+const strokeRow = {
   display: "flex",
   alignItems: "center",
   gap: 8,
-};
+} as const;
 
-const effectRowLabel: CSSProperties = {
+const strokeRowLabel = {
   flex: 1,
   fontSize: 12,
   color: "var(--text-secondary)",
-};
-
-const colorField: CSSProperties = {
-  width: 32,
-  height: 28,
-  padding: 0,
-  background: "transparent",
-  border: "1px solid var(--border-ghost)",
-  borderRadius: 4,
-  cursor: "pointer",
-};
-
-const removeButton: CSSProperties = {
-  width: 24,
-  height: 24,
-  background: "var(--bg-space-2)",
-  color: "var(--text-secondary)",
-  border: "1px solid var(--border-ghost)",
-  borderRadius: 4,
-  cursor: "pointer",
-  fontSize: 14,
-  lineHeight: 1,
-  padding: 0,
-};
-
-const addButton: CSSProperties = {
-  height: 28,
-  background: "var(--bg-space-2)",
-  color: "var(--text-primary)",
-  border: "1px dashed var(--border-ghost)",
-  borderRadius: 4,
-  cursor: "pointer",
-  fontSize: 12,
-};
+} as const;
