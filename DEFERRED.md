@@ -17,6 +17,99 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 Day 16 — held back (date: 2026-04-27)
+
+- **Rotation handle deferred.** Day 16 ships axis-aligned resize only;
+  the rotation handle (cream pip floating above the N edge with a
+  curved-arrow cursor) is its own pass. Several earlier deferred
+  notes (Day 7 outline math, Day 11 ellipse pixel-accurate hit-test,
+  Day 12 selection-outline padding) all wait on rotation since they
+  touch the same axis-aligned-vs-OBB seam. Land rotation as one
+  commit so the outline / hit-test / handles all switch to OBB
+  together.
+
+- **Edge handles dropped on text-only selections.** Render-side
+  filter — when every unlocked, non-hidden member is a TextLayer,
+  `paintResizeHandles` draws corners only. Edge handles would fight
+  Compositor's auto-resize (text width/height come from the rendered
+  glyph, not user input). Mixed selections (text + rect / image /
+  ellipse) still render all 8 since the non-text members can take
+  edge handles meaningfully. Worth flagging if a user with multiple
+  text layers gets confused — the corner-only mode is implicit.
+
+- **Text resize maps to fontSize via `max(sx, sy)`.** Corner drag
+  with equal sx/sy (or Shift) scales fontSize uniformly. Edge drag
+  in a multi-select picks the larger axis ratio so text grows along
+  with whatever direction the union is being stretched. Some users
+  may expect the text to stretch non-uniformly to fit the new bbox
+  (CSS `transform: scale()` semantics); we deliberately don't —
+  Pixi Text renders glyph metrics, scaling them non-uniformly looks
+  awful at small sizes. Cycle 3 if a designer asks for a "stretch
+  text" mode.
+
+- **fontSize floor at 8px.** `applyResize` clamps text fontSize ≥ 8
+  so a tiny drag-shrink doesn't render unreadable glyphs. Could
+  expose as a uiStore field but the floor is a hard a11y minimum
+  more than a preference.
+
+- **Locked-member multi-resize matches Day 15 multi-drag UX.**
+  startResize filters locked members out of the `starts` array;
+  the start union is computed from the unlocked subset. Side
+  effect: when the only unlocked member of a multi-selection is
+  ONE layer, the resize behaves like a single-layer resize even
+  though the handles are drawn around the union (which includes
+  the locked layer's bounds). The handle bbox can therefore shift
+  on pointerdown — visible flicker. Acceptable; flag in Day 17
+  polish if it bothers anyone.
+
+- **Resize doesn't trigger smart-guides today.** The Day 14 snap
+  engine reads from `SelectTool.drag` only, not the resize state.
+  Resize-snap (snap the dragged edge to other layers' edges /
+  canvas edges) is a clear win but adds another snap subject —
+  the moving CORNER instead of a moving union — and the engine's
+  current API takes a single subject AABB. Cycle 3 polish.
+
+- **Cursor on hover relies on Pixi v8's auto-cursor.** Each handle
+  Graphics has `cursor: '*-resize'`. v8 should apply this on hover.
+  If it fails on some renderer setups (WebGPU vs WebGL), fall back
+  to a global pointermove that reads `e.target.label` and writes
+  `document.body.style.cursor`. Holding off until a real failure
+  surfaces.
+
+- **`history.cancelStroke()` added for the resize-cancel path.**
+  endStroke can't reliably no-op when "values match but immer
+  references differ" — every mutate inside the open stroke
+  produces a new array reference. cancelStroke restores layers to
+  the captured startLayers in one shot. Existing `SelectTool`
+  drag-cancel path (Day 7) had the same latent bug — the comment
+  there ("With startLayers === endLayers now, endStroke is a
+  no-op") was wishful. Future work: switch the drag-cancel path
+  to cancelStroke too. Held to keep Day 16 commits small; Day 17
+  cleanup.
+
+- **Resize handle hit-area is exactly 8×8 screen-px.** Tight target
+  on small screens / trackpads. Could add an invisible 16×16 hit
+  area child for forgiving clicks. Defer until a user complains.
+
+- **No corner / edge marker preview during the gesture.** Once you
+  grab a handle, you only see the resulting box — no indicator of
+  WHICH corner you're holding. Small-screen polish for Cycle 3.
+
+- **`SelectTool.resize.ts` lives in `editor/tools/` despite not
+  being a Tool.** Naming + colocation choice: it's a strict helper
+  module owned by SelectTool. If a second tool ever wants resize
+  (e.g. crop tool), promote to `editor/resize.ts`. Today the file
+  is 230 lines.
+
+- **Test that targets a handle Container directly bypasses
+  Compositor's pointer dispatch.** The cancel-mid-resize test had
+  to call `SelectTool.onCancel()` directly because the test
+  doesn't route through `Compositor.onCanvasPointerDown` (which
+  is what sets `activeDrag` so `Compositor.cancelTool()` knows
+  there's anything to cancel). Acceptable — the production ESC
+  path goes through Compositor, but the unit test verifies the
+  same `SelectTool.onCancel` code Compositor would call.
+
 ## Cycle 2 Day 15.5 — groups (date: 2026-04-25, NEEDS FULL DAY)
 
 **Day 15.5 — needs full day, do not combine with other work.**

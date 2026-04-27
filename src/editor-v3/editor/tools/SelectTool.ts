@@ -6,6 +6,14 @@ import { layerBounds, canvasBounds } from "@/lib/bounds";
 import { computeSnap } from "@/lib/smartGuides";
 import { findLayerId } from "../sceneHelpers";
 import { getCurrentCompositor } from "../compositorRef";
+import {
+  isHandleTarget,
+  startResize,
+  applyResize,
+  endResize,
+  cancelResize,
+  type ResizeState,
+} from "./SelectTool.resize";
 import type { Tool, ToolCtx } from "./ToolTypes";
 
 type DragLayerStart = { id: string; x: number; y: number };
@@ -69,8 +77,21 @@ class SelectToolImpl implements Tool {
 
   private drag: DragState | null = null;
   private marquee: MarqueeState | null = null;
+  private resize: ResizeState | null = null;
 
   onPointerDown(ctx: ToolCtx) {
+    // Day 16: handle-hit routing runs FIRST so a click on a corner /
+    // edge handle starts a resize instead of falling through to layer
+    // hit-test (which would otherwise hit the layer behind the handle)
+    // or the empty-canvas marquee branch.
+    const handle = isHandleTarget(ctx.target);
+    if (handle) {
+      this.resize = startResize(handle, ctx);
+      this.drag = null;
+      this.marquee = null;
+      return;
+    }
+
     const hitLayerId = findLayerId(ctx.target);
     const ui = useUiStore.getState();
 
@@ -167,6 +188,10 @@ class SelectToolImpl implements Tool {
   }
 
   onPointerMove(ctx: ToolCtx) {
+    if (this.resize) {
+      applyResize(this.resize, ctx);
+      return;
+    }
     if (this.marquee) {
       this.marquee.last = { ...ctx.canvasPoint };
       this.paintMarquee();
@@ -227,6 +252,11 @@ class SelectToolImpl implements Tool {
   }
 
   onPointerUp(_ctx: ToolCtx) {
+    if (this.resize) {
+      endResize(this.resize);
+      this.resize = null;
+      return;
+    }
     if (this.marquee) {
       this.commitMarquee();
       return;
@@ -238,6 +268,11 @@ class SelectToolImpl implements Tool {
   }
 
   onCancel() {
+    if (this.resize) {
+      cancelResize(this.resize);
+      this.resize = null;
+      return;
+    }
     if (this.marquee) {
       this.clearMarquee();
       // Restore the selection that existed when the marquee began.
