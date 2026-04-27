@@ -18,6 +18,7 @@ import {
   refreshSelectionStroke,
   renderSelection,
 } from "./sceneReconcile";
+import { renderHandles } from "./resizeHandles";
 import { buildScene } from "./buildScene";
 import { TOOLS_BY_ID } from "./tools/tools";
 import type { Tool } from "./tools/ToolTypes";
@@ -69,6 +70,7 @@ export class Compositor {
   private currentGuides: readonly Guide[] = [];
   private layerNodes = new Map<string, Container>();
   private selectionNodes = new Map<string, Graphics>();
+  private handleNodes = new Map<string, Container>();
   private activeDrag: Tool | null = null;
 
   private unsubscribeDoc?: () => void;
@@ -120,6 +122,8 @@ export class Compositor {
     this.unsubscribeUi = useUiStore.subscribe((state, prev) => {
       if (state.selectedLayerIds !== prev.selectedLayerIds) this.render();
       if (state.editingTextLayerId !== prev.editingTextLayerId) this.render();
+      if (state.activeTool !== prev.activeTool) this.render();
+      if (state.isResizing !== prev.isResizing) this.render();
       const prevHand = prev.isHandMode || prev.activeTool === "hand";
       const nextHand = state.isHandMode || state.activeTool === "hand";
       if (prevHand !== nextHand) {
@@ -128,8 +132,11 @@ export class Compositor {
     });
 
     this.viewport.on("zoomed", () => {
+      const ui = useUiStore.getState();
+      const layers = useDocStore.getState().layers;
       useUiStore.setState({ zoomScale: this.viewport.scale.x });
       this.refreshSelectionStroke();
+      renderHandles(this.scene(), this.viewport, layers, ui.selectedLayerIds, ui.activeTool, ui.isResizing);
       this.updatePixelGrid();
       this.refreshGuides();
     });
@@ -165,6 +172,7 @@ export class Compositor {
     this.releaseWindowListeners();
     this.layerNodes.clear();
     this.selectionNodes.clear();
+    this.handleNodes.clear();
     this.viewport.destroy({ children: true });
   }
 
@@ -346,20 +354,17 @@ export class Compositor {
 
   private render() {
     const ui = useUiStore.getState();
-    reconcileLayers(this.scene(), useDocStore.getState().layers, ui.editingTextLayerId);
-    renderSelection(
-      this.scene(),
-      this.viewport,
-      useDocStore.getState().layers,
-      ui.selectedLayerIds,
-      SELECTION_WIDTH,
-    );
+    const layers = useDocStore.getState().layers;
+    reconcileLayers(this.scene(), layers, ui.editingTextLayerId);
+    renderSelection(this.scene(), this.viewport, layers, ui.selectedLayerIds, SELECTION_WIDTH);
+    renderHandles(this.scene(), this.viewport, layers, ui.selectedLayerIds, ui.activeTool, ui.isResizing);
   }
 
   private scene() {
     return {
       layerNodes: this.layerNodes,
       selectionNodes: this.selectionNodes,
+      handleNodes: this.handleNodes,
       canvasGroup: this.canvasGroup,
       toolPreview: this.toolPreview,
     };
@@ -368,13 +373,7 @@ export class Compositor {
   /** Called on viewport zoom changes. Redraws outlines with a new
    * stroke width so the outline always reads as 2 screen-pixels. */
   private refreshSelectionStroke() {
-    refreshSelectionStroke(
-      this.scene(),
-      this.viewport,
-      useDocStore.getState().layers,
-      useUiStore.getState().selectedLayerIds,
-      SELECTION_WIDTH,
-    );
+    refreshSelectionStroke(this.scene(), this.viewport, useDocStore.getState().layers, useUiStore.getState().selectedLayerIds, SELECTION_WIDTH);
   }
 
   /** Fade the pixel grid in/out based on the current zoom threshold. */

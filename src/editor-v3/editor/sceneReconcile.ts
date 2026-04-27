@@ -24,6 +24,10 @@ const UNION_OUTLINE_ID = "__union";
 export type ReconcileScene = {
   layerNodes: Map<string, Container>;
   selectionNodes: Map<string, Graphics>;
+  /** Day 16: single-keyed map ("__handles" → handles Container). The
+   * Container holds 8 child Graphics, one per resize handle. Lives
+   * above selection outlines in the canvasGroup z-order. */
+  handleNodes: Map<string, Container>;
   canvasGroup: Container;
   toolPreview: Container;
 };
@@ -84,6 +88,11 @@ export function reconcileLayers(
   }
   scene.canvasGroup.addChild(scene.toolPreview);
   for (const node of scene.selectionNodes.values()) {
+    scene.canvasGroup.addChild(node);
+  }
+  // Day 16: handles render ABOVE selection outlines — added last so
+  // re-attaches put them on top regardless of insertion order.
+  for (const node of scene.handleNodes.values()) {
     scene.canvasGroup.addChild(node);
   }
 }
