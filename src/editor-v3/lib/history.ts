@@ -223,6 +223,25 @@ const baseHistory = {
     });
   },
 
+  /** Day 16: atomic box write — position + size in one mutation so
+   * resize handles produce a single immer step per drag tick.
+   * Stroke-aware: inside an open stroke (the resize gesture) it
+   * mutates without pushing history; outside a stroke it commits as
+   * one entry. Used by the Day 16 resize-handle pipeline. */
+  setLayerBox(id: string, x: number, y: number, width: number, height: number) {
+    const run = (layers: Layer[]) => {
+      const l = layers.find((x) => x.id === id);
+      if (l) {
+        l.x = x;
+        l.y = y;
+        l.width = width;
+        l.height = height;
+      }
+    };
+    if (openStroke) mutate(run);
+    else commit("Resize layer", run);
+  },
+
   reorderLayer(id: string, toIndex: number) {
     commit("Reorder layer", (layers) => {
       const from = layers.findIndex((l) => l.id === id);
@@ -319,6 +338,17 @@ const baseHistory = {
     undoStack.push({ patches, inverse, label });
     if (undoStack.length > MAX_HISTORY) undoStack.shift();
     redoStack = [];
+  },
+
+  /** Day 16: drop the open stroke and revert docStore.layers to its
+   * pre-stroke state in one shot. Used by ESC / onCancel paths so a
+   * canceled gesture never lands on the undo stack — even if immer
+   * created new array references during the gesture. */
+  cancelStroke() {
+    if (!openStroke) return;
+    const { startLayers } = openStroke;
+    openStroke = null;
+    setLayers(startLayers);
   },
 
   undo() {

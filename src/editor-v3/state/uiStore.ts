@@ -82,6 +82,13 @@ type UiState = {
    * persisted to localStorage. Cmd+\ flips it. */
   smartGuidesEnabled: boolean;
   setSmartGuidesEnabled: (v: boolean) => void;
+
+  /** Day 16: true while a resize-handle drag is in progress. SelectTool
+   * sets it on handle pointerdown and clears it on pointerup / abort.
+   * Other surfaces read it to hide cosmetic chrome (e.g. handles
+   * themselves) during the gesture. */
+  isResizing: boolean;
+  setIsResizing: (v: boolean) => void;
 };
 
 /** UI-only flags. Document state lives in docStore. Do not cross streams. */
@@ -171,6 +178,9 @@ export const useUiStore = create<UiState>()((set) => ({
     persistString(SMART_GUIDES_KEY, v ? "1" : "0");
     set({ smartGuidesEnabled: v });
   },
+
+  isResizing: false,
+  setIsResizing: (isResizing) => set({ isResizing }),
 }));
 
 function loadString(key: string, fallback: string): string {
