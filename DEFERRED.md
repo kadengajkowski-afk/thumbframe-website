@@ -17,6 +17,105 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 Day 19 — held back (date: 2026-04-27)
+
+- **`uiStore.userTier` is a placeholder for Cycle 4 auth.** Default
+  `"free"`. A dev-only command-palette entry ("Toggle Pro tier (dev)")
+  flips it locally and persists to localStorage so refreshes keep
+  the chosen tier. Real auth + Polar.sh wiring lands Day 31. The
+  store contract won't change — Cycle 4 just swaps the loader from
+  localStorage to Supabase session.
+
+- **Watermark gate is purely tier-based.** `tier === "free"` →
+  watermark added pre-extract. `tier === "pro"` → no watermark.
+  No customization (color / position / opacity) — spec said no
+  demand. If a Pro user wants to bake a custom mark in, that's a
+  separate "stamp" tool (Cycle 6+).
+
+- **4K is always PNG.** Spec said preserve the alpha channel; the
+  format ignores `jpegQuality`. Filename auto-rewrites to `.png`
+  for both `png` and `4k`.
+
+- **Background fill: 4 presets (Transparent / Black / White /
+  Dark).** No custom-color picker yet — adding ColorSwatchButton
+  here is straightforward (Day 9 infra exists) but bikeshed for
+  now. Transparent is grayed in JPEG / YouTube modes with a
+  tooltip: "Transparent → white in JPEG."
+
+- **canvasFill hidden during export.** The dark canvas base
+  (`--bg-space-0`) would otherwise paint over any custom bg the
+  user picked. Compositor exposes `setCanvasFillVisible(v)`;
+  export.ts toggles off → extract → on inside a try/finally. Same
+  pattern would extend to a future "preview-without-canvas-fill"
+  mode if we ever want it.
+
+- **Recent exports: dedupe by (format, quality, dimensions).**
+  Filename + timestamp differ, but a re-ship of "JPEG q90 @1280×720"
+  consolidates into one row. Cap 10. Persisted localStorage. The
+  panel only renders the top 5 — the older 5 are still in the
+  store but invisible. Could surface a "show more" toggle if
+  someone asks; held.
+
+- **Cmd+Shift+E re-ships with last-used settings; no panel.**
+  When the user has never shipped, falls back to opening the panel
+  (since there's no last-settings to apply). Background defaults to
+  black for re-ships — bg isn't part of the persisted settings
+  shape today (RecentExport carries format/quality/dims/filename
+  only). Worth re-evaluating if users prefer their last bg color.
+
+- **Selection export uses union AABB.** `shipSelection({ format,
+  jpegQuality })` exports the bounding box of every visible
+  selected layer, sized to fit. Scales the extract resolution down
+  if the bbox is small. Rotated layers (Cycle 2+) will need an OBB
+  → AABB pass before this works correctly — same fragility as the
+  Day 14 smart-guides subject.
+
+- **shipSelection re-uses last format / quality.** Command palette
+  entry "Export selection" defaults to the user's most recent format
+  if any (else PNG q90). Doesn't surface its own format picker —
+  command-palette commands run synchronously, no chance to
+  intercept. Power users can open the panel + run "Export selection"
+  via console if they want a different format.
+
+- **Helper text under Format section is plain string per format.**
+  Static, not data-driven. Easy to swap to a more nuanced "Best for
+  YouTube channel art" / "Best for Discord embeds" once we know
+  what kinds of contexts users actually export to.
+
+- **Pro badge is a static orange pill.** Visible only on the 4K
+  format button in free tier. Pro tier just shows "2560×1440" sub-
+  label without the badge. No animation / hover prompt to upgrade
+  — bikeshed.
+
+- **Background fill renders at z-index 0 (under all layers).**
+  pixelGrid still renders ON TOP of the bg fill. At 600%+ zoom the
+  pixel-grid stripes will be visible in the export. Acceptable —
+  pixelGrid only fades in at zoom ≥ 6×, and exports happen at
+  zoom-independent canvas coords. If a user manages to trigger
+  this it's a one-frame artifact.
+
+- **`shipExport` runs in the React component callback.** No queue,
+  no cancellation. If the user mashes "Ship it" twice fast, two
+  encodes run in parallel. The button's `disabled={shipping}`
+  prevents that for clicks; Cmd+Shift+E doesn't have a guard.
+  Worth a global "currently shipping" lock if a user reports
+  duplicate downloads.
+
+- **Filename input doesn't validate the extension matches format.**
+  Same as Day 18 deferred. Type "foo.png" while format=jpeg → JPEG
+  named foo.png. Browser still decodes correctly.
+
+- **The "ship via Enter from filename input" trigger fires for any
+  Enter inside the card's onKeyDown.** Works as documented (Enter
+  ships from any input including the filename text). If we add a
+  textarea (e.g. metadata field) later, this behavior would need
+  to gate on `e.target.tagName !== 'TEXTAREA'`.
+
+- **uiStore.ts split** — added 70+ lines of tier + recents +
+  last-export persistence; pulled into state/exportPersistence.ts
+  to stay under the 400-line ceiling. Same pattern as
+  history.ts → history.text.ts split (Day 13).
+
 ## Cycle 2 Day 18 — held back (date: 2026-04-27)
 
 - **`@jsquash/jpeg` needs Vite's `optimizeDeps.exclude` + manual
