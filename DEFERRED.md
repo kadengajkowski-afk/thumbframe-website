@@ -19,6 +19,24 @@ Promote to SCOPE.md only after 48 hours of consideration.
 
 ## Cycle 2 Day 18 — held back (date: 2026-04-27)
 
+- **`@jsquash/jpeg` needs Vite's `optimizeDeps.exclude` + manual
+  WASM init.** Their emscripten glue resolves the .wasm path off
+  `import.meta.url`. When Vite's dep optimizer rewrites the
+  module's location into the cache, that URL no longer resolves
+  to the real .wasm — dev returns the SPA fallback (index.html)
+  and the WASM compile chokes on `<!do`. The fix:
+    1. `optimizeDeps.exclude: ["@jsquash/jpeg", "@jsquash/png"]`
+       in vite.config.ts (skip the optimizer entirely).
+    2. In the worker, import the WASM URL via Vite's `?url`
+       suffix and pass a manually-compiled `WebAssembly.Module`
+       into `init(wasmModule)` BEFORE the first `encode()`.
+  Verified post-fix by curl-ing the dev server: the .wasm path
+  returns 251 KB starting with `00 61 73 6d` (magic word) instead
+  of an HTML stub. Worth a directory-scoped CLAUDE.md note in
+  `lib/` if we ever add another emscripten-WASM dep.
+
+
+
 - **4K export gated as "Pro v3.1" via toast — no real auth gate yet.**
   ExportPanel renders a "4K" format button that surfaces a toast
   ("4K export unlocks at v3.1") and skips the encode. The actual

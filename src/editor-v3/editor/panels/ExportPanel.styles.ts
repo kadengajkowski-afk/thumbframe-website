@@ -49,7 +49,9 @@ export const formatBtn: CSSProperties = {
 };
 export const formatBtnActive: CSSProperties = {
   background: "var(--accent-orange)",
-  borderColor: "var(--accent-orange)",
+  // Use the full shorthand so React doesn't warn about mixing
+  // `border` (from formatBtn) with `borderColor` longhand here.
+  border: "1px solid var(--accent-orange)",
   color: "var(--bg-space-0)",
 };
 export const formatBtnPro: CSSProperties = { opacity: 0.65 };

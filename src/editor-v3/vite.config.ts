@@ -14,6 +14,16 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  // Day 18 fix — @jsquash/jpeg + @jsquash/png ship emscripten glue
+  // that loads .wasm files via import.meta.url. When Vite optimizes
+  // these into the dep cache, that URL no longer resolves to the
+  // original .wasm location and dev returns the SPA fallback
+  // (index.html) instead — the WASM compile then chokes on "<!do".
+  // Excluding them from optimizeDeps keeps the original module
+  // structure so we can drive WASM loading manually via ?url.
+  optimizeDeps: {
+    exclude: ["@jsquash/jpeg", "@jsquash/png"],
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,
