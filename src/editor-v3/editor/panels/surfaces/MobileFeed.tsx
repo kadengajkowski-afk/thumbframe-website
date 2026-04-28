@@ -1,7 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from "react";
-import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
-import { getCurrentCompositor } from "@/editor/compositorRef";
+import { previewBus } from "@/editor/previewBus";
 import type { SurfaceSpec } from "@/editor/previewSurfaces";
 
 /** Day 22 — mobile feed preview surface (iPhone 15 YouTube app card).
@@ -16,7 +15,6 @@ import type { SurfaceSpec } from "@/editor/previewSurfaces";
  * sizes (16 / 14 / 13 / 12px) — scaling them down would defeat the
  * legibility purpose of the rack. */
 
-const REFRESH_DEBOUNCE_MS = 32;
 
 // Real YouTube mobile palette (dark + light variants).
 const DARK = {
@@ -31,10 +29,8 @@ const LIGHT = {
 };
 
 export function MobileFeedSurface({ surface }: { surface: SurfaceSpec }) {
-  const layers = useDocStore((s) => s.layers);
   const mode = useUiStore((s) => s.previewMode);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const refreshTimer = useRef<number | null>(null);
   const palette = mode === "dark" ? DARK : LIGHT;
 
   // Aspect-locked thumb width fills the card; height computed from
@@ -43,18 +39,10 @@ export function MobileFeedSurface({ surface }: { surface: SurfaceSpec }) {
   const thumbH = Math.round((thumbW * surface.chrome.thumbH) / surface.chrome.thumbW);
 
   useEffect(() => {
-    if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    refreshTimer.current = window.setTimeout(() => {
-      refreshTimer.current = null;
-      paintThumbnail(canvasRef.current, thumbW, thumbH);
-    }, REFRESH_DEBOUNCE_MS);
-    return () => {
-      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    };
-  }, [layers, thumbW, thumbH]);
-
-  // Paint once on mount.
-  useEffect(() => { paintThumbnail(canvasRef.current, thumbW, thumbH); }, [thumbW, thumbH]);
+    return previewBus.subscribe((source) => {
+      paintFromSource(canvasRef.current, source, thumbW, thumbH);
+    });
+  }, [thumbW, thumbH]);
 
   return (
     <div
@@ -108,19 +96,8 @@ function ActionIcon({ label, color, icon }: { label: string; color: string; icon
   );
 }
 
-function paintThumbnail(target: HTMLCanvasElement | null, w: number, h: number): void {
+function paintFromSource(target: HTMLCanvasElement | null, source: HTMLCanvasElement, w: number, h: number): void {
   if (!target) return;
-  const compositor = getCurrentCompositor();
-  if (!compositor) return;
-  const masterTex = compositor.masterTexture;
-  if (!masterTex) return;
-  compositor.refreshMasterTexture();
-  let source: HTMLCanvasElement;
-  try {
-    source = compositor.app.renderer.extract.canvas({ target: masterTex }) as HTMLCanvasElement;
-  } catch {
-    return;
-  }
   const ctx = target.getContext("2d");
   if (!ctx) return;
   ctx.imageSmoothingQuality = "high";

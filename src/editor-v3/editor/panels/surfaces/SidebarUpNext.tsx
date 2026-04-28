@@ -1,7 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from "react";
-import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
-import { getCurrentCompositor } from "@/editor/compositorRef";
+import { previewBus } from "@/editor/previewBus";
 import type { SurfaceSpec } from "@/editor/previewSurfaces";
 
 /** Day 21 — sidebar Up Next preview surface. The legibility stress
@@ -17,29 +16,16 @@ import type { SurfaceSpec } from "@/editor/previewSurfaces";
 
 const THUMB_W = 168;
 const THUMB_H = 94;
-const REFRESH_DEBOUNCE_MS = 32;
 
 export function SidebarUpNextSurface({ surface }: { surface: SurfaceSpec }) {
-  const layers = useDocStore((s) => s.layers);
   const mode = useUiStore((s) => s.previewMode);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const refreshTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    refreshTimer.current = window.setTimeout(() => {
-      refreshTimer.current = null;
-      paintThumbnail(canvasRef.current);
-    }, REFRESH_DEBOUNCE_MS);
-    return () => {
-      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    };
-    // We intentionally re-run on layers reference change so any layer
-    // mutation (move, color change, etc.) triggers a thumbnail refresh.
-  }, [layers]);
-
-  // Paint once on mount so the surface isn't blank before the first edit.
-  useEffect(() => { paintThumbnail(canvasRef.current); }, []);
+    return previewBus.subscribe((source) => {
+      paintFromSource(canvasRef.current, source);
+    });
+  }, []);
 
   const isDark = mode === "dark";
   return (
@@ -85,24 +71,11 @@ export function SidebarUpNextSurface({ surface }: { surface: SurfaceSpec }) {
   );
 }
 
-function paintThumbnail(target: HTMLCanvasElement | null): void {
+// Day 29: source canvas comes from the shared previewBus broadcast.
+// No GPU readback here — just drawImage the shared source onto our
+// 168×94 surface canvas.
+function paintFromSource(target: HTMLCanvasElement | null, source: HTMLCanvasElement): void {
   if (!target) return;
-  const compositor = getCurrentCompositor();
-  if (!compositor) return;
-  const masterTex = compositor.masterTexture;
-  if (!masterTex) return;
-  // Force one master refresh so the texture reflects the latest layers
-  // (the layer subscription scheduled a debounced refresh; this snaps
-  // it immediate so the readback below sees fresh pixels).
-  compositor.refreshMasterTexture();
-  let source: HTMLCanvasElement;
-  try {
-    source = compositor.app.renderer.extract.canvas({
-      target: masterTex,
-    }) as HTMLCanvasElement;
-  } catch {
-    return;
-  }
   const ctx = target.getContext("2d");
   if (!ctx) return;
   ctx.imageSmoothingQuality = "high";

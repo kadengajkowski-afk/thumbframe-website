@@ -1,6 +1,5 @@
 import { useEffect, useRef, type CSSProperties } from "react";
-import { useDocStore } from "@/state/docStore";
-import { getCurrentCompositor } from "@/editor/compositorRef";
+import { previewBus } from "@/editor/previewBus";
 import type { SurfaceSpec } from "@/editor/previewSurfaces";
 
 /** Day 25 — TV Leanback (YouTube on TV).
@@ -11,27 +10,16 @@ import type { SurfaceSpec } from "@/editor/previewSurfaces";
  * imperfect text spacing or thin strokes that would die on a
  * 168×94 sidebar. Useful as the "best case" baseline. */
 
-const REFRESH_DEBOUNCE_MS = 32;
-
 export function TVLeanbackSurface({ surface }: { surface: SurfaceSpec }) {
-  const layers = useDocStore((s) => s.layers);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const refreshTimer = useRef<number | null>(null);
   const thumbW = surface.chrome.thumbW;
   const thumbH = surface.chrome.thumbH;
 
   useEffect(() => {
-    if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    refreshTimer.current = window.setTimeout(() => {
-      refreshTimer.current = null;
-      paintThumbnail(canvasRef.current, thumbW, thumbH);
-    }, REFRESH_DEBOUNCE_MS);
-    return () => {
-      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    };
-  }, [layers, thumbW, thumbH]);
-
-  useEffect(() => { paintThumbnail(canvasRef.current, thumbW, thumbH); }, [thumbW, thumbH]);
+    return previewBus.subscribe((source) => {
+      paintFromSource(canvasRef.current, source, thumbW, thumbH);
+    });
+  }, [thumbW, thumbH]);
 
   return (
     <div style={wrap} data-testid="surface-tv-leanback-live">
@@ -58,19 +46,8 @@ export function TVLeanbackSurface({ surface }: { surface: SurfaceSpec }) {
   );
 }
 
-function paintThumbnail(target: HTMLCanvasElement | null, w: number, h: number): void {
+function paintFromSource(target: HTMLCanvasElement | null, source: HTMLCanvasElement, w: number, h: number): void {
   if (!target) return;
-  const compositor = getCurrentCompositor();
-  if (!compositor) return;
-  const masterTex = compositor.masterTexture;
-  if (!masterTex) return;
-  compositor.refreshMasterTexture();
-  let source: HTMLCanvasElement;
-  try {
-    source = compositor.app.renderer.extract.canvas({ target: masterTex }) as HTMLCanvasElement;
-  } catch {
-    return;
-  }
   const ctx = target.getContext("2d");
   if (!ctx) return;
   ctx.imageSmoothingQuality = "high";

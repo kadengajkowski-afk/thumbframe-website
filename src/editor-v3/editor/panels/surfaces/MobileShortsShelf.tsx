@@ -1,7 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from "react";
-import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
-import { getCurrentCompositor } from "@/editor/compositorRef";
+import { previewBus } from "@/editor/previewBus";
 import type { SurfaceSpec } from "@/editor/previewSurfaces";
 
 /** Day 24 — mobile Shorts shelf. The 4:5 crop trap.
@@ -13,7 +12,6 @@ import type { SurfaceSpec } from "@/editor/previewSurfaces";
  * content actually lives in the cropped zones (content-aware crop
  * detection is a v3.1 feature). */
 
-const REFRESH_DEBOUNCE_MS = 32;
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
 const THUMB_W = 180;
@@ -23,25 +21,16 @@ const CROP_W = CANVAS_H * (4 / 5); // = 576
 const CROP_X = (CANVAS_W - CROP_W) / 2; // = 352
 
 export function MobileShortsShelfSurface({ surface }: { surface: SurfaceSpec }) {
-  const layers = useDocStore((s) => s.layers);
   const mode = useUiStore((s) => s.previewMode);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const refreshTimer = useRef<number | null>(null);
   void surface;
   const isDark = mode === "dark";
 
   useEffect(() => {
-    if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    refreshTimer.current = window.setTimeout(() => {
-      refreshTimer.current = null;
-      paintCroppedThumbnail(canvasRef.current);
-    }, REFRESH_DEBOUNCE_MS);
-    return () => {
-      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    };
-  }, [layers]);
-
-  useEffect(() => { paintCroppedThumbnail(canvasRef.current); }, []);
+    return previewBus.subscribe((source) => {
+      paintCroppedFromSource(canvasRef.current, source);
+    });
+  }, []);
 
   return (
     <div
@@ -74,19 +63,8 @@ export function MobileShortsShelfSurface({ surface }: { surface: SurfaceSpec }) 
   );
 }
 
-function paintCroppedThumbnail(target: HTMLCanvasElement | null): void {
+function paintCroppedFromSource(target: HTMLCanvasElement | null, source: HTMLCanvasElement): void {
   if (!target) return;
-  const compositor = getCurrentCompositor();
-  if (!compositor) return;
-  const masterTex = compositor.masterTexture;
-  if (!masterTex) return;
-  compositor.refreshMasterTexture();
-  let source: HTMLCanvasElement;
-  try {
-    source = compositor.app.renderer.extract.canvas({ target: masterTex }) as HTMLCanvasElement;
-  } catch {
-    return;
-  }
   const ctx = target.getContext("2d");
   if (!ctx) return;
   ctx.imageSmoothingQuality = "high";
@@ -94,8 +72,8 @@ function paintCroppedThumbnail(target: HTMLCanvasElement | null): void {
   // Crop the center vertical strip of the 16:9 master into the 4:5 target.
   ctx.drawImage(
     source,
-    CROP_X, 0, CROP_W, CANVAS_H,   // source rect (16:9 → centered 4:5 column)
-    0, 0, target.width, target.height, // dest rect (full target)
+    CROP_X, 0, CROP_W, CANVAS_H,
+    0, 0, target.width, target.height,
   );
 }
 

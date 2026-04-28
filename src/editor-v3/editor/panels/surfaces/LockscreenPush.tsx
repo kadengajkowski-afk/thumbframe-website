@@ -1,7 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from "react";
-import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
-import { getCurrentCompositor } from "@/editor/compositorRef";
+import { previewBus } from "@/editor/previewBus";
 import type { SurfaceSpec } from "@/editor/previewSurfaces";
 
 /** Day 25 — Lockscreen push notification surface.
@@ -15,36 +14,23 @@ import type { SurfaceSpec } from "@/editor/previewSurfaces";
  * blurred lockscreen wallpaper. previewMode flips between system
  * dark / light tints. */
 
-const REFRESH_DEBOUNCE_MS = 32;
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
 // iOS center-crop: take the 720×720 square out of the 16:9 canvas.
 const IOS_CROP_X = (CANVAS_W - CANVAS_H) / 2;
 
 export function LockscreenPushSurface({ surface }: { surface: SurfaceSpec }) {
-  const layers = useDocStore((s) => s.layers);
   const mode = useUiStore((s) => s.previewMode);
   const iosCanvasRef = useRef<HTMLCanvasElement>(null);
   const androidCanvasRef = useRef<HTMLCanvasElement>(null);
-  const refreshTimer = useRef<number | null>(null);
   void surface;
   const isDark = mode === "dark";
 
   useEffect(() => {
-    if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    refreshTimer.current = window.setTimeout(() => {
-      refreshTimer.current = null;
-      paintIosThumb(iosCanvasRef.current);
-      paintAndroidThumb(androidCanvasRef.current);
-    }, REFRESH_DEBOUNCE_MS);
-    return () => {
-      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    };
-  }, [layers]);
-
-  useEffect(() => {
-    paintIosThumb(iosCanvasRef.current);
-    paintAndroidThumb(androidCanvasRef.current);
+    return previewBus.subscribe((source) => {
+      paintIosFromSource(iosCanvasRef.current, source);
+      paintAndroidFromSource(androidCanvasRef.current, source);
+    });
   }, []);
 
   const wallpaper = isDark
@@ -106,19 +92,8 @@ export function LockscreenPushSurface({ surface }: { surface: SurfaceSpec }) {
   );
 }
 
-function paintIosThumb(target: HTMLCanvasElement | null): void {
+function paintIosFromSource(target: HTMLCanvasElement | null, source: HTMLCanvasElement): void {
   if (!target) return;
-  const compositor = getCurrentCompositor();
-  if (!compositor) return;
-  const masterTex = compositor.masterTexture;
-  if (!masterTex) return;
-  compositor.refreshMasterTexture();
-  let source: HTMLCanvasElement;
-  try {
-    source = compositor.app.renderer.extract.canvas({ target: masterTex }) as HTMLCanvasElement;
-  } catch {
-    return;
-  }
   const ctx = target.getContext("2d");
   if (!ctx) return;
   ctx.imageSmoothingQuality = "high";
@@ -127,19 +102,8 @@ function paintIosThumb(target: HTMLCanvasElement | null): void {
   ctx.drawImage(source, IOS_CROP_X, 0, CANVAS_H, CANVAS_H, 0, 0, target.width, target.height);
 }
 
-function paintAndroidThumb(target: HTMLCanvasElement | null): void {
+function paintAndroidFromSource(target: HTMLCanvasElement | null, source: HTMLCanvasElement): void {
   if (!target) return;
-  const compositor = getCurrentCompositor();
-  if (!compositor) return;
-  const masterTex = compositor.masterTexture;
-  if (!masterTex) return;
-  compositor.refreshMasterTexture();
-  let source: HTMLCanvasElement;
-  try {
-    source = compositor.app.renderer.extract.canvas({ target: masterTex }) as HTMLCanvasElement;
-  } catch {
-    return;
-  }
   const ctx = target.getContext("2d");
   if (!ctx) return;
   ctx.imageSmoothingQuality = "high";

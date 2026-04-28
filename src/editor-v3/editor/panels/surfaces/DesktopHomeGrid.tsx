@@ -1,7 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from "react";
-import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
-import { getCurrentCompositor } from "@/editor/compositorRef";
+import { previewBus } from "@/editor/previewBus";
 import type { SurfaceSpec } from "@/editor/previewSurfaces";
 
 /** Day 23 — desktop YouTube home grid card.
@@ -12,34 +11,21 @@ import type { SurfaceSpec } from "@/editor/previewSurfaces";
  * Roboto Medium); meta is one line below. Most-common context for
  * thumbnail evaluation. */
 
-const REFRESH_DEBOUNCE_MS = 32;
 const DARK = { bg: "#0F0F0F", text: "#FFFFFF", text2: "#AAAAAA", text3: "#717171" };
 const LIGHT = { bg: "#FFFFFF", text: "#0F0F0F", text2: "#606060", text3: "#909090" };
 
 export function DesktopHomeGridSurface({ surface }: { surface: SurfaceSpec }) {
-  const layers = useDocStore((s) => s.layers);
   const mode = useUiStore((s) => s.previewMode);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const refreshTimer = useRef<number | null>(null);
   const palette = mode === "dark" ? DARK : LIGHT;
-
-  // Render at the spec's intrinsic resolution; CSS maxWidth keeps it
-  // bounded by the rack-fit container width. aspect-ratio holds 16:9.
   const thumbW = surface.chrome.thumbW;
   const thumbH = surface.chrome.thumbH;
 
   useEffect(() => {
-    if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    refreshTimer.current = window.setTimeout(() => {
-      refreshTimer.current = null;
-      paintThumbnail(canvasRef.current, thumbW, thumbH);
-    }, REFRESH_DEBOUNCE_MS);
-    return () => {
-      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    };
-  }, [layers, thumbW, thumbH]);
-
-  useEffect(() => { paintThumbnail(canvasRef.current, thumbW, thumbH); }, [thumbW, thumbH]);
+    return previewBus.subscribe((source) => {
+      paintFromSource(canvasRef.current, source, thumbW, thumbH);
+    });
+  }, [thumbW, thumbH]);
 
   return (
     <div
@@ -75,19 +61,8 @@ export function DesktopHomeGridSurface({ surface }: { surface: SurfaceSpec }) {
   );
 }
 
-function paintThumbnail(target: HTMLCanvasElement | null, w: number, h: number): void {
+function paintFromSource(target: HTMLCanvasElement | null, source: HTMLCanvasElement, w: number, h: number): void {
   if (!target) return;
-  const compositor = getCurrentCompositor();
-  if (!compositor) return;
-  const masterTex = compositor.masterTexture;
-  if (!masterTex) return;
-  compositor.refreshMasterTexture();
-  let source: HTMLCanvasElement;
-  try {
-    source = compositor.app.renderer.extract.canvas({ target: masterTex }) as HTMLCanvasElement;
-  } catch {
-    return;
-  }
   const ctx = target.getContext("2d");
   if (!ctx) return;
   ctx.imageSmoothingQuality = "high";
