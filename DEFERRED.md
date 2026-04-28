@@ -128,9 +128,17 @@ Promote to SCOPE.md only after 48 hours of consideration.
   one bbox**. Day 14 deferred. Day 17 doesn't change that.
 
 - **All 25 modes work uniformly across rect / ellipse / image /
-  text** because every layer node now goes through the same
-  `isRenderGroup = true` + `blendMode` plumbing in
-  `sceneHelpers.createNode`. No type-specific branches.
+  text** via `useBackBuffer: true` on Application + the same
+  `blendMode` plumbing in `sceneHelpers.paintNode`. Image layers
+  are wrapped (Container holding one Sprite child) for shape
+  uniformity with text; rect/ellipse stay bare Graphics.
+
+- **Cycle 6 UX polish — explain that blend modes apply to layers
+  BELOW.** First-time users instinctively set the blend mode on
+  the BOTTOM layer expecting it to shift the layer above. Tooltip
+  on the Blend dropdown ("blend with layers below"), or a small
+  inline hint in the panel header, would close the gap. Holding
+  for the broader iconography / a11y pass; not blocking.
 
 ## Cycle 2 Day 16 — held back (date: 2026-04-27)
 
