@@ -238,7 +238,34 @@ function handleKeyup(e: KeyboardEvent) {
 }
 
 function handlePaste(e: ClipboardEvent) {
-  const items = e.clipboardData?.items;
+  const data = e.clipboardData;
+  if (!data) return;
+
+  // Day 28: YouTube URL paste → reference layer. Check text first
+  // (cheap pattern match) before falling through to image-file
+  // upload. Skip if focus is on a real text input — typing a URL
+  // into a layer name shouldn't yank the editor into a fetch.
+  const target = e.target;
+  const isTextInput =
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA");
+  if (!isTextInput) {
+    const text = data.getData("text/plain");
+    if (text) {
+      void import("@/lib/youtubeReference").then(({ parseYouTubeUrl, importYouTubeReference }) => {
+        if (parseYouTubeUrl(text)) {
+          void importYouTubeReference(text);
+        }
+      });
+      // We can't preventDefault asynchronously, but the bare-paste
+      // case (no input focused) has no native default to suppress.
+      // If the URL parse fails, fall through to image-file checks below.
+    }
+  }
+
+  const items = data.items;
   if (!items) return;
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
