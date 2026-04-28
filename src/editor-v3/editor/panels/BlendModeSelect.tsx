@@ -111,8 +111,17 @@ export function BlendModeSelect({ value, onChange }: Props) {
     const onDown = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
     };
+    // Window-level Esc so closing works even if focus has drifted off
+    // the search input (mouse-hover-then-Esc was a dead chord before).
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   // Reset highlight to top of list when query changes.

@@ -30,6 +30,8 @@ function SelectIcon() {
 }
 
 function HandIcon() {
+  // Four parallel finger pads + a thumb-anchor — reads as "open hand"
+  // without trying to draw realistic anatomy at 20×20.
   return (
     <svg
       width={ICON_SIZE}
@@ -38,10 +40,17 @@ function HandIcon() {
       aria-hidden="true"
     >
       <path
-        d="M6 9 V4 a1 1 0 0 1 2 0 V9 M8 9 V3 a1 1 0 0 1 2 0 V9 M10 9 V4 a1 1 0 0 1 2 0 V9 M12 9 V5 a1 1 0 0 1 2 0 V11 Q14 15 10.5 15 Q7 15 6 12 L4.5 9 a1 1 0 0 1 1.7 -1 L7 9"
+        d="M6 10 V5 M9 10 V4 M12 10 V5 M14.5 10 V7"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.2"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="M5 9 Q5 14 8 16 H13 Q16 16 16 12 V8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
         strokeLinecap="round"
         strokeLinejoin="round"
       />

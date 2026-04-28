@@ -43,20 +43,7 @@ export function EmptyState() {
       />
       <button
         type="button"
-        onClick={() => {
-          // DIAGNOSTIC — remove after bug closed.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const ua = (navigator as any).userActivation;
-          console.log("[ES/click]", {
-            userActivation_isActive: ua?.isActive,
-            userActivation_hasBeenActive: ua?.hasBeenActive,
-            fileRefPresent: !!fileRef.current,
-            inputInDOM: fileRef.current?.isConnected,
-            inputDisplay: fileRef.current ? getComputedStyle(fileRef.current).display : null,
-          });
-          fileRef.current?.click();
-          console.log("[ES/click] post-click() dispatched");
-        }}
+        onClick={() => fileRef.current?.click()}
         style={uploadTarget}
         aria-label="Upload to set sail — opens file picker"
       >

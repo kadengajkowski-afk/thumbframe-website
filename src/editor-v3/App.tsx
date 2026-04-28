@@ -23,6 +23,11 @@ import { startAutoSave, loadDraftIfPresent } from "@/lib/autoSave";
 import { listProjects, openProject } from "@/lib/projects";
 import { useDocStore } from "@/state/docStore";
 
+/** Module-scope flag so React 19 StrictMode's double-mount doesn't
+ * fire bootLoad twice — the duplication-on-load bug in DEFERRED
+ * traced back to two in-flight openProject calls racing setState. */
+let bootLoadStarted = false;
+
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
 export function App() {
@@ -42,7 +47,14 @@ export function App() {
     const ui = useUiStore.getState();
     const stop = startAutoSave();
 
+    // React 19 StrictMode dev-mounts this effect twice. The async
+    // bootLoad below races itself if both invocations call openProject
+    // before the first finishes — same row deserialized twice into the
+    // same docStore. The module-scope guard makes bootLoad run once
+    // per page load.
     async function bootLoad() {
+      if (bootLoadStarted) return;
+      bootLoadStarted = true;
       if (!supabase) {
         await loadDraftIfPresent();
         return;

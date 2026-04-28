@@ -42,6 +42,10 @@
   animation: swatch-pop-open 120ms var(--ease-standard) both;
   width: 240px;
 }
+.color-swatch__popover--right {
+  left: auto;
+  right: 0;
+}
 @keyframes swatch-pop-open {
   from {
     opacity: 0;

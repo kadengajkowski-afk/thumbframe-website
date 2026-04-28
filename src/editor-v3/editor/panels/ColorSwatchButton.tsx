@@ -29,10 +29,18 @@ export function ColorSwatchButton({
   label,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [flipRight, setFlipRight] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    // Flip the popover to align right when its left-anchored 240px
+    // would clip past the viewport edge — common in the right-side
+    // ContextPanel.
+    const r = rootRef.current?.getBoundingClientRect();
+    if (r && r.left + 240 > window.innerWidth - 8) setFlipRight(true);
+    else setFlipRight(false);
+
     const onDown = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) close();
     };
@@ -79,7 +87,13 @@ export function ColorSwatchButton({
         aria-haspopup="dialog"
       />
       {open && (
-        <div className="color-swatch__popover" role="dialog">
+        <div
+          className={
+            "color-swatch__popover" +
+            (flipRight ? " color-swatch__popover--right" : "")
+          }
+          role="dialog"
+        >
           <ColorPicker
             color={color}
             alpha={alpha}
