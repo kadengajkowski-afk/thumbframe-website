@@ -265,6 +265,19 @@ const COMMANDS: Command[] = [
       void import("./supabase").then(({ supabase }) => supabase?.auth.signOut());
     },
   },
+
+  // Day 21 — multi-surface preview rack toggle.
+  {
+    id: "view.toggle-preview-rack",
+    label: "Toggle preview rack",
+    section: "View",
+    hotkey: "Cmd+Shift+P",
+    aliases: ["preview", "surfaces", "multi-surface"],
+    run: () => {
+      const ui = useUiStore.getState();
+      ui.setPreviewRackOpen(!ui.previewRackOpen);
+    },
+  },
 ];
 
 export function listCommands(): readonly Command[] {

@@ -123,22 +123,17 @@ type UiState = {
   lastExport: RecentExport | null;
   setLastExport: (entry: RecentExport) => void;
 
-  /** Day 20: persistence state. user comes from
-   * supabase.auth.onAuthStateChange (set in App.tsx). currentProjectId
-   * is null until the first auto-save creates a row. saveStatus
-   * drives the TopBar indicator. */
+  /** Day 20: persistence state — user / currentProjectId / saveStatus. */
   user: { id: string; email: string | null; avatarUrl: string | null } | null;
   setUser: (user: UiState["user"]) => void;
-  currentProjectId: string | null;
-  setCurrentProjectId: (id: string | null) => void;
-  projectName: string;
-  setProjectName: (name: string) => void;
-  saveStatus: SaveStatus;
-  setSaveStatus: (status: SaveStatus) => void;
-  authPanelOpen: boolean;
-  setAuthPanelOpen: (v: boolean) => void;
-  projectsPanelOpen: boolean;
-  setProjectsPanelOpen: (v: boolean) => void;
+  currentProjectId: string | null; setCurrentProjectId: (id: string | null) => void;
+  projectName: string; setProjectName: (name: string) => void;
+  saveStatus: SaveStatus; setSaveStatus: (status: SaveStatus) => void;
+  authPanelOpen: boolean; setAuthPanelOpen: (v: boolean) => void;
+  projectsPanelOpen: boolean; setProjectsPanelOpen: (v: boolean) => void;
+  /** Day 21: PreviewRack visibility (Cmd+Shift+P) + light/dark toggle. */
+  previewRackOpen: boolean; setPreviewRackOpen: (v: boolean) => void;
+  previewMode: "dark" | "light"; setPreviewMode: (mode: "dark" | "light") => void;
 };
 
 export type SaveStatus =
@@ -283,6 +278,10 @@ export const useUiStore = create<UiState>()((set) => ({
   setAuthPanelOpen: (authPanelOpen) => set({ authPanelOpen }),
   projectsPanelOpen: false,
   setProjectsPanelOpen: (projectsPanelOpen) => set({ projectsPanelOpen }),
+  previewRackOpen: false,
+  setPreviewRackOpen: (previewRackOpen) => set({ previewRackOpen }),
+  previewMode: "dark",
+  setPreviewMode: (previewMode) => set({ previewMode }),
 }));
 
 function loadString(key: string, fallback: string): string {

@@ -89,6 +89,13 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
+  // Day 21 — Cmd+Shift+P toggles the multi-surface preview rack.
+  if (meta && e.shiftKey && e.key.toLowerCase() === "p") {
+    e.preventDefault();
+    runCommand("view.toggle-preview-rack");
+    return;
+  }
+
   // Zoom shortcuts.
   if (meta && (e.key === "=" || e.key === "+")) {
     e.preventDefault();
