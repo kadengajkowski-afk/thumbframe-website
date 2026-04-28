@@ -72,7 +72,7 @@
     "start": "node server.js",
     "dev": "npm run build:css && react-scripts start",
     "build:css": "npx @tailwindcss/cli -i src/landing/landing.css -o src/landing/landing.built.css --minify",
-    "build:v3": "node scripts/build-v3-into-v1.js",
+    "build:v3": "node scripts/build-v3-into-v1.mjs",
     "build": "npm run build:v3 && npm run build:css && react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
