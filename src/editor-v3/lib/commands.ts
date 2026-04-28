@@ -170,6 +170,53 @@ const COMMANDS: Command[] = [
       if (ui.smartGuidesEnabled) getCurrentCompositor()?.clearGuides();
     },
   },
+
+  // Day 19: export.
+  {
+    id: "file.export",
+    label: "Ship it… (Export)",
+    section: "File",
+    hotkey: "Cmd+E",
+    aliases: ["export", "save", "download"],
+    run: () => useUiStore.getState().setExportPanelOpen(true),
+  },
+  {
+    id: "file.export-last",
+    label: "Re-ship with last settings",
+    section: "File",
+    hotkey: "Cmd+Shift+E",
+    aliases: ["re-export", "ship again"],
+    run: () => { void import("./exportFlow").then((m) => m.shipWithLastSettings()); },
+  },
+  {
+    id: "file.export-selection",
+    label: "Export selection",
+    section: "File",
+    aliases: ["ship selection", "export selected"],
+    run: () => {
+      const last = useUiStore.getState().lastExport;
+      void import("./exportFlow").then((m) =>
+        m.shipSelection({
+          format: last?.format ?? "png",
+          jpegQuality: last?.quality ?? 90,
+        }),
+      );
+    },
+  },
+  {
+    id: "dev.toggle-pro-tier",
+    label: "Toggle Pro tier (dev)",
+    section: "File",
+    aliases: ["pro", "tier", "upgrade"],
+    run: () => {
+      const ui = useUiStore.getState();
+      const next = ui.userTier === "pro" ? "free" : "pro";
+      ui.setUserTier(next);
+      void import("@/toasts/toastStore").then((m) =>
+        m.toast(next === "pro" ? "Pro tier ON (dev)" : "Free tier"),
+      );
+    },
+  },
 ];
 
 export function listCommands(): readonly Command[] {

@@ -67,9 +67,11 @@ function handleKeydown(e: KeyboardEvent) {
   if (ui.commandPaletteOpen) return;
 
   // Day 18 — Cmd+E opens the export panel ("Ship it"). Toggle.
+  // Day 19 — Cmd+Shift+E re-ships with last-used settings (no panel).
   if (meta && e.key.toLowerCase() === "e") {
     e.preventDefault();
-    ui.setExportPanelOpen(!ui.exportPanelOpen);
+    if (e.shiftKey) runCommand("file.export-last");
+    else ui.setExportPanelOpen(!ui.exportPanelOpen);
     return;
   }
   // When the export panel is open, let it own the keyboard (Esc closes).
