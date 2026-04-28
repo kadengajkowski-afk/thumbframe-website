@@ -6,7 +6,9 @@ import MobileEditor from './mobile/MobileEditor';
 import CookieBanner from './components/CookieBanner';
 import { useAuth } from './context/AuthContext';
 import { handleUpgrade } from './utils/checkout';
-import { readUrlOverride } from './editor-v2/flag';
+// Day 20 — v3 ships at /editor via Vercel rewrite. v2's flag-based
+// route is removed; the v2 source still lives under src/editor-v2/
+// but is no longer imported anywhere in the app shell.
 
 // ── Code-split marketing pages ────────────────────────────────────────────────
 const Home      = lazy(() => import('./landing/LandingPageV2'));
@@ -29,7 +31,6 @@ const Account   = lazy(() => import('./pages/Account'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPassword'));
 const UpdatePasswordPage = lazy(() => import('./pages/UpdatePassword'));
-const EditorV2           = lazy(() => import('./editor-v2/EditorV2'));
 
 function PageLoader() {
   return (
@@ -396,7 +397,12 @@ function Examples({ setPage }) {
 
 function getInitialPage() {
   const path = window.location.pathname.toLowerCase();
-  if (path === '/editor-v2') return 'editor-v2';
+  // Day 20 — /editor-v2 redirects to /editor/ (handled by v3's
+  // Vercel rewrite). v1's old EditorV2 dev route is retired.
+  if (path === '/editor-v2') {
+    if (typeof window !== 'undefined') window.location.replace('/editor/');
+    return 'home';
+  }
   if (path === '/editor') return 'editor';
   // /dashboard is retired — redirect bookmarks to the new /gallery route.
   if (path === '/dashboard') return 'gallery';
@@ -436,7 +442,7 @@ function syncPath(page) {
   }
 }
 
-const PROTECTED_PAGES = new Set(['editor', 'editor-v2', 'gallery', 'settings', 'account']);
+const PROTECTED_PAGES = new Set(['editor', 'gallery', 'settings', 'account']);
 
 
 export default function App() {
@@ -462,32 +468,26 @@ export default function App() {
     }
   }, [page, user]);
 
-  // Explicit v2 route — dev access regardless of profile flag.
-  if (page === 'editor-v2') {
-    return (
-      <Suspense fallback={<PageLoader />}>
-        <EditorV2 />
-      </Suspense>
-    );
-  }
-
+  // Day 20 — /editor is owned by v3, served via Vercel rewrite to
+  // /editor/index.html (vercel.json). v1's React shell only reaches
+  // this branch when in-app navigation set page='editor' through
+  // history.replaceState, bypassing the rewrite. Hard-navigate so
+  // Vercel's rewrite engages and v3 takes over. Without this kick,
+  // the abandoned EditorV2 used to render here via a profile-flag
+  // check — that path is gone.
   if (page === 'editor') {
+    if (typeof window !== 'undefined' && window.location.pathname !== '/editor/') {
+      window.location.href = '/editor/';
+      return null;
+    }
+    // Defensive fallback: if we somehow reached /editor/ AND v1's
+    // React still rendered (rewrite failed at the edge), serve the
+    // legacy v1 NewEditor rather than nothing — so the user isn't
+    // staring at a blank page. Mobile keeps its dedicated path.
     if (isMobile) return <MobileEditor user={user} />;
-    // ?engine=fabric escapes to the legacy Fabric.js canvas (dev fallback only)
     const engineParam = new URLSearchParams(window.location.search).get('engine');
     if (engineParam === 'fabric') {
       return <FabricCanvas user={user} darkMode={true} />;
-    }
-    // Flag-routed v2: either the URL override ?editor=v2 OR the user's
-    // profile.editor_version === 'v2' promotes them to the new editor.
-    const flagV2 =
-      readUrlOverride() === 'v2' || user?.editor_version === 'v2';
-    if (flagV2) {
-      return (
-        <Suspense fallback={<PageLoader />}>
-          <EditorV2 />
-        </Suspense>
-      );
     }
     return <NewEditor user={user} setPage={setPage} />;
   }
