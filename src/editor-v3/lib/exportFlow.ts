@@ -30,12 +30,12 @@ export type ShipOptions = {
 export async function shipExport(opts: ShipOptions): Promise<ExportResult | null> {
   const compositor = getCurrentCompositor();
   if (!compositor) {
-    toast("Editor not ready");
+    toast("Editor still loading — give it a second");
     return null;
   }
   const tier = useUiStore.getState().userTier;
   if (opts.format === "4k" && tier !== "pro") {
-    toast("4K export unlocks at v3.1");
+    toast("4K export ships with Pro — coming soon");
     return null;
   }
   const exportOpts: ExportOptions = {
@@ -50,7 +50,7 @@ export async function shipExport(opts: ShipOptions): Promise<ExportResult | null
   try {
     result = await exportCanvas(compositor, exportOpts);
   } catch {
-    toast("Couldn't ship — try again?");
+    toast("Export failed — try a different format or reload the page");
     return null;
   }
   const filename = opts.filename || result.filename;

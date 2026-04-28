@@ -36,7 +36,7 @@ export function AuthPanel() {
   const configured = isSupabaseConfigured();
 
   async function sendMagicLink() {
-    if (!supabase) { toast("Supabase not configured"); return; }
+    if (!supabase) { toast("Sign-in isn't available right now — your work still saves locally"); return; }
     if (!email.trim()) return;
     setMode("sending");
     setErrorMsg("");
@@ -53,7 +53,7 @@ export function AuthPanel() {
   }
 
   async function signInWithGoogle() {
-    if (!supabase) { toast("Supabase not configured"); return; }
+    if (!supabase) { toast("Sign-in isn't available right now — your work still saves locally"); return; }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: window.location.origin },

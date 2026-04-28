@@ -51,7 +51,7 @@ export async function openProject(id: string): Promise<boolean> {
     .eq("id", id)
     .single();
   if (error || !data) {
-    toast("Couldn't open project");
+    toast("Couldn't open that project — it may have been deleted");
     return false;
   }
   const layers = await deserializeDoc(data.doc as ProjectDoc);
