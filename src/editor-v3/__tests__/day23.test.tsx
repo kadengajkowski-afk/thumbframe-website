@@ -27,10 +27,11 @@ const SEARCH_SPEC = SURFACES.find((s) => s.id === "desktop-search") as SurfaceSp
 // ── Registry locks ──────────────────────────────────────────────────
 
 describe("Day 23 — desktop surfaces in LIVE_SURFACES", () => {
-  it("LIVE_SURFACES grew to 4 (sidebar + mobile + desktop home + search)", () => {
+  it("LIVE_SURFACES includes desktop-home + desktop-search", () => {
     expect(LIVE_SURFACES.has("desktop-home")).toBe(true);
     expect(LIVE_SURFACES.has("desktop-search")).toBe(true);
-    expect(LIVE_SURFACES.size).toBe(4);
+    // Size assertion lives in the latest day's test (Days 24-25 expand
+    // to all 7); locking it here forces unrelated edits each day.
   });
 
   it("desktop-home spec dimensions are 310×174 (16:9-ish home grid)", () => {

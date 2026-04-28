@@ -17,6 +17,80 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 3 Days 24-25 — held back (date: 2026-04-28)
+
+- **Bleed fix v2 — wrapper div pattern instead of canvas-only.**
+  Day 23's `width: 100% + aspectRatio` on the canvas worked in
+  most browsers but a few (older Safari mobile, headless Pixi
+  test contexts) fell back to the canvas's intrinsic bitmap size
+  and overflowed. Replaced with a wrapper div that owns
+  `aspect-ratio + overflow:hidden`; the canvas inside is
+  `width:100% / height:100%`. Applied to all 7 surfaces — that's
+  the contract for any future surface too.
+
+- **DesktopSearchResults switched from horizontal to vertical
+  layout.** At 280-px rack width the horizontal flex (thumb left
+  + info right) crammed the title into ~80px and ate text
+  mid-letter ("Channe Name", "descripti…"). Real YouTube goes
+  vertical at narrow viewports too. Differentiator from
+  DesktopHomeGrid is now the description-preview block (2 lines
+  below metadata) — home grid skips that. Keeps the surface
+  identity without sacrificing readability.
+
+- **Shorts shelf shows the crop warning unconditionally.** We
+  can't yet detect whether the user's content lives in the
+  cropped left/right strips of the 16:9 → 4:5 transform — that's
+  a content-aware crop check (v3.1 candidate). For now every
+  Shorts preview surfaces the warning. False positives (canvas
+  with content that ALL fits in the center 4:5 region) are
+  harmless; the warning text is small + italic so it doesn't
+  shout.
+
+- **Shorts crop is fixed center-vertical-strip.** Pulls
+  pixels x=352 to x=928 of the 1280-wide master into the 4:5
+  thumb (576×720 source). No off-center crop today (designers
+  who composed asymmetrically lose the same way). v3.1 could
+  expose a "Shorts safe zone" overlay on the canvas itself.
+
+- **TVLeanback ignores `previewMode`.** Real YouTube TV is dark
+  only — there is no light theme. The PreviewRack's Dark/Light
+  toggle still flips the OTHER surfaces; TV stays #0F0F0F bg /
+  #FFFFFF text regardless. Documented behavior, not a bug.
+
+- **TV title size 18px, not the spec'd 28px.** 28 looked
+  comically large in the rack-fitting card — the TV's "10-foot
+  UI scale" exists at the actual size, not in a 280-pixel
+  preview. 18 still differentiates as "bigger than every other
+  surface" so the TV-feel reads.
+
+- **Lockscreen push uses emoji ▶ as the YouTube app icon.** Real
+  YouTube push has a custom icon. Cycle 6 polish (alongside the
+  verified-badge / action-icon SVG pass).
+
+- **Both lockscreen variants always paint when the surface is
+  visible.** That's 2 readbacks per refresh just for this
+  surface (iOS + Android). Combined with the other 6 surfaces:
+  layer mutation now triggers up to 8 readbacks per refresh tick
+  (sidebar + mobile-feed + desktop-home + desktop-search +
+  shorts + tv + iOS-lockscreen + android-lockscreen). Day 29
+  perf consolidation should batch into a single shared extract
+  + per-surface drawImage on the same source canvas.
+
+- **iOS lockscreen card uses position-mutation hack** — `(card as
+  …).position = "relative"` after the const declaration so the
+  iOS thumb's `position: absolute` anchors correctly. CSS Modules
+  / styled-components would handle this cleanly; for now the
+  mutation is loud enough in code that future readers will see
+  it. ~3 lines.
+
+- **Android lockscreen body clamped to 1 line, iOS to 2.** Real
+  iOS notifications expand on press; Android shows 1 line
+  collapsed. Static preview reflects collapsed state.
+
+- **Lockscreen wallpaper is a fixed gradient**, not a real
+  blurred photo. Light variant is a soft blue-grey, dark variant
+  is dark navy. Stand-in for the system blur.
+
 ## Cycle 3 Day 23 — held back (date: 2026-04-28)
 
 - **Thumbnail bleed bug from Day 22 fixed across all surfaces.**
