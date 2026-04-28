@@ -15,6 +15,7 @@ import { CommandPalette } from "@/editor/CommandPalette";
 import { ExportPanel } from "@/editor/panels/ExportPanel";
 import { AuthPanel } from "@/editor/panels/AuthPanel";
 import { ProjectsPanel } from "@/editor/panels/ProjectsPanel";
+import { PreviewRack } from "@/editor/panels/PreviewRack";
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 import { supabase } from "@/lib/supabase";
@@ -101,6 +102,9 @@ export function App() {
 
 function EditorShell() {
   const cursor = useUiStore(deriveCursor);
+  // Day 21: PreviewRack replaces the ContextPanel slot when open.
+  // Single right-side panel — never both at once.
+  const previewOpen = useUiStore((s) => s.previewRackOpen);
   return (
     <div style={editorGrid}>
       <TopBar />
@@ -111,7 +115,7 @@ function EditorShell() {
           <TextEditor />
           <ZoomIndicator />
         </main>
-        <ContextPanel />
+        {previewOpen ? <PreviewRack /> : <ContextPanel />}
       </div>
       <LayerPanel />
     </div>
