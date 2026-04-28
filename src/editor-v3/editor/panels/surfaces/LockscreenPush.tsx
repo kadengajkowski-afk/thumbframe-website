@@ -53,8 +53,8 @@ export function LockscreenPushSurface({ surface }: { surface: SurfaceSpec }) {
 
   return (
     <div style={{ ...wrap, background: wallpaper }} data-testid="surface-lockscreen-live">
-      {/* iOS push */}
-      <div style={{ ...card, ...(isDark ? cardDark : cardLight) }} data-testid="lockscreen-ios">
+      {/* iOS push — position:relative anchors the abs-positioned thumb. */}
+      <div style={{ ...card, ...(isDark ? cardDark : cardLight), position: "relative" }} data-testid="lockscreen-ios">
         <div style={iosThumbWrap}>
           <canvas
             ref={iosCanvasRef}
@@ -71,10 +71,10 @@ export function LockscreenPushSurface({ surface }: { surface: SurfaceSpec }) {
             <span style={iosTimestamp}>now</span>
           </div>
           <div style={{ ...iosTitle, color: isDark ? "#FFFFFF" : "#000000" }}>
-            Channel Name uploaded a video
+            Channel Name
           </div>
           <div style={{ ...iosBody, color: isDark ? "#AAAAAA" : "#3C3C43" }}>
-            Your video title — does this push read clearly?
+            Your video title — push card preview
           </div>
         </div>
       </div>
@@ -87,10 +87,10 @@ export function LockscreenPushSurface({ surface }: { surface: SurfaceSpec }) {
           <span style={androidTimestamp}>• now</span>
         </div>
         <div style={{ ...androidTitle, color: isDark ? "#FFFFFF" : "#000000" }}>
-          Channel Name uploaded
+          Channel Name
         </div>
         <div style={{ ...androidBody, color: isDark ? "#AAAAAA" : "#5F6368" }}>
-          Your video title — push notification preview
+          Your video title — Android push preview
         </div>
         <div style={{ ...androidThumbWrap, aspectRatio: `${CANVAS_W} / ${CANVAS_H}` }}>
           <canvas
@@ -193,11 +193,6 @@ const iosBody: CSSProperties = {
   WebkitLineClamp: 2 as unknown as number,
   overflow: "hidden", textOverflow: "ellipsis",
 };
-// Unfortunately position: absolute on the iOS thumb wrap requires
-// the card to be position: relative. Set it inline above where
-// `card` style is spread.
-(card as { position?: string }).position = "relative";
-
 const androidHeader: CSSProperties = {
   display: "flex", alignItems: "center", gap: 6,
   fontSize: 11, color: "#5F6368",

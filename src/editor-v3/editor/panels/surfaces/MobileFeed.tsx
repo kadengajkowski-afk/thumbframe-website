@@ -90,10 +90,10 @@ export function MobileFeedSurface({ surface }: { surface: SurfaceSpec }) {
         1.2M views • 3 days ago
       </div>
       <div style={{ ...actions, borderTop: `1px solid ${palette.border}` }}>
-        <ActionIcon label="Like" color={palette.text2} icon="👍" />
-        <ActionIcon label="Dislike" color={palette.text2} icon="👎" />
-        <ActionIcon label="Share" color={palette.text2} icon="↗" />
-        <ActionIcon label="Save" color={palette.text2} icon="☰" />
+        <ActionIcon label="Like" color={palette.text2} icon="▲" />
+        <ActionIcon label="Dislike" color={palette.text2} icon="▼" />
+        <ActionIcon label="Share" color={palette.text2} icon="⇪" />
+        <ActionIcon label="Save" color={palette.text2} icon="＋" />
       </div>
     </div>
   );
