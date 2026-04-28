@@ -15,6 +15,7 @@ import { CommandPalette } from "@/editor/CommandPalette";
 import { ExportPanel } from "@/editor/panels/ExportPanel";
 import { AuthPanel } from "@/editor/panels/AuthPanel";
 import { ProjectsPanel } from "@/editor/panels/ProjectsPanel";
+import { BrandKitPanel } from "@/editor/panels/BrandKitPanel";
 import { PreviewRack } from "@/editor/panels/PreviewRack";
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
@@ -107,6 +108,7 @@ export function App() {
       <ExportPanel />
       <AuthPanel />
       <ProjectsPanel />
+      <BrandKitPanel />
       <ToastHost />
     </div>
   );

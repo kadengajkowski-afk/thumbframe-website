@@ -3,6 +3,80 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 4 Day 31 — held back (date: 2026-04-29)
+
+- **No apply-to-canvas yet.** Day 31 ships display-only — clicking
+  a swatch is visual feedback, no `setLastFillColor` call. Day 32
+  adds the apply path so the next rect / text picks up a brand
+  color, and feeds `primaryAccent` into the rect-tool default.
+
+- **Cache is in-memory only.** Day 31's backend uses a 1h `Map`
+  cache per `(kind:value)` key. Each Railway instance has its own
+  cache; restarts wipe it. Day 33 adds the Supabase `brand_kits`
+  table (24h TTL, RLS, shared across instances + users). Quota
+  budget today is fine — 10K daily units / 3 per extraction =
+  ~3,300 extractions/day across all users.
+
+- **`/c/CustomName` URLs may fail to resolve.** YouTube no longer
+  exposes a canonical lookup for legacy `/c/` channels — we try
+  `forUsername=` and rely on the user pasting the `@handle` if
+  that doesn't resolve. The error message ("No channel found —
+  try the @handle from the channel page") nudges them in the
+  right direction. Documenting the fallback in the panel copy
+  itself is bikeshed for now.
+
+- **`brandingSettings.image.bannerExternalUrl` is the only banner
+  source.** Newer channels populated banners via Studio that
+  doesn't surface here may return null. Banner display lands Day
+  32 alongside apply-to-canvas — if this null rate is high, we
+  fall back to the first thumbnail strip cell as a banner stand-in.
+
+- **Color extraction sample size is 64×64 per image.** For 11
+  images (avatar + 10 thumbs) that's ~45K LAB samples per
+  extraction. K-means runs in ~50ms on Railway's spec; the user-
+  facing latency is dominated by image fetches (~1.5–3s for the
+  thumbnail strip). If we ever hit perf issues, drop to 32×32
+  (4× fewer samples) before touching the algorithm.
+
+- **k-means++ init is non-deterministic.** Two extractions of the
+  same channel can produce slightly different palettes. The
+  in-memory cache hides this for repeat asks within an hour, but
+  Day 33's Supabase cache will lock the first-extracted palette
+  in for 24h, which is stable enough for users.
+
+- **No "Hue / Darker Color / Lighter Color" Photoshop modes for
+  brand colors.** Brand Kit reads RGB only. If a designer wants a
+  hue-rotated brand variant they pick the swatch and use the v3
+  color picker's HSL adjustments. Out of scope for Day 31.
+
+- **Avatar k=1 sometimes lands on white** when the channel has a
+  white-bg avatar with a small colored logo. The "primary accent"
+  swatch then reads as #FFFFFF, which is technically correct but
+  useless for branding. Day 32 candidate: weight LAB samples by
+  saturation before the avatar k-means so neutral pixels lose
+  influence.
+
+- **No dev-mode mock for the Railway endpoint.** Local dev hits
+  the real Railway URL via `VITE_API_URL` (defaults to
+  `thumbframe-api-production.up.railway.app`). Quota lives at the
+  Google Cloud project level so a dev burst eats production
+  quota. If this becomes a problem, add a `VITE_API_URL=` pointer
+  to a localhost express server, or a `?mock=1` query that returns
+  a fixture.
+
+- **`@vitest/browser` "act not configured" warnings on the new
+  panel tests.** Pre-existing project noise from React 19 — every
+  panel test in the suite emits these. Set
+  `globalThis.IS_REACT_ACT_ENVIRONMENT = true` in a vitest setup
+  file to silence; not a Day 31 issue.
+
+- **Tests don't cover sharp + image fetch.** The `extractColors`
+  test only verifies the "empty inputs" branch and the LAB / hex
+  round-trip. The real-image path needs a fixture image checked
+  into the repo + sharp's binary; bigger than Day 31 scope. The
+  Day 33 Supabase work will add a snapshot test that records the
+  palette for a known channel and gates on stability.
+
 ## Cycle 3 close — held back through Cycle 4 (date: 2026-04-28)
 
 Soft-launch quality bar is met. The items below are known-but-not-

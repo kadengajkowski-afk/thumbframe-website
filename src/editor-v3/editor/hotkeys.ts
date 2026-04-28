@@ -96,6 +96,14 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
+  // Day 31 — Cmd+B opens the Brand Kit panel.
+  if (meta && !e.shiftKey && e.key.toLowerCase() === "b") {
+    e.preventDefault();
+    runCommand("file.brand-kit");
+    return;
+  }
+  if (ui.brandKitPanelOpen) return;
+
   // Zoom shortcuts.
   if (meta && (e.key === "=" || e.key === "+")) {
     e.preventDefault();

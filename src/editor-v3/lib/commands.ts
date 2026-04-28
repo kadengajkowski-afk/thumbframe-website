@@ -278,6 +278,16 @@ const COMMANDS: Command[] = [
       ui.setPreviewRackOpen(!ui.previewRackOpen);
     },
   },
+
+  // Day 31 — Brand Kit panel.
+  {
+    id: "file.brand-kit",
+    label: "Brand Kit…",
+    section: "File",
+    hotkey: "Cmd+B",
+    aliases: ["brand", "channel", "youtube", "palette"],
+    run: () => useUiStore.getState().setBrandKitPanelOpen(true),
+  },
 ];
 
 export function listCommands(): readonly Command[] {

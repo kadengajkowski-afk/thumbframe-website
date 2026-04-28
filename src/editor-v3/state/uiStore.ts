@@ -134,6 +134,9 @@ type UiState = {
   /** Day 21: PreviewRack visibility (Cmd+Shift+P) + light/dark toggle. */
   previewRackOpen: boolean; setPreviewRackOpen: (v: boolean) => void;
   previewMode: "dark" | "light"; setPreviewMode: (mode: "dark" | "light") => void;
+
+  /** Day 31: Brand Kit panel visibility. Cmd+B opens. */
+  brandKitPanelOpen: boolean; setBrandKitPanelOpen: (v: boolean) => void;
 };
 
 export type SaveStatus =
@@ -282,6 +285,9 @@ export const useUiStore = create<UiState>()((set) => ({
   setPreviewRackOpen: (previewRackOpen) => set({ previewRackOpen }),
   previewMode: "dark",
   setPreviewMode: (previewMode) => set({ previewMode }),
+
+  brandKitPanelOpen: false,
+  setBrandKitPanelOpen: (brandKitPanelOpen) => set({ brandKitPanelOpen }),
 }));
 
 function loadString(key: string, fallback: string): string {

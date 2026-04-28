@@ -1,9 +1,22 @@
-# SCOPE.md — soft-launch (post-Cycle 3)
+# SCOPE.md — Cycle 4 in progress
 
-Cycles 1, 2, 3 closed on 2026-04-28. The editor is feature-complete
-for the soft launch invite list (see `docs/soft-launch.md`). Next
-cycle (Cycle 4 — Brand Kit + ThumbFriend + Polar.sh) opens after
-the first round of invitee feedback.
+Cycles 1, 2, 3 closed on 2026-04-28. The soft-launch quality bar
+is met (see `docs/soft-launch.md`). Cycle 4 (Brand Kit +
+ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
+
+## Cycle 4 in flight
+
+- **Day 31 (2026-04-29) — Brand Kit v1.** Paste channel URL /
+  @handle / channel id; server-side YouTube Data API call
+  (`channels.list` + `playlistItems.list`) resolves channel + last
+  10 thumbnails; sharp + LAB k-means extracts an 8-color palette
+  with ΔE merging plus an avatar-derived primary accent. Modal
+  panel with `Cmd+B` hotkey. New backend endpoint:
+  `POST /api/youtube/channel-by-url`. In-memory 1h cache;
+  Supabase `brand_kits` table is Day 33 work.
+- Day 32 — apply-to-canvas: clicking a swatch sets `lastFillColor`,
+  primary accent feeds the next-rect / next-text default.
+- Day 33 — Supabase `brand_kits` table + RLS, 24h cross-user cache.
 
 ## Shipped (visible behavior)
 

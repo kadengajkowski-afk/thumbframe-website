@@ -1,0 +1,6 @@
+/* Day 31 — BrandKitPanel keyframes. */
+
+@keyframes brand-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
