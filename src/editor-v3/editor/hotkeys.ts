@@ -77,6 +77,18 @@ function handleKeydown(e: KeyboardEvent) {
   // When the export panel is open, let it own the keyboard (Esc closes).
   if (ui.exportPanelOpen) return;
 
+  // Day 20 — Cmd+S manual save, Cmd+N new project.
+  if (meta && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    runCommand("file.save");
+    return;
+  }
+  if (meta && e.key.toLowerCase() === "n") {
+    e.preventDefault();
+    runCommand("file.new");
+    return;
+  }
+
   // Zoom shortcuts.
   if (meta && (e.key === "=" || e.key === "+")) {
     e.preventDefault();

@@ -13,8 +13,11 @@ import { ZoomIndicator } from "@/editor/ZoomIndicator";
 import { ToolPalette } from "@/editor/panels/ToolPalette";
 import { CommandPalette } from "@/editor/CommandPalette";
 import { ExportPanel } from "@/editor/panels/ExportPanel";
+import { AuthPanel } from "@/editor/panels/AuthPanel";
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
+import { supabase } from "@/lib/supabase";
+import { startAutoSave, loadDraftIfPresent } from "@/lib/autoSave";
 
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
@@ -23,6 +26,26 @@ export function App() {
   const dragActive = useDropTarget();
 
   useEffect(() => installHotkeys(), []);
+
+  // Day 20 — auth subscription + boot-time draft recovery + auto-save.
+  useEffect(() => {
+    const setUser = useUiStore.getState().setUser;
+    void loadDraftIfPresent();
+    const stop = startAutoSave();
+    if (!supabase) return stop;
+    void supabase.auth.getSession().then(({ data }) => {
+      const u = data.session?.user ?? null;
+      if (u) setUser({ id: u.id, email: u.email ?? null, avatarUrl: u.user_metadata?.["avatar_url"] ?? null });
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const u = session?.user ?? null;
+      setUser(u ? { id: u.id, email: u.email ?? null, avatarUrl: u.user_metadata?.["avatar_url"] ?? null } : null);
+    });
+    return () => {
+      sub.subscription.unsubscribe();
+      stop();
+    };
+  }, []);
 
   return (
     <div style={shell}>
@@ -35,6 +58,7 @@ export function App() {
       {dragActive && <DropZone />}
       <CommandPalette />
       <ExportPanel />
+      <AuthPanel />
       <ToastHost />
     </div>
   );
