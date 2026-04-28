@@ -19,6 +19,7 @@ import {
   renderSelection,
 } from "./sceneReconcile";
 import { renderHandles } from "./resizeHandles";
+import { MasterTextureManager } from "./masterTexture";
 import { buildScene } from "./buildScene";
 import { TOOLS_BY_ID } from "./tools/tools";
 import type { Tool } from "./tools/ToolTypes";
@@ -50,10 +51,7 @@ const PIXEL_GRID_ZOOM = 6; // show grid at zoom ≥ 600%
 const PIXEL_GRID_ALPHA = 0.35;
 const PIXEL_GRID_FADE_MS = 200;
 
-/** Owns the Pixi scene graph, the pixi-viewport hosting it, and the
- * pointer-event dispatch to the active tool. Scene: app.stage →
- * viewport → (worldBg, canvasGroup → [canvasFill, layer nodes,
- * toolPreview, selection nodes]). */
+/** Owns the Pixi scene graph, viewport, and tool-event dispatch. */
 export class Compositor {
   app: Application;
   viewport: Viewport;
@@ -64,14 +62,13 @@ export class Compositor {
   private toolPreview: Container;
   private pixelGrid: Graphics;
   private guides: Graphics;
-  /** Last-applied guide list — kept so a viewport zoom can re-paint
-   * with a new scale-compensated stroke width without the caller
-   * having to re-supply the guides. Empty array = no active snap. */
+  /** Last-applied guides; re-painted on zoom with a fresh stroke width. */
   private currentGuides: readonly Guide[] = [];
   private layerNodes = new Map<string, Container>();
   private selectionNodes = new Map<string, Graphics>();
   private handleNodes = new Map<string, Container>();
   private activeDrag: Tool | null = null;
+  private masterTextureMgr: MasterTextureManager | null = null;
 
   private unsubscribeDoc?: () => void;
   private unsubscribeUi?: () => void;
@@ -115,9 +112,16 @@ export class Compositor {
   }
 
   start() {
+    // Day 21: master RenderTexture (preview rack source). Hides
+    // selection chrome / handles / guides / pixel-grid / tool preview
+    // during capture so thumbnails show design content only.
+    this.masterTextureMgr = new MasterTextureManager(this.app, this.canvasGroup, () => [
+      ...this.selectionNodes.values(), ...this.handleNodes.values(),
+      this.guides, this.pixelGrid, this.toolPreview,
+    ]);
     this.unsubscribeDoc = useDocStore.subscribe(
       (state) => state.layers,
-      () => this.render(),
+      () => { this.render(); this.masterTextureMgr?.scheduleRefresh(); },
     );
     this.unsubscribeUi = useUiStore.subscribe((state, prev) => {
       if (state.selectedLayerIds !== prev.selectedLayerIds) this.render();
@@ -151,14 +155,8 @@ export class Compositor {
     this.viewport.on("pinch-start", exitFit);
     this.viewport.on("wheel", exitFit);
 
-    // Tool input + hover tracking. Listen at the viewport level so
-    // clicks land regardless of whether the user hit the canvas-fill
-    // area or the surrounding "space" worldBg — the text tool would
-    // otherwise silently no-op on clicks outside the 1280×720 canvas.
-    // The Compositor's findLayerId(target) walk handles the routing
-    // (worldBg / canvasFill targets resolve to no layer; layer nodes
-    // resolve to their id), so the existing tool dispatch code works
-    // unchanged.
+    // Tool input + hover at viewport level so clicks outside the
+    // 1280×720 canvas-fill still route via findLayerId.
     this.viewport.on("pointerdown", this.onCanvasPointerDown);
     this.viewport.on("pointermove", this.onCanvasPointerHover);
     this.viewport.on("pointerleave", this.onCanvasPointerLeave);
@@ -170,6 +168,8 @@ export class Compositor {
     this.unsubscribeDoc?.();
     this.unsubscribeUi?.();
     this.releaseWindowListeners();
+    this.masterTextureMgr?.destroy();
+    this.masterTextureMgr = null;
     this.layerNodes.clear();
     this.selectionNodes.clear();
     this.handleNodes.clear();
@@ -217,18 +217,14 @@ export class Compositor {
     }
   }
 
-  // Programmatic setZoom / animate don't fire pixi-viewport's 'zoomed'
-  // event, so mirror the zoom-tracking side-effects here.
+  // Programmatic setZoom / animate don't fire 'zoomed', so mirror those side-effects.
   private afterProgrammaticZoom(scale: number) {
     useUiStore.setState({ zoomScale: scale });
     this.refreshSelectionStroke();
     this.updatePixelGrid();
   }
 
-  /** Project a canvas-local point (0..CANVAS_W, 0..CANVAS_H) into
-   * screen-space (CSS pixels relative to the viewport canvas). Used
-   * by the inline text editor to position a DOM <textarea> on top of
-   * the live Pixi node. */
+  /** Canvas-local (0..CANVAS_W, 0..CANVAS_H) → screen-space (CSS px). */
   canvasToScreen(point: { x: number; y: number }): { x: number; y: number } {
     const screen = this.viewport.toScreen(
       point.x + CANVAS_ORIGIN_X,
@@ -246,6 +242,9 @@ export class Compositor {
   get canvasSize(): { width: number; height: number } { return { width: CANVAS_W, height: CANVAS_H }; }
   /** Day 19: hide/show dark canvas-fill base — export bg goes behind layers. */
   setCanvasFillVisible(visible: boolean) { this.canvasFill.visible = visible; }
+  /** Day 21: master RenderTexture (preview rack). Null pre-start. */
+  get masterTexture() { return this.masterTextureMgr?.current ?? null; }
+  refreshMasterTexture() { this.masterTextureMgr?.refresh(); }
 
   /** Returns true if there was an active drag to cancel. */
   cancelTool(): boolean {
