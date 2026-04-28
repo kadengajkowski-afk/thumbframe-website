@@ -25,10 +25,11 @@ const MOBILE_FEED_SPEC = SURFACES.find((s) => s.id === "mobile-feed") as Surface
 // ── Surface registry locks ───────────────────────────────────────────
 
 describe("Day 22 — mobile-feed registry + LIVE_SURFACES", () => {
-  it("LIVE_SURFACES now includes mobile-feed", () => {
+  it("LIVE_SURFACES includes mobile-feed", () => {
     expect(LIVE_SURFACES.has("mobile-feed")).toBe(true);
     expect(LIVE_SURFACES.has("sidebar-up-next")).toBe(true);
-    expect(LIVE_SURFACES.size).toBe(2);
+    // size assertion moved to the latest day's test (each cycle day
+    // grows the live set; locking it here forces a churn).
   });
 
   it("mobile-feed spec dimensions match the iPhone 15 chrome", () => {

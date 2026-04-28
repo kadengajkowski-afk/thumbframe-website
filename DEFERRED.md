@@ -17,6 +17,73 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 3 Day 23 — held back (date: 2026-04-28)
+
+- **Thumbnail bleed bug from Day 22 fixed across all surfaces.**
+  Root cause: each surface set the canvas's CSS `width` + `height`
+  to the bitmap dimensions (e.g. 236×133), so when the rack-fit
+  card was narrower the canvas overflowed. Fix: drop fixed CSS
+  width / height; use `width: "100%"`, `height: "auto"`, and
+  `aspectRatio: "${w} / ${h}"` so the canvas resizes to its
+  container while keeping the master-texture's bitmap resolution.
+  Wrap container also gets `overflow: hidden` + `minWidth: 0` as
+  a belt-and-suspenders. Applied to MobileFeed, SidebarUpNext,
+  DesktopHomeGrid, DesktopSearchResults — every current and future
+  surface should follow the pattern.
+
+- **DesktopSearchResults thumbnail rendered at 140×79, not the
+  spec's 360×202.** Same rack-fit compromise as MobileFeed (236
+  vs 357). The horizontal layout (thumb left, info right) at 280
+  rack width forces a much smaller thumb to leave room for the
+  info column. Title size dropped from spec's 18px → 14px so it
+  fits ~10–12 chars per line in the narrow column. The point of
+  the surface is the LAYOUT IDENTITY (search-result horizontal
+  shape) more than pixel-perfect dimensions.
+
+- **DesktopSearchResults only fits 2 lines of title at 14px.**
+  Real search results show full 2-line titles at 18px in a wide
+  info column. Our cramped column truncates with ellipsis. This
+  is intentional — designers see "if my title looks bad cramped,
+  search results will be brutal" — but document so they don't
+  read it as a bug.
+
+- **DesktopSearchResults description preview is hard-coded
+  placeholder text.** Same as the title placeholder in earlier
+  surfaces. v3.1 ties to a project-level "description" field.
+
+- **DesktopHomeGrid thumbnail uses asymmetric corner radius**
+  (4px top, 12px bottom) — matches real YouTube home grid where
+  the thumb has rounded bottom corners only. Other surfaces use
+  uniform 4-8px. Per-surface decision; bookmark for the iconography
+  pass to verify.
+
+- **Each surface fires its own master-texture refresh + extract.**
+  4 live surfaces now → 4 refresh calls + 4 readbacks per layer
+  change. The MasterTextureManager's 16ms debounce dedupes the
+  refresh calls but each surface still does its own readback.
+  Day 29 perf pass should add a single shared subscriber that
+  refreshes once and notifies surfaces to re-extract. Today's
+  4-surface state still hits the <150ms target (MasterTexture
+  refresh + 4 extracts at 1280×720) but scaling to 7 surfaces
+  is the perf wall.
+
+- **Surface ordering inside the desktop section.** Spec required
+  smallest-to-largest top-to-bottom: sidebar-up-next → desktop-home
+  → desktop-search. The `SURFACES` array in `previewSurfaces.ts`
+  preserves that order naturally because the list was authored by
+  Day-priority. Verified visually; no separate ordering metadata.
+
+- **`void surface` in DesktopSearchResults.** The component
+  doesn't read the spec object today (uses hard-coded THUMB_W /
+  THUMB_H constants tuned for the rack-fit horizontal layout).
+  Suppresses unused-prop warning via `void surface;`. When v3.1
+  adds responsive rack widths, surface.chrome.thumbW becomes
+  the source of the proportional ratio.
+
+- **Title text is hard-coded ("Your video title — search results
+  context").** Same v3.1 plan as the other surfaces — wire a
+  project-level title field that flows through every surface.
+
 ## Cycle 3 Day 22 — held back (date: 2026-04-28)
 
 - **Mobile feed thumbnail is 236×133, not the spec's 357×201.** The
