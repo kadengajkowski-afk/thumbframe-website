@@ -1,11 +1,13 @@
 import { type CSSProperties } from "react";
 import { useUiStore } from "@/state/uiStore";
+import { useDocStore } from "@/state/docStore";
 import {
   groupBySection,
   LIVE_SURFACES,
   SECTION_LABEL,
   type SurfaceSpec,
 } from "@/editor/previewSurfaces";
+import { findTimestampCollisions } from "@/lib/timestampZone";
 import { SidebarUpNextSurface } from "./surfaces/SidebarUpNext";
 import { MobileFeedSurface } from "./surfaces/MobileFeed";
 import { DesktopHomeGridSurface } from "./surfaces/DesktopHomeGrid";
@@ -24,14 +26,26 @@ export function PreviewRack() {
   const close = useUiStore((s) => s.setPreviewRackOpen);
   const mode = useUiStore((s) => s.previewMode);
   const setMode = useUiStore((s) => s.setPreviewMode);
+  const layers = useDocStore((s) => s.layers);
 
   if (!open) return null;
   const sections = groupBySection();
+  const collisions = findTimestampCollisions(layers);
 
   return (
     <aside style={panel} aria-label="Preview rack" data-alive="preview-rack" data-testid="preview-rack">
       <header style={header}>
         <span style={title}>Preview</span>
+        {collisions.length > 0 && (
+          <span
+            style={collisionBadge}
+            title={`Layer${collisions.length > 1 ? "s" : ""} ${collisions.map((l) => `"${l.name}"`).join(", ")} overlap${collisions.length > 1 ? "" : "s"} the timestamp badge — may be hidden in YouTube views`}
+            aria-label="Timestamp collision warning"
+            data-testid="timestamp-collision-warning"
+          >
+            ⚠️
+          </span>
+        )}
         <div style={modeToggle} role="group" aria-label="Preview mode">
           <button
             type="button"
@@ -119,6 +133,9 @@ const panel: CSSProperties = {
   background: "var(--bg-space-1)",
   borderLeft: "1px solid var(--border-ghost)",
   color: "var(--text-primary)",
+};
+const collisionBadge: CSSProperties = {
+  fontSize: 14, lineHeight: 1, cursor: "help",
 };
 const header: CSSProperties = {
   display: "flex", alignItems: "center", gap: 10,
