@@ -155,7 +155,7 @@ export function groupBySection(): Array<{ section: PreviewSection; surfaces: Sur
  * The rest render as placeholder cards in the rack. As Days 22–26
  * land, ids get added here and the placeholder branch in PreviewRack
  * narrows toward zero. */
-export const LIVE_SURFACES = new Set<string>(["sidebar-up-next"]);
+export const LIVE_SURFACES = new Set<string>(["sidebar-up-next", "mobile-feed"]);
 
 /** Section title for the rack header. */
 export const SECTION_LABEL: Record<PreviewSection, string> = {
