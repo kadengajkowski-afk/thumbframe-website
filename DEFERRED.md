@@ -17,6 +17,29 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 fallout — open bugs to fix during Cycle 3 (date: 2026-04-28)
+
+- **Text bounding box is always larger than the rendered glyph.**
+  Pixi Text adds internal padding (descender + safety margin) before
+  reporting `width / height`. Selection outline + drag hit-area
+  trace the box including that padding, so users see "empty space
+  is part of the layer" — drag from a corner that looks like glyph
+  edge moves the layer instead of resizing, resize handles sit a
+  visible gap from the actual letters. Fix needs a glyph-bounds
+  measurement that subtracts the Pixi padding (Day 12's deferred
+  note flagged this; Day 16 didn't address it). Address Day 22+
+  if blocking, else Cycle 6 polish.
+
+- **Layer duplication on project load / image upload.** Reopening
+  a saved project OR uploading an image sometimes inserts the
+  layer 2-3× into the LayerPanel. Likely a docStore subscription
+  firing twice — either React 19 StrictMode double-mount of the
+  uploadFlow handler, or `setLayers(...)` in a path that already
+  fires reconcile, or autoSave+openProject racing. Repro: open a
+  multi-layer project; watch LayerPanel for duplicates. Day 22
+  fix candidate (need to land first thing this cycle so multi-
+  surface testing isn't poisoned by phantom layers).
+
 ## Cycle 2 Day 20 — held back (date: 2026-04-28)
 
 - **`v3_projects` is a separate table from v1's `projects`.** v1 owns
