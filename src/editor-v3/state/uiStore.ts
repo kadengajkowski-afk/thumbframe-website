@@ -1,5 +1,17 @@
 import { create } from "zustand";
 import { normalizeHex } from "@/lib/color";
+import {
+  loadDevTier,
+  loadLastExport,
+  loadRecentExports,
+  MAX_RECENT_EXPORTS,
+  persistDevTier,
+  persistLastExport,
+  persistRecentExports,
+  type RecentExport,
+} from "./exportPersistence";
+
+export type { RecentExport } from "./exportPersistence";
 
 export type Tool = "select" | "hand" | "rect" | "ellipse" | "text";
 
@@ -94,7 +106,27 @@ type UiState = {
    * "Ship it" button toggle this. Esc closes from inside the panel. */
   exportPanelOpen: boolean;
   setExportPanelOpen: (v: boolean) => void;
+
+  /** Day 19: tier flag. Real auth ships Cycle 4 (Day 31). Today the
+   * value is "free" by default; a dev-only command-palette toggle
+   * flips it to "pro" for local Pro-flow testing. The dev override
+   * persists in localStorage so refreshes keep the chosen tier. */
+  userTier: "free" | "pro";
+  setUserTier: (tier: "free" | "pro") => void;
+
+  /** Day 19: most-recent export settings, capped at 10, persisted
+   * to localStorage. ExportPanel surfaces these as a "Recent"
+   * section — clicking re-applies the same format / quality. */
+  recentExports: RecentExport[];
+  pushRecentExport: (entry: RecentExport) => void;
+
+  /** Day 19: last-used export settings, persisted. Cmd+Shift+E
+   * uses these to ship without opening the panel. Null until the
+   * user has shipped at least once. */
+  lastExport: RecentExport | null;
+  setLastExport: (entry: RecentExport) => void;
 };
+
 
 /** UI-only flags. Document state lives in docStore. Do not cross streams. */
 export const useUiStore = create<UiState>()((set) => ({
@@ -189,6 +221,35 @@ export const useUiStore = create<UiState>()((set) => ({
 
   exportPanelOpen: false,
   setExportPanelOpen: (exportPanelOpen) => set({ exportPanelOpen }),
+
+  userTier: loadDevTier(),
+  setUserTier: (userTier) => {
+    persistDevTier(userTier);
+    set({ userTier });
+  },
+
+  recentExports: loadRecentExports(),
+  pushRecentExport: (entry) =>
+    set((state) => {
+      const dedup = [
+        entry,
+        ...state.recentExports.filter(
+          (e) =>
+            !(e.format === entry.format &&
+              e.quality === entry.quality &&
+              e.width === entry.width &&
+              e.height === entry.height),
+        ),
+      ].slice(0, MAX_RECENT_EXPORTS);
+      persistRecentExports(dedup);
+      return { recentExports: dedup };
+    }),
+
+  lastExport: loadLastExport(),
+  setLastExport: (entry) => {
+    persistLastExport(entry);
+    set({ lastExport: entry });
+  },
 }));
 
 function loadString(key: string, fallback: string): string {
@@ -301,3 +362,4 @@ function persistRecentFonts(fonts: string[]) {
     // swallow
   }
 }
+
