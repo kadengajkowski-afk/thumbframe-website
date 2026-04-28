@@ -17,6 +17,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@jsquash/jpeg": "^1.6.0",
     "@jsquash/png": "^3.1.1",
+    "@supabase/supabase-js": "^2.105.0",
     "cmdk": "^1.1.1",
     "immer": "^10.1.1",
     "nanoid": "^5.1.6",

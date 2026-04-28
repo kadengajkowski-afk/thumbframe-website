@@ -1,13 +1,18 @@
 import LandingScene from '../scenes/LandingScene';
 import Navbar from '../components/layout/Navbar';
 import { useAuth } from '../../context/AuthContext';
+import { gotoEditor } from '../../lib/editorUrl';
 
 export default function LandingPage({ onNavigate }) {
   const { user } = useAuth();
 
   const handlePrimary = () => {
     if (user) {
-      onNavigate?.('editor');
+      // Day 20: signed-in users go straight to the v3 editor on the
+      // editor.thumbframe.com subdomain. The apex still serves v1
+      // marketing; v1's in-app /editor route remains as legacy
+      // fallback for in-session journeys.
+      gotoEditor();
     } else {
       onNavigate?.('signup');
     }

@@ -17,6 +17,108 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 Day 20 — held back (date: 2026-04-28)
+
+- **`v3_projects` is a separate table from v1's `projects`.** v1 owns
+  `public.projects` (id text, layers_json text). My first migration
+  blindly used `CREATE TABLE IF NOT EXISTS public.projects` and
+  no-op'd on the existing v1 table while still attaching parallel
+  policies / index / trigger / COMMENT. Cleanup migration removed
+  the strays and created `public.v3_projects` (id uuid, doc jsonb)
+  fresh. Both editors now coexist without schema collision.
+
+- **Image bitmaps round-trip via base64 PNG dataURLs.** ImageBitmap
+  isn't JSON-serializable, so projectSerializer renders the bitmap
+  to an OffscreenCanvas at `naturalWidth × naturalHeight`, encodes
+  PNG via `convertToBlob`, FileReader → dataURL, stuffs into the
+  serialized layer. Deserialize fetches the dataURL, blob, then
+  createImageBitmap. ~33% byte overhead from base64; acceptable at
+  v3 image counts. Future: switch to Supabase Storage uploads
+  (per-image entries) so docs stay slim and images are addressable.
+
+- **Auto-save debounce is 2s.** Caller can force immediate via
+  `saveNow()` (Cmd+S). Fire-and-forget thumbnail upload runs
+  AFTER the save promise resolves so the save status isn't gated
+  on storage round-trip. Failure of the thumbnail upload is
+  silent — the row's `thumbnail_url` just keeps its prior value.
+
+- **Thumbnail bucket is public-read.** Thumbnails aren't sensitive
+  (the user already chose to save them) and public read makes the
+  ProjectsPanel preview a single `<img src=...>` with no signed URL
+  dance. Write is gated by an `auth.uid()::text = (storage.foldername(name))[1]`
+  policy on storage.objects so a user can only upload to their own
+  `<userId>/...` folder.
+
+- **Thumbnail filenames are fixed `<userId>/<projectId>.jpg`.** Each
+  upload `upsert: true` overwrites the prior file. Storage doesn't
+  grow with edit count. Cache-busted via `?t=Date.now()` in the
+  stored URL so the browser's `<img>` cache fetches the new
+  thumbnail without a hard refresh.
+
+- **localStorage draft is a single slot.** Signed-out users get
+  one auto-save draft, mapped to `thumbframe:draft`. Switching
+  between drafts isn't supported — sign in if you want named
+  projects. Documented in the panel's empty state.
+
+- **ProjectsPanel right-click menu is browser-prompt-based.**
+  Rename uses `window.prompt`, Delete uses `window.confirm`.
+  Quick-and-correct; replace with branded modals when the
+  marketing-aesthetic pass lands (Cycle 6).
+
+- **Open project clears `selectedLayerIds` + sets `saveStatus` to
+  saved.** No "are you sure you want to discard unsaved changes"
+  guard before the docStore swap. With auto-save running every 2s
+  this is rarely a problem; but if a user edits then immediately
+  opens another project within the 2s window, the in-flight edits
+  are lost. Add a guard if a real user reports it.
+
+- **No version history beyond the live `doc` field.** No undo
+  across sessions. Spec said v3.3.
+
+- **No folders / search / batch-select in ProjectsPanel.** Spec
+  said v3.3.
+
+- **`createNewProject` requires a signed-in user.** Signed-out
+  "new project" flow is just clearing docStore — no row created.
+  ProjectsPanel hides the "+ New project" button when user is null
+  and shows a "Sign in to save…" prompt instead.
+
+- **Vercel deploy: `/editor` → v3, everything else → v1.** The
+  Vercel rewrite (`vercel.json`) maps `/editor` and `/editor/` to
+  `/editor/index.html` (v3's bundle, base = `/editor/`). Build
+  script `scripts/build-v3-into-v1.mjs` (renamed from `.js` after
+  the deploy bricked on CommonJS-vs-ESM) runs vite build inside
+  src/editor-v3/, copies dist into public/editor/, then react-scripts
+  build picks up public/editor/ and ships it under build/editor/.
+  Single Vercel deploy, no subdomain.
+
+- **v1's `App.js` no longer routes to `EditorV2` for any path.**
+  The flag check (user.editor_version === 'v2') used to render
+  the abandoned v2 editor on first /editor load when in-app
+  navigation hit history.replaceState; the rewrite never fired.
+  Removed entirely. v1 still has `<NewEditor />` as a defensive
+  fallback for /editor/ if Vercel's rewrite ever misses.
+
+- **deploy/v3-at-editor-route + cycle-2-day-20 are separate
+  branches.** The deploy branch only had Cycle 1 + Days 11-19;
+  Day 20 (this work) is merging in via cycle-2-day-20. Going
+  forward, cycle work always layers ON TOP of the latest deploy
+  commits to avoid re-doing the deploy / rewrite plumbing.
+
+- **No tests for openProject / renameProject / etc.** They're
+  Supabase round-trips — needs a mocked client to test in isolation,
+  and the existing test harness doesn't ship mocks for `@supabase/supabase-js`.
+  Tests cover serializer + autoSave's logged-out path. Logged-in
+  paths verified manually via browser sign-in. Write the mock
+  harness in v3.1 when Day 31's auth gate forces a refactor.
+
+- **Editor reaches the live server only when env vars are set.**
+  `lib/supabase.ts` returns `null` when `VITE_SUPABASE_URL` /
+  `VITE_SUPABASE_ANON_KEY` aren't present. Auth UI then shows the
+  warn box; auto-save falls back to localStorage. Editor still boots,
+  no crashes — important for fresh clones / preview deploys without
+  env wiring.
+
 ## Cycle 2 Day 19 — held back (date: 2026-04-27)
 
 - **`uiStore.userTier` is a placeholder for Cycle 4 auth.** Default

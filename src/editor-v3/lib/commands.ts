@@ -217,6 +217,54 @@ const COMMANDS: Command[] = [
       );
     },
   },
+
+  // Day 20: file actions + auth.
+  {
+    id: "file.save",
+    label: "Save",
+    section: "File",
+    hotkey: "Cmd+S",
+    aliases: ["save now"],
+    run: () => { void import("./autoSave").then((m) => m.saveNow()); },
+  },
+  {
+    id: "file.new",
+    label: "New project",
+    section: "File",
+    hotkey: "Cmd+N",
+    aliases: ["new"],
+    run: () => {
+      const ui = useUiStore.getState();
+      useDocStore.setState({ layers: [] });
+      ui.setSelectedLayerIds([]);
+      ui.setCurrentProjectId(null);
+      ui.setProjectName("Untitled");
+      ui.setSaveStatus({ kind: "idle" });
+    },
+  },
+  {
+    id: "file.open-projects",
+    label: "Open project…",
+    section: "File",
+    aliases: ["projects", "open"],
+    run: () => useUiStore.getState().setProjectsPanelOpen(true),
+  },
+  {
+    id: "auth.signin",
+    label: "Sign in",
+    section: "File",
+    aliases: ["login", "sign in"],
+    run: () => useUiStore.getState().setAuthPanelOpen(true),
+  },
+  {
+    id: "auth.signout",
+    label: "Sign out",
+    section: "File",
+    aliases: ["logout", "sign out"],
+    run: () => {
+      void import("./supabase").then(({ supabase }) => supabase?.auth.signOut());
+    },
+  },
 ];
 
 export function listCommands(): readonly Command[] {
