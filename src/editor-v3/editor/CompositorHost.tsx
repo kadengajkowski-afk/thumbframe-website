@@ -33,6 +33,11 @@ export function CompositorHost() {
         background: 0x050510, // --bg-space-0
         preference: "webgl",
         antialias: true,
+        // Day 17: backbuffer is required by Pixi v8's advanced
+        // blend filter (overlay / soft-light / etc.). Without it
+        // the BlendModeFilter logs a warning and falls back to
+        // normal — silently breaking 21 of 25 modes.
+        useBackBuffer: true,
       });
       if (cancelled) {
         // Unmount fired while init was in flight (StrictMode double-

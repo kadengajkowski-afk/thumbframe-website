@@ -58,6 +58,12 @@ export function createNode(layer: Layer): Container {
     const g = new Graphics();
     g.label = `layer:${layer.id}`;
     g.eventMode = "static";
+    // Day 17: advanced blend modes (overlay / soft-light / etc.)
+    // need the node to be a render-group root so the BlendModePipe
+    // can attach the per-mode filter. Setting isRenderGroup on every
+    // layer keeps the contract uniform — at v3 layer counts (~50)
+    // the per-layer texture cost is negligible.
+    g.isRenderGroup = true;
     return g;
   }
   if (layer.type === "text") {
@@ -67,6 +73,7 @@ export function createNode(layer: Layer): Container {
     const c = new Container();
     c.label = `layer:${layer.id}`;
     c.eventMode = "static";
+    c.isRenderGroup = true;
     const primary = new Text({ text: layer.text, style: textStyle(layer) });
     primary.eventMode = "static";
     primary.resolution = 2;
@@ -81,6 +88,7 @@ export function createNode(layer: Layer): Container {
   const sprite = new Sprite(texture);
   sprite.label = `layer:${layer.id}`;
   sprite.eventMode = "static";
+  sprite.isRenderGroup = true;
   return sprite;
 }
 
