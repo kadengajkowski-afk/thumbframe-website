@@ -75,9 +75,28 @@ export function ColorPicker({
           current={hex}
         />
       )}
+      <BrandKitSwatchRow onPick={pick} current={hex} />
       <SwatchRow label="Presets" colors={PRESETS} onPick={pick} current={hex} />
     </div>
   );
+}
+
+/** Day 32 — pinned Brand Kit palette as a presets-style row. Renders
+ * only when a kit is pinned; ordered with primaryAccent first. */
+function BrandKitSwatchRow({
+  onPick,
+  current,
+}: {
+  onPick: (hex: string) => void;
+  current: string;
+}) {
+  const pinned = useUiStore((u) => u.pinnedBrandKit);
+  if (!pinned) return null;
+  const colors = (pinned.primaryAccent ? [pinned.primaryAccent] : [])
+    .concat(pinned.palette.filter((c) => c !== pinned.primaryAccent));
+  if (colors.length === 0) return null;
+  const label = `Brand · ${pinned.channelTitle}`;
+  return <SwatchRow label={label} colors={colors} onPick={onPick} current={current} />;
 }
 
 // ── subfields ────────────────────────────────────────────────────────

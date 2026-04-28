@@ -41,6 +41,7 @@ export function TopBar() {
         <SaveStatusBadge status={saveStatus} signedIn={signedIn} />
       </div>
       <div style={rightGroup}>
+        <PinnedKitBadge />
         {user ? (
           <UserBadge email={user.email} avatarUrl={user.avatarUrl} />
         ) : (
@@ -138,6 +139,30 @@ function UserBadge(props: { email: string | null; avatarUrl: string | null }) {
   );
 }
 
+/** Day 32 — small badge in TopBar showing the pinned Brand Kit's avatar
+ * + channel name. Click opens the panel. Hidden when nothing pinned. */
+function PinnedKitBadge() {
+  const pinned = useUiStore((s) => s.pinnedBrandKit);
+  const openKit = useUiStore((s) => s.setBrandKitPanelOpen);
+  if (!pinned) return null;
+  return (
+    <button
+      type="button"
+      style={pinnedBadge}
+      onClick={() => openKit(true)}
+      title={`Brand Kit: ${pinned.channelTitle} — click to manage`}
+      data-testid="topbar-pinned-kit"
+    >
+      {pinned.avatarUrl ? (
+        <img src={pinned.avatarUrl} alt="" style={pinnedAvatar} />
+      ) : (
+        <span style={pinnedAvatarFallback}>{pinned.channelTitle.charAt(0).toUpperCase()}</span>
+      )}
+      <span style={pinnedLabel}>{pinned.channelTitle}</span>
+    </button>
+  );
+}
+
 function Logo() {
   return (
     <div style={logoGroup} aria-label="thumbframe">
@@ -188,6 +213,26 @@ const shipItBtn: CSSProperties = {
   fontSize: 12, fontWeight: 600, letterSpacing: "0.04em",
   cursor: "pointer",
   transition: "opacity var(--motion-fast) var(--ease-standard)",
+};
+const pinnedBadge: CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 6,
+  padding: "3px 8px 3px 3px",
+  background: "var(--bg-space-0)", border: "1px solid var(--border-ghost)",
+  borderRadius: 14, cursor: "pointer", color: "var(--text-primary)",
+  maxWidth: 160, overflow: "hidden",
+};
+const pinnedAvatar: CSSProperties = {
+  width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0,
+};
+const pinnedAvatarFallback: CSSProperties = {
+  width: 22, height: 22, borderRadius: "50%",
+  background: "var(--bg-space-2)",
+  display: "inline-flex", alignItems: "center", justifyContent: "center",
+  fontSize: 11, color: "var(--accent-cream)", fontWeight: 600, flexShrink: 0,
+};
+const pinnedLabel: CSSProperties = {
+  fontSize: 11, color: "var(--text-primary)",
+  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
 };
 const userBadgeWrap: CSSProperties = { position: "relative" };
 const userBadgeBtn: CSSProperties = {

@@ -10,20 +10,30 @@ import {
   persistRecentExports,
   type RecentExport,
 } from "./exportPersistence";
+import { loadPinnedKit, persistPinnedKit } from "./pinnedKitPersistence";
+import {
+  loadBool,
+  loadLastFillColor,
+  loadNumber,
+  loadRecentColors,
+  loadRecentFonts,
+  loadString,
+  persistLastFillColor,
+  persistRecentColors,
+  persistRecentFonts,
+  persistString,
+} from "./uiStorePersistence";
 
 export type { RecentExport } from "./exportPersistence";
 
 export type Tool = "select" | "hand" | "rect" | "ellipse" | "text";
 
-const RECENT_COLORS_KEY = "thumbframe:recent-colors";
-const LAST_FILL_KEY = "thumbframe:last-fill";
 const LAST_FONT_FAMILY_KEY = "thumbframe:last-font-family";
 const LAST_FONT_SIZE_KEY = "thumbframe:last-font-size";
 const LAST_FONT_WEIGHT_KEY = "thumbframe:last-font-weight";
-const RECENT_FONTS_KEY = "thumbframe:recent-fonts";
 const SMART_GUIDES_KEY = "thumbframe:smart-guides-enabled";
 const MAX_RECENT = 8, MAX_RECENT_FONTS = 6;
-const DEFAULT_FILL = "#F97316", DEFAULT_FONT_FAMILY = "Inter";
+const DEFAULT_FONT_FAMILY = "Inter";
 const DEFAULT_FONT_SIZE = 96, DEFAULT_FONT_WEIGHT = 700;
 
 type UiState = {
@@ -137,6 +147,25 @@ type UiState = {
 
   /** Day 31: Brand Kit panel visibility. Cmd+B opens. */
   brandKitPanelOpen: boolean; setBrandKitPanelOpen: (v: boolean) => void;
+
+  /** Day 32: pinned Brand Kit. Persists across reloads via localStorage
+   * (signed-out) or the user's most-recent saved row (signed-in, loaded
+   * at boot). When pinned, the kit's palette appears as a "Brand"
+   * presets section in the ColorPicker, and the kit's avatar + name
+   * shows in the TopBar. Apply-on-click on the BrandKitPanel is gated
+   * on whether the kit is the panel's current result, not the pinned
+   * one — pinning is a separate user choice. */
+  pinnedBrandKit: PinnedBrandKit | null;
+  setPinnedBrandKit: (kit: PinnedBrandKit | null) => void;
+};
+
+export type PinnedBrandKit = {
+  channelId: string;
+  channelTitle: string;
+  customUrl: string | null;
+  avatarUrl: string | null;
+  primaryAccent: string | null;
+  palette: string[];
 };
 
 export type SaveStatus =
@@ -172,7 +201,7 @@ export const useUiStore = create<UiState>()((set) => ({
   hoveredLayerId: null,
   setHoveredLayerId: (hoveredLayerId) => set({ hoveredLayerId }),
 
-  recentColors: loadRecentColors(),
+  recentColors: loadRecentColors(MAX_RECENT),
   addRecentColor: (hex) =>
     set((s) => {
       const normalized = normalizeHex(hex);
@@ -215,7 +244,7 @@ export const useUiStore = create<UiState>()((set) => ({
     set({ lastFontWeight: weight });
   },
 
-  recentFonts: loadRecentFonts(),
+  recentFonts: loadRecentFonts(MAX_RECENT_FONTS),
   addRecentFont: (family) =>
     set((state) => {
       const trimmed = family.trim();
@@ -288,116 +317,12 @@ export const useUiStore = create<UiState>()((set) => ({
 
   brandKitPanelOpen: false,
   setBrandKitPanelOpen: (brandKitPanelOpen) => set({ brandKitPanelOpen }),
+
+  pinnedBrandKit: loadPinnedKit(),
+  setPinnedBrandKit: (pinnedBrandKit) => {
+    persistPinnedKit(pinnedBrandKit);
+    set({ pinnedBrandKit });
+  },
 }));
 
-function loadString(key: string, fallback: string): string {
-  if (typeof window === "undefined") return fallback;
-  try {
-    return window.localStorage.getItem(key) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function loadBool(key: string, fallback: boolean): boolean {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (raw === null) return fallback;
-    return raw === "1" || raw === "true";
-  } catch {
-    return fallback;
-  }
-}
-
-function loadNumber(key: string, fallback: number): number {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    const n = raw ? Number(raw) : NaN;
-    return Number.isFinite(n) ? n : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function persistString(key: string, value: string) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // private mode / quota
-  }
-}
-
-// ── localStorage helpers ─────────────────────────────────────────────
-
-function loadRecentColors(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(RECENT_COLORS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((c) => (typeof c === "string" ? normalizeHex(c) : null))
-      .filter((c): c is string => c !== null)
-      .slice(0, MAX_RECENT);
-  } catch {
-    return [];
-  }
-}
-
-function persistRecentColors(colors: string[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(RECENT_COLORS_KEY, JSON.stringify(colors));
-  } catch {
-    // private mode / quota / disabled — swallow.
-  }
-}
-
-function loadLastFillColor(): string {
-  if (typeof window === "undefined") return DEFAULT_FILL;
-  try {
-    const raw = window.localStorage.getItem(LAST_FILL_KEY);
-    const normalized = raw ? normalizeHex(raw) : null;
-    return normalized ?? DEFAULT_FILL;
-  } catch {
-    return DEFAULT_FILL;
-  }
-}
-
-function persistLastFillColor(hex: string) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(LAST_FILL_KEY, hex);
-  } catch {
-    // swallow
-  }
-}
-
-function loadRecentFonts(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(RECENT_FONTS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((f): f is string => typeof f === "string")
-      .slice(0, MAX_RECENT_FONTS);
-  } catch {
-    return [];
-  }
-}
-
-function persistRecentFonts(fonts: string[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(RECENT_FONTS_KEY, JSON.stringify(fonts));
-  } catch {
-    // swallow
-  }
-}
 

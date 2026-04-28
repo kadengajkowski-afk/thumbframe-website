@@ -12,11 +12,23 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   10 thumbnails; sharp + LAB k-means extracts an 8-color palette
   with ΔE merging plus an avatar-derived primary accent. Modal
   panel with `Cmd+B` hotkey. New backend endpoint:
-  `POST /api/youtube/channel-by-url`. In-memory 1h cache;
-  Supabase `brand_kits` table is Day 33 work.
-- Day 32 — apply-to-canvas: clicking a swatch sets `lastFillColor`,
-  primary accent feeds the next-rect / next-text default.
-- Day 33 — Supabase `brand_kits` table + RLS, 24h cross-user cache.
+  `POST /api/youtube/channel-by-url`. In-memory 1h cache.
+- **Day 32 (2026-04-29) — Brand Kit applies, persists, pins.**
+  Click a swatch → adds to `recentColors`, applies as fill on the
+  selected layer (rect/ellipse/text) through history, else sets
+  `lastFillColor`. Drag a thumbnail onto the canvas → imports as
+  a 35%-opacity locked reference layer (same shape as Day 28
+  YouTube paste). New per-user `brand_kits` Supabase table
+  (RLS-gated, upsert by `(user_id, channel_id)`); freshly
+  extracted kits auto-save when signed in. Saved tab in the
+  panel lists/opens/deletes them. New `shared_brand_kits` table
+  (public read, service-role write only) acts as L2 cache for
+  the API — 24h TTL keyed by `channelId`, populated by the
+  Railway endpoint after each successful extraction. Pin button
+  drops a kit's palette into the ColorPicker as a "Brand · X"
+  presets section, plus a small avatar+name badge in the TopBar
+  that's click-to-reopen.
+- Day 33 — font detection, banner-as-template, AI proxy.
 
 ## Shipped (visible behavior)
 

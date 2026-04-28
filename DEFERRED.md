@@ -3,6 +3,119 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 4 Day 32 — held back (date: 2026-04-29)
+
+- **Drop position is canvas-center, not pointer-released.** Day 32's
+  thumbnail-drop calls `buildImageLayer` which centers in the canvas
+  (Day 4 default) regardless of where the user releases. The spec
+  asked for "drop position: where pointer released" but the existing
+  upload + paste paths both center; matching that consistency feels
+  cleaner than introducing a one-off pointer-coord branch. Add when
+  enough designers ask for it (likely paired with a smarter "drop
+  near hovered layer" placement, not just raw pointer).
+
+- **Saved tab loads the kit from the row, not a fresh re-extract.**
+  Click → `rowToBrandKit(row)` → render. Doesn't refresh palette /
+  thumbnails from YouTube. If the channel uploaded new thumbs since
+  the save, the user sees stale data. Fine for soft-launch — a
+  manual "re-extract" by re-pasting the @handle hits the L2 cache
+  (instant if <24h old). A dedicated "refresh" button is bikeshed
+  for now.
+
+- **Saved kits are upsert-by-channel, not version-history.** Each
+  re-extraction overwrites the prior row. No way to see "what did
+  this kit look like a month ago." Day 47 (ThumbFriend deep memory)
+  could store a kit-history table but Brand Kit alone doesn't need
+  it.
+
+- **L2 cache key is `channel_id` only, not `(channel_id, locale)`.**
+  YouTube returns localized titles + descriptions based on the
+  caller's region. The Railway server's region pins us to whatever
+  Google sees from us-east. If we ever route through a region-aware
+  CDN, two users in different countries would clobber each other's
+  cache entries. Document; revisit if internationalization comes up.
+
+- **Apply-to-multiple-selection writes one history entry per layer**
+  inside a stroke. The undo restores all of them in one click — the
+  stroke wrapping handles that — but if a user has 30 layers selected
+  the patch list gets long. Acceptable; Day 17 multi-fill was
+  built the same way and no one complained.
+
+- **Apply-to-text writes `color` only, not the stroke chain.** Text
+  with a bright stroke outline still keeps the original stroke when
+  the user clicks a brand color. Could extend to "set primary fill
+  + most-common stroke color", but most thumbnail designers want
+  fine-grained control over stroke independently. Holding off until
+  signal.
+
+- **Pinned kit persists per-device, not per-user.** Day 32's pinned-
+  kit lives in localStorage. Signed-in users on Device B see no pin.
+  When ThumbFriend lands (Cycle 5) we'll fetch the user's most-
+  recently-saved kit at boot and treat it as implicit-pinned;
+  explicit pinning becomes a Supabase column on `brand_kits` then.
+
+- **PinnedKitBadge in TopBar uses `var(--bg-space-0)`** — same
+  background as the Sign-in button. On the dark variant, the badge
+  sits a bit too quietly next to the orange "Ship it" CTA. Move to
+  `--accent-cream` outline + transparent fill if Kaden flags it.
+
+- **Drag image is the browser's default ghost.** No custom drag
+  preview. Most browsers render a half-transparent copy of the
+  thumbnail itself which reads fine; Safari occasionally renders a
+  generic "image" icon instead. Custom `setDragImage` is a one-liner
+  add — held until a Safari user reports the boring ghost.
+
+- **Saved tab uses native `confirm` for delete.** Same shortcut as
+  ProjectsPanel (Day 20 deferred note). Branded modal is Cycle 6
+  polish.
+
+- **`brand_kits.recent_thumbnails` is JSONB, not a join table.**
+  Up to 10 thumbs at ~150 bytes each = ~1.5 KB per row. Fine. A
+  dedicated thumbnails table would give per-thumb analytics later
+  (which thumbnails users have actually dragged in) — Day 48 data-
+  pipeline territory.
+
+- **`shared_brand_kits` rows never expire.** The L2 read checks
+  `updated_at` age inline (24h TTL); rows older than that just
+  trigger a re-fetch + upsert. Old rows accumulate forever. A
+  Supabase scheduled job to delete rows older than 7 days would
+  keep the table tidy; not urgent at our row count (one per
+  unique channel ever extracted).
+
+- **L2 read on @handle → channels.list → L2 second-chance**
+  doubles the wall-time for warm hits where the user pasted a
+  handle (we still pay the channels.list call to learn the id).
+  Could maintain a `handle_to_id_index` lookup table to short-
+  circuit, but the read is ~80ms — well within budget. Skip.
+
+- **No `extractColors` retry on transient sharp/network failure.**
+  If a single thumbnail fetch fails the cluster has fewer samples;
+  if every fetch fails the palette comes back empty. The panel
+  handles empty palette gracefully ("Couldn't extract colors —
+  try a channel with more public uploads"), but a one-shot retry
+  on each image would cut false-empties. Cheap add for Day 33+.
+
+- **No tests for the L2 Supabase cache code paths.** The backend
+  test suite covers the URL parser and color math; the L2 read /
+  write helpers are exercised manually only. Mocking Supabase
+  client in node:test needs a thin abstraction the test setup
+  doesn't have. Day 34 (AI proxy + Anthropic SDK mock harness)
+  should land that mock pattern; cover L2 in the same pass.
+
+- **`useBrandKit.setKit` bypasses the loading state.** Loading a
+  saved kit jumps straight to "success" without a spinner. Visually
+  fine because the data lands instantly, but tests that watch for
+  `brand-kit-loading` after `setKit(...)` would not see it. No
+  current tests do.
+
+- **Re-extracting the same channel triggers a save effect.** The
+  effect fires on `(state, user)` change; React identity-equal
+  objects suppress re-runs but the network response is a fresh
+  object every time, so each extraction triggers one upsert. That's
+  the correct shape (refresh persisted thumbnails + palette) but
+  worth noting for cost — the upsert is a single round-trip, no big
+  deal.
+
 ## Cycle 4 Day 31 — held back (date: 2026-04-29)
 
 - **No apply-to-canvas yet.** Day 31 ships display-only — clicking

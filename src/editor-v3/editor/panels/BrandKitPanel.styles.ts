@@ -107,3 +107,84 @@ export const cancelBtn: CSSProperties = {
   background: "transparent", border: "1px solid var(--border-ghost)",
   color: "var(--text-secondary)", borderRadius: 6, fontSize: 13, cursor: "pointer",
 };
+
+// ── Day 32 additions ───────────────────────────────────────────────────────
+export const tabRow: CSSProperties = {
+  display: "flex", gap: 4, marginBottom: 12,
+  borderBottom: "1px solid var(--border-ghost)",
+};
+const tabBase: CSSProperties = {
+  padding: "8px 14px", fontSize: 13,
+  background: "transparent", border: "none", cursor: "pointer",
+  color: "var(--text-secondary)",
+  borderBottom: "2px solid transparent",
+  marginBottom: -1,
+};
+export const tabBtn: CSSProperties = { ...tabBase };
+export const tabBtnActive: CSSProperties = {
+  ...tabBase,
+  color: "var(--accent-cream)",
+  borderBottomColor: "var(--accent-cream)",
+};
+
+const pinBtnBase: CSSProperties = {
+  padding: "6px 10px", fontSize: 12, fontWeight: 600,
+  borderRadius: 6, cursor: "pointer", flexShrink: 0,
+};
+export const pinBtn: CSSProperties = {
+  ...pinBtnBase,
+  background: "transparent", color: "var(--accent-cream)",
+  border: "1px solid var(--accent-cream)",
+};
+export const pinBtnActive: CSSProperties = {
+  ...pinBtnBase,
+  background: "var(--accent-cream)", color: "var(--bg-space-0)",
+  border: "1px solid var(--accent-cream)",
+};
+
+export const savedList: CSSProperties = {
+  display: "flex", flexDirection: "column", gap: 6,
+  maxHeight: "55vh", overflowY: "auto",
+};
+export const savedRow: CSSProperties = {
+  position: "relative",
+  display: "flex", alignItems: "stretch",
+  border: "1px solid var(--border-ghost)", borderRadius: 6,
+  background: "var(--bg-space-0)",
+};
+export const savedRowOpen: CSSProperties = {
+  flex: 1, display: "flex", alignItems: "center", gap: 10,
+  padding: 8, background: "transparent", border: "none",
+  color: "var(--text-primary)", cursor: "pointer", textAlign: "left",
+};
+export const savedAvatar: CSSProperties = {
+  width: 36, height: 36, borderRadius: "50%", objectFit: "cover",
+  border: "1px solid var(--border-ghost)", flexShrink: 0,
+};
+export const savedAvatarPlaceholder: CSSProperties = {
+  width: 36, height: 36, borderRadius: "50%",
+  border: "1px solid var(--border-ghost)",
+  display: "flex", alignItems: "center", justifyContent: "center",
+  color: "var(--text-secondary)", flexShrink: 0,
+};
+export const savedText: CSSProperties = { flex: 1, minWidth: 0 };
+export const savedTitle: CSSProperties = {
+  fontSize: 13, fontWeight: 600,
+  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+};
+export const savedHandle: CSSProperties = {
+  fontSize: 11, color: "var(--text-secondary)",
+  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+};
+export const savedSwatches: CSSProperties = {
+  display: "flex", gap: 3, flexShrink: 0,
+};
+export const savedSwatch: CSSProperties = {
+  width: 14, height: 14, borderRadius: 3,
+  border: "1px solid var(--border-ghost)",
+};
+export const savedDelete: CSSProperties = {
+  padding: "0 12px", background: "transparent", border: "none",
+  borderLeft: "1px solid var(--border-ghost)",
+  color: "var(--text-secondary)", fontSize: 18, cursor: "pointer",
+};

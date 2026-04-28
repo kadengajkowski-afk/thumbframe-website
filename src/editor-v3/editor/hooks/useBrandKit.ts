@@ -49,5 +49,12 @@ export function useBrandKit() {
     setState({ status: "idle" });
   }, []);
 
-  return { state, extract, reset };
+  /** Day 32 — load an already-extracted kit (e.g. from the Saved tab)
+   * straight into success state without a network call. */
+  const setKit = useCallback((kit: BrandKit) => {
+    requestIdRef.current += 1;
+    setState({ status: "success", kit });
+  }, []);
+
+  return { state, extract, reset, setKit };
 }
