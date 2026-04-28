@@ -17,6 +17,85 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 3 Day 21 — held back (date: 2026-04-28)
+
+- **Master texture renders canvasGroup with position zeroed.**
+  canvasGroup lives at world-space (CANVAS_ORIGIN_X=1360,
+  CANVAS_ORIGIN_Y=1140) so the editor's pan/zoom math works.
+  When rendered as a root container into a 1280×720 RenderTexture
+  (no parent transform), Pixi applied canvasGroup's local position
+  and the children drew off-texture → black thumbnail. Fix:
+  snapshot + zero source.x/y for the render call, restore in
+  finally. Unit test (`day21.test.ts:"master refresh restores
+  canvasGroup position"`) locks the restore behavior.
+
+- **PreviewRack panel width = 280 (matches ContextPanel).** Spec
+  said 320 but the editorRow flex layout was tuned for 280; a 320
+  rack overflowed by 40px and clipped surface cards on the right.
+  Picked 280 + restructured SidebarUpNext to vertical (thumb on
+  top, text below) since horizontal at 280 left ~44px for the
+  title — unreadable. If we want 320+, the editorRow needs a
+  different layout (CSS grid or `min-width: 0` on the canvas
+  surface so it shrinks below the 1280-canvas width).
+
+- **One live surface today.** `LIVE_SURFACES = Set("sidebar-up-next")`.
+  The other 6 render as dashed-border placeholder cards labeled
+  with their thumbnail dimensions. Days 22–26 narrow this down.
+
+- **Sidebar Up Next surface uses the vertical layout, not the
+  YouTube-actual horizontal one.** Real YouTube sidebar cards are
+  horizontal (168px thumb left, 2-line title + metadata right) at
+  ~380×96. We mock the same content vertically because the
+  preview rack is 280px wide. Functionally equivalent for "does
+  the title survive at 168 wide" tests; visually a softer match.
+
+- **Master refresh fires on every docStore.layers change.** The
+  16ms debounce inside MasterTextureManager coalesces a stroke's
+  many mutations into a single render, but multi-second drags
+  still produce ~60 master renders. Acceptable at v3 layer counts
+  but the perf-pass on Day 29 should profile this.
+
+- **`samplePreview` cache never evicts.** A long session that
+  changes thumbnail dimensions a lot (e.g. responsive rack widths
+  on resize) accumulates orphaned Sprites. The keys are stable
+  per `(textureUid, w, h)` so the cache stops growing once all
+  surfaces have been seen. Not a real leak — but worth a `_resetSampleCache`
+  call on PreviewRack unmount if a perf signal surfaces.
+
+- **`SidebarUpNext` renders via `extract.canvas(masterTexture)`
+  + `ctx.drawImage`.** Single readback per layer change. Cheaper
+  than spinning up a per-surface Pixi Application and shares the
+  master texture with future surfaces. Trade-off: each surface
+  reads the GPU pixels independently rather than referencing the
+  texture directly. When 7 surfaces all live, that's 7 readbacks
+  per refresh — still well under the 100ms target at canvas
+  dimensions but worth re-evaluating Day 29.
+
+- **Perf marks (`console.time("[v3] master-texture.refresh")`)**
+  are emitted on every render. Cheap; left on in production. Use
+  the browser's perf timeline to verify the <100ms canvas-edit →
+  preview-update target.
+
+- **Light/Dark toggle is visual only** — flips the SidebarUpNext
+  card's bg + text colors. Day 26 spec covers per-surface
+  light/dark variants; today's toggle just updates the chrome
+  preview, not the canvas content rendering.
+
+- **PreviewRack ↔ ContextPanel exclusivity.** `App.tsx`
+  conditionally renders one or the other in the right slot. Loses
+  the ContextPanel's selection state when toggling — but
+  selection itself is preserved in uiStore, so reopening
+  ContextPanel re-renders with the correct properties. Fine.
+
+- **Master texture renders include canvasFill (the dark canvas
+  base).** The export pipeline hides canvasFill during extract;
+  the master texture path doesn't. Result: previews show the
+  dark editor canvas-bg behind layers. For empty canvas this
+  reads as "thumbnail with bg color" which is fine; for layers
+  it's the same as the editor view. If we want a transparent
+  preview master, hide canvasFill in MasterTextureManager.refresh()
+  too. Day 22+ if needed.
+
 ## Cycle 2 fallout — open bugs to fix during Cycle 3 (date: 2026-04-28)
 
 - **Text bounding box is always larger than the rendered glyph.**
