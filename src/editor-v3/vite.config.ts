@@ -5,6 +5,12 @@ import { fileURLToPath, URL } from "node:url";
 // NOTE: this file is ESM (package.json "type": "module"), so __dirname is
 // undefined. Use fileURLToPath(import.meta.url) to resolve the config dir.
 export default defineConfig({
+  // Day 20 — v3 deploys at thumbframe.com/editor (bundled into v1's
+  // public/ folder by scripts/build-v3-into-v1.js). All asset URLs
+  // in v3's index.html must reference /editor/assets/... to resolve
+  // on the live site. Dev server keeps "/" so localhost:5173 still
+  // serves from the root.
+  base: process.env.NODE_ENV === "production" ? "/editor/" : "/",
   plugins: [react()],
   resolve: {
     alias: {
