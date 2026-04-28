@@ -7,6 +7,8 @@ import {
   loadDraftFromLocalStorage,
   deserializeDoc,
 } from "./projectSerializer";
+import { generateAndUploadThumbnail } from "./thumbnail";
+import { getCurrentCompositor } from "@/editor/compositorRef";
 
 /** Day 20 — auto-save. Subscribes to docStore.layers; on any change,
  * waits 2s of quiet, then saves:
@@ -70,6 +72,7 @@ async function doSave() {
   const ui = useUiStore.getState();
   const layers = useDocStore.getState().layers;
   ui.setSaveStatus({ kind: "saving" });
+  let savedProjectId: string | null = null;
   try {
     const doc = await serializeDoc(layers);
     if (ui.user && supabase) {
@@ -81,6 +84,7 @@ async function doSave() {
           .update({ doc, name: ui.projectName })
           .eq("id", ui.currentProjectId);
         if (error) throw error;
+        savedProjectId = ui.currentProjectId;
       } else {
         const { data, error } = await supabase
           .from("v3_projects")
@@ -88,7 +92,10 @@ async function doSave() {
           .select("id")
           .single();
         if (error) throw error;
-        if (data?.id) ui.setCurrentProjectId(data.id);
+        if (data?.id) {
+          ui.setCurrentProjectId(data.id);
+          savedProjectId = data.id;
+        }
       }
     } else {
       // Logged-out: localStorage draft.
@@ -100,6 +107,19 @@ async function doSave() {
       kind: "error",
       message: err instanceof Error ? err.message : "Couldn't save",
     });
+    return;
+  }
+
+  // Day 20 — fire-and-forget thumbnail upload after a successful
+  // signed-in save. Failure here doesn't roll back the save status;
+  // the row's `thumbnail_url` just won't refresh until the next save.
+  // Fire-and-forget keeps the auto-save loop snappy at the cost of
+  // one extra round-trip per save tick.
+  if (savedProjectId && ui.user) {
+    const compositor = getCurrentCompositor();
+    if (compositor) {
+      void generateAndUploadThumbnail(compositor, ui.user.id, savedProjectId);
+    }
   }
 }
 
