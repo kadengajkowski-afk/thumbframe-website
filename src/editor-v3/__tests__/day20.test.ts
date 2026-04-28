@@ -139,3 +139,43 @@ describe("Day 20 — localStorage draft", () => {
     expect(loadDraftFromLocalStorage()).toBeNull();
   });
 });
+
+// ── autoSave logged-out path → localStorage ──────────────────────────
+
+import { useUiStore } from "@/state/uiStore";
+import { useDocStore } from "@/state/docStore";
+import { saveNow } from "@/lib/autoSave";
+
+describe("Day 20 — autoSave fallback to localStorage when signed-out", () => {
+  beforeEach(() => {
+    clearDraft();
+    useUiStore.setState({
+      user: null, currentProjectId: null, projectName: "Untitled",
+      saveStatus: { kind: "idle" },
+    });
+    useDocStore.setState({ layers: [] });
+  });
+
+  it("saveNow on signed-out writes draft to localStorage and flips status to saved", async () => {
+    useDocStore.setState({ layers: [makeRect("a")] });
+    await saveNow();
+    const draft = loadDraftFromLocalStorage();
+    expect(draft).not.toBeNull();
+    expect(draft!.layers.length).toBe(1);
+    const status = useUiStore.getState().saveStatus;
+    expect(status.kind).toBe("saved");
+  });
+
+  it("saveNow with no layers still writes an empty draft", async () => {
+    await saveNow();
+    const draft = loadDraftFromLocalStorage();
+    expect(draft).not.toBeNull();
+    expect(draft!.layers).toEqual([]);
+  });
+
+  it("saveStatus reaches 'saved' when no error happens", async () => {
+    useDocStore.setState({ layers: [makeRect("a")] });
+    await saveNow();
+    expect(useUiStore.getState().saveStatus.kind).toBe("saved");
+  });
+});
