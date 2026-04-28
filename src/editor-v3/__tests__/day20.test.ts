@@ -179,3 +179,39 @@ describe("Day 20 — autoSave fallback to localStorage when signed-out", () => {
     expect(useUiStore.getState().saveStatus.kind).toBe("saved");
   });
 });
+
+// ── Boot-load: refresh restores draft for signed-out users ──────────
+
+describe("Day 20 — refresh-restore via localStorage draft", () => {
+  beforeEach(() => {
+    clearDraft();
+    useUiStore.setState({
+      user: null, currentProjectId: null, projectName: "Untitled",
+      saveStatus: { kind: "idle" },
+    });
+    useDocStore.setState({ layers: [] });
+  });
+
+  it("save → reset docStore → loadDraftIfPresent restores layers", async () => {
+    useDocStore.setState({ layers: [makeRect("draft-a", 50, 60, 70, 80)] });
+    await saveNow();
+
+    // Simulate page refresh: blank docStore, then boot-load.
+    useDocStore.setState({ layers: [] });
+    expect(useDocStore.getState().layers).toEqual([]);
+
+    const { loadDraftIfPresent } = await import("@/lib/autoSave");
+    const restored = await loadDraftIfPresent();
+    expect(restored).toBe(true);
+    const layers = useDocStore.getState().layers;
+    expect(layers.length).toBe(1);
+    expect(layers[0]!.id).toBe("draft-a");
+    expect(layers[0]!.x).toBe(50);
+  });
+
+  it("loadDraftIfPresent returns false when no draft is stashed", async () => {
+    const { loadDraftIfPresent } = await import("@/lib/autoSave");
+    const restored = await loadDraftIfPresent();
+    expect(restored).toBe(false);
+  });
+});

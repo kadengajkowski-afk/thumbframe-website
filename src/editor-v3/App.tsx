@@ -19,6 +19,8 @@ import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 import { supabase } from "@/lib/supabase";
 import { startAutoSave, loadDraftIfPresent } from "@/lib/autoSave";
+import { listProjects, openProject } from "@/lib/projects";
+import { useDocStore } from "@/state/docStore";
 
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
@@ -28,19 +30,50 @@ export function App() {
 
   useEffect(() => installHotkeys(), []);
 
-  // Day 20 — auth subscription + boot-time draft recovery + auto-save.
+  // Day 20 — auth subscription + boot-time project / draft recovery
+  // + auto-save. Boot order matters:
+  //   1. Resolve session (Supabase getSession).
+  //   2. If signed-in → fetch most-recent project + open it. The
+  //      empty-canvas-on-refresh bug came from skipping this load.
+  //   3. If signed-out → restore the localStorage draft.
+  // onAuthStateChange handles future flips (sign-in / sign-out).
   useEffect(() => {
-    const setUser = useUiStore.getState().setUser;
-    void loadDraftIfPresent();
+    const ui = useUiStore.getState();
     const stop = startAutoSave();
-    if (!supabase) return stop;
-    void supabase.auth.getSession().then(({ data }) => {
+
+    async function bootLoad() {
+      if (!supabase) {
+        await loadDraftIfPresent();
+        return;
+      }
+      const { data } = await supabase.auth.getSession();
       const u = data.session?.user ?? null;
-      if (u) setUser({ id: u.id, email: u.email ?? null, avatarUrl: u.user_metadata?.["avatar_url"] ?? null });
-    });
+      if (u) {
+        ui.setUser({
+          id: u.id,
+          email: u.email ?? null,
+          avatarUrl: (u.user_metadata as { avatar_url?: string } | null)?.avatar_url ?? null,
+        });
+        // Reopen the most-recent project so refresh doesn't reset
+        // the user to the empty state.
+        const rows = await listProjects();
+        if (rows.length > 0 && useDocStore.getState().layers.length === 0) {
+          await openProject(rows[0]!.id);
+        }
+      } else {
+        await loadDraftIfPresent();
+      }
+    }
+    void bootLoad();
+
+    if (!supabase) return stop;
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
-      setUser(u ? { id: u.id, email: u.email ?? null, avatarUrl: u.user_metadata?.["avatar_url"] ?? null } : null);
+      ui.setUser(u ? {
+        id: u.id,
+        email: u.email ?? null,
+        avatarUrl: (u.user_metadata as { avatar_url?: string } | null)?.avatar_url ?? null,
+      } : null);
     });
     return () => {
       sub.subscription.unsubscribe();
