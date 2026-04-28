@@ -66,6 +66,15 @@ function handleKeydown(e: KeyboardEvent) {
   // When the palette is open, let cmdk own the keyboard.
   if (ui.commandPaletteOpen) return;
 
+  // Day 18 — Cmd+E opens the export panel ("Ship it"). Toggle.
+  if (meta && e.key.toLowerCase() === "e") {
+    e.preventDefault();
+    ui.setExportPanelOpen(!ui.exportPanelOpen);
+    return;
+  }
+  // When the export panel is open, let it own the keyboard (Esc closes).
+  if (ui.exportPanelOpen) return;
+
   // Zoom shortcuts.
   if (meta && (e.key === "=" || e.key === "+")) {
     e.preventDefault();

@@ -1,12 +1,12 @@
 import { type CSSProperties } from "react";
+import { useUiStore } from "@/state/uiStore";
 
 /**
  * Cycle 1 Day 6 TopBar. Sailship logo left, project name center,
- * "Ship it" button right (locked until Cycle 2). The dev-only
- * "+ Add test rect" button retired now that the real rectangle
- * tool ships in the left rail.
+ * "Ship it" button right — Day 18 unlocked it: opens ExportPanel.
  */
 export function TopBar() {
+  const openExport = useUiStore((s) => s.setExportPanelOpen);
   return (
     <header style={bar} data-alive="topbar">
       <div style={leftGroup}>
@@ -18,10 +18,10 @@ export function TopBar() {
       <div style={rightGroup}>
         <button
           type="button"
-          disabled
           style={shipItBtn}
-          title="Export unlocks Cycle 2"
-          aria-disabled="true"
+          title="Export the canvas (Cmd+E)"
+          onClick={() => openExport(true)}
+          data-testid="topbar-ship"
         >
           Ship it
         </button>
@@ -123,7 +123,6 @@ const shipItBtn: CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
   letterSpacing: "0.04em",
-  cursor: "not-allowed",
-  opacity: 0.4,
+  cursor: "pointer",
   transition: "opacity var(--motion-fast) var(--ease-standard)",
 };

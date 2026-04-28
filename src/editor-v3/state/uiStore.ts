@@ -89,6 +89,11 @@ type UiState = {
    * themselves) during the gesture. */
   isResizing: boolean;
   setIsResizing: (v: boolean) => void;
+
+  /** Day 18: ExportPanel modal visibility. Cmd+E + the TopBar
+   * "Ship it" button toggle this. Esc closes from inside the panel. */
+  exportPanelOpen: boolean;
+  setExportPanelOpen: (v: boolean) => void;
 };
 
 /** UI-only flags. Document state lives in docStore. Do not cross streams. */
@@ -181,6 +186,9 @@ export const useUiStore = create<UiState>()((set) => ({
 
   isResizing: false,
   setIsResizing: (isResizing) => set({ isResizing }),
+
+  exportPanelOpen: false,
+  setExportPanelOpen: (exportPanelOpen) => set({ exportPanelOpen }),
 }));
 
 function loadString(key: string, fallback: string): string {

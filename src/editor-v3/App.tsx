@@ -12,6 +12,7 @@ import { useDropTarget } from "@/editor/useDropTarget";
 import { ZoomIndicator } from "@/editor/ZoomIndicator";
 import { ToolPalette } from "@/editor/panels/ToolPalette";
 import { CommandPalette } from "@/editor/CommandPalette";
+import { ExportPanel } from "@/editor/panels/ExportPanel";
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 
@@ -33,6 +34,7 @@ export function App() {
       />
       {dragActive && <DropZone />}
       <CommandPalette />
+      <ExportPanel />
       <ToastHost />
     </div>
   );
