@@ -15,6 +15,7 @@ export function TopBar() {
   const user = useUiStore((s) => s.user);
   const saveStatus = useUiStore((s) => s.saveStatus);
   const [editingName, setEditingName] = useState(false);
+  const signedIn = !!user;
 
   return (
     <header style={bar} data-alive="topbar">
@@ -37,7 +38,7 @@ export function TopBar() {
         ) : (
           <FileMenu onStartRename={() => setEditingName(true)} />
         )}
-        <SaveStatusBadge status={saveStatus} />
+        <SaveStatusBadge status={saveStatus} signedIn={signedIn} />
       </div>
       <div style={rightGroup}>
         {user ? (
@@ -47,9 +48,10 @@ export function TopBar() {
             type="button"
             style={signInBtn}
             onClick={() => openAuth(true)}
+            title="Sign in to sync your work across devices"
             data-testid="topbar-signin"
           >
-            Sign in
+            Sign in to sync
           </button>
         )}
         <button
@@ -66,7 +68,7 @@ export function TopBar() {
   );
 }
 
-function SaveStatusBadge({ status }: { status: SaveStatus }) {
+function SaveStatusBadge({ status, signedIn }: { status: SaveStatus; signedIn: boolean }) {
   if (status.kind === "idle") return null;
   if (status.kind === "saving") {
     return <span style={saveBadge} data-testid="save-status">Saving…</span>;
@@ -78,16 +80,24 @@ function SaveStatusBadge({ status }: { status: SaveStatus }) {
       </span>
     );
   }
-  return <span style={saveBadge} data-testid="save-status">{relativeTime(status.at)}</span>;
+  // Signed-in users save to Supabase (synced); signed-out save to
+  // localStorage (this browser only). Different copy so users know
+  // whether their work is reachable from another device.
+  return (
+    <span style={saveBadge} data-testid="save-status">
+      {relativeTime(status.at, signedIn)}
+    </span>
+  );
 }
 
-function relativeTime(at: number): string {
+function relativeTime(at: number, signedIn: boolean): string {
+  const suffix = signedIn ? "" : " locally";
   const sec = Math.floor((Date.now() - at) / 1000);
-  if (sec < 5) return "Saved";
-  if (sec < 60) return `Saved ${sec}s ago`;
+  if (sec < 5) return `Saved${suffix}`;
+  if (sec < 60) return `Saved ${sec}s ago${suffix}`;
   const min = Math.floor(sec / 60);
-  if (min < 60) return `Saved ${min}m ago`;
-  return "Saved";
+  if (min < 60) return `Saved ${min}m ago${suffix}`;
+  return `Saved${suffix}`;
 }
 
 function UserBadge(props: { email: string | null; avatarUrl: string | null }) {
