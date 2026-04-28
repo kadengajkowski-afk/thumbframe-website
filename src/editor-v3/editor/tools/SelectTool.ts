@@ -281,11 +281,13 @@ class SelectToolImpl implements Tool {
       return;
     }
     if (!this.drag) return;
-    // Revert every moved layer to its pre-drag position, then close
-    // the stroke. With startLayers === endLayers now, endStroke is a
-    // no-op — the canceled drag never touches the undo stack.
-    for (const s of this.drag.starts) history.moveLayer(s.id, s.x, s.y);
-    history.endStroke();
+    // Day 17: drop the open stroke and restore captured layers in
+    // one shot. Previously this looped moveLayer back to start +
+    // endStroke, but immer creates new array refs on every mutate
+    // so endStroke's startLayers === endLayers fast path didn't
+    // fire and a "Move layer" no-op entry slipped onto the undo
+    // stack. cancelStroke avoids that.
+    history.cancelStroke();
     getCurrentCompositor()?.clearGuides();
     this.drag = null;
   }
