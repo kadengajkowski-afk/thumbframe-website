@@ -14,6 +14,7 @@ import { ToolPalette } from "@/editor/panels/ToolPalette";
 import { CommandPalette } from "@/editor/CommandPalette";
 import { ExportPanel } from "@/editor/panels/ExportPanel";
 import { AuthPanel } from "@/editor/panels/AuthPanel";
+import { ProjectsPanel } from "@/editor/panels/ProjectsPanel";
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 import { supabase } from "@/lib/supabase";
@@ -59,6 +60,7 @@ export function App() {
       <CommandPalette />
       <ExportPanel />
       <AuthPanel />
+      <ProjectsPanel />
       <ToastHost />
     </div>
   );
