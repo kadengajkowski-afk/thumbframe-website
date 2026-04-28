@@ -2,14 +2,21 @@
 
 ThumbFrame v3. YouTube thumbnail editor. Solo founder + Claude Code.
 
+## Status (Day 30 — 2026-04-28)
+
+Cycles 1, 2, 3 complete. Soft launch ready. Editor lives at
+`/editor` on the production Vercel deploy; v1 still owns the
+marketing site root. See `docs/soft-launch.md` for the launch
+checklist + invitee list.
+
 ## Stack (LOCKED — do not propose alternatives)
 - React 19 + TypeScript strict
 - PixiJS v8.16+ (MUST pin, bugs below 8.16)
 - Zustand v5 with immer middleware
 - Vite 5
 - Supabase Pro (auth, DB, storage) with RLS via DDL event trigger on every table
-- Railway Pro backend (Node/Express)
-- Cloudflare Pages frontend
+- Vercel frontend deploy (single deploy serving v1 marketing + v3 editor at /editor)
+- Railway Pro backend (Node/Express) — v1 design save endpoint only
 - Polar.sh for payments (MoR, 4% + $0.40)
 - Anthropic Claude API (Haiku 4.5 for intent, Sonnet 4.6 default, Opus 4.7 only on "Deep Think")
 - fal.ai for image generation (Ideogram 3, Flux Schnell, Nano Banana)
@@ -98,13 +105,15 @@ BANNED WORDS in UI copy: Oops, Sorry, Welcome back, AI-powered, generic marketer
 - ALWAYS import `pixi.js/advanced-blend-modes` side-effect
 - ALWAYS enable RLS on new Supabase tables (via DDL event trigger)
 
-## Commands
-- `yarn dev` — local dev server
-- `yarn test` — Vitest
-- `yarn test:smoke` — Playwright smoke test
-- `yarn typecheck` — tsc --noEmit
-- `yarn build` — production build
-- `yarn deploy:preview` — deploy to Cloudflare Pages preview
+## Commands (run from src/editor-v3/)
+- `npm run dev` — local dev server (Vite, http://localhost:5173)
+- `npm test` — Vitest, real PixiJS via `--browser`
+- `npm run test:smoke` — Playwright smoke test
+- `npm run typecheck` — tsc --noEmit
+- `npm run build` — production build into dist/
+- Repo-root build: `node scripts/build-v3-into-v1.mjs` chains the v3
+  build into `public/editor/` so Vercel ships both bundles in one
+  deploy.
 
 ## See also
 - @V3_REBUILD_PLAN.md — the 12-week master plan

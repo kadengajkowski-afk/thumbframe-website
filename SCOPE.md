@@ -1,79 +1,88 @@
-# SCOPE.md — Cycle 1 (Weeks 1-2)
+# SCOPE.md — soft-launch (post-Cycle 3)
 
-## Required file structure (established Day 1, enforced throughout)
+Cycles 1, 2, 3 closed on 2026-04-28. The editor is feature-complete
+for the soft launch invite list (see `docs/soft-launch.md`). Next
+cycle (Cycle 4 — Brand Kit + ThumbFriend + Polar.sh) opens after
+the first round of invitee feedback.
 
-These boundaries exist to prevent v1's 1,843-line god component. Create these files empty on Day 1 as placeholders, fill them as needed:
+## Shipped (visible behavior)
 
-```
-src/
-├── state/
-│   ├── docStore.ts          ← document state ONLY (layers, canvas size)
-│   ├── uiStore.ts           ← UI flags ONLY (active tool, panel visibility)
-│   └── types.ts             ← shared types
-├── editor/
-│   ├── Compositor.ts        ← PixiJS scene graph reconciliation
-│   ├── CompositorHost.tsx   ← React mount point for Pixi (renders ONCE)
-│   ├── tools/
-│   │   ├── SelectTool.ts    ← one tool per file, max 200 lines each
-│   │   └── RectTool.ts
-│   ├── panels/
-│   │   ├── LayerPanel.tsx   ← one panel per file, max 200 lines each
-│   │   ├── ContextPanel.tsx
-│   │   └── TopBar.tsx
-│   ├── transitions/
-│   │   └── ShipComingAlive.tsx
-│   └── hotkeys.ts           ← SINGLE global keydown listener lives here
-├── lib/
-│   ├── history.ts           ← immer patch-based undo/redo
-│   └── upload.ts            ← file picker + drag-drop + clipboard paste
-├── styles/
-│   └── tokens.css           ← sailship colors + motion tokens
-└── App.tsx                  ← <200 lines, just wires everything
-```
+**Cycle 1 — foundations.** Rect tool, select, layer panel, context
+panel, undo/redo (immer patches), command palette (Cmd+K), pan +
+zoom + viewport, image upload (file picker / drag-drop / paste),
+hotkeys, ship-coming-alive transition, sailship aesthetic.
 
-**Hard rules:**
-- NO file over 400 lines
-- NO React component over 200 lines
-- NO window.__* globals, ever
-- EXACTLY ONE global keydown listener (in hotkeys.ts)
-- If a file approaches a limit, split it BEFORE adding more
+**Cycle 2 — content + persistence.** Ellipse tool, text tool with
+inline edit, 25-mode blend pipeline (advanced blend modes via
+`useBackBuffer`), color picker + recents, drop shadow + glow text
+effects, font picker (25 bundled OFL fonts), text presets, smart
+guides (canvas + layer-edge snap, equal-spacing markers), unified
+resize handles (Shift = aspect lock, Alt = from center), multi-
+select (cmd-click / shift-range / marquee), multi-drag / multi-
+delete / multi-duplicate, MultiSelectPanel, image-layer support,
+ship-it export pipeline (PNG / JPEG via @jsquash mozjpeg WASM
+worker, 1080p + 4K Pro-tier gate), watermark gate via tier flag,
+auto-save (Supabase `v3_projects` table for signed-in users,
+localStorage draft for signed-out), AuthPanel (magic link + Google
+OAuth), ProjectsPanel (list / open / rename / duplicate / delete /
+new).
 
-## In scope
-- Vite + React 19 + TS strict scaffolding
-- PixiJS v8.16+ + pixi-viewport + pixi-filters pinned
-- Zustand v5 document store (immer middleware) + UI store (separate)
-- Compositor class subscribing Zustand to Pixi stage.children (see docs/spikes/react-pixi-wiring.md)
-- Sailship aesthetic: dark-mode nebula bg, ghostly canvas empty state, "Upload to set sail", 1.2s ship-coming-alive transition (sessionStorage-gated)
-- Upload flow: file picker + drag-drop + paste from clipboard
-- Pan/zoom via pixi-viewport
-- Rectangle tool (click-drag to create)
-- Selection (click, move, delete, arrow-key nudge)
-- Undo/redo via immer patches, stroke-coalesced, Cmd+Z/Cmd+Shift+Z
-- Contextual panel (right side) with fill/stroke/opacity for rect
-- Layer panel (bottom) with select/reorder/visibility/lock
-- Cmd+K command palette via cmdk
-- Cloudflare Pages deployed preview per PR
-- Sentry + PostHog wired (silent)
-- 10-15 integration tests using real PixiJS + TestEditor harness
-- One Playwright smoke test (boot → upload → add rect → undo → verify state)
-- CLAUDE.md + directory-scoped CLAUDE.md files
+**Cycle 3 — multi-surface preview.** Master texture pipeline
+(single render, multi-readback share), 7 live surfaces (Sidebar Up
+Next, Mobile Feed, Desktop Home Grid, Desktop Search Results,
+Mobile Shorts Shelf, TV Leanback, Lockscreen Push iOS+Android),
+PreviewRack (280px right-rail panel with light/dark toggle and
+timestamp-collision warning), per-surface chrome at native font
+sizes, content-cropping for Shorts (4:5 from 16:9), perf-
+consolidation single-broadcast pattern (Day 29). YouTube URL paste
+imports at 35% opacity locked-reference layer (Day 28).
 
-## Out of scope (moved to DEFERRED.md)
-- Text tool (Cycle 2)
-- Ellipse tool (Cycle 2)
-- Image layer (Cycle 2)
-- Export (Cycle 2)
-- Persistence/Supabase (Cycle 2)
-- Multi-select (Cycle 2)
-- Groups (Cycle 2)
-- Blend modes (Cycle 2)
-- Multi-surface preview (Cycle 3)
-- AI anything (Cycle 4+)
-- ThumbFriend (Cycle 4+)
-- Brand Kit (Cycle 4)
+## File-structure rules (enforced)
 
-## Stopping rules
-- If a task goes 2x over estimate, STOP and flag in DEFERRED.md
-- If 3 confident-rubbish loops from Claude Code, close session
-- If smoke test fails, revert last commit
-- If Kaden can't click through the demo at end of day, something is broken
+- NO file over 400 lines.
+- NO React component over 200 lines (some panels capped at 250).
+- NO `window.__*` globals.
+- EXACTLY ONE global keydown listener (in `hotkeys.ts`).
+- One tool per file in `editor/tools/`. One panel per file in
+  `editor/panels/`.
+
+## Out of scope (Cycle 4+ work, see DEFERRED.md)
+
+- Brand Kit (channel URL → palette + avatar import) — Cycle 4 Day 31.
+- ThumbFriend AI chat — Cycle 4.
+- Polar.sh payments + real Pro-tier gating — Cycle 4.
+- Group layers (Cmd+G / Cmd+Shift+G) — Day 15.5 (1 day of focused
+  work, sliced off from Day 15 for risk isolation).
+- Rotation handle + OBB hit-test — separate later pass after Day 16
+  axis-aligned resize.
+- Real CTR-score widget, AI image generation, Hero Composites — v3.1.
+- Channel dashboard / niche presets — v3.1.
+- Custom GLSL blend modes for Pixi-missing trio (Hue / Darker
+  Color / Lighter Color) — Cycle 3+ polish.
+- Selection-aware export with rotated AABB → OBB — needs rotation
+  pass first.
+- Pixel-accurate ellipse / text-glyph hit-testing — paired with
+  rotation work.
+- Settings panel (snap threshold slider, equal-spacing tolerance,
+  custom hotkey rebind) — v3.1.
+
+## Soft-launch quality bar (Day 30)
+
+- All 281 tests green.
+- Typecheck clean.
+- Bundle: 302 KB gzip (1060 KB raw) main + 4.5 KB CSS + lazy WASM/
+  Pixi chunks. Single-deploy code-split via Pixi v8's runtime.
+- Toast voice: direct, no Oops/Sorry/AI-powered/Welcome back.
+- Layer-duplication-on-load fixed (StrictMode race, App.tsx guard).
+- ColorSwatchButton popover edge-flips when clipping viewport.
+- BlendModeSelect Esc closes from anywhere, not just input focus.
+- Sign-in CTA reads "Sign in to sync"; signed-out save status
+  shows "Saved locally" so users know storage scope.
+
+## Stopping rules (still in force)
+
+- If a task goes 2x over estimate, STOP and flag in DEFERRED.md.
+- If 3 confident-rubbish loops from Claude Code, close session.
+- If smoke test fails, revert last commit.
+- If Kaden can't click through the demo at end of day, something
+  is broken.

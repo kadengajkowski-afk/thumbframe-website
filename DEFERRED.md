@@ -3,6 +3,55 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 3 close — held back through Cycle 4 (date: 2026-04-28)
+
+Soft-launch quality bar is met. The items below are known-but-not-
+blocking; they shape the Cycle 4 backlog rather than block invites.
+
+- **Bundle main chunk is 1,060 KB raw / 302 KB gzip.** Above the
+  Vite 500 KB warning. Pixi v8 already lazy-splits its renderers
+  (WebGL/WebGPU/CanvasRenderer chunks). Wins remaining: dynamic-
+  import the AuthPanel + ProjectsPanel + ExportPanel + PreviewRack
+  modal-style panels (only mounted on user action). Should drop the
+  initial bundle by ~80-120 KB. Cycle 4 candidate when first-paint
+  metrics from real invitees come in.
+
+- **Lighthouse audit hasn't been run in browser.** The Day 30 perf
+  pass measured bundle size only. Run Lighthouse locally on a
+  cold-load /editor before sending invites; flag anything <85
+  Performance.
+
+- **Cmd+K discoverability is invisible to first-time users.** The
+  command palette is the gateway to half the editor's affordances
+  (add layer, change tool, sign in, export, Pro toggle) but no UI
+  surfaces it. Possible fixes: dismissible "Press ⌘K" toast on
+  first canvas mutation, or a small "⌘K" pill in the TopBar. Held
+  for first-wave feedback to confirm the gap matters.
+
+- **Text bbox is larger than rendered glyph** — Day 12 deferred,
+  unchanged through Day 30. Pixi Text width/height include
+  descender padding so selection outline + drag hit-area trace
+  the box ~3-6px wider than the glyph reads. Fix needs a glyph-
+  bounds measurement that subtracts the padding (or a dedicated
+  TextMetrics path). ~30 min if Pixi exposes a clean API; longer
+  if we need to project font metrics manually. Not chosen as a
+  Day 30 quick win because the budget was already tight; landing
+  it is Cycle 4 first-week polish.
+
+- **Layer-duplication-on-load fix uses a module-scope flag.** The
+  `bootLoadStarted` boolean in App.tsx is module-scope, so a
+  hot-module-reload during dev re-creates it and the fix degrades
+  to "fires once per module instance." Production bundles get a
+  single instance, so the fix holds. If we ever switch to a
+  client-side router that reuses the App component across
+  navigations, swap to a useRef + cleanup pattern.
+
+- **Sign-in-to-sync nudge is text-only.** Day 30's "Sign in to
+  sync" button copy + "Saved locally" badge tell users about
+  cloud sync, but there's no soft prompt during the flow ("3
+  saves locally — sign in to keep your work safe"). Test reaction
+  with invitees first.
+
 ## Design ideas from Kaden
 
 - **Tool palette unfurls like ship sails dropping.** When the left rail
