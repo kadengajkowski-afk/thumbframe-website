@@ -1,6 +1,7 @@
 import { type CSSProperties, useState } from "react";
 import { useUiStore, type SaveStatus } from "@/state/uiStore";
 import { supabase } from "@/lib/supabase";
+import { FileMenu } from "./FileMenu";
 
 /** Day 18 + 20 — TopBar. Logo / project name / Ship It on the right.
  * Day 20 adds a save-status indicator + sign-in button (or avatar
@@ -34,13 +35,7 @@ export function TopBar() {
             data-testid="project-name-input"
           />
         ) : (
-          <span
-            style={projectName_style}
-            onDoubleClick={() => setEditingName(true)}
-            data-testid="project-name"
-          >
-            {projectName}
-          </span>
+          <FileMenu onStartRename={() => setEditingName(true)} />
         )}
         <SaveStatusBadge status={saveStatus} />
       </div>
@@ -162,10 +157,6 @@ const logoGroup: CSSProperties = { display: "inline-flex", alignItems: "center",
 const wordmark: CSSProperties = {
   fontSize: 13, letterSpacing: "0.06em", fontWeight: 500,
   color: "var(--accent-cream)", textTransform: "lowercase",
-};
-const projectName_style: CSSProperties = {
-  fontSize: 13, color: "var(--text-secondary)", letterSpacing: "0.01em",
-  cursor: "text", padding: "2px 6px", borderRadius: 4,
 };
 const projectNameInput: CSSProperties = {
   fontSize: 13, color: "var(--text-primary)",
