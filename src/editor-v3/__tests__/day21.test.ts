@@ -45,9 +45,10 @@ describe("Day 21 — preview surface registry", () => {
     ]);
   });
 
-  it("only sidebar-up-next is live today", () => {
+  it("sidebar-up-next is in the live set", () => {
+    // Day 22 added mobile-feed; day22.test.ts owns the size assertion
+    // for the current cycle. This test just locks the Day 21 surface.
     expect(LIVE_SURFACES.has("sidebar-up-next")).toBe(true);
-    expect(LIVE_SURFACES.size).toBe(1);
   });
 
   it("every section has at least one surface assigned", () => {

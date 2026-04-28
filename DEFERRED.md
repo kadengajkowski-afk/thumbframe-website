@@ -17,6 +17,72 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 3 Day 22 — held back (date: 2026-04-28)
+
+- **Mobile feed thumbnail is 236×133, not the spec's 357×201.** The
+  surface spec stays accurate (357×201 is the iPhone 15 YouTube
+  app's actual thumbnail size); the rendered card scales the
+  thumbnail down to fit the 280-wide rack. Native text sizes
+  (16/14/13/12 px) stay at their real values so the legibility
+  test still works — that's the whole point of the rack. If we
+  ever widen the rack to 380+, swap the hard-coded 236 for a
+  rack-width responsive value.
+
+- **Avatar fallback is a circled "C" — not a real channel logo.**
+  Day 22 ships placeholder chrome only. Day 31 (Brand Kit) lets
+  users paste a YouTube channel URL → real avatar + name flow
+  through the chrome.
+
+- **Verified-badge glyph is "✓" instead of YouTube's actual blue
+  ring icon.** Cosmetic; matters for "does this look authentic"
+  but doesn't affect the legibility evaluation. Real SVG icon
+  Cycle 6 polish.
+
+- **Action row uses emoji glyphs (👍 👎 ↗ ☰) for like/dislike/
+  share/save.** Renders cross-platform but won't match YouTube's
+  monochrome stroked icons. Same Cycle 6 polish bucket as the
+  verified badge.
+
+- **Each surface fires its own `compositor.refreshMasterTexture()`
+  on layer changes.** With 2 live surfaces (sidebar + mobile-feed),
+  one layer mutation triggers TWO refresh calls. Each refresh runs
+  Pixi's render() against the same texture — wasteful but cheap.
+  Day 29 perf pass should add a single shared subscriber that
+  refreshes once and notifies surfaces to re-extract. Fine for the
+  current 2-surface state.
+
+- **Each surface does its own `extract.canvas(masterTexture)`
+  readback.** With 2 surfaces that's 2 GPU readbacks per layer
+  change; with 7 surfaces it's 7. Still well under the 100ms
+  target on tests but worth profiling Day 29 — share one canvas
+  extract, drawImage to per-surface canvases.
+
+- **Refresh debounce is 32ms per surface (~30Hz).** Runs INSIDE
+  the master texture's own 16ms debounce, but the surfaces' own
+  setTimeout means a layer change → master refresh at +16ms,
+  surface paint at +32ms. The 100ms perf target is comfortably
+  met but worth simplifying once the perf pass lands.
+
+- **previewMode toggle in the rack header now actually drives
+  surface chrome.** Day 21 shipped the toggle as visual-only;
+  Day 22 wires it through to MobileFeed (and SidebarUpNext picks
+  it up too — the existing hookup was already mode-aware). The 5
+  remaining placeholder cards don't yet honor the toggle since
+  they have no chrome to color. Days 23-26 add per-surface
+  light/dark variants.
+
+- **Title text is a hard-coded placeholder** ("Your video title —
+  does this read clearly inside a real feed card"). v3.1 will
+  pull from a "title preview" field tied to the project. For
+  Day 22 the placeholder is sufficient — designers visually
+  evaluate against generic text length.
+
+- **Roboto font is loaded via `font-family` declaration only**
+  (system-ui fallback). v3 doesn't bundle Roboto, so users on
+  systems without it (most modern Mac/Windows have system-ui
+  Mac → SF Pro, Windows → Segoe UI) see the fallback. Cycle 6
+  could bundle Roboto subset if exact YouTube look matters more.
+
 ## Cycle 3 Day 21 — held back (date: 2026-04-28)
 
 - **Master texture renders canvasGroup with position zeroed.**
