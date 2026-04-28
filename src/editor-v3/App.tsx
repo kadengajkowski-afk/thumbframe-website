@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { CompositorHost } from "@/editor/CompositorHost";
 import { TextEditor } from "@/editor/TextEditor";
@@ -24,16 +24,19 @@ import { startAutoSave, loadDraftIfPresent } from "@/lib/autoSave";
 import { listProjects, openProject } from "@/lib/projects";
 import { useDocStore } from "@/state/docStore";
 
-/** Module-scope flag so React 19 StrictMode's double-mount doesn't
- * fire bootLoad twice — the duplication-on-load bug in DEFERRED
- * traced back to two in-flight openProject calls racing setState. */
-let bootLoadStarted = false;
-
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
 export function App() {
   const hasEntered = useUiStore((s) => s.hasEntered);
   const dragActive = useDropTarget();
+
+  // React 19 StrictMode dev-mounts this effect twice. The async
+  // bootLoad below races itself if both invocations call openProject
+  // before the first finishes. useRef guards against the double-mount
+  // without leaking module-level state across (hypothetical) future
+  // remounts (e.g. when client-side routing lands). Day 30 deferred
+  // this from a module flag; Day 32 fix-up swaps it in.
+  const bootLoadStarted = useRef(false);
 
   useEffect(() => installHotkeys(), []);
 
@@ -44,20 +47,24 @@ export function App() {
   //      empty-canvas-on-refresh bug came from skipping this load.
   //   3. If signed-out → restore the localStorage draft.
   // onAuthStateChange handles future flips (sign-in / sign-out).
+  //
+  // Day 32 fix-up: after a project / draft loads with content, flip
+  // hasEntered=true so EditorShell renders. Without this, refresh
+  // restored the layers into docStore but EmptyState kept rendering
+  // because nothing pointed hasEntered at the loaded state, forcing
+  // the user to upload a stub image just to enter the editor.
   useEffect(() => {
     const ui = useUiStore.getState();
     const stop = startAutoSave();
 
-    // React 19 StrictMode dev-mounts this effect twice. The async
-    // bootLoad below races itself if both invocations call openProject
-    // before the first finishes — same row deserialized twice into the
-    // same docStore. The module-scope guard makes bootLoad run once
-    // per page load.
     async function bootLoad() {
-      if (bootLoadStarted) return;
-      bootLoadStarted = true;
+      if (bootLoadStarted.current) return;
+      bootLoadStarted.current = true;
       if (!supabase) {
-        await loadDraftIfPresent();
+        const restored = await loadDraftIfPresent();
+        if (restored && useDocStore.getState().layers.length > 0) {
+          useUiStore.getState().setHasEntered(true);
+        }
         return;
       }
       const { data } = await supabase.auth.getSession();
@@ -72,10 +79,20 @@ export function App() {
         // the user to the empty state.
         const rows = await listProjects();
         if (rows.length > 0 && useDocStore.getState().layers.length === 0) {
-          await openProject(rows[0]!.id);
+          const ok = await openProject(rows[0]!.id);
+          if (ok && useDocStore.getState().layers.length > 0) {
+            useUiStore.getState().setHasEntered(true);
+          }
+        } else if (useDocStore.getState().layers.length > 0) {
+          // openProject already ran via some other path (e.g. URL deep
+          // link); just flip hasEntered to skip the empty state.
+          useUiStore.getState().setHasEntered(true);
         }
       } else {
-        await loadDraftIfPresent();
+        const restored = await loadDraftIfPresent();
+        if (restored && useDocStore.getState().layers.length > 0) {
+          useUiStore.getState().setHasEntered(true);
+        }
       }
     }
     void bootLoad();
