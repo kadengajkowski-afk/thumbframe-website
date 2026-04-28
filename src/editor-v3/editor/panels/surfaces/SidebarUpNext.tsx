@@ -116,12 +116,15 @@ function paintThumbnail(target: HTMLCanvasElement | null): void {
 const wrap: CSSProperties = {
   display: "flex", flexDirection: "column", gap: 6, padding: 8,
   borderRadius: 6,
+  // Day 23 hotfix: contain the thumbnail + text inside the card.
+  overflow: "hidden", minWidth: 0,
   fontFamily: "Roboto, system-ui, sans-serif",
 };
 const thumbnail: CSSProperties = {
-  width: THUMB_W, height: THUMB_H,
   borderRadius: 4, background: "#000",
   display: "block",
+  width: "100%", height: "auto", maxWidth: "100%",
+  aspectRatio: `${THUMB_W} / ${THUMB_H}`,
 };
 const textCol: CSSProperties = {
   display: "flex", flexDirection: "column", gap: 2, minWidth: 0,

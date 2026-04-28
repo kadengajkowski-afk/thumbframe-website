@@ -78,7 +78,7 @@ export function MobileFeedSurface({ surface }: { surface: SurfaceSpec }) {
         ref={canvasRef}
         width={thumbW}
         height={thumbH}
-        style={{ ...thumbnail, width: thumbW, height: thumbH }}
+        style={{ ...thumbnail, aspectRatio: `${thumbW} / ${thumbH}` }}
         aria-label="Thumbnail preview"
       />
       <div style={titleStyle}>
@@ -129,6 +129,11 @@ function paintThumbnail(target: HTMLCanvasElement | null, w: number, h: number):
 const wrap: CSSProperties = {
   display: "flex", flexDirection: "column", gap: 6, padding: 8,
   borderRadius: 6,
+  // overflow: hidden + min-width: 0 keeps the canvas + text from
+  // bleeding past the card when the rack-fit width undercuts the
+  // canvas's intrinsic bitmap size. Same fix applied to every
+  // surface today (Day 22 bug from Mobile feed).
+  overflow: "hidden", minWidth: 0,
   fontFamily: 'Roboto, -apple-system, "Segoe UI", system-ui, sans-serif',
 };
 const headerRow: CSSProperties = {
@@ -161,6 +166,7 @@ const moreBtn: CSSProperties = {
 const thumbnail: CSSProperties = {
   display: "block", borderRadius: 4, background: "#000",
   marginTop: 4,
+  width: "100%", height: "auto", maxWidth: "100%",
 };
 const titleStyle: CSSProperties = {
   fontSize: 16, fontWeight: 500, lineHeight: 1.3,
