@@ -243,9 +243,9 @@ export class Compositor {
   /** Day 18: read-only handle for the export pipeline (lib/export.ts). */
   get canvasContainer(): Container { return this.canvasGroup; }
   /** Day 18: canvas dimensions — 1280×720 today; canvas resize lands later. */
-  get canvasSize(): { width: number; height: number } {
-    return { width: CANVAS_W, height: CANVAS_H };
-  }
+  get canvasSize(): { width: number; height: number } { return { width: CANVAS_W, height: CANVAS_H }; }
+  /** Day 19: hide/show dark canvas-fill base — export bg goes behind layers. */
+  setCanvasFillVisible(visible: boolean) { this.canvasFill.visible = visible; }
 
   /** Returns true if there was an active drag to cancel. */
   cancelTool(): boolean {

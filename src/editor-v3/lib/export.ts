@@ -1,4 +1,4 @@
-import { Rectangle } from "pixi.js";
+import { Container, Graphics, Rectangle } from "pixi.js";
 import type { Compositor } from "@/editor/Compositor";
 import { buildWatermark } from "./watermark";
 import JpegWorker from "./exportJpegWorker?worker";
@@ -17,12 +17,28 @@ import JpegWorker from "./exportJpegWorker?worker";
 
 export type ExportFormat = "png" | "jpeg" | "youtube" | "4k";
 
+export type ExportBackground =
+  | { kind: "transparent" }
+  | { kind: "color"; color: number };
+
 export type ExportOptions = {
   format: ExportFormat;
   /** 50–100. Used by jpeg / youtube formats. */
   jpegQuality?: number;
   /** Free tier always true. Pro (Cycle 4) flips this off. */
   watermark: boolean;
+  /** Day 19: bg fill behind layers — fixes "letterbox bars" when a
+   * single image layer is smaller than the canvas. Transparent only
+   * lands in PNG output (JPEG falls back to white if requested). */
+  background?: ExportBackground;
+  /** Day 19: gates the 4K format. Free → throws "4k-gated". Pro
+   * → encodes at the upgraded resolution. Real auth Cycle 4 (Day 31). */
+  isPro?: boolean;
+  /** Day 19 selection export: when set, the export region uses this
+   * AABB (in canvas coords) instead of the full canvas. Format keeps
+   * its meaning — youtube still forces 1280×720 by scaling the
+   * selection bbox to fit. */
+  region?: { x: number; y: number; width: number; height: number };
 };
 
 export type ExportResult = {
@@ -35,8 +51,6 @@ export type ExportResult = {
   mimeType: string;
 };
 
-const PRO_GATED = "4k" as const;
-
 /** Default JPEG quality when not specified (matches the slider's mid). */
 const DEFAULT_JPEG_QUALITY = 90;
 /** YouTube's re-encode pipeline rarely benefits past 85, so the preset
@@ -45,51 +59,79 @@ const DEFAULT_JPEG_QUALITY = 90;
 const YOUTUBE_JPEG_QUALITY = 85;
 const YOUTUBE_W = 1280;
 const YOUTUBE_H = 720;
+/** Day 19: 4K thumbnail (Pro). 2× the YouTube resolution, intended
+ * for high-DPI surfaces (TV / desktop / lock-screen). PNG by default
+ * to preserve full alpha if the user wants a transparent bg. */
+const FOUR_K_W = 2560;
+const FOUR_K_H = 1440;
 
 export async function exportCanvas(
   compositor: Compositor,
   opts: ExportOptions,
 ): Promise<ExportResult> {
-  if (opts.format === PRO_GATED) {
+  if (opts.format === "4k" && !opts.isPro) {
     throw new Error("4k-gated");
   }
 
   const { width: canvasW, height: canvasH } = compositor.canvasSize;
+  // Day 19: selection-aware export — region defaults to the full canvas.
+  const regionX = opts.region?.x ?? 0;
+  const regionY = opts.region?.y ?? 0;
+  const regionW = opts.region?.width ?? canvasW;
+  const regionH = opts.region?.height ?? canvasH;
+
   const isYoutube = opts.format === "youtube";
-  const outW = isYoutube ? YOUTUBE_W : canvasW;
-  const outH = isYoutube ? YOUTUBE_H : canvasH;
+  const isFourK = opts.format === "4k";
+  const outW = isYoutube ? YOUTUBE_W : isFourK ? FOUR_K_W : regionW;
+  const outH = isYoutube ? YOUTUBE_H : isFourK ? FOUR_K_H : regionH;
+  const resolution = outW / regionW;
 
-  // Resolution scales the extract — when output dimensions match
-  // canvas dimensions, resolution = 1. For an upscaled output (4K
-  // when it ships) this would scale up.
-  const resolution = outW / canvasW;
+  // Hide the dark canvas-fill base so the export's chosen background
+  // takes over (or alpha 0 stays alpha 0 for transparent PNG).
+  // Restored in `finally` so the editor view stays normal.
+  compositor.setCanvasFillVisible(false);
 
-  // Bake the watermark in for the duration of the extract. Add to
-  // canvasContainer so its render-order tracks the rest of the scene.
-  // canvasContainer is the parent of all layer nodes; appending
-  // places the watermark on top of every layer.
+  // Add transient nodes (background fill + watermark) for the
+  // duration of the extract. They live in canvasContainer so the
+  // viewport's transform applies, but never persist to docStore.
+  const transients: Container[] = [];
+  const bg = opts.background ?? { kind: "color" as const, color: 0x000000 };
+  if (bg.kind === "color") {
+    // Insert at index 0 so the fill renders behind every layer node.
+    const fill = buildBackgroundFill(canvasW, canvasH, bg.color);
+    compositor.canvasContainer.addChildAt(fill, 0);
+    transients.push(fill);
+  }
+  // bg.kind === "transparent" → no fill node; canvasFill is hidden so
+  // empty regions extract as alpha 0.
   const watermarkNode =
     opts.watermark ? buildWatermark(canvasW, canvasH) : null;
-  if (watermarkNode) compositor.canvasContainer.addChild(watermarkNode);
+  if (watermarkNode) {
+    compositor.canvasContainer.addChild(watermarkNode);
+    transients.push(watermarkNode);
+  }
 
   let extracted: HTMLCanvasElement;
   try {
     extracted = compositor.app.renderer.extract.canvas({
       target: compositor.canvasContainer,
-      frame: new Rectangle(0, 0, canvasW, canvasH),
+      frame: new Rectangle(regionX, regionY, regionW, regionH),
       antialias: true,
       resolution,
       clearColor: 0x00000000,
     }) as HTMLCanvasElement;
   } finally {
-    if (watermarkNode) {
-      compositor.canvasContainer.removeChild(watermarkNode);
-      watermarkNode.destroy({ children: true });
+    for (const node of transients) {
+      compositor.canvasContainer.removeChild(node);
+      node.destroy({ children: true });
     }
+    compositor.setCanvasFillVisible(true);
   }
 
   const filename = makeFilename(opts.format);
-  if (opts.format === "png") {
+  // PNG and 4K both ship as PNG (4K preserves full alpha if the
+  // caller chose transparent bg).
+  if (opts.format === "png" || isFourK) {
     const blob = await canvasToPngBlob(extracted);
     return { blob, width: outW, height: outH, filename, mimeType: "image/png" };
   }
@@ -100,6 +142,15 @@ export async function exportCanvas(
     : clampQuality(opts.jpegQuality ?? DEFAULT_JPEG_QUALITY);
   const blob = await canvasToJpegBlob(extracted, quality);
   return { blob, width: outW, height: outH, filename, mimeType: "image/jpeg" };
+}
+
+function buildBackgroundFill(width: number, height: number, color: number): Container {
+  const g = new Graphics();
+  g.label = "export-bg";
+  g.eventMode = "none";
+  g.rect(0, 0, width, height);
+  g.fill({ color, alpha: 1 });
+  return g;
 }
 
 function clampQuality(q: number): number {
@@ -157,7 +208,8 @@ export function makeFilename(format: ExportFormat, now = new Date()): string {
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
-  const ext = format === "png" ? "png" : "jpg";
+  // 4K defaults to PNG (alpha-preserving); the rest follow format.
+  const ext = format === "png" || format === "4k" ? "png" : "jpg";
   return `thumbnail-${y}-${m}-${d}.${ext}`;
 }
 
