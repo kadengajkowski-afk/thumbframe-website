@@ -17,6 +17,105 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 Day 17 — held back (date: 2026-04-27)
+
+- **3 Photoshop modes ship NOT supported by Pixi v8.** Photoshop has
+  Hue, Darker Color, and Lighter Color in its Adjustments / Component
+  groups. Pixi's `pixi.js/advanced-blend-modes` package doesn't ship
+  filters for any of them — verified by walking
+  `node_modules/pixi.js/lib/advanced-blend-modes/`. We ship the 25 Pixi
+  exposes; the gap is documented to set expectations. If a thumbnail
+  designer asks specifically for Hue / Darker Color / Lighter Color,
+  we'd need to ship custom GLSL BlendModeFilter classes — feasible but
+  a Cycle 3 polish item, not Day 17 work.
+
+- **`useBackBuffer: true` is now permanent on Application.init.**
+  PixiJS v8's BlendModeFilter requires the back-buffer to render
+  the off-screen pass for any advanced mode. Without it, the
+  filter logs a warning and silently falls back to normal — which
+  is exactly the bug we shipped on Day 8 (Bug 2). The flag is set
+  in CompositorHost.tsx for production and per-test in
+  day8-bug2 + day17 + (going forward) every Compositor-bound test.
+  Modest perf cost — one extra render-target allocation; negligible
+  at v3 layer counts.
+
+- **`isRenderGroup = true` set on every layer node.** Required for
+  the BlendModePipe to attach the per-mode filter. Setting it makes
+  the node render to its own batch, which means each layer gets
+  its own draw call instead of joining a shared batcher — small
+  per-frame cost, zero impact at v3 layer counts (~50). If layer
+  counts ever grow past a few hundred, gate isRenderGroup behind
+  "blend mode is non-normal" instead of always-on.
+
+- **Pure-channel test colors break hard-light's distinct-from-normal
+  check.** Hard-light's piecewise formula collapses to "top wins"
+  when blend channels are 0 or 255 — so green-over-red with
+  hard-light produces (0,255,0), identical to normal. Used mid-tone
+  colors (0xc0a040 over 0x4060c0) in the day17 spec to exercise
+  every channel of the formula. Worth a comment in any future
+  blend-mode test.
+
+- **BlendModeSelect drops `useMemo`.** The Recent section reads
+  module-scope `recentStack`. Memoizing on `query` alone caches
+  stale sections after a click — the recents update doesn't change
+  query so the sections are reused even though recentStack flipped.
+  The dropdown isn't a hot path; one rebuild per render is fine.
+  If we ever grow this to a heavy component, recompute via a
+  ref-counted version key bumped on every commit() instead.
+
+- **Recent stack persists for the session only (in-memory).**
+  Reload wipes it. Could mirror to localStorage like recent fonts
+  do (Day 13), but bikeshed — many users prefer a fresh start each
+  session and recents don't need to survive much past "last few
+  modes I tried." Add localStorage if a user complains.
+
+- **"Common" section is hardcoded to 5 modes.** Not data-driven —
+  a real "frequency-of-use" ranking would track per-user counts
+  and surface the top 5. Today the 5 = Normal, Multiply, Screen,
+  Overlay, Add — what most thumbnail designers reach for. Reads
+  fine; revisit if telemetry surfaces a different distribution.
+
+- **Search filter is substring on both the mode key and the label.**
+  No fuzzy matching, no acronyms. Typing "vl" doesn't surface
+  "Vivid Light." Acceptable for a 25-item list; if we ever push
+  past 40+ modes (Cycle 3 custom filters), cmdk's substring +
+  acronym matcher is right there.
+
+- **Section headers always render even when their group has only
+  one filtered match.** A search that narrows Contrast to just
+  "Hard Mix" still shows the "Contrast" header above it. Could
+  collapse single-match sections into the parent; cosmetic.
+
+- **Edge handles in mixed text+rect multi-select are intentionally
+  left active.** Day 16 hid edge handles for text-ONLY selections.
+  Mixed selections still show all 8 — the edge handles work
+  meaningfully for the rect/ellipse/image members, and the text
+  layers' bounds re-derive from glyph metrics on the next reconcile
+  tick (the brief "wrong" frame is invisible). Documented; no fix.
+
+- **Drag-cancel switched to `history.cancelStroke()`.** Day 16
+  added cancelStroke to fix a latent bug — the loop-revert +
+  endStroke pattern produced new array refs every mutate so the
+  "no-op when start === end" check never fired. Day 17 cleanup
+  swaps SelectTool.onCancel's drag branch to use cancelStroke
+  directly; verified no undo entry leaks via two new tests
+  (single-layer + multi-layer drag cancels).
+
+- **`history.endStroke` still has the brittle reference-equality
+  fast path.** Not removed — other code paths (resize, font-size
+  scrub, etc.) DO produce identical references via immer's
+  structural sharing when no real changes happen, so the fast
+  path is still useful. Cancel-with-revert pattern is now the
+  outlier; cancelStroke owns it.
+
+- **Smart guides during a multi-drag still subject the union as
+  one bbox**. Day 14 deferred. Day 17 doesn't change that.
+
+- **All 25 modes work uniformly across rect / ellipse / image /
+  text** because every layer node now goes through the same
+  `isRenderGroup = true` + `blendMode` plumbing in
+  `sceneHelpers.createNode`. No type-specific branches.
+
 ## Cycle 2 Day 16 — held back (date: 2026-04-27)
 
 - **Rotation handle deferred.** Day 16 ships axis-aligned resize only;
