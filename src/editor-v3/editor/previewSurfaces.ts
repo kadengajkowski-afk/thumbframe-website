@@ -160,6 +160,9 @@ export const LIVE_SURFACES = new Set<string>([
   "mobile-feed",
   "desktop-home",
   "desktop-search",
+  "shorts-shelf",
+  "tv-leanback",
+  "lockscreen-push",
 ]);
 
 /** Section title for the rack header. */

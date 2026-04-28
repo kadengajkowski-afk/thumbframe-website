@@ -10,6 +10,9 @@ import { SidebarUpNextSurface } from "./surfaces/SidebarUpNext";
 import { MobileFeedSurface } from "./surfaces/MobileFeed";
 import { DesktopHomeGridSurface } from "./surfaces/DesktopHomeGrid";
 import { DesktopSearchResultsSurface } from "./surfaces/DesktopSearchResults";
+import { MobileShortsShelfSurface } from "./surfaces/MobileShortsShelf";
+import { TVLeanbackSurface } from "./surfaces/TVLeanback";
+import { LockscreenPushSurface } from "./surfaces/LockscreenPush";
 
 /** Day 21 — multi-surface PreviewRack. Slides in over the right
  * panel slot (ContextPanel hides when this is open). One live
@@ -101,6 +104,9 @@ function SurfaceContent({ surface }: { surface: SurfaceSpec }) {
   if (surface.id === "mobile-feed") return <MobileFeedSurface surface={surface} />;
   if (surface.id === "desktop-home") return <DesktopHomeGridSurface surface={surface} />;
   if (surface.id === "desktop-search") return <DesktopSearchResultsSurface surface={surface} />;
+  if (surface.id === "shorts-shelf") return <MobileShortsShelfSurface surface={surface} />;
+  if (surface.id === "tv-leanback") return <TVLeanbackSurface surface={surface} />;
+  if (surface.id === "lockscreen-push") return <LockscreenPushSurface surface={surface} />;
   return null;
 }
 

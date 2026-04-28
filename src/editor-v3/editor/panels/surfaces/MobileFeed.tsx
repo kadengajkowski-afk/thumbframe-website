@@ -74,13 +74,15 @@ export function MobileFeedSurface({ surface }: { surface: SurfaceSpec }) {
         </div>
         <span style={{ ...moreBtn, color: palette.text2 }} aria-hidden="true">⋮</span>
       </header>
-      <canvas
-        ref={canvasRef}
-        width={thumbW}
-        height={thumbH}
-        style={{ ...thumbnail, aspectRatio: `${thumbW} / ${thumbH}` }}
-        aria-label="Thumbnail preview"
-      />
+      <div style={{ ...thumbWrap, aspectRatio: `${thumbW} / ${thumbH}` }}>
+        <canvas
+          ref={canvasRef}
+          width={thumbW}
+          height={thumbH}
+          style={thumbnail}
+          aria-label="Thumbnail preview"
+        />
+      </div>
       <div style={titleStyle}>
         Your video title — does this read clearly inside a real feed card
       </div>
@@ -163,10 +165,17 @@ const timestamp: CSSProperties = {
 const moreBtn: CSSProperties = {
   fontSize: 18, lineHeight: 1, padding: "0 4px",
 };
-const thumbnail: CSSProperties = {
-  display: "block", borderRadius: 4, background: "#000",
+// Wrapper-clamp pattern: parent enforces max-width + aspect-ratio
+// + overflow:hidden so the canvas can't bleed past the card.
+const thumbWrap: CSSProperties = {
+  position: "relative",
+  width: "100%", maxWidth: "100%",
   marginTop: 4,
-  width: "100%", height: "auto", maxWidth: "100%",
+  borderRadius: 4, overflow: "hidden",
+  background: "#000",
+};
+const thumbnail: CSSProperties = {
+  display: "block", width: "100%", height: "100%",
 };
 const titleStyle: CSSProperties = {
   fontSize: 16, fontWeight: 500, lineHeight: 1.3,

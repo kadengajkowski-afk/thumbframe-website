@@ -51,13 +51,15 @@ export function SidebarUpNextSurface({ surface }: { surface: SurfaceSpec }) {
       }}
       data-testid="surface-sidebar-up-next-live"
     >
-      <canvas
-        ref={canvasRef}
-        width={THUMB_W}
-        height={THUMB_H}
-        style={thumbnail}
-        aria-label="Thumbnail preview"
-      />
+      <div style={thumbWrap}>
+        <canvas
+          ref={canvasRef}
+          width={THUMB_W}
+          height={THUMB_H}
+          style={thumbnail}
+          aria-label="Thumbnail preview"
+        />
+      </div>
       <div style={textCol}>
         <div
           style={{
@@ -120,11 +122,21 @@ const wrap: CSSProperties = {
   overflow: "hidden", minWidth: 0,
   fontFamily: "Roboto, system-ui, sans-serif",
 };
-const thumbnail: CSSProperties = {
-  borderRadius: 4, background: "#000",
-  display: "block",
-  width: "100%", height: "auto", maxWidth: "100%",
+// The robust no-bleed pattern: a wrapper div clamps width + aspect
+// ratio + overflow:hidden; the canvas inside fills the wrapper.
+// Pure aspect-ratio on the canvas works in most browsers but a few
+// (older Safari mobile) fall back to the bitmap intrinsic size and
+// overflow the parent. The wrapper bypasses that quirk.
+const thumbWrap: CSSProperties = {
+  position: "relative",
+  width: "100%", maxWidth: "100%",
   aspectRatio: `${THUMB_W} / ${THUMB_H}`,
+  borderRadius: 4, overflow: "hidden",
+  background: "#000",
+};
+const thumbnail: CSSProperties = {
+  display: "block",
+  width: "100%", height: "100%",
 };
 const textCol: CSSProperties = {
   display: "flex", flexDirection: "column", gap: 2, minWidth: 0,

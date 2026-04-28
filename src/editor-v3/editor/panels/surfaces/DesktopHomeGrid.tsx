@@ -46,13 +46,15 @@ export function DesktopHomeGridSurface({ surface }: { surface: SurfaceSpec }) {
       style={{ ...wrap, background: palette.bg, color: palette.text }}
       data-testid="surface-desktop-home-live"
     >
-      <canvas
-        ref={canvasRef}
-        width={thumbW}
-        height={thumbH}
-        style={{ ...thumbnail, aspectRatio: `${thumbW} / ${thumbH}` }}
-        aria-label="Thumbnail preview"
-      />
+      <div style={{ ...thumbWrap, aspectRatio: `${thumbW} / ${thumbH}` }}>
+        <canvas
+          ref={canvasRef}
+          width={thumbW}
+          height={thumbH}
+          style={thumbnail}
+          aria-label="Thumbnail preview"
+        />
+      </div>
       <div style={infoRow}>
         <div style={{ ...avatar, background: "var(--border-ghost)" }} aria-hidden="true">
           <span style={avatarFallback}>C</span>
@@ -101,12 +103,19 @@ const wrap: CSSProperties = {
   padding: 8,
   fontFamily: 'Roboto, -apple-system, "Segoe UI", system-ui, sans-serif',
 };
-const thumbnail: CSSProperties = {
-  display: "block", background: "#000",
-  // Real YouTube home thumbnails have 12px rounded corners.
+// Wrapper-clamp pattern (same as the other surfaces). Asymmetric
+// corner radius lives on the wrapper so overflow:hidden clips the
+// canvas to the rounded shape.
+const thumbWrap: CSSProperties = {
+  position: "relative",
+  width: "100%", maxWidth: "100%",
   borderRadius: "4px 4px 12px 12px",
-  width: "100%", height: "auto", maxWidth: "100%",
+  overflow: "hidden",
+  background: "#000",
   marginBottom: 12,
+};
+const thumbnail: CSSProperties = {
+  display: "block", width: "100%", height: "100%",
 };
 const infoRow: CSSProperties = {
   display: "flex", gap: 10, alignItems: "flex-start",
