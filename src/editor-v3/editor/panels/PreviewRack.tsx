@@ -8,6 +8,8 @@ import {
 } from "@/editor/previewSurfaces";
 import { SidebarUpNextSurface } from "./surfaces/SidebarUpNext";
 import { MobileFeedSurface } from "./surfaces/MobileFeed";
+import { DesktopHomeGridSurface } from "./surfaces/DesktopHomeGrid";
+import { DesktopSearchResultsSurface } from "./surfaces/DesktopSearchResults";
 
 /** Day 21 — multi-surface PreviewRack. Slides in over the right
  * panel slot (ContextPanel hides when this is open). One live
@@ -97,6 +99,8 @@ function SurfaceCard({ surface }: { surface: SurfaceSpec }) {
 function SurfaceContent({ surface }: { surface: SurfaceSpec }) {
   if (surface.id === "sidebar-up-next") return <SidebarUpNextSurface surface={surface} />;
   if (surface.id === "mobile-feed") return <MobileFeedSurface surface={surface} />;
+  if (surface.id === "desktop-home") return <DesktopHomeGridSurface surface={surface} />;
+  if (surface.id === "desktop-search") return <DesktopSearchResultsSurface surface={surface} />;
   return null;
 }
 
