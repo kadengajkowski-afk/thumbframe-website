@@ -3,19 +3,42 @@
  * adds `blendMode` to all variants. Cycle 2 Day 11 adds ellipse;
  * Day 12 adds text. */
 
+/** Day 17: full PixiJS v8 blend-mode surface — 25 distinct modes
+ * grouped into 6 visual families. Photoshop's "Hue", "Darker Color",
+ * and "Lighter Color" aren't in Pixi v8's advanced-blend-modes set;
+ * documented in DEFERRED. Advanced modes require the layer node to
+ * be a render group (sceneHelpers.createNode sets isRenderGroup). */
 export type BlendMode =
   | "normal"
+  // Darken
   | "multiply"
+  | "darken"
+  | "color-burn"
+  | "linear-burn"
+  // Lighten
   | "screen"
+  | "lighten"
+  | "color-dodge"
+  | "linear-dodge"
+  | "add"
+  // Contrast
   | "overlay"
   | "soft-light"
   | "hard-light"
-  | "darken"
-  | "lighten"
+  | "vivid-light"
+  | "linear-light"
+  | "pin-light"
+  | "hard-mix"
+  // Inversion
   | "difference"
-  | "color-dodge"
-  | "color-burn"
-  | "add";
+  | "exclusion"
+  | "subtract"
+  | "divide"
+  | "negation"
+  // Component
+  | "saturation"
+  | "color"
+  | "luminosity";
 
 type BaseLayer = {
   id: string;
