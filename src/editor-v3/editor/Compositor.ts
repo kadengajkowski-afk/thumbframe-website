@@ -239,8 +239,12 @@ export class Compositor {
 
   /** Returns the current viewport scale — DOM overlays multiply by
    * this to size text correctly at any zoom. */
-  get viewportScale(): number {
-    return this.viewport.scale.x;
+  get viewportScale(): number { return this.viewport.scale.x; }
+  /** Day 18: read-only handle for the export pipeline (lib/export.ts). */
+  get canvasContainer(): Container { return this.canvasGroup; }
+  /** Day 18: canvas dimensions — 1280×720 today; canvas resize lands later. */
+  get canvasSize(): { width: number; height: number } {
+    return { width: CANVAS_W, height: CANVAS_H };
   }
 
   /** Returns true if there was an active drag to cancel. */
