@@ -22,12 +22,9 @@ const LAST_FONT_SIZE_KEY = "thumbframe:last-font-size";
 const LAST_FONT_WEIGHT_KEY = "thumbframe:last-font-weight";
 const RECENT_FONTS_KEY = "thumbframe:recent-fonts";
 const SMART_GUIDES_KEY = "thumbframe:smart-guides-enabled";
-const MAX_RECENT = 8;
-const MAX_RECENT_FONTS = 6;
-const DEFAULT_FILL = "#F97316";
-const DEFAULT_FONT_FAMILY = "Inter";
-const DEFAULT_FONT_SIZE = 96;
-const DEFAULT_FONT_WEIGHT = 700;
+const MAX_RECENT = 8, MAX_RECENT_FONTS = 6;
+const DEFAULT_FILL = "#F97316", DEFAULT_FONT_FAMILY = "Inter";
+const DEFAULT_FONT_SIZE = 96, DEFAULT_FONT_WEIGHT = 700;
 
 type UiState = {
   hasEntered: boolean;
@@ -125,7 +122,30 @@ type UiState = {
    * user has shipped at least once. */
   lastExport: RecentExport | null;
   setLastExport: (entry: RecentExport) => void;
+
+  /** Day 20: persistence state. user comes from
+   * supabase.auth.onAuthStateChange (set in App.tsx). currentProjectId
+   * is null until the first auto-save creates a row. saveStatus
+   * drives the TopBar indicator. */
+  user: { id: string; email: string | null; avatarUrl: string | null } | null;
+  setUser: (user: UiState["user"]) => void;
+  currentProjectId: string | null;
+  setCurrentProjectId: (id: string | null) => void;
+  projectName: string;
+  setProjectName: (name: string) => void;
+  saveStatus: SaveStatus;
+  setSaveStatus: (status: SaveStatus) => void;
+  authPanelOpen: boolean;
+  setAuthPanelOpen: (v: boolean) => void;
+  projectsPanelOpen: boolean;
+  setProjectsPanelOpen: (v: boolean) => void;
 };
+
+export type SaveStatus =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "saved"; at: number }
+  | { kind: "error"; message: string };
 
 
 /** UI-only flags. Document state lives in docStore. Do not cross streams. */
@@ -250,6 +270,19 @@ export const useUiStore = create<UiState>()((set) => ({
     persistLastExport(entry);
     set({ lastExport: entry });
   },
+
+  user: null,
+  setUser: (user) => set({ user }),
+  currentProjectId: null,
+  setCurrentProjectId: (currentProjectId) => set({ currentProjectId }),
+  projectName: "Untitled",
+  setProjectName: (projectName) => set({ projectName }),
+  saveStatus: { kind: "idle" },
+  setSaveStatus: (saveStatus) => set({ saveStatus }),
+  authPanelOpen: false,
+  setAuthPanelOpen: (authPanelOpen) => set({ authPanelOpen }),
+  projectsPanelOpen: false,
+  setProjectsPanelOpen: (projectsPanelOpen) => set({ projectsPanelOpen }),
 }));
 
 function loadString(key: string, fallback: string): string {
