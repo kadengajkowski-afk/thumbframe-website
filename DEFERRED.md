@@ -17,6 +17,84 @@ Promote to SCOPE.md only after 48 hours of consideration.
   a gentle overshoot). Respect `prefers-reduced-motion` by falling back
   to a plain fade-in like ship-coming-alive does.
 
+## Cycle 2 Day 18 — held back (date: 2026-04-27)
+
+- **4K export gated as "Pro v3.1" via toast — no real auth gate yet.**
+  ExportPanel renders a "4K" format button that surfaces a toast
+  ("4K export unlocks at v3.1") and skips the encode. The actual
+  Pro tier ships Cycle 4 with the auth + Polar.sh wiring; today's
+  gate is purely UI. exportCanvas throws "4k-gated" so the worker
+  pipeline never runs — keeps the gate honest at the boundary.
+
+- **Watermark always-on for free tier.** Day 18 hardcodes
+  `watermark: true` at every export call site (preview + ship).
+  Cycle 4 will read from a `userTier` flag and flip it off for
+  paying users. Watermark text + style live in `lib/watermark.ts`
+  — Pro flow won't need to touch the export pipeline at all.
+
+- **No selection-aware export.** Spec said defer; v3.1.
+  ExportPanel always exports the full 1280×720 canvas. The
+  export.ts API takes the compositor + format only; adding a
+  bounds-restricted variant later is a one-arg add.
+
+- **Worker bundle ships @jsquash mozjpeg WASM (~80 KB).** Lazily
+  loaded via `?worker` Vite suffix — only fetched on first encode.
+  Reasonable cost for the quality-vs-size win over native JPEG.
+  PNG stays on the native canvas.toBlob path; @jsquash/png is
+  installed but unused — kept for a future "PNG optimize" toggle.
+
+- **Preview re-renders on every format / quality change.** 200ms
+  debounce. JPEG q-slider scrub during a stream of changes still
+  fires worker-encode multiple times. If we surface a complex
+  canvas (50+ layers) and scrubbing feels janky, gate the preview
+  on pointerup of the slider instead. Acceptable for Day 18.
+
+- **Filename input doesn't validate the extension matches format.**
+  User can type "foo.png" with format=jpeg — they'll get a JPEG
+  named foo.png. Filename is auto-rewritten when format changes,
+  but free-typing through that into a mismatched ext is allowed.
+  Cosmetic; the browser still decodes correctly.
+
+- **ExportPanel.tsx + .styles.ts split** to stay under the 250-line
+  panel budget the spec set. Same pattern other panels use
+  (ContextPanel.styles.ts, etc.). Style file holds CSSProperties
+  constants only; component file holds JSX + state.
+
+- **Compositor exposes `canvasContainer` + `canvasSize` getters.**
+  Required so lib/export.ts can extract the canvas region without
+  reaching into private fields. canvasSize is hardcoded to
+  1280×720 today — when canvas resize lands (Cycle 2+ design
+  resize) it should read docStore.canvas.
+
+- **No Polish-style "Stop" / "Cancel encode" mid-encode.** The
+  worker can be terminated via worker.terminate() but the panel
+  doesn't surface that. JPEG encode at 1280×720 finishes in
+  ~500ms-2s on modern hardware so it's fine; if we ship 4K
+  encodes that take 5-10s, expose a Cancel button.
+
+- **No sRGB color space conversion.** Spec said defer; pixels
+  flow Pixi → HTMLCanvasElement → ImageData → mozjpeg with no
+  ICC profile attached. Browsers default to sRGB for display, so
+  this is fine for most thumbnails — but if a designer's source
+  art lives in P3 or wider gamut, we'd lose color fidelity.
+  Cycle 3 polish.
+
+- **No animated GIF / WebP / SVG export.** Spec called these out
+  as v3.2 / v4.0. PNG + JPEG cover the YouTube workflow.
+
+- **Selection state survives the export render.** The watermark
+  add → render → remove cycle doesn't touch docStore or uiStore,
+  so selection outlines and resize handles stay where they were.
+  The watermark renders ABOVE everything in canvasGroup — added
+  last, removed after extract — but it's on a separate Container
+  from selection chrome, so they don't collide visually.
+
+- **Worker's main-thread-responsive test is best-effort.** Asserts
+  that a Promise.resolve().then() microtask fires before the
+  encode promise resolves. Stronger guarantee would require a
+  perf hook, but a microtask passing is sufficient signal that
+  the encode isn't blocking the event loop.
+
 ## Cycle 2 Day 17 — held back (date: 2026-04-27)
 
 - **3 Photoshop modes ship NOT supported by Pixi v8.** Photoshop has
