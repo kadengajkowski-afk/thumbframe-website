@@ -39,18 +39,25 @@ export function matchesType(node: Container, layer: Layer): boolean {
   if (layer.type === "rect" || layer.type === "ellipse") {
     return node instanceof Graphics;
   }
-  if (layer.type === "text") {
-    // Text layer nodes are PLAIN Containers carrying 1+ Text children
-    // (1 primary + N stacked-stroke siblings). A bare Text instance
-    // is the pre-Day-13 shape; reject it so the reconciler rebuilds.
-    return (
-      node instanceof Container &&
-      !(node instanceof Text) &&
-      !(node instanceof Graphics) &&
-      !(node instanceof Sprite)
-    );
+  // Day 17 image-blend fix: image layers used to map directly to a
+  // bare Sprite, but Sprite + isRenderGroup doesn't engage the
+  // BlendModePipe (verified empirically — multiply / overlay / etc.
+  // all silently fall back to normal). Wrap in a plain Container
+  // (the render-group host) holding ONE Sprite child instead.
+  // Text and image both end up as plain Containers; differentiate
+  // by inspecting the first child's class.
+  if (
+    !(node instanceof Container) ||
+    node instanceof Text ||
+    node instanceof Graphics ||
+    node instanceof Sprite
+  ) {
+    return false;
   }
-  return node instanceof Sprite;
+  const first = node.children[0];
+  if (layer.type === "text") return first instanceof Text;
+  // image
+  return first instanceof Sprite;
 }
 
 export function createNode(layer: Layer): Container {
@@ -58,12 +65,6 @@ export function createNode(layer: Layer): Container {
     const g = new Graphics();
     g.label = `layer:${layer.id}`;
     g.eventMode = "static";
-    // Day 17: advanced blend modes (overlay / soft-light / etc.)
-    // need the node to be a render-group root so the BlendModePipe
-    // can attach the per-mode filter. Setting isRenderGroup on every
-    // layer keeps the contract uniform — at v3 layer counts (~50)
-    // the per-layer texture cost is negligible.
-    g.isRenderGroup = true;
     return g;
   }
   if (layer.type === "text") {
@@ -73,23 +74,31 @@ export function createNode(layer: Layer): Container {
     const c = new Container();
     c.label = `layer:${layer.id}`;
     c.eventMode = "static";
-    c.isRenderGroup = true;
     const primary = new Text({ text: layer.text, style: textStyle(layer) });
     primary.eventMode = "static";
     primary.resolution = 2;
     c.addChild(primary);
     return c;
   }
-  // OffscreenCanvas → ImageSource → Texture — the path v1 proved against
-  // PixiJS v8's batcher. Texture.from(bitmap) can report alphaMode:null
-  // and trip the renderer; constructing ImageSource explicitly avoids it.
+  // Image layer = a plain Container holding ONE Sprite child. The
+  // wrap exists for shape uniformity with text (so the layer's node
+  // type is consistent across types-with-children), and so paintNode
+  // sets layer-level transforms (x/y/opacity/blendMode) on the
+  // Container while size goes on the Sprite child.
+  //
+  // OffscreenCanvas → ImageSource → Texture — the path v1 proved
+  // against PixiJS v8's batcher. Texture.from(bitmap) can report
+  // alphaMode:null and trip the renderer; constructing ImageSource
+  // explicitly avoids it.
   const source = new ImageSource({ resource: layer.bitmap });
   const texture = new Texture({ source });
   const sprite = new Sprite(texture);
-  sprite.label = `layer:${layer.id}`;
   sprite.eventMode = "static";
-  sprite.isRenderGroup = true;
-  return sprite;
+  const wrapper = new Container();
+  wrapper.label = `layer:${layer.id}`;
+  wrapper.eventMode = "static";
+  wrapper.addChild(sprite);
+  return wrapper;
 }
 
 export function paintNode(node: Container, layer: Layer) {
@@ -133,9 +142,14 @@ export function paintNode(node: Container, layer: Layer) {
     return;
   }
 
-  const s = node as Sprite;
-  s.width = layer.width;
-  s.height = layer.height;
+  // Image: the layer node is a Container wrapping the Sprite. Write
+  // size to the Sprite child (children[0]) — not the Container —
+  // since the Container is just a render-group host with no width
+  // / height of its own.
+  const c = node as Container;
+  const sprite = c.children[0] as Sprite;
+  sprite.width = layer.width;
+  sprite.height = layer.height;
 }
 
 /** Reconcile a text-layer Container's children (1 primary Text + N

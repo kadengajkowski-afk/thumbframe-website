@@ -39,13 +39,29 @@ Promote to SCOPE.md only after 48 hours of consideration.
   Modest perf cost — one extra render-target allocation; negligible
   at v3 layer counts.
 
-- **`isRenderGroup = true` set on every layer node.** Required for
-  the BlendModePipe to attach the per-mode filter. Setting it makes
-  the node render to its own batch, which means each layer gets
-  its own draw call instead of joining a shared batcher — small
-  per-frame cost, zero impact at v3 layer counts (~50). If layer
-  counts ever grow past a few hundred, gate isRenderGroup behind
-  "blend mode is non-normal" instead of always-on.
+- **`isRenderGroup` was a red herring — `useBackBuffer: true`
+  alone unlocked advanced blends.** Original Day 17 commit set
+  `isRenderGroup = true` on every layer node thinking the
+  BlendModePipe needed it. It didn't, AND for Sprite-backed image
+  layers it actively broke blending: pushing isRenderGroup down
+  the RenderGroupPipe's `_addRenderableDirect` path skips the
+  `pushBlendMode(renderGroup, root.groupBlendMode, ...)` call
+  that only fires on the cached-as-texture branch (line 45 of
+  `RenderGroupPipe.mjs`). Net result: every blend mode on
+  image layers silently fell back to normal — the bug Kaden caught
+  in browser. fix/day-17-image-blend-modes drops isRenderGroup
+  entirely and instead wraps image layers in a Container holding
+  one Sprite child, matching how text already wraps.
+
+- **Image-layer node is now `Container { children: [Sprite] }`.**
+  Wrapping the Sprite in a Container was the pattern Kaden's
+  spec hinted at. The wrap matters for one structural reason:
+  paintNode now sets `width / height` on the SPRITE child, while
+  layer-level transforms (x/y/opacity/blendMode) live on the
+  Container — same as text. matchesType differentiates text from
+  image by inspecting the first child's class (Text vs Sprite).
+  spriteCount() in day4.test.tsx had to be updated to walk into
+  the wrapper.
 
 - **Pure-channel test colors break hard-light's distinct-from-normal
   check.** Hard-light's piecewise formula collapses to "top wins"

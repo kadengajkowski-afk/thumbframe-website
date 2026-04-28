@@ -114,10 +114,72 @@ describe("Day 17 — every blend mode renders visible output", () => {
     expect(failures).toEqual([]);
   });
 
-  it("layer nodes are render groups so the BlendModePipe can attach", () => {
-    history.addLayer(makeRect("a", 0xff0000));
-    const node = compositor.nodes.get("a")!;
-    expect(node.isRenderGroup).toBe(true);
+  // ── Image-layer regression check (the bug Kaden caught in browser) ──
+
+  async function makeImage(id: string, color: number, x: number, y: number, w: number, h: number) {
+    // OffscreenCanvas → ImageBitmap as a uniform-color tile, so we
+    // can blend it like a rect but exercise the Sprite render path.
+    const oc = new OffscreenCanvas(w, h);
+    const ctx2d = oc.getContext("2d")!;
+    ctx2d.fillStyle = "#" + color.toString(16).padStart(6, "0");
+    ctx2d.fillRect(0, 0, w, h);
+    const bitmap = await createImageBitmap(oc);
+    return {
+      id,
+      type: "image" as const,
+      x, y, width: w, height: h,
+      opacity: 1,
+      name: id, hidden: false, locked: false,
+      blendMode: "normal" as BlendMode,
+      bitmap,
+      naturalWidth: w,
+      naturalHeight: h,
+    };
+  }
+
+  it("advanced modes engage on IMAGE layers (Sprite render path)", async () => {
+    history.addLayer(await makeImage("bottom", 0x4060c0, 595, 315, 90, 90));
+    history.addLayer(await makeImage("top", 0xc0a040, 595, 315, 90, 90));
+
+    history.setLayerBlendMode("top", "normal");
+    const normalPx = await sampleCenter();
+
+    const ADVANCED: BlendMode[] = [
+      "overlay", "soft-light", "hard-light",
+      "difference", "exclusion", "color-dodge", "color-burn",
+      "multiply",
+    ];
+    const failures: string[] = [];
+    for (const mode of ADVANCED) {
+      history.setLayerBlendMode("top", mode);
+      const px = await sampleCenter();
+      const differs =
+        px[0] !== normalPx[0] || px[1] !== normalPx[1] || px[2] !== normalPx[2];
+      if (!differs) failures.push(`${mode} matches normal rgb(${normalPx.join(",")})`);
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it("blend modes engage on IMAGE-over-RECT", async () => {
+    history.addLayer(makeRect("bottom", 0x4060c0, 595, 315, 90, 90));
+    history.addLayer(await makeImage("top", 0xc0a040, 595, 315, 90, 90));
+
+    history.setLayerBlendMode("top", "normal");
+    const normalPx = await sampleCenter();
+    history.setLayerBlendMode("top", "multiply");
+    const multPx = await sampleCenter();
+    expect(multPx).not.toEqual(normalPx);
+  });
+
+  it("blend modes engage on RECT-over-IMAGE", async () => {
+    history.addLayer(await makeImage("bottom", 0x4060c0, 595, 315, 90, 90));
+    history.addLayer(makeRect("top", 0xc0a040, 595, 315, 90, 90));
+
+    history.setLayerBlendMode("top", "normal");
+    const normalPx = await sampleCenter();
+    history.setLayerBlendMode("top", "overlay");
+    const ovPx = await sampleCenter();
+    expect(ovPx).not.toEqual(normalPx);
   });
 });
 

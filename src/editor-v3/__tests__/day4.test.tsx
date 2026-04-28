@@ -43,9 +43,14 @@ async function makeBitmap(w: number, h: number): Promise<ImageBitmap> {
 }
 
 function spriteCount(compositor: Compositor): number {
+  // Day 17: image layer nodes are Containers wrapping a Sprite child
+  // (the wrap is required so blendModes engage on Sprite-backed
+  // layers — bare Sprite at top level breaks Pixi's BlendModePipe).
+  // Count layer nodes that have a Sprite as their first child.
   let count = 0;
   for (const node of compositor.nodes.values()) {
     if (node instanceof Sprite) count++;
+    else if (node.children[0] instanceof Sprite) count++;
   }
   return count;
 }
