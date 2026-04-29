@@ -47,6 +47,34 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   (AUTH_REQUIRED / RATE_LIMITED / BAD_INPUT / NETWORK_ERROR /
   UPSTREAM_ERROR / NOT_CONFIGURED). No UI surface yet —
   ThumbFriend wiring is Day 39+.
+- **Day 36 (2026-04-30) — Background remover (browser BiRefNet +
+  Remove.bg HD).** New `lib/bgRemove.ts` provider abstraction
+  (`browser` | `removebg-hd`); `removeBg({bitmap, provider})`
+  returns `{bitmap, alpha?}`. Browser path lives in
+  `lib/bgRemoveWorker.ts` — onnxruntime-web (1.24.3, lazy-imported)
+  loads BiRefNet ONNX from a public model URL on first call,
+  WebGPU EP with wasm fallback, ImageNet-normalized 1024×1024
+  input, sigmoid-pass alpha mask composited at the layer's natural
+  resolution. HD path POSTs to `/api/bg-remove` (new Railway route
+  `routes/bgRemove.js`); flexAuth + Pro gate (free → 403
+  PRO_REQUIRED), 100/month cap via `count(*)` on `ai_usage_events`
+  filtered by `intent='bg-remove-hd'`, logs `model='removebg'`
+  with `cost_usd=0.20`. New history methods
+  `replaceLayerBitmap(id, bitmap, label)` +
+  `restoreLayerOriginalBitmap(id)` split into
+  `lib/history.image.ts`. `ImageLayer.originalBitmap?` preserves
+  the source on first replace; subsequent replaces don't overwrite.
+  `projectSerializer` round-trips the original via a parallel
+  `originalBitmapDataUrl` field — only encoded when present.
+  `BgRemoveSection.tsx` (under 200 lines) added to ContextPanel
+  for image layers — "Remove BG (N left)" + "HD" Pro pill +
+  Cancel during run + "Restore original" after replace + free-tier
+  cap copy. `state/bgRemovePersistence.ts` owns the localStorage
+  monthly counter (`thumbframe:bg-remove-monthly`, YYYY-MM keyed,
+  resets on UTC month rollover, `FREE_BG_REMOVE_LIMIT=10`).
+  `uiStore.bgRemoveCount` + `incrementBgRemoveCount` +
+  `resetBgRemoveCount` wired through.
+
 - **Day 35 (2026-04-30) — Brand Kit context for AI + helpers.**
   New `lib/aiContext.ts` (`buildSystemContext` returns a brand
   context block — channel + handle, fonts, palette hex strings,
