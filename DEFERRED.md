@@ -3,6 +3,94 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 4 Day 35 — held back (date: 2026-04-30)
+
+- **Brand context is appended to the user message, not the system
+  prompt.** The Day 34 backend hard-codes BASE_VOICE as the system
+  block and doesn't expose a passthrough field. Day 41 personality
+  work will rebuild the system block per personality; the cleaner
+  spot for brand context is alongside that. For Day 35 prepending
+  to the user message is the cheapest workaround that ships today —
+  the model still receives it. Cost: ~80–120 extra input tokens per
+  call when a kit is pinned. Cache effect: every call sees a
+  slightly different first user message (canvas snapshot dimensions
+  + layer counts vary), so prompt caching wouldn't help yet anyway.
+
+- **`useAiChat` re-creates the `send` callback on every message
+  change.** `useCallback([state.messages])` so the closure can read
+  prior history when building the wire payload. A consumer that
+  passes `send` into a memoized child re-renders whenever a chunk
+  lands. Acceptable since ThumbFriend's UI is the only consumer
+  and chunks already trigger re-renders. Refactor to a ref-based
+  history snapshot if a real perf signal surfaces.
+
+- **`canvasSnapshot.image` is empty in tests.** No Compositor in
+  the test harness. Day 35's image branch is exercised manually in
+  the browser. A test that boots a real CompositorHost +
+  MasterTexture would be ~50 lines of harness; held until Day 39
+  ThumbFriend tests need a real snapshot anyway.
+
+- **Snapshot image format hard-coded to PNG @ 320×180.** Anthropic's
+  vision API accepts JPEG (smaller payload) and tolerates larger
+  images. The PNG-only choice mirrors the Day 34 `canvasImage`
+  contract. Once ThumbFriend ships and we measure how often the
+  image is the bottleneck, switching to JPEG @ q=80 would cut the
+  payload ~3-5×.
+
+- **`snapshotCanvas` summary for image layers is just `"image"`.**
+  No size, no aspect ratio, no source filename. The model sees
+  layer dimensions separately so it can infer placement, but
+  knowing whether an image is "tall portrait" vs "wide thumbnail"
+  costs zero tokens to add. Day 39 if ThumbFriend asks for it.
+
+- **`fetchTodayAiUsage` cache is global module-scope.** A user who
+  switches accounts mid-session sees their first account's count
+  for up to 60s. The cache key is `userId`, so the next call with
+  the new id refetches — the staleness window only affects the
+  badge rendered between sign-out and the next click. Acceptable;
+  swap to per-user keying with TTL eviction if the badge ever
+  shows wrong-user numbers.
+
+- **`AiStatusBadge` re-fetches usage on every `streaming` toggle.**
+  That's 2 queries per AI call (one when streaming flips on, one
+  off) for what's effectively a single change. The 60s memory cache
+  inside `aiUsage.ts` absorbs the duplicate. If the cache TTL ever
+  drops (or telemetry shows hot-pathing), gate the effect on
+  `streaming === false` only.
+
+- **Token total in the tooltip is "all-time today" not session-only.**
+  Sums across all calls in the past 24h, not just this session.
+  Some users will read it as "this conversation"; honest framing
+  would say "today" explicitly. The tooltip already says "today"
+  so it's accurate, just easy to misread when reset() didn't reset
+  it. Consider exposing both numbers if a user complains.
+
+- **Quota badge format is `2/5`.** Compact but reads as a fraction —
+  some users will see "2 left" instead of "2 used". Tooltip
+  resolves the ambiguity; the badge itself is bikeshed for Cycle 6
+  when the iconography pass touches all TopBar elements.
+
+- **`fetchTodayAiUsage` returns null for misconfigured Supabase
+  *and* failed queries.** Caller can't tell "no client" from "query
+  errored" — both surface as the badge being hidden. Fine for the
+  display surface, but if the backend ever exposes a /usage
+  endpoint we'd want the distinction.
+
+- **`buildSystemContext` returns "" for classify intent.** Cheap
+  Haiku cost saving — the classifier doesn't need brand context
+  for "is this a question or an edit command?" but a future
+  classifier that benefits from brand-tone awareness would want
+  the block. Easy to flip; no caller depends on the current
+  empty-on-classify behavior.
+
+- **Pinned kit stays in localStorage; AI still works for signed-
+  out users in dev** (with `VITE_SUPABASE_URL` unset). The
+  aiClient throws AUTH_REQUIRED before the brand context matters,
+  but `useAiChat.send` builds the context block first and then
+  the network call fails. The block is discarded — no leak — but
+  unnecessary work. Skip the build when no auth token is available
+  if telemetry shows a perf cost.
+
 ## Cycle 4 Day 34 — held back (date: 2026-04-30)
 
 - **No prompt caching yet.** Anthropic's prompt-cache header would

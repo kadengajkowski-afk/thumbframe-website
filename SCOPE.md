@@ -47,8 +47,26 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   (AUTH_REQUIRED / RATE_LIMITED / BAD_INPUT / NETWORK_ERROR /
   UPSTREAM_ERROR / NOT_CONFIGURED). No UI surface yet —
   ThumbFriend wiring is Day 39+.
-- Day 35 — explicit Haiku/Sonnet routing UX + per-request cost
-  metering display.
+- **Day 35 (2026-04-30) — Brand Kit context for AI + helpers.**
+  New `lib/aiContext.ts` (`buildSystemContext` returns a brand
+  context block — channel + handle, fonts, palette hex strings,
+  primary accent, optional canvas dims; empty for `classify` intent
+  to keep Haiku tokens minimal). `lib/canvasSnapshot.ts`
+  (`snapshotCanvas()` returns simplified layers + dimensions + a
+  raw-base64 320×180 PNG via the master-texture extract) reuses
+  the preview pipeline's single GPU readback. New
+  `editor/hooks/useAiChat.ts` wraps `streamChat` for ThumbFriend's
+  Cycle 5 surface — auto-injects brand context onto the wire user
+  message and attaches a canvas snapshot for non-`classify` intents,
+  exposes `messages[]`, `streaming`, `error`, `sessionTokens`,
+  `send(text, intent)`, `reset()`. New `lib/aiUsage.ts` queries
+  `ai_usage_events` for the last 24h (`fetchTodayAiUsage(userId)` →
+  `{used, limit, remaining, tokensTotal}`, 60s memory cache). TopBar
+  gains an `AiStatusBadge`: while `uiStore.aiStreaming` is true a
+  pulsing "thinking…" indicator shows; otherwise a `2/5` quota pill
+  with a hover tooltip "X used today (Y left) · Z tokens". Hidden
+  entirely when signed out. `tf-pulse` keyframes added to
+  tokens.css.
 
 - **Day 33 (2026-04-30) — Brand Kit fonts + bundle split.** Backend
   `routes/brandKit.js` now also calls Claude Sonnet 4.6 vision on

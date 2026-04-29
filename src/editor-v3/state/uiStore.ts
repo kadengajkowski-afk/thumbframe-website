@@ -157,6 +157,12 @@ type UiState = {
    * one — pinning is a separate user choice. */
   pinnedBrandKit: PinnedBrandKit | null;
   setPinnedBrandKit: (kit: PinnedBrandKit | null) => void;
+
+  /** Day 35 — true while a useAiChat stream is open. TopBar shows a
+   * subtle "thinking…" indicator while set. Single boolean (not a
+   * counter) because the editor only runs one chat at a time today. */
+  aiStreaming: boolean;
+  setAiStreaming: (v: boolean) => void;
 };
 
 export type PinnedBrandKit = {
@@ -327,6 +333,9 @@ export const useUiStore = create<UiState>()((set) => ({
     persistPinnedKit(pinnedBrandKit);
     set({ pinnedBrandKit });
   },
+
+  aiStreaming: false,
+  setAiStreaming: (aiStreaming) => set({ aiStreaming }),
 }));
 
 

@@ -1,6 +1,7 @@
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { useUiStore, type SaveStatus } from "@/state/uiStore";
 import { supabase } from "@/lib/supabase";
+import { fetchTodayAiUsage, type AiUsage } from "@/lib/aiUsage";
 import { FileMenu } from "./FileMenu";
 
 /** Day 18 + 20 — TopBar. Logo / project name / Ship It on the right.
@@ -41,6 +42,7 @@ export function TopBar() {
         <SaveStatusBadge status={saveStatus} signedIn={signedIn} />
       </div>
       <div style={rightGroup}>
+        <AiStatusBadge />
         <PinnedKitBadge />
         {user ? (
           <UserBadge email={user.email} avatarUrl={user.avatarUrl} />
@@ -136,6 +138,53 @@ function UserBadge(props: { email: string | null; avatarUrl: string | null }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Day 35 — AI status badge. While a chat stream is open, shows a
+ * subtle "thinking…" indicator. Otherwise (signed in only) shows the
+ * remaining-quota dot which surfaces "X used today (Y left)" + token
+ * total on hover. Hidden entirely when not signed in. */
+function AiStatusBadge() {
+  const streaming = useUiStore((s) => s.aiStreaming);
+  const user = useUiStore((s) => s.user);
+  const userId = user?.id ?? null;
+  const [usage, setUsage] = useState<AiUsage | null>(null);
+
+  useEffect(() => {
+    if (!userId) {
+      setUsage(null);
+      return;
+    }
+    let cancelled = false;
+    fetchTodayAiUsage(userId).then((u) => {
+      if (!cancelled) setUsage(u);
+    });
+    return () => { cancelled = true; };
+    // streaming -> false transition refetches the count
+  }, [userId, streaming]);
+
+  if (streaming) {
+    return (
+      <span style={aiThinking} data-testid="topbar-ai-thinking">
+        <span style={aiThinkingDot} /> thinking…
+      </span>
+    );
+  }
+  if (!userId || !usage) return null;
+  const tokensLabel = usage.tokensTotal > 0
+    ? ` · ${usage.tokensTotal.toLocaleString()} tokens`
+    : "";
+  const title = `${usage.used} of ${usage.limit} AI calls used today (${usage.remaining} left)${tokensLabel}`;
+  return (
+    <span
+      style={aiUsage}
+      title={title}
+      data-testid="topbar-ai-usage"
+      aria-label={title}
+    >
+      {usage.remaining}/{usage.limit}
+    </span>
   );
 }
 
@@ -261,4 +310,19 @@ const userMenuItem: CSSProperties = {
   width: "100%", textAlign: "left", padding: "6px 8px",
   background: "transparent", border: "none",
   color: "var(--text-primary)", fontSize: 12, cursor: "pointer", borderRadius: 4,
+};
+const aiThinking: CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 6,
+  fontSize: 11, color: "var(--text-secondary)", fontStyle: "italic",
+};
+const aiThinkingDot: CSSProperties = {
+  width: 6, height: 6, borderRadius: "50%",
+  background: "var(--accent-cream)",
+  animation: "tf-pulse 1.2s ease-in-out infinite",
+};
+const aiUsage: CSSProperties = {
+  display: "inline-flex", alignItems: "center",
+  fontSize: 10, color: "var(--text-secondary)",
+  padding: "2px 6px", border: "1px solid var(--border-ghost)",
+  borderRadius: 10, cursor: "help", letterSpacing: "0.04em",
 };
