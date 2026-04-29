@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-// Mock supabase singleton with a stable Pro session for the HD path
-// tests, and a way to flip auth/free state per-test.
+// Mock supabase singleton with a stable session for the HD path
+// tests; flip session to null per-test to exercise AUTH_REQUIRED.
 let mockSession: { access_token: string } | null = { access_token: "FAKE" };
 vi.mock("@/lib/supabase", () => ({
   supabase: {
@@ -10,21 +10,6 @@ vi.mock("@/lib/supabase", () => ({
     },
   },
   isSupabaseConfigured: () => true,
-}));
-
-// Mock the BiRefNet worker so we don't pull onnxruntime + a 80MB
-// model into the test harness. Returns a synthetic transparent
-// bitmap derived from the input.
-vi.mock("@/lib/bgRemoveWorker", () => ({
-  runBiRefNet: vi.fn(async ({ bitmap, onProgress }: {
-    bitmap: ImageBitmap;
-    onProgress?: (n: number) => void;
-  }) => {
-    onProgress?.(0.5);
-    onProgress?.(1);
-    return { bitmap };
-  }),
-  _resetBiRefNetCache: () => {},
 }));
 
 import { removeBg, BgRemoveError } from "@/lib/bgRemove";
@@ -55,77 +40,39 @@ function makeImageLayer(id: string, bitmap: ImageBitmap): Layer {
   };
 }
 
-describe("Day 36 — browser provider returns a transparent bitmap", () => {
-  beforeEach(() => {
-    mockSession = { access_token: "FAKE" };
-  });
+async function bitmapToBase64(bitmap: ImageBitmap): Promise<string> {
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bitmap, 0, 0);
+  const blob = await canvas.convertToBlob({ type: "image/png" });
+  const buf = await blob.arrayBuffer();
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
 
-  it("removeBg('browser') returns a bitmap result", async () => {
-    const src = await tinyBitmap();
-    const out = await removeBg({ bitmap: src, provider: "browser" });
-    expect(out.bitmap.width).toBe(src.width);
-    expect(out.bitmap.height).toBe(src.height);
-  });
-
-  it("emits progress callbacks ascending to 1", async () => {
-    const src = await tinyBitmap();
-    const progress: number[] = [];
-    await removeBg({
-      bitmap: src,
-      provider: "browser",
-      onProgress: (p) => progress.push(p),
-    });
-    expect(progress.length).toBeGreaterThan(0);
-    expect(progress[0]).toBeGreaterThanOrEqual(0);
-    expect(progress[progress.length - 1]).toBe(1);
-  });
-});
-
-describe("Day 36 — Remove.bg HD provider gates on Pro", () => {
+describe("Cycle 6 — removeBg calls /api/bg-remove and returns a bitmap", () => {
   beforeEach(() => {
     mockSession = { access_token: "FAKE" };
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("403 PRO_REQUIRED bubbles up as BgRemoveError(PRO_REQUIRED)", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: "Upgrade to Pro for HD background removal", code: "PRO_REQUIRED" }),
-        { status: 403, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-    const src = await tinyBitmap();
-    let caught: BgRemoveError | null = null;
-    try {
-      await removeBg({ bitmap: src, provider: "removebg-hd" });
-    } catch (err) {
-      caught = err as BgRemoveError;
-    }
-    expect(caught).not.toBeNull();
-    expect(caught!.code).toBe("PRO_REQUIRED");
-  });
-
-  it("Pro succeeds — returns bitmap from HD endpoint", async () => {
-    // Pro mocked at backend; here we just simulate a successful HTTP
-    // response (the gate logic is server-side and exercised in route tests).
+  it("happy path returns a bitmap and emits progress", async () => {
     const inputBitmap = await tinyBitmap(8, 8);
-    const canvas = new OffscreenCanvas(8, 8);
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(inputBitmap, 0, 0);
-    const blob = await canvas.convertToBlob({ type: "image/png" });
-    const buf = await blob.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-
+    const base64 = await bitmapToBase64(inputBitmap);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ bitmap: base64, format: "png" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
     );
-
-    const out = await removeBg({ bitmap: inputBitmap, provider: "removebg-hd" });
+    const progress: number[] = [];
+    const out = await removeBg({
+      bitmap: inputBitmap,
+      onProgress: (p) => progress.push(p),
+    });
     expect(out.bitmap.width).toBe(8);
     expect(out.bitmap.height).toBe(8);
+    expect(progress.length).toBeGreaterThan(0);
+    expect(progress[progress.length - 1]).toBe(1);
   });
 
   it("AUTH_REQUIRED when no Supabase session", async () => {
@@ -133,15 +80,84 @@ describe("Day 36 — Remove.bg HD provider gates on Pro", () => {
     const src = await tinyBitmap();
     let caught: BgRemoveError | null = null;
     try {
-      await removeBg({ bitmap: src, provider: "removebg-hd" });
+      await removeBg({ bitmap: src });
     } catch (err) {
       caught = err as BgRemoveError;
     }
     expect(caught?.code).toBe("AUTH_REQUIRED");
   });
+
+  it("FREE_LIMIT_REACHED bubbles up from a 403 response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: "3 free removes used — upgrade to Pro for 100/month",
+          code: "FREE_LIMIT_REACHED",
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const src = await tinyBitmap();
+    let caught: BgRemoveError | null = null;
+    try {
+      await removeBg({ bitmap: src });
+    } catch (err) {
+      caught = err as BgRemoveError;
+    }
+    expect(caught?.code).toBe("FREE_LIMIT_REACHED");
+  });
+
+  it("RATE_LIMITED bubbles up from a 429 response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: "limit reached", code: "RATE_LIMITED" }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const src = await tinyBitmap();
+    let caught: BgRemoveError | null = null;
+    try {
+      await removeBg({ bitmap: src });
+    } catch (err) {
+      caught = err as BgRemoveError;
+    }
+    expect(caught?.code).toBe("RATE_LIMITED");
+  });
+
+  it("aborts mid-flight via AbortSignal", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      (_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          const sig = init?.signal;
+          const fail = () => {
+            const err = new Error("aborted");
+            err.name = "AbortError";
+            reject(err);
+          };
+          if (sig?.aborted) return fail();
+          sig?.addEventListener("abort", fail);
+          // Fall through with a long timeout so cancellation is what
+          // resolves the call.
+          setTimeout(() => _resolve(new Response("late", { status: 200 })), 5000);
+        }),
+    );
+    const src = await tinyBitmap();
+    const controller = new AbortController();
+    const promise = removeBg({ bitmap: src, signal: controller.signal });
+    // Abort on next microtask so the (async) bitmapToBase64 / fetch
+    // call has been scheduled.
+    setTimeout(() => controller.abort(), 0);
+    let caught: BgRemoveError | null = null;
+    try {
+      await promise;
+    } catch (err) {
+      caught = err as BgRemoveError;
+    }
+    expect(caught?.code).toBe("ABORTED");
+  });
 });
 
-describe("Day 36 — replaceLayerBitmap preserves original", () => {
+describe("Cycle 6 — replaceLayerBitmap preserves original", () => {
   beforeEach(() => history._reset());
 
   it("first replace stashes original; second preserves the same original", async () => {
@@ -163,7 +179,6 @@ describe("Day 36 — replaceLayerBitmap preserves original", () => {
     stored = useDocStore.getState().layers[0] as Layer;
     if (stored.type === "image") {
       expect(stored.bitmap).toBe(replacement2);
-      // originalBitmap STAYS as the very first source — not replacement1.
       expect(stored.originalBitmap).toBe(src);
     }
   });
@@ -194,7 +209,7 @@ describe("Day 36 — replaceLayerBitmap preserves original", () => {
   });
 });
 
-describe("Day 36 — free-tier monthly counter", () => {
+describe("Cycle 6 — free-tier monthly counter", () => {
   beforeEach(() => {
     useUiStore.getState().resetBgRemoveCount();
   });
@@ -219,16 +234,21 @@ describe("Day 36 — free-tier monthly counter", () => {
     expect(parsed.count).toBe(2);
   });
 
-  it("FREE_BG_REMOVE_LIMIT === 10 (spec)", () => {
-    expect(FREE_BG_REMOVE_LIMIT).toBe(10);
+  it("FREE_BG_REMOVE_LIMIT === 3 (Cycle 6 spec)", () => {
+    expect(FREE_BG_REMOVE_LIMIT).toBe(3);
   });
 });
 
-describe("Day 36 — BgRemoveSection UI", () => {
+describe("Cycle 6 — BgRemoveSection UI", () => {
   beforeEach(async () => {
     history._reset();
     useUiStore.getState().resetBgRemoveCount();
-    useUiStore.setState({ userTier: "free", selectedLayerIds: [] });
+    useUiStore.setState({
+      userTier: "free",
+      selectedLayerIds: [],
+      bgRemoveInProgress: false,
+      bgRemoveLayerId: null,
+    });
   });
 
   it("disables Remove BG button when free tier hits the monthly cap", async () => {
@@ -241,7 +261,6 @@ describe("Day 36 — BgRemoveSection UI", () => {
     const layer = makeImageLayer("img-cap", src);
     history.addLayer(layer);
 
-    // Push count to the limit
     for (let i = 0; i < FREE_BG_REMOVE_LIMIT; i++) {
       useUiStore.getState().incrementBgRemoveCount();
     }
@@ -257,9 +276,37 @@ describe("Day 36 — BgRemoveSection UI", () => {
       );
     });
 
-    const btn = container.querySelector<HTMLButtonElement>('[data-testid="bg-remove-free"]')!;
+    const btn = container.querySelector<HTMLButtonElement>('[data-testid="bg-remove-run"]')!;
     expect(btn.disabled).toBe(true);
     expect(container.querySelector('[data-testid="bg-remove-cap"]')).not.toBeNull();
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("button reads 'Remove BG (N left)' on free tier with quota remaining", async () => {
+    const React = await import("react");
+    const { act } = await import("react");
+    const { createRoot } = await import("react-dom/client");
+    const { BgRemoveSection } = await import("@/editor/panels/BgRemoveSection");
+
+    const src = await tinyBitmap(10, 10);
+    history.addLayer(makeImageLayer("img-fresh", src));
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        React.createElement(BgRemoveSection, {
+          layer: useDocStore.getState().layers[0]! as Layer & { type: "image" },
+        } as never),
+      );
+    });
+
+    const btn = container.querySelector<HTMLButtonElement>('[data-testid="bg-remove-run"]')!;
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toContain(`${FREE_BG_REMOVE_LIMIT} left`);
 
     act(() => root.unmount());
     container.remove();
@@ -291,5 +338,24 @@ describe("Day 36 — BgRemoveSection UI", () => {
 
     act(() => root.unmount());
     container.remove();
+  });
+});
+
+describe("Cycle 6 — uiStore.bgRemoveInProgress flag", () => {
+  beforeEach(() => {
+    useUiStore.setState({ bgRemoveInProgress: false, bgRemoveLayerId: null });
+  });
+
+  it("setBgRemoveInProgress(layerId) flips the flag and stores the id", () => {
+    useUiStore.getState().setBgRemoveInProgress("img-xyz");
+    expect(useUiStore.getState().bgRemoveInProgress).toBe(true);
+    expect(useUiStore.getState().bgRemoveLayerId).toBe("img-xyz");
+  });
+
+  it("setBgRemoveInProgress(null) clears the flag and the id", () => {
+    useUiStore.getState().setBgRemoveInProgress("img-xyz");
+    useUiStore.getState().setBgRemoveInProgress(null);
+    expect(useUiStore.getState().bgRemoveInProgress).toBe(false);
+    expect(useUiStore.getState().bgRemoveLayerId).toBeNull();
   });
 });

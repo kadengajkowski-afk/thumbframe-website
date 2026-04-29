@@ -1,48 +1,34 @@
 import { supabase } from "./supabase";
 
-/** Day 36 — background removal provider abstraction.
- *
- * Two providers behind one interface:
- *  - `browser`: BiRefNet ONNX runs in a worker (free, ~3-5s, default).
- *  - `removebg-hd`: Pro-only, calls Railway proxy → Remove.bg HD.
- *
- * The provider abstraction lets ContextPanel route by user choice
- * without caring about transport. Returns an ImageBitmap with a
- * transparent background. The optional alpha mask gives the editor
- * a 1-channel matte for future inpaint / refine UIs (Cycle 6+).
- *
- * Browser worker is lazy-imported on first call so users who never
- * click "Remove BG" don't pay the ONNX runtime weight at boot. */
+/** Cycle 6 — background removal calls Remove.bg HD via the Railway
+ * proxy. The earlier browser BiRefNet path was dropped: free-tier
+ * quality on graphics/logos was unacceptable, and the model download
+ * cost dwarfed the quality difference. Free users now get 3 trial
+ * HD removes/month tracked server-side; Pro keeps 100/month. */
 
 const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ||
   "https://thumbframe-api-production.up.railway.app";
 
-export type BgRemoveProvider = "browser" | "removebg-hd";
-
 export type RemoveBgArgs = {
   bitmap: ImageBitmap;
-  provider: BgRemoveProvider;
-  /** Aborts the in-flight worker task or fetch. */
+  /** Aborts the in-flight fetch. */
   signal?: AbortSignal;
-  /** Progress callback for worker route — 0..1. */
+  /** Coarse progress callback — 0..1. */
   onProgress?: (fraction: number) => void;
 };
 
 export type RemoveBgResult = {
   bitmap: ImageBitmap;
-  /** Optional alpha-mask bitmap (1-channel). Browser provider returns
-   * one; the HD provider doesn't (Remove.bg returns the cutout PNG only). */
-  alpha?: ImageBitmap;
 };
 
 export type BgRemoveErrorCode =
   | "AUTH_REQUIRED"
-  | "PRO_REQUIRED"
+  | "FREE_LIMIT_REACHED"
   | "RATE_LIMITED"
   | "NETWORK_ERROR"
-  | "WORKER_FAILED"
   | "NOT_CONFIGURED"
+  | "ABORTED"
   | "UPSTREAM_ERROR";
 
 export class BgRemoveError extends Error {
@@ -56,33 +42,13 @@ export class BgRemoveError extends Error {
 }
 
 export async function removeBg(args: RemoveBgArgs): Promise<RemoveBgResult> {
-  if (args.provider === "browser") return runBrowser(args);
-  return runRemoveBgHd(args);
-}
-
-// ── Browser path ────────────────────────────────────────────────────
-
-async function runBrowser(args: RemoveBgArgs): Promise<RemoveBgResult> {
-  args.onProgress?.(0.05);
-  const { runBiRefNet } = await import("./bgRemoveWorker");
-  const inner: { bitmap: ImageBitmap; signal?: AbortSignal; onProgress?: (n: number) => void } = {
-    bitmap: args.bitmap,
-  };
-  if (args.signal) inner.signal = args.signal;
-  if (args.onProgress) inner.onProgress = args.onProgress;
-  return runBiRefNet(inner);
-}
-
-// ── Remove.bg HD path (Pro) ─────────────────────────────────────────
-
-async function runRemoveBgHd(args: RemoveBgArgs): Promise<RemoveBgResult> {
   if (!supabase) {
     throw new BgRemoveError("NOT_CONFIGURED", "Sign-in not configured");
   }
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token ?? null;
   if (!token) {
-    throw new BgRemoveError("AUTH_REQUIRED", "Sign in to use HD background removal", 401);
+    throw new BgRemoveError("AUTH_REQUIRED", "Sign in to remove backgrounds", 401);
   }
 
   const base64 = await bitmapToBase64(args.bitmap);
@@ -101,6 +67,9 @@ async function runRemoveBgHd(args: RemoveBgArgs): Promise<RemoveBgResult> {
     if (args.signal) init.signal = args.signal;
     res = await fetch(`${API_BASE}/api/bg-remove`, init);
   } catch (err) {
+    if (args.signal?.aborted) {
+      throw new BgRemoveError("ABORTED", "Cancelled");
+    }
     throw new BgRemoveError(
       "NETWORK_ERROR",
       err instanceof Error ? err.message : "Network error",
@@ -113,7 +82,7 @@ async function runRemoveBgHd(args: RemoveBgArgs): Promise<RemoveBgResult> {
     const code = (typeof body === "object" && body && "code" in body
       ? String((body as { code?: unknown }).code)
       : res.status === 401 ? "AUTH_REQUIRED"
-      : res.status === 403 ? "PRO_REQUIRED"
+      : res.status === 403 ? "FREE_LIMIT_REACHED"
       : res.status === 429 ? "RATE_LIMITED"
       : "UPSTREAM_ERROR") as BgRemoveErrorCode;
     const message =
@@ -140,7 +109,7 @@ async function bitmapToBase64(bitmap: ImageBitmap): Promise<string> {
   canvas.width = bitmap.width;
   canvas.height = bitmap.height;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new BgRemoveError("WORKER_FAILED", "Couldn't get 2D context");
+  if (!ctx) throw new BgRemoveError("UPSTREAM_ERROR", "Couldn't get 2D context");
   ctx.drawImage(bitmap, 0, 0);
   const dataUrl = canvas.toDataURL("image/png");
   const comma = dataUrl.indexOf(",");

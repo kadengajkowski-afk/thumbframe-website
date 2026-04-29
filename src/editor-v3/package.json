@@ -21,7 +21,6 @@
     "cmdk": "^1.1.1",
     "immer": "^10.1.1",
     "nanoid": "^5.1.6",
-    "onnxruntime-web": "^1.24.3",
     "pixi-filters": "^6.1.5",
     "pixi-viewport": "^6.0.3",
     "pixi.js": "^8.16.0",

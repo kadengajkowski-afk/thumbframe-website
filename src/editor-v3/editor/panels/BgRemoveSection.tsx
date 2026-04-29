@@ -1,77 +1,69 @@
-import { type CSSProperties, useState, useRef } from "react";
+import { type CSSProperties, useState } from "react";
 import type { ImageLayer } from "@/state/types";
 import { useUiStore } from "@/state/uiStore";
 import { history } from "@/lib/history";
 import { removeBg, BgRemoveError } from "@/lib/bgRemove";
 import { FREE_BG_REMOVE_LIMIT } from "@/state/bgRemovePersistence";
+import {
+  setBgRemoveController,
+  cancelBgRemove,
+} from "../bgRemoveController";
 
-/** Day 36 — Background remove section in ContextPanel for image layers.
- *
- * Two buttons:
- *   - "Remove BG (free)" — calls browser BiRefNet (gated by 10/mo
- *     monthly cap on the free tier; Pro: unlimited).
- *   - "Remove BG HD" — Pro only, calls Railway proxy → Remove.bg HD.
- *
- * After a successful removal, "Restore original" appears (non-Pro users
- * can recover a botched cutout without re-uploading). */
-
-type BgState =
-  | { kind: "idle" }
-  | { kind: "running"; provider: "browser" | "removebg-hd"; progress: number }
-  | { kind: "error"; message: string };
+/** Cycle 6 — Background remove section in ContextPanel for image
+ * layers. Single "Remove BG" button calls the Remove.bg HD endpoint.
+ * Free tier gets 3 trial uses/month; Pro gets 100/month. The scanning
+ * animation lives in BgRemoveOverlay (mounted in App.tsx) — this
+ * section just kicks off the request and surfaces the result. */
 
 export function BgRemoveSection({ layer }: { layer: ImageLayer }) {
   const userTier = useUiStore((u) => u.userTier);
   const isPro = userTier === "pro";
   const bgRemoveCount = useUiStore((u) => u.bgRemoveCount);
   const incrementBgRemoveCount = useUiStore((u) => u.incrementBgRemoveCount);
-  const [state, setState] = useState<BgState>({ kind: "idle" });
-  const abortRef = useRef<AbortController | null>(null);
+  const setBgRemoveInProgress = useUiStore((u) => u.setBgRemoveInProgress);
+  const inProgress = useUiStore((u) => u.bgRemoveInProgress);
+  const [error, setError] = useState<string | null>(null);
 
   const remaining = Math.max(0, FREE_BG_REMOVE_LIMIT - bgRemoveCount);
   const freeAtCap = !isPro && remaining <= 0;
   const hasOriginal = !!layer.originalBitmap;
-  const running = state.kind === "running";
 
-  async function run(provider: "browser" | "removebg-hd") {
-    if (running) return;
-    if (provider === "browser" && freeAtCap) return;
-    abortRef.current = new AbortController();
-    setState({ kind: "running", provider, progress: 0 });
+  async function run() {
+    if (inProgress) return;
+    if (freeAtCap) return;
+    setError(null);
+    const controller = new AbortController();
+    setBgRemoveController(controller);
+    setBgRemoveInProgress(layer.id);
     try {
       const result = await removeBg({
         bitmap: layer.bitmap,
-        provider,
-        signal: abortRef.current.signal,
-        onProgress: (p) =>
-          setState((s) => (s.kind === "running" ? { ...s, progress: p } : s)),
+        signal: controller.signal,
       });
-      history.replaceLayerBitmap(
-        layer.id,
-        result.bitmap,
-        provider === "browser" ? "Remove BG" : "Remove BG (HD)",
-      );
-      if (!isPro && provider === "browser") incrementBgRemoveCount();
-      setState({ kind: "idle" });
+      history.replaceLayerBitmap(layer.id, result.bitmap, "Remove BG");
+      if (!isPro) incrementBgRemoveCount();
     } catch (err) {
-      const message =
-        err instanceof BgRemoveError
-          ? err.code === "PRO_REQUIRED"
-            ? "HD removal is Pro-only — upgrade to use it"
-            : err.code === "RATE_LIMITED"
-              ? "Monthly HD limit reached"
-              : err.message
-          : "Couldn't cut out the background";
-      setState({ kind: "error", message });
+      if (err instanceof BgRemoveError) {
+        if (err.code === "ABORTED") {
+          // Cancel — silent.
+        } else if (err.code === "FREE_LIMIT_REACHED") {
+          setError(
+            `${FREE_BG_REMOVE_LIMIT} free removes used — upgrade to Pro for ${100}/month`,
+          );
+        } else if (err.code === "RATE_LIMITED") {
+          setError("Monthly limit reached");
+        } else if (err.code === "AUTH_REQUIRED") {
+          setError("Sign in to remove backgrounds");
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError("Couldn't cut out the background");
+      }
     } finally {
-      abortRef.current = null;
+      setBgRemoveController(null);
+      setBgRemoveInProgress(null);
     }
-  }
-
-  function cancel() {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setState({ kind: "idle" });
   }
 
   function restore() {
@@ -81,48 +73,33 @@ export function BgRemoveSection({ layer }: { layer: ImageLayer }) {
   return (
     <section style={section}>
       <label style={fieldLabel}>Background</label>
-      {running ? (
+      {inProgress ? (
         <div style={runningRow} data-testid="bg-remove-running">
-          <span style={runningLabel}>
-            Cutting out background…
-            {state.progress > 0 ? ` ${Math.round(state.progress * 100)}%` : ""}
-          </span>
-          <button type="button" style={cancelBtn} onClick={cancel}>
+          <span style={runningLabel}>Removing background…</span>
+          <button type="button" style={cancelBtn} onClick={() => cancelBgRemove()}>
             Cancel
           </button>
         </div>
       ) : (
         <>
-          <div style={btnRow}>
-            <button
-              type="button"
-              style={freeAtCap ? primaryBtnDisabled : primaryBtn}
-              disabled={freeAtCap}
-              onClick={() => run("browser")}
-              title={
-                freeAtCap
-                  ? `${FREE_BG_REMOVE_LIMIT} free removes used this month — upgrade to Pro for unlimited`
-                  : "Cut out the background in the browser (free)"
-              }
-              data-testid="bg-remove-free"
-            >
-              Remove BG{!isPro && ` (${remaining} left)`}
-            </button>
-            <button
-              type="button"
-              style={hdBtn}
-              onClick={() => run("removebg-hd")}
-              title={
-                isPro
+          <button
+            type="button"
+            style={freeAtCap ? primaryBtnDisabled : primaryBtn}
+            disabled={freeAtCap}
+            onClick={run}
+            title={
+              freeAtCap
+                ? "Out of free removes — upgrade to Pro"
+                : isPro
                   ? "HD background removal (Remove.bg)"
-                  : "HD background removal — Pro tier only"
-              }
-              data-testid="bg-remove-hd"
-            >
-              HD
-              <span style={proPill}>Pro</span>
-            </button>
-          </div>
+                  : "Try HD background removal — free trial"
+            }
+            data-testid="bg-remove-run"
+          >
+            {freeAtCap
+              ? "Out of free removes — upgrade to Pro"
+              : `Remove BG${isPro ? "" : ` (${remaining} left)`}`}
+          </button>
           {hasOriginal && (
             <button
               type="button"
@@ -133,14 +110,15 @@ export function BgRemoveSection({ layer }: { layer: ImageLayer }) {
               Restore original
             </button>
           )}
-          {state.kind === "error" && (
+          {error && (
             <div style={errorRow} data-testid="bg-remove-error">
-              {state.message}
+              {error}
             </div>
           )}
           {freeAtCap && (
             <div style={hintRow} data-testid="bg-remove-cap">
-              {FREE_BG_REMOVE_LIMIT} free removes used this month — upgrade to Pro for unlimited.
+              {FREE_BG_REMOVE_LIMIT} free removes used this month — upgrade
+              to Pro for 100/month.
             </div>
           )}
         </>
@@ -157,26 +135,13 @@ const fieldLabel: CSSProperties = {
   fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.04em",
   textTransform: "uppercase",
 };
-const btnRow: CSSProperties = { display: "flex", gap: 6 };
 const primaryBtn: CSSProperties = {
-  flex: 1, padding: "6px 10px", fontSize: 12,
-  background: "var(--bg-space-0)", color: "var(--text-primary)",
-  border: "1px solid var(--border-ghost)", borderRadius: 6, cursor: "pointer",
-};
-const primaryBtnDisabled: CSSProperties = {
-  ...primaryBtn, opacity: 0.4, cursor: "not-allowed",
-};
-const hdBtn: CSSProperties = {
-  display: "inline-flex", alignItems: "center", gap: 6,
   padding: "6px 10px", fontSize: 12,
   background: "var(--bg-space-0)", color: "var(--text-primary)",
   border: "1px solid var(--border-ghost)", borderRadius: 6, cursor: "pointer",
 };
-const proPill: CSSProperties = {
-  display: "inline-flex", alignItems: "center",
-  fontSize: 9, padding: "1px 5px", borderRadius: 8,
-  background: "var(--accent-orange)", color: "var(--bg-space-0)",
-  fontWeight: 600, letterSpacing: "0.06em",
+const primaryBtnDisabled: CSSProperties = {
+  ...primaryBtn, opacity: 0.5, cursor: "not-allowed",
 };
 const restoreBtn: CSSProperties = {
   marginTop: 4, padding: "5px 10px", fontSize: 11,

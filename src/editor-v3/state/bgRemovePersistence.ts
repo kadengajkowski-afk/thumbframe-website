@@ -1,15 +1,16 @@
-/** Day 36 — free-tier BG remove monthly counter, persisted in
+/** Cycle 6 — free-tier BG remove monthly counter, persisted in
  * localStorage. Resets when the stored month differs from the
- * current YYYY-MM, so a user who removes 5 backgrounds on April
+ * current YYYY-MM, so a user who removes 2 backgrounds on April
  * 30 sees the count reset to 0 on May 1.
  *
- * Pro tier doesn't burn this counter — they get unlimited browser
- * removals. The HD path is gated server-side via ai_usage_events
- * (100/month, see routes/bgRemove.js). */
+ * Free tier gets 3 trial HD removes/month (Remove.bg). Server is
+ * the source of truth (ai_usage_events count); this counter mirrors
+ * for UI display so the button can show "X left" without a round
+ * trip on every selection. */
 
 const STORAGE_KEY = "thumbframe:bg-remove-monthly";
 
-export const FREE_BG_REMOVE_LIMIT = 10;
+export const FREE_BG_REMOVE_LIMIT = 3;
 
 export type BgRemoveCounter = {
   /** YYYY-MM. */

@@ -170,15 +170,23 @@ type UiState = {
   aiStreaming: boolean;
   setAiStreaming: (v: boolean) => void;
 
-  /** Day 36 — free-tier monthly BG remove counter. Pro tier ignores
-   * this (unlimited browser removals); free tier capped at 10/month
-   * resetting on UTC month rollover via bgRemovePersistence. */
+  /** Cycle 6 — free-tier monthly BG remove counter. Free tier capped
+   * at 3 trial HD removes/month (server-enforced via ai_usage_events;
+   * this counter mirrors for UI display). Pro tier tracked separately
+   * server-side at 100/month. Resets on UTC month rollover. */
   bgRemoveCount: number;
   bgRemoveMonth: string;
   /** Increment used count by 1 + persist. */
   incrementBgRemoveCount: () => void;
   /** Test hook + dev-mode reset. */
   resetBgRemoveCount: () => void;
+
+  /** Cycle 6 — true while a Remove.bg call is in flight. Drives the
+   * BgRemoveOverlay scanning animation over the layer being processed,
+   * and blocks duplicate clicks on the section button. */
+  bgRemoveInProgress: boolean;
+  bgRemoveLayerId: string | null;
+  setBgRemoveInProgress: (layerId: string | null) => void;
 };
 
 export type PinnedBrandKit = {
@@ -372,6 +380,14 @@ export const useUiStore = create<UiState>()((set) => ({
     persistBgRemoveCount({ month, count: 0 });
     set({ bgRemoveCount: 0, bgRemoveMonth: month });
   },
+
+  bgRemoveInProgress: false,
+  bgRemoveLayerId: null,
+  setBgRemoveInProgress: (layerId) =>
+    set({
+      bgRemoveInProgress: layerId != null,
+      bgRemoveLayerId: layerId,
+    }),
 }));
 
 export { FREE_BG_REMOVE_LIMIT };
