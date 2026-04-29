@@ -86,6 +86,10 @@ export type ImageLayer = BaseLayer & {
   bitmap: ImageBitmap;
   naturalWidth: number;
   naturalHeight: number;
+  /** Day 36 — kept around when bitmap is replaced (background removal,
+   * future inpaint passes) so the user can restore the source. Held
+   * out of save serialization unless a destructive op happened. */
+  originalBitmap?: ImageBitmap;
 };
 
 export type TextAlign = "left" | "center" | "right";

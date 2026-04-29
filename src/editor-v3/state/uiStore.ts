@@ -12,6 +12,12 @@ import {
 } from "./exportPersistence";
 import { loadPinnedKit, persistPinnedKit } from "./pinnedKitPersistence";
 import {
+  currentMonth,
+  loadBgRemoveCount,
+  persistBgRemoveCount,
+  FREE_BG_REMOVE_LIMIT,
+} from "./bgRemovePersistence";
+import {
   loadBool,
   loadLastFillColor,
   loadNumber,
@@ -163,6 +169,16 @@ type UiState = {
    * counter) because the editor only runs one chat at a time today. */
   aiStreaming: boolean;
   setAiStreaming: (v: boolean) => void;
+
+  /** Day 36 — free-tier monthly BG remove counter. Pro tier ignores
+   * this (unlimited browser removals); free tier capped at 10/month
+   * resetting on UTC month rollover via bgRemovePersistence. */
+  bgRemoveCount: number;
+  bgRemoveMonth: string;
+  /** Increment used count by 1 + persist. */
+  incrementBgRemoveCount: () => void;
+  /** Test hook + dev-mode reset. */
+  resetBgRemoveCount: () => void;
 };
 
 export type PinnedBrandKit = {
@@ -336,6 +352,28 @@ export const useUiStore = create<UiState>()((set) => ({
 
   aiStreaming: false,
   setAiStreaming: (aiStreaming) => set({ aiStreaming }),
+
+  ...(() => {
+    const initial = loadBgRemoveCount();
+    return {
+      bgRemoveCount: initial.count,
+      bgRemoveMonth: initial.month,
+    };
+  })(),
+  incrementBgRemoveCount: () =>
+    set((s) => {
+      const month = currentMonth();
+      const count = (s.bgRemoveMonth === month ? s.bgRemoveCount : 0) + 1;
+      persistBgRemoveCount({ month, count });
+      return { bgRemoveCount: count, bgRemoveMonth: month };
+    }),
+  resetBgRemoveCount: () => {
+    const month = currentMonth();
+    persistBgRemoveCount({ month, count: 0 });
+    set({ bgRemoveCount: 0, bgRemoveMonth: month });
+  },
 }));
+
+export { FREE_BG_REMOVE_LIMIT };
 
 

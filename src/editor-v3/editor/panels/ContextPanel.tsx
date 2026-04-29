@@ -8,6 +8,7 @@ import { ColorSwatchButton } from "./ColorSwatchButton";
 import { StrokeWidthInput } from "./StrokeWidthInput";
 import { TextProperties } from "./TextProperties";
 import { MultiSelectPanel } from "./MultiSelectPanel";
+import { BgRemoveSection } from "./BgRemoveSection";
 import * as s from "./ContextPanel.styles";
 import "./blend-select.css";
 import "./color-picker.css";
@@ -142,6 +143,8 @@ export function ContextPanel() {
           </div>
         </section>
       )}
+
+      {layer.type === "image" && <BgRemoveSection layer={layer} />}
 
       <section style={s.section}>
         <label style={s.fieldLabel}>Blend</label>

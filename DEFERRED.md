@@ -3,6 +3,153 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 4 Day 36 — held back (date: 2026-04-30)
+
+- **BiRefNet ONNX runs ON the main thread, not in a Web Worker.**
+  WebGPU isn't reliably available in worker context across all
+  browsers (Safari, older Firefox), and the browser path's whole
+  appeal over Remove.bg HD is "free + GPU-fast." UI freezes during
+  the ~3-5s call are perceptible — covered by the loading toast
+  + Cancel button. Day 39+ will revisit when Safari ships
+  `gpu`-in-worker.
+
+- **Model URL points at a public Hugging Face mirror by default.**
+  `VITE_BG_REMOVE_MODEL_URL` overrides for self-hosting. We don't
+  bundle the 80MB+ ONNX file into Vercel deploys (would dwarf the
+  whole bundle). First-call download is cached by the browser HTTP
+  cache, but a cleared cache means a re-download. Worth shipping a
+  `<link rel="prefetch">` in main.tsx that warm-starts the cache
+  on editor boot — held until we measure how often users hit the
+  feature vs. just open the editor.
+
+- **Worker bundle adds 401 KB raw / 110 KB gzip (`ort.bundle.min.js`).**
+  Lazy-imported in lib/bgRemove.ts so users who never click
+  "Remove BG" don't pay the cost on initial load. Main bundle
+  unchanged at ~302 KB gzip. The real cost is the 80MB ONNX
+  download — runtime is small.
+
+- **No fp32 fallback on devices without WebGPU + fp16 support.**
+  We pass `executionProviders: ["webgpu", "wasm"]`. wasm EP runs
+  fp16 ops via emulation but is ~10× slower; older devices may
+  time out user patience. Fallback to a smaller model variant
+  (BiRefNet-lite at 512×512) on wasm-only hardware would help —
+  needs a feature-detection pass + a 2nd model URL. Cycle 6.
+
+- **Alpha mask is point-sampled when scaling 1024² up to layer
+  natural resolution.** Linear filtering would smooth the mask
+  edges. The visual difference shows up on tight portrait hair
+  cutouts where the matte's hard pixels alias. Easy fix —
+  `ctx.imageSmoothingEnabled = true` on the alpha-resampling pass
+  — but the current point-sampled mask reads as "crisp cutout"
+  which is what most thumbnail uses want. Add a quality toggle if
+  hair / fur cutout user feedback comes in.
+
+- **Free-tier cap is enforced client-side only.** A user clearing
+  localStorage gets unlimited browser removals. Acceptable today
+  since the inference cost is the user's own GPU/CPU, not ours
+  — but if we ever want a true 10/month gate, mirror to a
+  `bg_removes_browser` Supabase table (per-user count). Not worth
+  the complexity at our current cost shape.
+
+- **Monthly reset is UTC, not user-local.** A user in
+  Asia/Tokyo on the last hour of April 30 sees their count reset
+  before midnight local. Cosmetic; documented behavior. The
+  alternative (per-user timezone tracking) is over-engineered for
+  a free-tier counter.
+
+- **No persist-resume during a long-running browser inference.**
+  Closing the tab mid-stroke loses the cutout. The history op
+  fires only on success, so closing during run is a no-op (the
+  layer keeps its original bitmap). Acceptable; nothing destructive.
+
+- **Browser provider doesn't surface its alpha-mask bitmap to the
+  layer.** `removeBg` returns `{bitmap, alpha}` but `replaceLayerBitmap`
+  only swaps `bitmap`. The alpha is discarded. Day 37+ inpainting
+  / BG generation needs the matte; we'd plumb a parallel
+  `setLayerAlphaMask` then. Holding off so we don't bloat the layer
+  schema before Day 37 reads it.
+
+- **HD button always visible.** Free-tier users see it next to the
+  free button with a "Pro" pill. Click → server returns 403 →
+  toast surfaces "HD removal is Pro-only — upgrade to use it".
+  An alternative (hide entirely + show only "Remove BG" + "Pro
+  upgrade" link) would feel less aggressive but also gives free
+  users no signal that an HD path exists. Today's loud-but-honest
+  approach matches the rest of the editor's voice.
+
+- **Cancel during HD post-fetch decode doesn't actually short-
+  circuit Remove.bg.** Once we've sent the POST, the upstream call
+  proceeds and the user's quota burns. AbortController cuts the
+  fetch reader but the server-side call still ran. Fix would be a
+  Railway-side `AbortController` mirroring; not worth the
+  complexity for a 3-5s call where the user likely hits Cancel
+  ~once a session.
+
+- **No retry on worker failure.** WebGPU EP failures (e.g. transient
+  driver hiccups) bubble straight to the error toast. A single
+  retry with wasm-only EP would handle the common "WebGPU adapter
+  lost mid-init" case. Day 37 candidate after we see real-world
+  failure shapes.
+
+- **`bgRemoveCount` is single-account, not multi-account.** A
+  user signing in on a shared device sees the prior user's count
+  until the next month rollover. Pro tier sidesteps this; free
+  users on shared devices may hit "10 used" without remembering
+  the prior session. Could key by Supabase user id when signed
+  in; held until a real complaint.
+
+- **HD button is always enabled visually for Pro tier even when
+  100/month quota is exhausted.** Server returns 429
+  RATE_LIMITED; the section surfaces "Monthly HD limit reached"
+  but the button doesn't get disabled until after the failed
+  click. A `GET /api/bg-remove/quota` poll on layer-select would
+  let us pre-disable. Day 38 (credit ledger) is the right place
+  for this — quota becomes a first-class read.
+
+- **`projectSerializer` round-trips `originalBitmap` as another
+  base64 PNG dataURL.** Saved doc with a removed BG carries 2x
+  the image size. Fine for soft-launch — users who actively
+  remove BGs have a small N — but bloats the JSON column on
+  Supabase. Day 41+ image-storage refactor (per-image
+  Supabase Storage uploads) is where this stops mattering.
+
+- **No tests for the backend `routes/bgRemove.js`.** snapframe-api
+  has no test harness today; the route logic (Pro gate,
+  ai_usage_events insert, Remove.bg call shape) is verified
+  manually only. The frontend tests mock the HTTP layer. Day 38+
+  when `ai_usage_events` becomes the credit ledger we'll need
+  real backend tests anyway.
+
+- **`removeBg` always re-downloads the ONNX model on cold-cache.**
+  `loadSession()` caches in module scope per session, but a hard
+  refresh + cache miss = ~80MB re-download. A Service Worker
+  cache or `cache: "force-cache"` on the model fetch would fix
+  this; held until we measure repeat-visitor BG-remove usage.
+
+- **`REMOVE_BG_API_KEY` is also read by v1's `/api/remove-bg`.**
+  Two endpoints sharing the same key means a v1 free-tier user
+  burns the same key budget as v3 Pro. v1 has its own per-call
+  limit (no Pro gate), so a malicious v1 client could deplete
+  the key faster than expected. Day 38 will likely deprecate v1's
+  endpoint; for now, monitor.
+
+- **Anchor mode for the replaced bitmap is the layer's existing
+  position/size.** Background removal doesn't recompute layer
+  bounds — the new transparent bitmap fills the same canvas
+  region, padded with transparency where the model masked out
+  pixels. This is correct for BG remove (the cutout sits inside
+  the prior bounds) but means the layer "looks the same size"
+  visually because the transparent border is part of the layer.
+  v3.1 could add an "auto-crop transparent" pass after replace.
+
+- **Inference cancellation between tensor ops not implemented.**
+  The signal is checked between major phases (load runtime, load
+  session, build input, run, mask, compose) but not inside the
+  `session.run` call itself. Once the run starts, Cancel waits
+  for it to finish. For large inputs this can be 2-3s of
+  un-cancelable work. Acceptable; ONNX runtime doesn't expose
+  per-op cancellation either.
+
 ## Cycle 4 Day 35 — held back (date: 2026-04-30)
 
 - **Brand context is appended to the user message, not the system

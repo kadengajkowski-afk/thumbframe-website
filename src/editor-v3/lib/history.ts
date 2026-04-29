@@ -207,6 +207,9 @@ const baseHistory = {
     else commit("Stroke alpha", run);
   },
 
+  // ── Image-layer setters live in lib/history.image.ts (Day 36) ──
+  // Spread back in below the `history` export so callers see one API.
+
   // ── Text-layer setters live in lib/history.text.ts (Day 12+13) ──
   // Spread back in below the `history` export so callers see one API.
 
@@ -382,11 +385,10 @@ const baseHistory = {
   },
 };
 
-// Day 13 text-effect setters live in lib/history.text.ts to keep
-// this file under the 400-line ceiling. Folded back into the public
-// `history` object so callers see one merged API.
-export const history: typeof baseHistory & typeof textHistory = Object.assign(
-  baseHistory,
-  textHistory,
-);
+// Day 13 text-effect setters live in lib/history.text.ts; Day 36
+// image setters live in lib/history.image.ts. Both are folded into
+// the public `history` object so callers see one merged API.
+import { imageHistory } from "./history.image";
+export const history: typeof baseHistory & typeof textHistory & typeof imageHistory =
+  Object.assign(baseHistory, textHistory, imageHistory);
 

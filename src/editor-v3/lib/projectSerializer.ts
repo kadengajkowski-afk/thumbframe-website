@@ -19,10 +19,23 @@ export async function serializeDoc(layers: readonly Layer[]): Promise<ProjectDoc
   for (const l of layers) {
     if (l.type === "image") {
       const dataUrl = await bitmapToDataUrl(l.bitmap, l.naturalWidth, l.naturalHeight);
-      out.push({
+      // Day 36 — preserve the pre-removal source so "Restore original"
+      // survives a save/reload cycle. Only encoded when present, so
+      // fresh image layers don't carry a 2x size penalty.
+      let originalDataUrl: string | undefined;
+      if (l.originalBitmap) {
+        originalDataUrl = await bitmapToDataUrl(
+          l.originalBitmap,
+          l.originalBitmap.width,
+          l.originalBitmap.height,
+        );
+      }
+      const serialized: SerializedLayer = {
         ...stripBitmap(l),
         bitmapDataUrl: dataUrl,
-      } as SerializedLayer);
+      } as SerializedLayer;
+      if (originalDataUrl) serialized["originalBitmapDataUrl"] = originalDataUrl;
+      out.push(serialized);
       continue;
     }
     out.push({ ...l } as SerializedLayer);
@@ -54,15 +67,24 @@ async function deserializeLayer(raw: SerializedLayer): Promise<Layer | null> {
     if (typeof dataUrl !== "string") return null;
     const bitmap = await dataUrlToBitmap(dataUrl);
     if (!bitmap) return null;
-    const { bitmapDataUrl: _drop, ...rest } = raw as SerializedLayer & { bitmapDataUrl: string };
-    return { ...(rest as unknown as ImageLayer), bitmap };
+    const { bitmapDataUrl: _drop, originalBitmapDataUrl, ...rest } =
+      raw as SerializedLayer & { bitmapDataUrl: string; originalBitmapDataUrl?: string };
+    let originalBitmap: ImageBitmap | undefined;
+    if (typeof originalBitmapDataUrl === "string") {
+      originalBitmap = (await dataUrlToBitmap(originalBitmapDataUrl)) ?? undefined;
+    }
+    const layer: ImageLayer = { ...(rest as unknown as ImageLayer), bitmap };
+    if (originalBitmap) layer.originalBitmap = originalBitmap;
+    return layer;
   }
   return null;
 }
 
-/** Strip the runtime ImageBitmap so JSON.stringify doesn't choke. */
-function stripBitmap(l: ImageLayer): Omit<ImageLayer, "bitmap"> {
-  const { bitmap: _drop, ...rest } = l;
+/** Strip the runtime ImageBitmap (and originalBitmap, Day 36) so
+ * JSON.stringify doesn't choke. The dataUrl variants are added by
+ * the caller. */
+function stripBitmap(l: ImageLayer): Omit<ImageLayer, "bitmap" | "originalBitmap"> {
+  const { bitmap: _drop, originalBitmap: _drop2, ...rest } = l;
   return rest;
 }
 
