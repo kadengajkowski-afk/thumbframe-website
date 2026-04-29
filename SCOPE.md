@@ -75,7 +75,29 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   `uiStore.bgRemoveCount` + `incrementBgRemoveCount` +
   `resetBgRemoveCount` wired through.
 
-- **Day 35 (2026-04-30) — Brand Kit context for AI + helpers.**
+- **Day 37 (2026-04-30) — AI image generation (fal.ai pipeline).**
+  New `POST /api/image-gen` endpoint on snapframe-api. Three models
+  routed by intent: Flux Schnell ($0.003/img, ~3s) for backgrounds,
+  Ideogram 3 ($0.06/img, ~10s) when prompt requests text/typography,
+  Nano Banana / Flux Kontext ($0.02/img, ~5s) when a reference image
+  is attached. SSE streams `queued → progress(per-variant) → variant
+  → done`. Free tier: 3 trial generations/month. Pro: 40/month. Both
+  metered via `ai_usage_events` (count(*) of `image-gen-*` intents,
+  30-day window). Auto-detect intent from prompt patterns
+  (`"text saying"`, `"title:"`, quoted text → text-in-image; reference
+  present → reference-guided; else → thumbnail-bg). New
+  `lib/imageGenClient.ts` exposes `streamImageGen()` async generator
+  + `STYLE_PRESETS` (5 presets: Cinematic, MrBeast pop, Subtle clean,
+  Gaming intense, Photo realistic) + client-side `detectIntent`.
+  Hook `editor/hooks/useImageGen.ts` (192 lines) wraps the stream;
+  auto-injects pinned Brand Kit colors + fonts onto the wire prompt
+  so generated images match the channel without prompting. Modal
+  `ImageGenPanel` (Cmd+G; 272 lines + 129-line styles split) — 3-line
+  prompt textarea, 5 preset chips, 16:9/1:1/4:5 aspect group, optional
+  drag-drop reference, scanning-line loader, 2×2 result grid with
+  hover actions: "Add to canvas" (creates real ImageLayer via
+  `imageGenAddToCanvas.ts`) + "Use as reference" (sets ref for the
+  next call). Lazy-loaded, 4.99 KB gzip chunk.
   New `lib/aiContext.ts` (`buildSystemContext` returns a brand
   context block — channel + handle, fonts, palette hex strings,
   primary accent, optional canvas dims; empty for `classify` intent

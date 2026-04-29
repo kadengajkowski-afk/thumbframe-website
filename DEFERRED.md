@@ -3,6 +3,154 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 4 Day 37 — held back (date: 2026-04-30)
+
+- **Variants run in parallel via `Promise.all`, not a queue.** With 4
+  variants per call and Pro at 40/month, the burst on fal.ai's queue
+  is fine, but a single user mashing Generate 4× in 30s = 16 in-flight
+  fal jobs. fal.ai charges per job regardless of cancel state, so
+  burst-spam costs us. Acceptable today (Cmd+G is one panel, one user)
+  but worth a per-user concurrency lock if telemetry shows abuse.
+
+- **Cancel doesn't actually short-circuit fal.ai.** The frontend's
+  AbortController kills the SSE reader and the request closes — the
+  Express handler hears `req.on('close')` and aborts the in-flight
+  fetches to fal. But fal's queue API doesn't have a documented
+  cancel endpoint we trust; the queued/in-progress jobs still run to
+  completion server-side and their image URLs are computed even
+  though we never read them. Quota is debited only on success log —
+  but the fal cost is already incurred. Acceptable for now: cancels
+  are rare, and chasing a per-job kill switch isn't worth the spend
+  delta. Day 38 credit-ledger work is the right place to revisit
+  ("user cancelled mid-flight = 50% refund?" type policy).
+
+- **No prompt history or favorites.** Each Cmd+G opens a blank panel.
+  Some users will retype the same prompt across sessions. Cycle 6
+  candidate alongside the broader settings-and-recents pass.
+
+- **No "regenerate this variant" — only "use as reference" or full
+  re-generate.** Spec listed the third hover action but it would
+  re-submit a single-variant request, which the backend doesn't
+  expose as a different shape. Today's "Generate 4" rerun gives
+  the user 4 fresh variants with the same prompt, which is usually
+  what they wanted anyway. Add explicit single-variant regen if
+  user feedback asks.
+
+- **Auto-detect intent is regex-only.** "make a thumbnail with the
+  word HEROES across the top" matches "the words?" and routes to
+  Ideogram. "thumbnail with title text small in the corner" also
+  routes to Ideogram even though the prompt's main subject is the
+  scene. A Haiku 4.5 classify call would do this 95% better — but
+  costs ~$0.0003/call which dwarfs the Flux Schnell cost on
+  bg-only prompts. Held until we see signal that the regex misroutes
+  often enough to justify the latency hit.
+
+- **Brand Kit injection is naive prompt-suffix.** `, brand colors
+  #abc, #def, fonts Anton, Bebas Neue` appended to the prompt. fal
+  models will interpret the colors/fonts loosely — Flux especially
+  treats hex codes as suggestions, not constraints. A more reliable
+  brand match would be: send the avatar as a reference image (Flux
+  Kontext path) so the model sees actual brand visuals. Cycle 5
+  when we have stronger Brand Kit telemetry.
+
+- **`fetchImageBlob` uses CORS mode.** fal.ai's CDN URLs return
+  proper CORS headers in production — works in browser. Tests
+  mock fetch entirely so this isn't exercised. If fal moves their
+  CDN or revokes CORS, the "Add to canvas" flow breaks; we'd need
+  to proxy through Railway instead (adds bandwidth cost).
+
+- **`buildFalInput` has model-specific shape inline in the route.**
+  Each model takes a slightly different input schema (Flux uses
+  `image_size`, Ideogram uses `aspect_ratio`, Kontext uses
+  `image_url`). Today they're branched in `buildFalInput`. As models
+  shift / new models land, this gets brittle — but a generic adapter
+  layer is over-engineering for 3 models. Refactor when 5+.
+
+- **fal.ai polling cadence is 700ms with a 60s deadline.** If a fal
+  job runs longer than 60s (rare, but Ideogram 3 with reference can
+  spike), the request times out and we report `UPSTREAM_ERROR`.
+  Acceptable; bump deadline if telemetry surfaces frequent timeouts.
+
+- **No retry on transient fal failures.** `generateOne` throws on
+  the first 5xx, which propagates to one variant in the grid as
+  an error message. The other 3 variants succeed independently.
+  Fine for partial-success UX, but a single retry would smooth
+  things out. Hold until we see a real failure rate.
+
+- **Layer schema doesn't carry `metadata: {generatedBy, prompt,
+  generatedAt}`.** Spec asked for it; the Layer discriminated union
+  doesn't have an arbitrary-metadata slot. Provenance lives only in
+  the layer's `name` (first 30 chars of prompt). Promoting metadata
+  into the schema is a Cycle 5 ask once a layer-level "regenerate"
+  menu surfaces it.
+
+- **Image URLs are NOT downloaded server-side and stored.** The
+  layer's `bitmap` field holds the in-memory ImageBitmap; the
+  generated image's CDN URL is forgotten. If fal's CDN expires the
+  URL (default policy is 7 days), the saved project's bitmap blob
+  in the doc still works (we round-trip ImageBitmap as base64 PNG)
+  but a "regenerate from same source" feature doesn't have the URL
+  anymore. Day 41+ image-storage refactor is where this stops
+  mattering — we'd persist generated assets to Supabase Storage on
+  add-to-canvas.
+
+- **No CTR-score widget to rate the generations.** Spec says v3.1.
+  Today the user picks visually. Adding even a rough "this matches
+  your channel's high-CTR style" overlay would be a strong nudge —
+  but it needs the channel-dashboard data plumbing that lands later.
+
+- **Pro quota is 40/month total across ALL three models.** A user
+  who burns 40 Ideogram calls hits the cap; they can't then run a
+  cheap Flux Schnell call. Could split per-model caps (Flux: 80,
+  Ideogram: 20, Kontext: 30) but the simpler single-cap matches the
+  pricing-page narrative ("40 generations/month"). Revisit at
+  Day 38 credit-ledger when caps become per-credit-spend.
+
+- **No ai_usage_events row when ALL variants fail.** Quota isn't
+  burned, but Sentry / observability has no signal that the user
+  tried. We log to console only. A separate `ai_failure_events`
+  table would be the right place — held until v3.1 observability.
+
+- **Result grid hover overlay uses CSS `opacity: 0`** — the spec
+  asked for "hover → show buttons" but inline-style React doesn't
+  expose `:hover`. The overlay renders permanently at opacity 0;
+  hovering doesn't change opacity (no global CSS hook for the
+  variant cells). Cosmetic — the buttons aren't reachable today
+  via hover. To fix: add a CSS class + global rule in tokens.css
+  with `[data-testid^="variant-"]:hover .overlay { opacity: 1 }`.
+  Day 37 ships a non-hover variant: clicking the cell could surface
+  the actions instead. Cycle 6 polish.
+
+- **No per-variant share / download button.** A user might want to
+  save a variant they don't add to canvas. Right-click → save image
+  works (it's a real `<img>` tag) but isn't discoverable. Add a
+  "Download" hover action when the iconography pass lands.
+
+- **Reference image is sent as raw base64 PNG.** Files larger than
+  a few MB blow up the JSON body and slow the SSE handshake. Cap
+  at 4MB or downscale client-side before encoding. Held — no
+  user has hit this yet.
+
+- **No tests for fal.ai integration's actual HTTP shape.** The
+  backend test mocks `imageGenRoutes` at the unit level (intent
+  detect, cost calc) and the frontend mocks fetch entirely. The
+  end-to-end "submit → poll → response" loop against a real fal
+  endpoint needs a recorded fixture or a dedicated staging key.
+  Day 41+ when we have a cassette pattern across the AI surface.
+
+- **Backend uses `node-fetch` v2 (already in deps) but inline
+  `fetch` calls assume Node 18+ global fetch.** Both work; we
+  rely on the global. If Railway downgrades to Node 16 (unlikely),
+  swap to `require('node-fetch')`. Worth a CI guard once we have
+  one.
+
+- **`@fal-ai/serverless-client` not installed.** Spec listed it as
+  one option; we went with direct REST instead because the queue
+  API is straightforward and the client adds another dependency
+  to a backend that's already heavy. The client offers nicer ergo
+  + a `subscribe()` real-time helper that's nicer than polling —
+  swap if our polling cadence becomes a perf concern.
+
 ## Cycle 6 polish — BG remove free-path quality (date: 2026-04-30)
 
 - **Free BG-remove model is wrong for general thumbnail content.**
