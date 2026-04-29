@@ -157,6 +157,11 @@ type UiState = {
   /** Day 37: Image generation panel visibility. Cmd+G toggles. */
   imageGenPanelOpen: boolean; setImageGenPanelOpen: (v: boolean) => void;
 
+  /** Day 38: Upgrade-to-Pro panel visibility. Cmd+U toggles; all Pro
+   * upgrade CTAs (4K export, BG cap, AI-gen cap, TopBar billing menu)
+   * route through this panel. */
+  upgradePanelOpen: boolean; setUpgradePanelOpen: (v: boolean) => void;
+
   /** Day 32: pinned Brand Kit. Persists across reloads via localStorage
    * (signed-out) or the user's most-recent saved row (signed-in, loaded
    * at boot). When pinned, the kit's palette appears as a "Brand"
@@ -357,6 +362,9 @@ export const useUiStore = create<UiState>()((set) => ({
 
   imageGenPanelOpen: false,
   setImageGenPanelOpen: (imageGenPanelOpen) => set({ imageGenPanelOpen }),
+
+  upgradePanelOpen: false,
+  setUpgradePanelOpen: (upgradePanelOpen) => set({ upgradePanelOpen }),
 
   pinnedBrandKit: loadPinnedKit(),
   setPinnedBrandKit: (pinnedBrandKit) => {

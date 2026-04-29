@@ -98,6 +98,35 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   hover actions: "Add to canvas" (creates real ImageLayer via
   `imageGenAddToCanvas.ts`) + "Use as reference" (sets ref for the
   next call). Lazy-loaded, 4.99 KB gzip chunk.
+- **Day 38 (2026-04-30) — Stripe billing wiring (v3).** Reuses v1's
+  existing pipeline, doesn't rebuild. `POST /api/create-checkout-session`
+  + webhook flow already write `is_pro` / `plan` / `subscription_status`
+  / `stripe_customer_id` to the `profiles` table on
+  `checkout.session.completed` and `customer.subscription.updated`/
+  `deleted`. Day 38 adds: (1) RLS on `public.profiles` plus a
+  `profiles_select_own` policy keyed on `email = auth.email()` so the
+  v3 frontend reads its own row directly via supabase-js; (2)
+  `lib/userTier.ts` (`fetchUserProfile` + `tierFromProfile` +
+  `resolveUserTier(email)`) writes Stripe-backed tier into
+  `uiStore.userTier` at boot + on auth-state change, honoring a
+  `thumbframe:dev-tier-override` localStorage flag for local Pro
+  testing; (3) `lib/billing.ts` exposes `startCheckout()` +
+  `openCustomerPortal()` (typed `BillingError` codes:
+  `AUTH_REQUIRED` / `NO_CUSTOMER` / `NOT_CONFIGURED` /
+  `NETWORK_ERROR` / `UPSTREAM_ERROR`); (4) lazy-loaded
+  `UpgradePanel` modal (`Cmd+U`; 138 + 65-line styles split) shows
+  the feature list + $15/mo + Stripe Checkout button on free, "You're
+  Pro" + Manage subscription → Stripe Customer Portal on Pro; (5)
+  upgrade CTAs wired across the editor — BG-remove "Out of free
+  removes" → UpgradePanel, ImageGen `FREE_LIMIT_REACHED` error →
+  inline "Upgrade to Pro" button, ExportPanel 4K format chip on free
+  → UpgradePanel, TopBar avatar menu gains a "Billing" entry.
+  Backend hotfix: `/api/create-portal-session` now reads
+  `stripe_customer_id` from Supabase `profiles` (with users.json +
+  Stripe customer-search-by-email fallbacks) so portal access works
+  after Railway restarts wipe the JSON. `pro_subscriptions` table
+  intentionally NOT created — `profiles` is already the source of
+  truth.
   New `lib/aiContext.ts` (`buildSystemContext` returns a brand
   context block — channel + handle, fonts, palette hex strings,
   primary accent, optional canvas dims; empty for `classify` intent

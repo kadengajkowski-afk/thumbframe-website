@@ -84,9 +84,8 @@ export function BgRemoveSection({ layer }: { layer: ImageLayer }) {
         <>
           <button
             type="button"
-            style={freeAtCap ? primaryBtnDisabled : primaryBtn}
-            disabled={freeAtCap}
-            onClick={run}
+            style={freeAtCap ? upgradeBtn : primaryBtn}
+            onClick={freeAtCap ? () => useUiStore.getState().setUpgradePanelOpen(true) : run}
             title={
               freeAtCap
                 ? "Out of free removes — upgrade to Pro"
@@ -94,10 +93,10 @@ export function BgRemoveSection({ layer }: { layer: ImageLayer }) {
                   ? "HD background removal (Remove.bg)"
                   : "Try HD background removal — free trial"
             }
-            data-testid="bg-remove-run"
+            data-testid={freeAtCap ? "bg-remove-upgrade" : "bg-remove-run"}
           >
             {freeAtCap
-              ? "Out of free removes — upgrade to Pro"
+              ? "Upgrade to Pro"
               : `Remove BG${isPro ? "" : ` (${remaining} left)`}`}
           </button>
           {hasOriginal && (
@@ -117,8 +116,8 @@ export function BgRemoveSection({ layer }: { layer: ImageLayer }) {
           )}
           {freeAtCap && (
             <div style={hintRow} data-testid="bg-remove-cap">
-              {FREE_BG_REMOVE_LIMIT} free removes used this month — upgrade
-              to Pro for 100/month.
+              {FREE_BG_REMOVE_LIMIT} free removes used this month. Pro
+              gets 100/month.
             </div>
           )}
         </>
@@ -140,8 +139,12 @@ const primaryBtn: CSSProperties = {
   background: "var(--bg-space-0)", color: "var(--text-primary)",
   border: "1px solid var(--border-ghost)", borderRadius: 6, cursor: "pointer",
 };
-const primaryBtnDisabled: CSSProperties = {
-  ...primaryBtn, opacity: 0.5, cursor: "not-allowed",
+const upgradeBtn: CSSProperties = {
+  ...primaryBtn,
+  background: "var(--accent-orange)",
+  color: "var(--bg-space-0)",
+  borderColor: "var(--accent-orange)",
+  fontWeight: 600,
 };
 const restoreBtn: CSSProperties = {
   marginTop: 4, padding: "5px 10px", fontSize: 11,

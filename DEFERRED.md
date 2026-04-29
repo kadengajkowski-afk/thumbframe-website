@@ -3,6 +3,107 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 4 Day 38 — held back (date: 2026-04-30)
+
+- **`customer.subscription.trial_will_end` doesn't sync to Supabase
+  profiles.** The webhook handler updates `users.json` only and leaves
+  a stale `subscription_status` on the profile until `subscription.updated`
+  / `deleted` fires. Reminder emails (currently TODO) and any
+  trial-aware UX would read the wrong value. Fix is one block of code
+  in `index.js:970` mirroring the pattern from `subscription.updated`.
+  Held — no UX surface depends on this today.
+
+- **`invoice.payment_failed` doesn't sync to Supabase profiles.** Same
+  shape — `users.json` gets `stripeStatus: 'past_due'` but profiles
+  keeps the prior status. A user whose card fails is still rendered
+  as Pro in the editor for up to a billing cycle. Same fix needed.
+  Day 41+ when payment-failed UX (banner, dunning) actually surfaces,
+  this gets prioritized.
+
+- **`profiles.id` is bigint, not uuid.** Lookups everywhere go
+  by email instead of `auth.uid()`. The RLS policy added today
+  (`profiles_select_own`) matches on `email = auth.email()` for the
+  same reason. If we ever migrate to `id uuid REFERENCES auth.users`,
+  every read path + the policy needs to change in lockstep. Cycle 6
+  candidate — risky migration on a row that drives Pro tier billing.
+
+- **Two checkout endpoints exist.** `POST /checkout` (legacy,
+  email-only, no auth) is still mounted alongside
+  `POST /api/create-checkout-session` (Supabase-aware). v3 only calls
+  the latter, but the legacy route is still reachable from v1's
+  pricing page and from any unauth client that knows the URL. Decommission
+  once v1's marketing site routes through `/api/create-checkout-session`
+  too. Held — v1 still works and removing it could break a marketing
+  page CTA we haven't audited.
+
+- **Webhook `users.json` writes still happen on every event.** The
+  Supabase `profiles` table is now the source of truth, but the JSON
+  cache is updated in parallel for backwards compat with v1 routes
+  that read it (`/api/me`, `/auth/me`). Removing the JSON path needs
+  a v1 sweep to confirm nothing else reads it. Cycle 5 cleanup.
+
+- **`profiles_select_own` RLS uses `auth.email()`.** Postgres RLS
+  evaluation calls Postgres' built-in `auth.email()` function, which
+  reads the JWT email claim. If Supabase ever stops populating that
+  claim (unlikely but possible on a major auth lib upgrade), the
+  policy fails closed and v3 reads `null`, falling back to `free`
+  tier. Worth a Sentry hook on `fetchUserProfile` returning null for
+  a signed-in user — held until we have alerting.
+
+- **Dev override flag is undocumented.** `localStorage["thumbframe:
+  dev-tier-override"] = "1"` makes `resolveUserTier` a no-op so the
+  command-palette "Toggle Pro tier (dev)" entry can flip tier locally
+  without Stripe interfering. Useful but unsurfaced. Add a "Dev
+  override engaged" pill in the TopBar when this flag is set so a
+  developer doesn't get confused why their real Pro purchase isn't
+  reflecting. Cycle 6 polish.
+
+- **No quota-exhausted CTA on AI-gen at first response.** The
+  ImageGenPanel surfaces the upgrade button only after an attempted
+  generation returns `FREE_LIMIT_REACHED`. A pre-flight check via
+  `GET /api/image-gen/quota` would let us pre-disable Generate +
+  show "Upgrade" before the user types a prompt. Held — pre-flight
+  adds a round-trip on panel-open and the failure UX is fine.
+
+- **No quota indicator on the BG-remove button until the user is
+  AT cap.** "(N left)" shows the remaining count, but at N=1 a user
+  who's about to use their last credit gets no warning. A subtle
+  `--accent-orange` color change at N≤1 would hint the cap is close.
+  Cosmetic; Cycle 6.
+
+- **`startCheckout` / `openCustomerPortal` use `window.location.assign`
+  for the redirect.** This loses the editor's current state — the
+  user comes back from Stripe to a fresh editor boot. AutoSave
+  flushes most recent edits before navigation, but undo history is
+  lost. Could trade for a popup window + postMessage flow, but
+  Stripe's hosted Checkout strongly recommends the redirect path
+  for security. Acceptable.
+
+- **TopBar Billing menu entry is identical for free + Pro.** Both
+  open the same UpgradePanel which handles the branching internally.
+  Could surface "Manage billing" vs "Upgrade to Pro" copy in the
+  menu itself based on tier — but that doubles the rendering paths
+  for marginal gain. Held.
+
+- **No backend test for the patched portal-session.** The
+  Supabase-profile-first lookup + customer-search fallback is
+  exercised manually; backend tests exist for image-gen and AI
+  routes but the billing routes have no harness. Day 41+ when we
+  build a Stripe-mock test pattern.
+
+- **The legacy `/account` page on v1 still reads the JSON cache.**
+  When a v3 user upgrades, the v1 `/account` page may show stale
+  Pro state until the next webhook event refreshes the JSON.
+  Cosmetic — the editor itself is correct via the profiles RLS read.
+
+- **No resubscribe flow.** A user whose subscription was canceled
+  and then wants to re-subscribe goes through `startCheckout()` again
+  — Stripe creates a new Customer if there isn't one, otherwise
+  reuses the existing. The webhook handles either path correctly.
+  But there's no in-product "Reactivate" affordance separate from
+  "Upgrade now" — the same button does both. Cosmetic copy issue
+  for Cycle 6.
+
 ## Cycle 4 Day 37 — held back (date: 2026-04-30)
 
 - **Variants run in parallel via `Promise.all`, not a queue.** With 4

@@ -36,10 +36,14 @@ const BrandKitPanel = lazy(() =>
 const ImageGenPanel = lazy(() =>
   import("@/editor/panels/ImageGenPanel").then((m) => ({ default: m.ImageGenPanel })),
 );
+const UpgradePanel = lazy(() =>
+  import("@/editor/panels/UpgradePanel").then((m) => ({ default: m.UpgradePanel })),
+);
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 import { supabase } from "@/lib/supabase";
 import { startAutoSave } from "@/lib/autoSave";
+import { resolveUserTier } from "@/lib/userTier";
 
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
@@ -77,6 +81,8 @@ export function App() {
           email: u.email ?? null,
           avatarUrl: (u.user_metadata as { avatar_url?: string } | null)?.avatar_url ?? null,
         });
+        // Day 38 — resolve Stripe-backed tier from profiles row.
+        void resolveUserTier(u.email ?? null);
       }
     });
 
@@ -87,6 +93,7 @@ export function App() {
         email: u.email ?? null,
         avatarUrl: (u.user_metadata as { avatar_url?: string } | null)?.avatar_url ?? null,
       } : null);
+      if (u?.email) void resolveUserTier(u.email);
     });
     return () => {
       sub.subscription.unsubscribe();
@@ -110,6 +117,7 @@ export function App() {
         <ProjectsPanel />
         <BrandKitPanel />
         <ImageGenPanel />
+        <UpgradePanel />
       </Suspense>
       <ToastHost />
     </div>

@@ -154,7 +154,29 @@ export function ImageGenPanel() {
           </button>
         )}
 
-        {gen.error && <div style={s.errorRow} data-testid="image-gen-error">{gen.error}</div>}
+        {gen.error && (
+          <div style={s.errorRow} data-testid="image-gen-error">
+            {gen.error}
+            {/^.*free generations? used.*upgrade.*$/i.test(gen.error) && (
+              <button
+                type="button"
+                onClick={() => {
+                  close(false);
+                  useUiStore.getState().setUpgradePanelOpen(true);
+                }}
+                style={{
+                  marginLeft: 8, padding: "3px 8px", fontSize: 11,
+                  fontWeight: 600, background: "var(--accent-orange)",
+                  color: "var(--bg-space-0)", border: "none",
+                  borderRadius: 4, cursor: "pointer",
+                }}
+                data-testid="image-gen-upgrade"
+              >
+                Upgrade to Pro
+              </button>
+            )}
+          </div>
+        )}
 
         <ResultGrid
           variants={gen.variants}
