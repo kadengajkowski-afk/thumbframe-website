@@ -94,9 +94,12 @@ export function createNode(layer: Layer): Container {
   const texture = new Texture({ source });
   const sprite = new Sprite(texture);
   sprite.eventMode = "static";
-  const wrapper = new Container();
+  const wrapper = new Container() as Container & { _tfBitmap?: ImageBitmap };
   wrapper.label = `layer:${layer.id}`;
   wrapper.eventMode = "static";
+  // Day 36 — stamp the bitmap that this Sprite was built from so
+  // paintNode's swap-detection doesn't fire on the first paint.
+  wrapper._tfBitmap = layer.bitmap;
   wrapper.addChild(sprite);
   return wrapper;
 }
@@ -148,6 +151,31 @@ export function paintNode(node: Container, layer: Layer) {
   // / height of its own.
   const c = node as Container;
   const sprite = c.children[0] as Sprite;
+
+  // Day 36 fix — bitmap swap detection. replaceLayerBitmap (BG remove,
+  // future inpaint) mutates layer.bitmap to a new ImageBitmap. The
+  // Sprite still holds the original Texture, so the canvas keeps
+  // showing the pre-removal pixels until refresh re-creates the node.
+  // Track the last-painted bitmap on the wrapper Container itself; on
+  // mismatch, build a fresh ImageSource + Texture, swap onto the
+  // sprite, destroy the old one. Layer-node identity stays stable so
+  // selection / drag / hit-test don't churn.
+  const w = c as Container & { _tfBitmap?: ImageBitmap };
+  if (w._tfBitmap !== layer.bitmap) {
+    const oldTexture = sprite.texture;
+    const source = new ImageSource({ resource: layer.bitmap });
+    const nextTexture = new Texture({ source });
+    sprite.texture = nextTexture;
+    w._tfBitmap = layer.bitmap;
+    // Destroy AFTER the swap so the renderer never observes a sprite
+    // pointing at a destroyed texture mid-frame. `texture: true` +
+    // `textureSource: true` releases the GPU memory of the prior
+    // bitmap (otherwise long sessions with many BG-removes leak).
+    if (oldTexture && oldTexture !== nextTexture) {
+      oldTexture.destroy(true);
+    }
+  }
+
   sprite.width = layer.width;
   sprite.height = layer.height;
 }
