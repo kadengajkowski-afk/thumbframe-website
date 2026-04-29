@@ -104,6 +104,14 @@ function handleKeydown(e: KeyboardEvent) {
   }
   if (ui.brandKitPanelOpen) return;
 
+  // Day 37 — Cmd+G opens the Image Generation panel.
+  if (meta && !e.shiftKey && e.key.toLowerCase() === "g") {
+    e.preventDefault();
+    runCommand("file.image-gen");
+    return;
+  }
+  if (ui.imageGenPanelOpen) return;
+
   // Zoom shortcuts.
   if (meta && (e.key === "=" || e.key === "+")) {
     e.preventDefault();

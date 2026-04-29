@@ -154,6 +154,9 @@ type UiState = {
   /** Day 31: Brand Kit panel visibility. Cmd+B opens. */
   brandKitPanelOpen: boolean; setBrandKitPanelOpen: (v: boolean) => void;
 
+  /** Day 37: Image generation panel visibility. Cmd+G toggles. */
+  imageGenPanelOpen: boolean; setImageGenPanelOpen: (v: boolean) => void;
+
   /** Day 32: pinned Brand Kit. Persists across reloads via localStorage
    * (signed-out) or the user's most-recent saved row (signed-in, loaded
    * at boot). When pinned, the kit's palette appears as a "Brand"
@@ -351,6 +354,9 @@ export const useUiStore = create<UiState>()((set) => ({
 
   brandKitPanelOpen: false,
   setBrandKitPanelOpen: (brandKitPanelOpen) => set({ brandKitPanelOpen }),
+
+  imageGenPanelOpen: false,
+  setImageGenPanelOpen: (imageGenPanelOpen) => set({ imageGenPanelOpen }),
 
   pinnedBrandKit: loadPinnedKit(),
   setPinnedBrandKit: (pinnedBrandKit) => {

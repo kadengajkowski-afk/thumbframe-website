@@ -33,6 +33,9 @@ const ExportPanel = lazy(() =>
 const BrandKitPanel = lazy(() =>
   import("@/editor/panels/BrandKitPanel").then((m) => ({ default: m.BrandKitPanel })),
 );
+const ImageGenPanel = lazy(() =>
+  import("@/editor/panels/ImageGenPanel").then((m) => ({ default: m.ImageGenPanel })),
+);
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 import { supabase } from "@/lib/supabase";
@@ -106,6 +109,7 @@ export function App() {
         <AuthPanel />
         <ProjectsPanel />
         <BrandKitPanel />
+        <ImageGenPanel />
       </Suspense>
       <ToastHost />
     </div>

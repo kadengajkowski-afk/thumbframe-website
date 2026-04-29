@@ -289,6 +289,16 @@ const COMMANDS: Command[] = [
     run: () => useUiStore.getState().setBrandKitPanelOpen(true),
   },
 
+  // Day 37 — Image generation panel.
+  {
+    id: "file.image-gen",
+    label: "Generate image…",
+    section: "File",
+    hotkey: "Cmd+G",
+    aliases: ["generate", "ai image", "fal", "thumbnail bg", "midjourney"],
+    run: () => useUiStore.getState().setImageGenPanelOpen(true),
+  },
+
   // Day 34 dev — smoke-test the Railway AI proxy end-to-end. The
   // bundled aiClient can't be reached via console `import()` since
   // Vite hashes its path, so this command is the only way to verify
