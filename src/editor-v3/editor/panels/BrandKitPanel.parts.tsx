@@ -12,10 +12,23 @@ import * as s from "./BrandKitPanel.styles";
 /** Day 32 — Brand Kit panel sub-components, split out of
  * BrandKitPanel.tsx to keep it under the 250-line panel ceiling. */
 
-export function BrandKitResult({ kit }: { kit: BrandKit }) {
+export function BrandKitResult({
+  kit,
+  onReextract,
+}: {
+  kit: BrandKit;
+  onReextract?: () => void;
+}) {
   const setPinned = useUiStore((u) => u.setPinnedBrandKit);
   const pinned    = useUiStore((u) => u.pinnedBrandKit);
   const isPinned  = pinned?.channelId === kit.channelId;
+  // Day 33 fix — three font states:
+  //   undefined → kit predates Day 33 / detection didn't run → hide silently
+  //   []        → detection ran, found nothing → show empty hint
+  //   length>0  → render cards
+  const hasFontsKey   = kit.fonts !== undefined;
+  const detectedFonts = kit.fonts ?? [];
+  const fontsRan      = hasFontsKey;
 
   return (
     <div style={s.resultWrap} data-testid="brand-kit-success">
@@ -67,12 +80,32 @@ export function BrandKitResult({ kit }: { kit: BrandKit }) {
         <div style={s.emptyHint}>Couldn't extract colors — try a channel with more public uploads.</div>
       )}
 
-      {kit.fonts && kit.fonts.length > 0 && (
+      {fontsRan && (
         <section style={s.section}>
-          <div style={s.sectionLabel}>Fonts — click to apply</div>
-          <div style={s.fontGrid} data-testid="brand-kit-fonts">
-            {kit.fonts.map((f) => <FontCard key={f.name} font={f} />)}
+          <div style={s.sectionLabel}>
+            Fonts — click to apply
+            {onReextract && (
+              <button
+                type="button"
+                style={s.reextractLink}
+                onClick={onReextract}
+                title="Re-extract bypassing the cache (debug)"
+                data-testid="brand-kit-reextract"
+              >
+                Re-extract
+              </button>
+            )}
           </div>
+          {detectedFonts.length > 0 ? (
+            <div style={s.fontGrid} data-testid="brand-kit-fonts">
+              {detectedFonts.map((f) => <FontCard key={f.name} font={f} />)}
+            </div>
+          ) : (
+            <div style={s.emptyHint} data-testid="brand-kit-fonts-empty">
+              Couldn't identify any of our 25 bundled fonts in this channel's
+              recent thumbnails. Try Re-extract or pick fonts manually.
+            </div>
+          )}
         </section>
       )}
 

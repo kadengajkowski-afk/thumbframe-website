@@ -65,13 +65,24 @@ export type BrandKitError = {
   message: string;
 };
 
-export async function fetchBrandKit(input: string): Promise<BrandKit> {
+export type FetchBrandKitOptions = {
+  /** Day 33 fix — when true, skip the L1 in-memory + L2 Supabase
+   * caches on the backend and re-run YouTube fetch + color/font
+   * extraction. Used by the "Re-extract" link in BrandKitPanel for
+   * debugging stale cache rows. */
+  bypassCache?: boolean;
+};
+
+export async function fetchBrandKit(
+  input: string,
+  options: FetchBrandKitOptions = {},
+): Promise<BrandKit> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/api/youtube/channel-by-url`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input }),
+      body: JSON.stringify({ input, bypassCache: options.bypassCache === true }),
     });
   } catch (err) {
     throw {

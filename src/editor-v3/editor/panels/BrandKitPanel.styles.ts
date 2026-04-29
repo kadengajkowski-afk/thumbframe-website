@@ -217,3 +217,13 @@ export const confidenceDot: CSSProperties = {
   width: 6, height: 6, borderRadius: "50%",
   background: "var(--accent-cream)",
 };
+export const reextractLink: CSSProperties = {
+  marginLeft: 8,
+  padding: "1px 6px",
+  background: "transparent",
+  border: "1px solid var(--border-ghost)",
+  borderRadius: 3,
+  color: "var(--text-secondary)",
+  fontSize: 9, letterSpacing: 0.5, textTransform: "uppercase",
+  cursor: "pointer",
+};

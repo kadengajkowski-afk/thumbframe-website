@@ -16,33 +16,39 @@ export function useBrandKit() {
   const [state, setState] = useState<BrandKitState>({ status: "idle" });
   const requestIdRef = useRef(0);
 
-  const extract = useCallback(async (input: string) => {
-    const trimmed = input.trim();
-    if (!trimmed) {
-      setState({
-        status: "error",
-        error: { code: "BAD_INPUT", message: "Paste a YouTube channel URL or @handle" },
-      });
-      return;
-    }
-    const reqId = ++requestIdRef.current;
-    setState({ status: "loading", input: trimmed });
-    try {
-      const kit = await fetchBrandKit(trimmed);
-      if (reqId !== requestIdRef.current) return;
-      setState({ status: "success", kit });
-    } catch (err) {
-      if (reqId !== requestIdRef.current) return;
-      const error = err as BrandKitError;
-      setState({
-        status: "error",
-        error: {
-          code: error.code ?? "UPSTREAM_ERROR",
-          message: error.message ?? "Couldn't reach the brand kit service",
-        },
-      });
-    }
-  }, []);
+  const extract = useCallback(
+    async (input: string, opts: { bypassCache?: boolean } = {}) => {
+      const trimmed = input.trim();
+      if (!trimmed) {
+        setState({
+          status: "error",
+          error: { code: "BAD_INPUT", message: "Paste a YouTube channel URL or @handle" },
+        });
+        return;
+      }
+      const reqId = ++requestIdRef.current;
+      setState({ status: "loading", input: trimmed });
+      try {
+        const kit = await fetchBrandKit(
+          trimmed,
+          opts.bypassCache ? { bypassCache: true } : {},
+        );
+        if (reqId !== requestIdRef.current) return;
+        setState({ status: "success", kit });
+      } catch (err) {
+        if (reqId !== requestIdRef.current) return;
+        const error = err as BrandKitError;
+        setState({
+          status: "error",
+          error: {
+            code: error.code ?? "UPSTREAM_ERROR",
+            message: error.message ?? "Couldn't reach the brand kit service",
+          },
+        });
+      }
+    },
+    [],
+  );
 
   const reset = useCallback(() => {
     requestIdRef.current += 1;

@@ -56,6 +56,17 @@ export function BrandKitPanel() {
     });
   }, [state, user]);
 
+  // Day 33 fix — keep the input populated when a saved kit loads in,
+  // so the "Re-extract" link in BrandKitResult always has a known
+  // handle to send back to the backend.
+  useEffect(() => {
+    if (state.status === "success" && !input) {
+      setInput(state.kit.customUrl ?? state.kit.channelTitle);
+    }
+    // We intentionally only fire on status change, not input change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status]);
+
   if (!open) return null;
 
   const onSubmit = (e: React.FormEvent) => {
@@ -112,7 +123,12 @@ export function BrandKitPanel() {
                 {state.error.message}
               </div>
             )}
-            {state.status === "success" && <BrandKitResult kit={state.kit} />}
+            {state.status === "success" && (
+              <BrandKitResult
+                kit={state.kit}
+                onReextract={() => void extract(input || state.kit.channelTitle, { bypassCache: true })}
+              />
+            )}
           </>
         )}
 
