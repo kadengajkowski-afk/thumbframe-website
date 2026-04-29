@@ -22,6 +22,8 @@ import { handleUploadedFile } from "@/lib/uploadFlow";
  */
 export function EmptyState() {
   const setHasEntered = useUiStore((s) => s.setHasEntered);
+  const setProjectsPanelOpen = useUiStore((s) => s.setProjectsPanelOpen);
+  const user = useUiStore((s) => s.user);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -52,13 +54,28 @@ export function EmptyState() {
         </span>
         <span style={heading}>Upload to set sail</span>
       </button>
-      <button
-        type="button"
-        onClick={() => setHasEntered(true)}
-        style={startBlank}
-      >
-        or start blank →
-      </button>
+      <div style={secondaryRow}>
+        <button
+          type="button"
+          onClick={() => setHasEntered(true)}
+          style={secondaryLink}
+        >
+          or start blank →
+        </button>
+        {user && (
+          <>
+            <span style={separator} aria-hidden="true">·</span>
+            <button
+              type="button"
+              onClick={() => setProjectsPanelOpen(true)}
+              style={secondaryLink}
+              data-testid="empty-state-open-project"
+            >
+              Open project…
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -128,7 +145,13 @@ const visuallyHidden: CSSProperties = {
   border: 0,
 };
 
-const startBlank: CSSProperties = {
+const secondaryRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+};
+
+const secondaryLink: CSSProperties = {
   background: "transparent",
   border: "none",
   color: "var(--text-secondary)",
@@ -137,4 +160,10 @@ const startBlank: CSSProperties = {
   cursor: "pointer",
   padding: "4px 8px",
   transition: "color var(--motion-fast) var(--ease-standard)",
+};
+
+const separator: CSSProperties = {
+  color: "var(--text-secondary)",
+  opacity: 0.5,
+  fontSize: 13,
 };

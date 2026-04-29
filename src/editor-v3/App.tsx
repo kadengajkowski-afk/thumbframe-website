@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { CompositorHost } from "@/editor/CompositorHost";
 import { TextEditor } from "@/editor/TextEditor";
@@ -35,9 +35,7 @@ const BrandKitPanel = lazy(() =>
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 import { supabase } from "@/lib/supabase";
-import { startAutoSave, loadDraftIfPresent } from "@/lib/autoSave";
-import { listProjects, openProject } from "@/lib/projects";
-import { useDocStore } from "@/state/docStore";
+import { startAutoSave } from "@/lib/autoSave";
 
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
@@ -45,44 +43,29 @@ export function App() {
   const hasEntered = useUiStore((s) => s.hasEntered);
   const dragActive = useDropTarget();
 
-  // React 19 StrictMode dev-mounts this effect twice. The async
-  // bootLoad below races itself if both invocations call openProject
-  // before the first finishes. useRef guards against the double-mount
-  // without leaking module-level state across (hypothetical) future
-  // remounts (e.g. when client-side routing lands). Day 30 deferred
-  // this from a module flag; Day 32 fix-up swaps it in.
-  const bootLoadStarted = useRef(false);
-
   useEffect(() => installHotkeys(), []);
 
-  // Day 20 — auth subscription + boot-time project / draft recovery
-  // + auto-save. Boot order matters:
-  //   1. Resolve session (Supabase getSession).
-  //   2. If signed-in → fetch most-recent project + open it. The
-  //      empty-canvas-on-refresh bug came from skipping this load.
-  //   3. If signed-out → restore the localStorage draft.
-  // onAuthStateChange handles future flips (sign-in / sign-out).
+  // Day 36 fix — auto-load-most-recent-project on boot was removed.
+  // Refresh now ALWAYS lands on the empty state (Figma / Photoshop
+  // model). Auto-save still runs in the background; users resume via
+  // FileMenu → "Open project…" (or Cmd+O). Boot-time auto-load made
+  // stuck states (BG-remove worker hangs, infinite loops, broken
+  // model URL) sticky across refresh — the user couldn't escape
+  // without manual cleanup. Empty-state-first removes that trap.
   //
-  // Day 32 fix-up: after a project / draft loads with content, flip
-  // hasEntered=true so EditorShell renders. Without this, refresh
-  // restored the layers into docStore but EmptyState kept rendering
-  // because nothing pointed hasEntered at the loaded state, forcing
-  // the user to upload a stub image just to enter the editor.
+  // What stays: auth subscription (so user / Pro tier resolves),
+  // startAutoSave() (so the project is still saved as the user
+  // edits). What's gone: listProjects() + openProject(rows[0]!.id)
+  // + loadDraftIfPresent() at boot.
   useEffect(() => {
     const ui = useUiStore.getState();
     const stop = startAutoSave();
 
-    async function bootLoad() {
-      if (bootLoadStarted.current) return;
-      bootLoadStarted.current = true;
-      if (!supabase) {
-        const restored = await loadDraftIfPresent();
-        if (restored && useDocStore.getState().layers.length > 0) {
-          useUiStore.getState().setHasEntered(true);
-        }
-        return;
-      }
-      const { data } = await supabase.auth.getSession();
+    if (!supabase) return stop;
+
+    // Resolve initial auth session so the TopBar avatar + Pro flag
+    // are populated. We do NOT load a project here.
+    void supabase.auth.getSession().then(({ data }) => {
       const u = data.session?.user ?? null;
       if (u) {
         ui.setUser({
@@ -90,29 +73,9 @@ export function App() {
           email: u.email ?? null,
           avatarUrl: (u.user_metadata as { avatar_url?: string } | null)?.avatar_url ?? null,
         });
-        // Reopen the most-recent project so refresh doesn't reset
-        // the user to the empty state.
-        const rows = await listProjects();
-        if (rows.length > 0 && useDocStore.getState().layers.length === 0) {
-          const ok = await openProject(rows[0]!.id);
-          if (ok && useDocStore.getState().layers.length > 0) {
-            useUiStore.getState().setHasEntered(true);
-          }
-        } else if (useDocStore.getState().layers.length > 0) {
-          // openProject already ran via some other path (e.g. URL deep
-          // link); just flip hasEntered to skip the empty state.
-          useUiStore.getState().setHasEntered(true);
-        }
-      } else {
-        const restored = await loadDraftIfPresent();
-        if (restored && useDocStore.getState().layers.length > 0) {
-          useUiStore.getState().setHasEntered(true);
-        }
       }
-    }
-    void bootLoad();
+    });
 
-    if (!supabase) return stop;
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
       ui.setUser(u ? {
