@@ -102,3 +102,10 @@ button {
     opacity: 1;
   }
 }
+
+/* Day 35 — AI "thinking…" indicator on TopBar. Subtle pulse so the
+ * indicator reads as alive without competing with the Ship It CTA. */
+@keyframes tf-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
