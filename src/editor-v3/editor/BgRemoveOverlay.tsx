@@ -69,23 +69,21 @@ export function BgRemoveOverlay() {
  * The cone is a separate SVG so its rotation pivots on the lamp center
  * without dragging the lighthouse silhouette with it. */
 function Lighthouse({ width, height }: { width: number; height: number }) {
-  const houseW = 44;
-  const houseH = 50;
-  // Lamp sits ~6px from the top of the lighthouse silhouette in our
-  // SVG. The cone rotates around that lamp. Anchor lighthouse to
-  // bottom-right with ~16px inset; if the layer is tiny, gracefully
-  // shrink (no overlay clutter on thumbnails).
+  // Slimmer, taller silhouette — proportions tuned for "navigation
+  // seal" / minimalist line-art rather than illustrated children's-book
+  // lighthouse. SVG box: 32 wide × 60 tall.
+  const houseW = 32;
+  const houseH = 60;
   if (width < 80 || height < 80) return null;
-  const right = 16;
-  const bottom = 16;
+  const right = 18;
+  const bottom = 18;
+  // Lamp sits at SVG (16, 14). Position lamp anchor in screen coords.
   const lampX = right + houseW / 2;
-  const lampY = bottom + houseH - 6;
+  const lampY = bottom + houseH - 14;
 
   return (
     <>
-      {/* Cone of light — origin at lamp, pivots around it. The cone's
-          tip sits at the lamp; the cone fans down-left across the
-          image. We rotate the cone container, not the cone path. */}
+      {/* Cone of light — origin at lamp, pivots around it. */}
       <div
         style={{
           ...coneWrap,
@@ -107,8 +105,7 @@ function Lighthouse({ width, height }: { width: number; height: number }) {
               <stop offset="100%" stopColor="var(--accent-cream, #F9F0E1)" stopOpacity="0" />
             </radialGradient>
           </defs>
-          {/* 120° sector: from -60° to +60° around 0° (straight up).
-              The wrapper rotates this whole shape around (0,0). */}
+          {/* 120° sector around 0° (straight up). */}
           <path
             d="M0 0 L-86.6 -50 A100 100 0 0 1 86.6 -50 Z"
             fill="url(#tf-bg-cone)"
@@ -116,76 +113,88 @@ function Lighthouse({ width, height }: { width: number; height: number }) {
         </svg>
       </div>
 
-      {/* Lighthouse silhouette + glowing lamp. */}
+      {/* Refined lighthouse silhouette — line-art only, no fill chrome.
+          Slim tower, narrow taper, single railing platform, dome with
+          a small finial. Stroke is cream; rendered open (no fill) so
+          the dimmed image shows through and the silhouette reads as
+          architecture, not a pasted icon. */}
       <svg
         width={houseW}
-        height={houseH + 8}
-        viewBox="0 0 44 58"
+        height={houseH}
+        viewBox="0 0 32 60"
+        fill="none"
+        stroke="var(--accent-cream, #F9F0E1)"
+        strokeWidth="1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
         style={{
           position: "absolute",
           right,
           bottom,
           pointerEvents: "none",
           zIndex: 2,
+          filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))",
         }}
         aria-hidden="true"
       >
         <defs>
-          <radialGradient id="tf-bg-lamp" cx="22" cy="8" r="9" gradientUnits="userSpaceOnUse">
-            <stop offset="0%"   stopColor="var(--accent-cream, #F9F0E1)" stopOpacity="1" />
-            <stop offset="60%"  stopColor="var(--accent-cream, #F9F0E1)" stopOpacity="0.4" />
+          <radialGradient id="tf-bg-lamp" cx="16" cy="14" r="7" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stopColor="var(--accent-cream, #F9F0E1)" stopOpacity="0.95" />
+            <stop offset="55%"  stopColor="var(--accent-cream, #F9F0E1)" stopOpacity="0.35" />
             <stop offset="100%" stopColor="var(--accent-cream, #F9F0E1)" stopOpacity="0" />
           </radialGradient>
         </defs>
-        {/* Base — wide trapezoid */}
-        <path
-          d="M6 56 L10 40 L34 40 L38 56 Z"
-          fill="rgba(10,12,20,0.85)"
-          stroke="var(--accent-cream, #F9F0E1)"
-          strokeWidth="1.2"
-        />
-        {/* Mid section */}
-        <path
-          d="M12 40 L14 22 L30 22 L32 40 Z"
-          fill="rgba(10,12,20,0.85)"
-          stroke="var(--accent-cream, #F9F0E1)"
-          strokeWidth="1.2"
-        />
-        {/* Platform under the lamp */}
-        <rect
-          x="11" y="20" width="22" height="3"
-          fill="rgba(10,12,20,0.85)"
-          stroke="var(--accent-cream, #F9F0E1)"
-          strokeWidth="1.2"
-        />
-        {/* Lamp housing */}
-        <path
-          d="M15 20 L15 12 L29 12 L29 20 Z"
-          fill="rgba(10,12,20,0.85)"
-          stroke="var(--accent-cream, #F9F0E1)"
-          strokeWidth="1.2"
-        />
-        {/* Dome / roof */}
-        <path
-          d="M14 12 L22 4 L30 12 Z"
-          fill="rgba(10,12,20,0.85)"
-          stroke="var(--accent-cream, #F9F0E1)"
-          strokeWidth="1.2"
-        />
-        {/* Glow halo behind the bulb */}
-        <circle cx="22" cy="8" r="9" fill="url(#tf-bg-lamp)">
-          <animate attributeName="r" values="7;10;7" dur="2.4s" repeatCount="indefinite" />
+
+        {/* Base footprint — narrow plinth */}
+        <line x1="6" y1="58" x2="26" y2="58" />
+        <line x1="9" y1="58" x2="9" y2="55" />
+        <line x1="23" y1="58" x2="23" y2="55" />
+        <line x1="9" y1="55" x2="23" y2="55" />
+
+        {/* Tapered tower — gently narrows toward the gallery */}
+        <line x1="11" y1="55" x2="13" y2="26" />
+        <line x1="21" y1="55" x2="19" y2="26" />
+
+        {/* Two horizontal banding lines for stripe detail (subtle, not
+            painted bands — just hints at the classic candy-stripe). */}
+        <line x1="11.5" y1="46" x2="20.5" y2="46" strokeWidth="0.6" opacity="0.55" />
+        <line x1="12" y1="36" x2="20" y2="36" strokeWidth="0.6" opacity="0.55" />
+
+        {/* Gallery / railing platform */}
+        <line x1="10" y1="26" x2="22" y2="26" />
+        <line x1="11" y1="23" x2="21" y2="23" />
+        <line x1="10" y1="26" x2="11" y2="23" />
+        <line x1="22" y1="26" x2="21" y2="23" />
+        {/* Railing balusters */}
+        <line x1="13" y1="23" x2="13" y2="26" strokeWidth="0.6" />
+        <line x1="16" y1="23" x2="16" y2="26" strokeWidth="0.6" />
+        <line x1="19" y1="23" x2="19" y2="26" strokeWidth="0.6" />
+
+        {/* Lamp housing — narrow rectangle */}
+        <rect x="13" y="13" width="6" height="10" rx="0.5" />
+
+        {/* Dome — clean half-circle */}
+        <path d="M12.5 13 A3.5 3.5 0 0 1 19.5 13" />
+
+        {/* Finial / spire */}
+        <line x1="16" y1="9.5" x2="16" y2="6.5" strokeWidth="0.8" />
+        <circle cx="16" cy="6" r="0.6" fill="var(--accent-cream, #F9F0E1)" stroke="none" />
+
+        {/* Glow halo behind the bulb — slow pulse to match beam cadence */}
+        <circle cx="16" cy="14" r="7" fill="url(#tf-bg-lamp)" stroke="none">
+          <animate attributeName="r" values="5.5;8;5.5" dur="4.8s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.85;1;0.85" dur="4.8s" repeatCount="indefinite" />
         </circle>
-        {/* Bulb */}
-        <circle
-          cx="22" cy="8" r="2"
-          fill="var(--accent-cream, #F9F0E1)"
-        />
+        {/* Bulb core */}
+        <circle cx="16" cy="14" r="1.4" fill="var(--accent-cream, #F9F0E1)" stroke="none" />
       </svg>
     </>
   );
 }
 
+// Slow ease at the apex of each sweep so the beam pauses gently at the
+// edges — feels like a real lighthouse motor catching, not a frantic
+// scan line. 12s round trip = 6s each direction.
 const keyframes = `
 @keyframes tf-bg-sweep {
   0%   { transform: translate(50%, 50%) rotate(-90deg); }
@@ -227,7 +236,7 @@ const cone: CSSProperties = {
   // The transform-origin sits at SVG (0,0), which we placed at the
   // bottom-right of the SVG box via the translate above.
   transformOrigin: "100% 100%",
-  animation: "tf-bg-sweep 3s ease-in-out infinite",
+  animation: "tf-bg-sweep 12s cubic-bezier(0.45, 0, 0.55, 1) infinite",
 };
 const hintWrap: CSSProperties = {
   position: "absolute",
