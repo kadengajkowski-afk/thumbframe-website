@@ -4,7 +4,8 @@ import { history } from "@/lib/history";
 import { hexToPixi, normalizeHex } from "@/lib/color";
 import { toast } from "@/toasts/toastStore";
 import { THUMBNAIL_DRAG_MIME } from "@/lib/thumbnailReference";
-import type { BrandKit } from "@/lib/brandKit";
+import { ensureFontLoaded, getFontMeta } from "@/lib/fonts";
+import type { BrandKit, BrandKitFont } from "@/lib/brandKit";
 import type { SavedBrandKitRow } from "@/lib/savedBrandKits";
 import * as s from "./BrandKitPanel.styles";
 
@@ -43,6 +44,7 @@ export function BrandKitResult({ kit }: { kit: BrandKit }) {
                 avatarUrl:     kit.avatarUrl,
                 primaryAccent: kit.primaryAccent,
                 palette:       kit.palette,
+                fonts:         kit.fonts ?? [],
               });
               toast(`Pinned ${kit.channelTitle}`);
             }
@@ -63,6 +65,15 @@ export function BrandKitResult({ kit }: { kit: BrandKit }) {
         </section>
       ) : (
         <div style={s.emptyHint}>Couldn't extract colors — try a channel with more public uploads.</div>
+      )}
+
+      {kit.fonts && kit.fonts.length > 0 && (
+        <section style={s.section}>
+          <div style={s.sectionLabel}>Fonts — click to apply</div>
+          <div style={s.fontGrid} data-testid="brand-kit-fonts">
+            {kit.fonts.map((f) => <FontCard key={f.name} font={f} />)}
+          </div>
+        </section>
       )}
 
       {kit.recentThumbnails.length > 0 && (
@@ -119,6 +130,57 @@ function Swatch({ hex, primary = false }: { hex: string; primary?: boolean }) {
       <div style={s.swatchLabel}>{primary ? "Primary" : hex}</div>
     </button>
   );
+}
+
+function FontCard({ font }: { font: BrandKitFont }) {
+  const meta = getFontMeta(font.name);
+  // Kick a font load on first paint so the preview face renders sharply.
+  if (meta) void ensureFontLoaded(meta.family, meta.weights[0]!);
+  return (
+    <button
+      type="button"
+      style={s.fontCard}
+      onClick={() => applyFont(font.name)}
+      onMouseEnter={() => meta && void ensureFontLoaded(meta.family, meta.weights[0]!)}
+      title={`${font.name} — ${Math.round(font.confidence * 100)}% confidence`}
+      data-testid="brand-kit-font"
+    >
+      <div style={{ ...s.fontCardName, fontFamily: `"${font.name}", system-ui, sans-serif` }}>
+        {font.name}
+      </div>
+      <div style={{ ...s.fontCardSample, fontFamily: `"${font.name}", system-ui, sans-serif` }}>
+        Aa Bb Cc 123
+      </div>
+      <div style={s.fontCardConfidence}>
+        <span style={{ ...s.confidenceDot, opacity: 0.3 + 0.7 * font.confidence }} />
+        {Math.round(font.confidence * 100)}%
+      </div>
+    </button>
+  );
+}
+
+/** Click a brand font:
+ *   - always pin to recentFonts + lastFontFamily so the next text layer
+ *     uses it.
+ *   - if a text layer is selected, also commit fontFamily through history. */
+function applyFont(family: string) {
+  const ui = useUiStore.getState();
+  ui.addRecentFont(family);
+  ui.setLastFontFamily(family);
+
+  const layers = useDocStore.getState().layers;
+  const targets = ui.selectedLayerIds
+    .map((id) => layers.find((l) => l.id === id))
+    .filter((l): l is NonNullable<typeof l> => !!l && l.type === "text");
+
+  if (targets.length > 0) {
+    history.beginStroke("Apply brand font");
+    for (const t of targets) history.setFontFamily(t.id, family);
+    history.endStroke();
+    toast(`Applied ${family}`);
+  } else {
+    toast(`${family} set as default font`);
+  }
 }
 
 /** Click a brand swatch:

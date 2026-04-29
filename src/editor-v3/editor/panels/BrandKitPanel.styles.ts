@@ -188,3 +188,32 @@ export const savedDelete: CSSProperties = {
   borderLeft: "1px solid var(--border-ghost)",
   color: "var(--text-secondary)", fontSize: 18, cursor: "pointer",
 };
+
+// ── Day 33: Fonts section ──────────────────────────────────────────────────
+export const fontGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+  gap: 8,
+};
+export const fontCard: CSSProperties = {
+  display: "flex", flexDirection: "column", gap: 6,
+  padding: "10px 12px",
+  background: "var(--bg-space-0)",
+  border: "1px solid var(--border-ghost)", borderRadius: 6,
+  color: "var(--text-primary)",
+  cursor: "pointer", textAlign: "left",
+};
+export const fontCardName: CSSProperties = {
+  fontSize: 14, fontWeight: 600, lineHeight: 1.1,
+};
+export const fontCardSample: CSSProperties = {
+  fontSize: 18, lineHeight: 1.2, color: "var(--accent-cream)",
+};
+export const fontCardConfidence: CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 5,
+  fontSize: 10, color: "var(--text-secondary)",
+};
+export const confidenceDot: CSSProperties = {
+  width: 6, height: 6, borderRadius: "50%",
+  background: "var(--accent-cream)",
+};

@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 import { useUiStore } from "@/state/uiStore";
 import { toast } from "@/toasts/toastStore";
-import type { BrandKit } from "./brandKit";
+import type { BrandKit, BrandKitFont } from "./brandKit";
 
 /** Day 32 — per-user saved Brand Kits.
  *
@@ -19,6 +19,7 @@ export type SavedBrandKitRow = {
   banner_url: string | null;
   primary_accent: string | null;
   colors: string[];
+  fonts: BrandKitFont[];
   recent_thumbnails: BrandKit["recentThumbnails"];
   created_at: string;
   updated_at: string;
@@ -42,6 +43,7 @@ export function rowToBrandKit(row: SavedBrandKitRow): BrandKit {
     recentThumbnails: row.recent_thumbnails ?? [],
     palette:          row.colors ?? [],
     primaryAccent:    row.primary_accent,
+    fonts:            row.fonts ?? [],
     fromCache:        true,
   };
 }
@@ -52,7 +54,7 @@ export async function listSavedBrandKits(): Promise<SavedBrandKitRow[]> {
   if (!user) return [];
   const { data, error } = await supabase
     .from("brand_kits")
-    .select("id, channel_id, channel_title, custom_url, avatar_url, banner_url, primary_accent, colors, recent_thumbnails, created_at, updated_at")
+    .select("id, channel_id, channel_title, custom_url, avatar_url, banner_url, primary_accent, colors, fonts, recent_thumbnails, created_at, updated_at")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false })
     .limit(50);
@@ -81,6 +83,7 @@ export async function saveBrandKit(kit: BrandKit): Promise<boolean> {
         banner_url:        kit.bannerUrl,
         primary_accent:    kit.primaryAccent,
         colors:            kit.palette,
+        fonts:             kit.fonts,
         recent_thumbnails: kit.recentThumbnails,
       },
       { onConflict: "user_id,channel_id" },

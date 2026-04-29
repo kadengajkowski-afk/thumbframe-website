@@ -104,7 +104,7 @@ export function BrandKitPanel() {
             {state.status === "loading" && (
               <div style={s.loadingBlock} data-testid="brand-kit-loading">
                 <div style={s.spinner} />
-                <span>Extracting brand kit…</span>
+                <LoadingPhases />
               </div>
             )}
             {state.status === "error" && (
@@ -147,4 +147,25 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
       {children}
     </button>
   );
+}
+
+/** Day 33 — fake-progress message that cycles through the three real
+ * backend phases at sensible intervals. The backend POST is one
+ * round-trip with no streaming, so this is purely UX — but the timings
+ * roughly match what actually happens server-side: channels.list runs
+ * fast (~300ms), playlistItems.list adds a beat, then sharp colors +
+ * vision fonts run in parallel for ~3-5s. */
+function LoadingPhases() {
+  const [phase, setPhase] = useState(0);
+  useEffect(() => {
+    const t1 = window.setTimeout(() => setPhase(1), 800);
+    const t2 = window.setTimeout(() => setPhase(2), 2200);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+  }, []);
+  const messages = [
+    "Fetching channel…",
+    "Extracting colors…",
+    "Detecting fonts…",
+  ];
+  return <span>{messages[phase]}</span>;
 }

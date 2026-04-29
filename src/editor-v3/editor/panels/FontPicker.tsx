@@ -48,7 +48,13 @@ export function FontPicker({
     };
   }, [open]);
 
-  const grouped = useMemo(() => groupFonts(query, recent), [query, recent]);
+  const pinned = useUiStore((s) => s.pinnedBrandKit);
+  const brandFontNames = pinned?.fonts?.map((f) => f.name) ?? [];
+  const brandLabel = pinned ? `Brand · ${pinned.channelTitle}` : null;
+  const grouped = useMemo(
+    () => groupFonts(query, recent, brandFontNames, brandLabel),
+    [query, recent, brandFontNames.join(","), brandLabel],
+  );
 
   return (
     <div ref={containerRef} style={wrap}>
@@ -154,16 +160,31 @@ function FontRow({
   );
 }
 
-function groupFonts(query: string, recent: readonly string[]): Group[] {
+function groupFonts(
+  query: string,
+  recent: readonly string[],
+  brandFontNames: readonly string[],
+  brandLabel: string | null,
+): Group[] {
   const q = query.trim().toLowerCase();
   const matches = (m: FontMeta) =>
     !q || m.family.toLowerCase().includes(q);
 
+  const groups: Group[] = [];
+
+  // Day 33 — pinned-kit fonts at the very top.
+  if (brandLabel && brandFontNames.length > 0) {
+    const brandMetas = brandFontNames
+      .map((f) => FONT_REGISTRY.find((m) => m.family === f))
+      .filter((m): m is FontMeta => !!m && matches(m));
+    if (brandMetas.length > 0) {
+      groups.push({ label: brandLabel, fonts: brandMetas });
+    }
+  }
+
   const recentMetas = recent
     .map((f) => FONT_REGISTRY.find((m) => m.family === f))
     .filter((m): m is FontMeta => !!m && matches(m));
-
-  const groups: Group[] = [];
   if (recentMetas.length > 0) {
     groups.push({ label: "Recent", fonts: recentMetas });
   }

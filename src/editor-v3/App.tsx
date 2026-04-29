@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { CompositorHost } from "@/editor/CompositorHost";
 import { TextEditor } from "@/editor/TextEditor";
@@ -12,11 +12,26 @@ import { useDropTarget } from "@/editor/useDropTarget";
 import { ZoomIndicator } from "@/editor/ZoomIndicator";
 import { ToolPalette } from "@/editor/panels/ToolPalette";
 import { CommandPalette } from "@/editor/CommandPalette";
-import { ExportPanel } from "@/editor/panels/ExportPanel";
-import { AuthPanel } from "@/editor/panels/AuthPanel";
-import { ProjectsPanel } from "@/editor/panels/ProjectsPanel";
-import { BrandKitPanel } from "@/editor/panels/BrandKitPanel";
 import { PreviewRack } from "@/editor/panels/PreviewRack";
+
+/** Day 33 — modal-style panels lazy-load on first open. Each is gated
+ * behind a user action (hotkey or button) so the boot path doesn't
+ * pay for code that may never run. AuthPanel, ProjectsPanel, and
+ * ExportPanel were Day-30 DEFERRED follow-ups; BrandKitPanel is the
+ * new Day-33 addition. PreviewRack stays eager because it's part of
+ * the right-rail layout, not modal. */
+const AuthPanel = lazy(() =>
+  import("@/editor/panels/AuthPanel").then((m) => ({ default: m.AuthPanel })),
+);
+const ProjectsPanel = lazy(() =>
+  import("@/editor/panels/ProjectsPanel").then((m) => ({ default: m.ProjectsPanel })),
+);
+const ExportPanel = lazy(() =>
+  import("@/editor/panels/ExportPanel").then((m) => ({ default: m.ExportPanel })),
+);
+const BrandKitPanel = lazy(() =>
+  import("@/editor/panels/BrandKitPanel").then((m) => ({ default: m.BrandKitPanel })),
+);
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 import { supabase } from "@/lib/supabase";
@@ -122,10 +137,12 @@ export function App() {
       />
       {dragActive && <DropZone />}
       <CommandPalette />
-      <ExportPanel />
-      <AuthPanel />
-      <ProjectsPanel />
-      <BrandKitPanel />
+      <Suspense fallback={null}>
+        <ExportPanel />
+        <AuthPanel />
+        <ProjectsPanel />
+        <BrandKitPanel />
+      </Suspense>
       <ToastHost />
     </div>
   );

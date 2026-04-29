@@ -208,7 +208,7 @@ describe("Day 32 — saved kits flow (without supabase)", () => {
       channelId: "x", channelTitle: "x", customUrl: null,
       description: "", avatarUrl: null, bannerUrl: null, country: null,
       subscriberCount: 0, videoCount: 0, viewCount: 0,
-      recentThumbnails: [], palette: [], primaryAccent: null,
+      recentThumbnails: [], palette: [], primaryAccent: null, fonts: [],
     });
     expect(ok).toBe(false);
   });

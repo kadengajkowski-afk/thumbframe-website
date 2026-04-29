@@ -3,6 +3,136 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 4 Day 33 — held back (date: 2026-04-30)
+
+- **Bundle landed at 298 KB gzip, not the 280 KB target.** Day 33
+  spec asked to "verify bundle drops below 280KB main." Lazy-
+  splitting all four modal-style panels (Brand Kit, Auth, Projects,
+  Export) saved ~9 KB. The remaining ~298 KB is dominated by Pixi
+  core (already split into renderer chunks; the always-needed bits
+  stay in main), React 19, Zustand+immer, pixi-viewport,
+  pixi-filters, and the editor wiring (compositor, hotkeys, color,
+  history, smart-guides, scene helpers, autoSave, projectSerializer).
+  Getting under 280 needs surgery on Pixi (lazy-load until first
+  paint) or splitting FontPicker / TextProperties (only used when
+  text is selected). Both are bigger than Day 33 scope; a dedicated
+  bundle pass post-soft-launch with first-paint metrics from real
+  invitees will tell us what to split next.
+
+- **Loading-phase messages are time-based fakes, not real progress.**
+  The backend POST is a single round-trip with no streaming. The
+  client-side `LoadingPhases` cycles through "Fetching channel…
+  → Extracting colors… → Detecting fonts…" on 800ms / 2200ms timers
+  that approximately match real backend phases. Honest UX since the
+  user sees something happening, but the messages don't reflect
+  *actual* server progress. SSE / WebSockets to stream phases is a
+  Day-34+ ask (tied to AI proxy SSE work) and probably overkill —
+  3-5s of fake progress is better than 3-5s of frozen "Loading…".
+
+- **Vision call doesn't retry on transient timeout.** `detectFonts`
+  catches all errors and returns `[]`. A 503 from Anthropic or a
+  timeout on the image fetch silently degrades to colors-only.
+  Acceptable for "no fonts detected" UX (the section just hides),
+  but worth a single retry with backoff if we see telemetry showing
+  >5% empty-fonts rate. Today's bigger driver of empty fonts is
+  Claude's caution — it returns [] when it can't confidently match
+  any face from our 25-OFL set, which is correct behavior.
+
+- **Confidence floor 0.6 was a guess.** Some fonts (Anton, Bebas
+  Neue, Press Start 2P) have such distinctive letterforms that
+  Claude is right ~95% of the time; others (Roboto, Open Sans,
+  Inter — all neutral sans-serifs) Claude can barely tell apart in
+  YouTube-thumbnail context, so even high confidence might be wrong.
+  Day 33+ candidate: per-font confidence floors based on uniqueness
+  (display fonts trust 0.6, neutral sans need 0.85).
+
+- **No "wrong font" feedback loop.** If Claude says Anton and the
+  user pastes a font they recognize as Bebas Neue, there's no way
+  to correct it. Day 47 (ThumbFriend deep memory) could store user
+  corrections per channel and feed them into a "the user said this
+  channel uses X" hint in the prompt. Out of scope today.
+
+- **Vision sees up to 5 thumbnails; channels with mixed fonts may
+  return only one family.** Claude tends to lock onto the most
+  prominent face across the strip rather than enumerating per-thumb.
+  Acceptable — most YouTube channels lean hard on one display font
+  for hooks, and that's what brand kits should reflect — but if a
+  user splits their content between two voices (gaming + vlog) the
+  detection might miss the secondary face. Manual font picking from
+  the 25-OFL set covers the gap.
+
+- **Filter to bundled OFL set is hardcoded in two places.** The
+  backend `lib/detectFonts.js` carries a copy of the 25-name list
+  (used in the prompt + the post-filter); the frontend
+  `state/types.ts` carries the canonical list. Adding a font means
+  editing both. A shared JSON constants file would be cleaner but
+  the import path crosses two repos — Day 39+ when we ship `shared/`
+  as a published package, or just keep the assertion test that
+  flags drift.
+
+- **`detectFonts` runs in parallel with color extraction via
+  Promise.allSettled.** Wall time becomes the slower of the two
+  (~3-5s for vision) instead of summed. Risk: a hung vision call
+  (no SDK timeout configured) holds the whole response. Anthropic
+  SDK doesn't expose a per-request timeout option in our version
+  but `AbortController` + `setTimeout` would do it. Add a 12s
+  timeout if telemetry shows hangs.
+
+- **Anthropic SDK token cost not metered.** Each Brand Kit extraction
+  uses ~5 images × ~1500 tokens vision input + ~50 tokens output =
+  ~7,500 input + 50 output Sonnet 4.6 tokens. At Sonnet 4.6 pricing
+  that's ~$0.025 per call. With 24h shared-cache hits dominating
+  warm reads, only first-extractions pay; budget is fine for
+  soft-launch (~$25 if every soft-launch invitee extracts 1000
+  channels). Day 35 (Haiku/Sonnet routing + ai_usage_events) is
+  where this becomes auditable.
+
+- **Per-font confidence values are exposed in the UI.** The card
+  shows "92%" alongside the font name. Some users will treat this
+  as authoritative; it's actually Claude's self-reported confidence,
+  which is well-calibrated for distinctive fonts and overconfident
+  for neutral ones. If user feedback says "the percentage is
+  misleading," swap to a 3-tier visual indicator (•, ••, •••) that
+  hides the false precision.
+
+- **Saved kits don't refresh fonts on re-extract.** Click a saved
+  kit in the Saved tab → loads via `setKit(rowToBrandKit(row))` —
+  shows the snapshot fonts. Re-pasting the @handle hits the L2
+  cache (likely stale fonts < 24h old) or re-extracts. Day 33's
+  `brand_kits.fonts` column is a snapshot, like colors. Same
+  Day-32 deferred note about "no kit version history" applies here.
+
+- **`@vitest/browser` "act not configured" warnings spike on Day 33
+  tests** — same issue all panel tests carry, multiplied by the new
+  font-card render paths. Fix is one line in a vitest setup file
+  (`globalThis.IS_REACT_ACT_ENVIRONMENT = true`); held until Day 34
+  when the AI proxy's mock harness sets up a proper setup file
+  anyway.
+
+- **`SavedKitsTab` doesn't surface fonts in the row preview.**
+  The row shows avatar + title + 5-color strip. Adding a small
+  "T" badge per detected font (or "3 fonts" text) is bikeshed —
+  the fonts only matter once the kit is open, so leaving the
+  preview color-only keeps the list scannable.
+
+- **Pinned-kit fonts are presented in the FontPicker ordered by
+  confidence (server-sorted descending).** When a user clicks one,
+  the Recent group bumps it to the top of the next opening too,
+  which can shadow the "Brand" group's display. Cosmetic — the
+  Brand group still renders with the kit's fonts regardless of
+  Recent ordering.
+
+- **Spinner copy is plural even when one font is detected.** Says
+  "Detecting fonts…" regardless. Singular-vs-plural toggling on a
+  fake-progress message is over-engineering.
+
+- **No way to disable font detection per-channel.** A channel with
+  truly custom fonts (paid/private, not in our OFL set) gets a
+  fonts section showing the closest-matching bundled fonts — which
+  may be wrong from the designer's perspective. Workaround: if it
+  matters, designer just doesn't click the Brand fonts. A "Hide
+  fonts" toggle is a Cycle 6 polish ask.
+
 ## Cycle 4 Day 32 — held back (date: 2026-04-29)
 
 - **Drop position is canvas-center, not pointer-released.** Day 32's

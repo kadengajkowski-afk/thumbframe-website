@@ -28,7 +28,23 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   drops a kit's palette into the ColorPicker as a "Brand · X"
   presets section, plus a small avatar+name badge in the TopBar
   that's click-to-reopen.
-- Day 33 — font detection, banner-as-template, AI proxy.
+- **Day 33 (2026-04-30) — Brand Kit fonts + bundle split.** Backend
+  `routes/brandKit.js` now also calls Claude Sonnet 4.6 vision on
+  the channel's recent thumbnails (parallel with the sharp color
+  pass via `Promise.allSettled`), filters detections to the 25-OFL
+  bundled set with a 0.6 confidence floor, capped at 3. New `fonts:
+  [{name, confidence}]` field on the response, persisted alongside
+  colors in `shared_brand_kits.payload` (no schema change) and a
+  new `brand_kits.fonts jsonb` column. Panel surfaces a "Fonts"
+  section with cards rendered in their own face — click applies as
+  `lastFontFamily` + adds to recent fonts; if a text layer is
+  selected, also commits `setFontFamily` through history. Pinned
+  kits get a "Brand · X" group at the top of the FontPicker.
+  Loading state cycles through "Fetching channel… → Extracting
+  colors… → Detecting fonts…". `BrandKitPanel`, `AuthPanel`,
+  `ProjectsPanel`, `ExportPanel` lazy-load on first open via
+  `lazy(() => import(...))` + `<Suspense>` — main bundle dropped
+  from 307 KB to 298 KB gzip; per-panel chunks 1.8–4.9 KB gzip.
 
 ## Shipped (visible behavior)
 

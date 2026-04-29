@@ -20,6 +20,13 @@ export type BrandKitThumbnail = {
   url: string;
 };
 
+export type BrandKitFont = {
+  /** Canonical bundled-font name (one of BUNDLED_FONTS in state/types). */
+  name: string;
+  /** 0..1, server-side confidence floor of 0.6 already applied. */
+  confidence: number;
+};
+
 export type BrandKit = {
   channelId: string;
   channelTitle: string;
@@ -38,6 +45,10 @@ export type BrandKit = {
   /** Hex string. Server-extracted as the dominant color of the channel
    * avatar (k-means k=1). Falls back to palette[0] when avatar is missing. */
   primaryAccent: string | null;
+  /** Day 33 — fonts identified by Claude vision, filtered to the
+   * 25-OFL bundled set, capped at 3. Empty array on detection failure
+   * or when ANTHROPIC_API_KEY isn't configured. */
+  fonts: BrandKitFont[];
   fromCache?: boolean;
 };
 

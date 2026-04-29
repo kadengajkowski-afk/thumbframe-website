@@ -166,6 +166,10 @@ export type PinnedBrandKit = {
   avatarUrl: string | null;
   primaryAccent: string | null;
   palette: string[];
+  /** Day 33 — pinned-kit fonts surface as a "Brand" group at the top
+   * of the FontPicker. Empty when font detection failed / the kit
+   * predates Day 33. */
+  fonts: { name: string; confidence: number }[];
 };
 
 export type SaveStatus =
