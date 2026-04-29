@@ -1,9 +1,9 @@
 import type { RemoveBgResult } from "./bgRemove";
 import { BgRemoveError } from "./bgRemove";
 
-/** Day 36 — browser BiRefNet inference, Pixi-thread.
+/** Day 36 — browser BG-removal inference, Pixi-thread.
  *
- * Runs BiRefNet ONNX in onnxruntime-web (WebGPU when available, falls
+ * Runs RMBG-1.4 ONNX in onnxruntime-web (WebGPU when available, falls
  * back to wasm). Loads the runtime + model lazily on first call and
  * caches the InferenceSession for the session.
  *
@@ -17,14 +17,28 @@ import { BgRemoveError } from "./bgRemove";
  *    catastrophic; the loading toast covers it.
  *  - Day 39+ can fork to a worker once Safari ships gpu-in-worker.
  *
- * Model: hosted via fetch. Default URL points at the public BiRefNet
- * portrait fp16 release; users can override via VITE_BG_REMOVE_MODEL_URL. */
+ * Model: hosted via fetch. Default URL points at briaai/RMBG-1.4
+ * (publicly hostable, ~44 MB quantized, no auth required). The
+ * onnx-community/BiRefNet-portrait release went auth-walled in
+ * mid-2026 — switched to RMBG-1.4 because it's:
+ *   - publicly downloadable + popular (Bria's open release)
+ *   - half the size of BiRefNet_lite (44 MB vs 114 MB)
+ *   - same 1024×1024 single-channel sigmoid output shape, so the
+ *     mask code path is unchanged
+ *   - different normalization stats — RMBG uses mean=0.5, std=1.0
+ *     (not ImageNet) — handled below.
+ * Users can override with VITE_BG_REMOVE_MODEL_URL. */
 
 const DEFAULT_MODEL_URL =
   (import.meta.env.VITE_BG_REMOVE_MODEL_URL as string | undefined) ||
-  "https://huggingface.co/onnx-community/BiRefNet-portrait/resolve/main/onnx/model_fp16.onnx";
+  "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model_quantized.onnx";
 
 const MODEL_INPUT = 1024;
+/** RMBG-1.4 normalization: input pixels mapped to [-0.5, 0.5].
+ * (BiRefNet used ImageNet mean/std; if VITE_BG_REMOVE_MODEL_URL is
+ * pointed back at a BiRefNet variant, swap these constants too.) */
+const NORM_MEAN = [0.5, 0.5, 0.5] as const;
+const NORM_STD  = [1.0, 1.0, 1.0] as const;
 
 let sessionPromise: Promise<unknown> | null = null;
 let runtimePromise: Promise<typeof import("onnxruntime-web")> | null = null;
@@ -40,6 +54,26 @@ async function loadSession() {
   if (sessionPromise) return sessionPromise;
   sessionPromise = (async () => {
     const ort = await loadRuntime();
+    // Fail-fast probe — onnxruntime's "Failed to load external data
+    // file" error swallows the underlying HTTP status, so a 401/403
+    // from a model URL that went auth-walled becomes a confusing
+    // "Worker failed". Probe with a HEAD first so the surface error
+    // is honest about what happened.
+    let probe: Response;
+    try {
+      probe = await fetch(DEFAULT_MODEL_URL, { method: "HEAD" });
+    } catch (err) {
+      throw new BgRemoveError(
+        "WORKER_FAILED",
+        `Couldn't reach ${DEFAULT_MODEL_URL}: ${err instanceof Error ? err.message : "network error"}`,
+      );
+    }
+    if (!probe.ok) {
+      throw new BgRemoveError(
+        "WORKER_FAILED",
+        `Model URL returned HTTP ${probe.status}. The default model may have been moved or auth-walled — set VITE_BG_REMOVE_MODEL_URL to a public ONNX URL.`,
+      );
+    }
     return ort.InferenceSession.create(DEFAULT_MODEL_URL, {
       executionProviders: ["webgpu", "wasm"],
       graphOptimizationLevel: "all",
@@ -111,8 +145,8 @@ export async function runBiRefNet(args: RunBiRefNetArgs): Promise<RemoveBgResult
 }
 
 /** Convert ImageBitmap → Float32 NCHW tensor at MODEL_INPUT × MODEL_INPUT.
- * Mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225] — ImageNet
- * preprocessing matches BiRefNet's training. */
+ * Pixels mapped via (px/255 - mean)/std. RMBG-1.4 (current default)
+ * uses mean=0.5, std=1.0 → output range [-0.5, 0.5]. */
 function bitmapToInputTensor(
   ort: typeof import("onnxruntime-web"),
   bitmap: ImageBitmap,
@@ -124,12 +158,10 @@ function bitmapToInputTensor(
   const { data } = ctx.getImageData(0, 0, MODEL_INPUT, MODEL_INPUT);
   const len = MODEL_INPUT * MODEL_INPUT;
   const out = new Float32Array(3 * len);
-  const mean = [0.485, 0.456, 0.406];
-  const std = [0.229, 0.224, 0.225];
   for (let i = 0; i < len; i++) {
-    const r = (data[i * 4]! / 255 - mean[0]!) / std[0]!;
-    const g = (data[i * 4 + 1]! / 255 - mean[1]!) / std[1]!;
-    const b = (data[i * 4 + 2]! / 255 - mean[2]!) / std[2]!;
+    const r = (data[i * 4]! / 255 - NORM_MEAN[0]) / NORM_STD[0];
+    const g = (data[i * 4 + 1]! / 255 - NORM_MEAN[1]) / NORM_STD[1];
+    const b = (data[i * 4 + 2]! / 255 - NORM_MEAN[2]) / NORM_STD[2];
     out[i] = r;
     out[len + i] = g;
     out[len * 2 + i] = b;
