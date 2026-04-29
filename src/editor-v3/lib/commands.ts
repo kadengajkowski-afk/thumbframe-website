@@ -288,7 +288,50 @@ const COMMANDS: Command[] = [
     aliases: ["brand", "channel", "youtube", "palette"],
     run: () => useUiStore.getState().setBrandKitPanelOpen(true),
   },
+
+  // Day 34 dev — smoke-test the Railway AI proxy end-to-end. The
+  // bundled aiClient can't be reached via console `import()` since
+  // Vite hashes its path, so this command is the only way to verify
+  // the stream from a real signed-in browser session. Remove once
+  // ThumbFriend lands Day 39+ (the real chat input replaces it).
+  {
+    id: "dev.ai-test",
+    label: "AI: Send test message (dev)",
+    section: "File",
+    aliases: ["ai", "test", "stream", "chat", "thumbfriend"],
+    run: () => { void runAiSmokeTest(); },
+  },
 ];
+
+async function runAiSmokeTest() {
+  const { streamChat, AiError } = await import("./aiClient");
+  const { toast } = await import("@/toasts/toastStore");
+  console.group("[ai-test] streamChat smoke");
+  console.log("starting…");
+  try {
+    let chunkCount = 0;
+    for await (const event of streamChat({
+      messages: [
+        { role: "user", content: "Reply in one short sentence: pick a single thumbnail color for a tech review video." },
+      ],
+      intent: "edit",
+    })) {
+      console.log(event);
+      if (event.type === "chunk") chunkCount += 1;
+    }
+    console.log(`done — ${chunkCount} chunk(s)`);
+    console.groupEnd();
+    toast(`AI response in console (${chunkCount} chunks)`);
+  } catch (err) {
+    console.error("[ai-test] failed:", err);
+    console.groupEnd();
+    if (err instanceof AiError) {
+      toast(`AI failed (${err.code}) — see console`);
+    } else {
+      toast("AI failed — see console");
+    }
+  }
+}
 
 export function listCommands(): readonly Command[] {
   return COMMANDS;
