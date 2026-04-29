@@ -299,6 +299,16 @@ const COMMANDS: Command[] = [
     run: () => useUiStore.getState().setImageGenPanelOpen(true),
   },
 
+  // Day 38 — Upgrade-to-Pro panel.
+  {
+    id: "file.upgrade",
+    label: "Upgrade to Pro…",
+    section: "File",
+    hotkey: "Cmd+U",
+    aliases: ["pro", "upgrade", "billing", "subscription", "plan", "stripe"],
+    run: () => useUiStore.getState().setUpgradePanelOpen(true),
+  },
+
   // Day 34 dev — smoke-test the Railway AI proxy end-to-end. The
   // bundled aiClient can't be reached via console `import()` since
   // Vite hashes its path, so this command is the only way to verify

@@ -112,6 +112,14 @@ function handleKeydown(e: KeyboardEvent) {
   }
   if (ui.imageGenPanelOpen) return;
 
+  // Day 38 — Cmd+U opens the Upgrade-to-Pro panel.
+  if (meta && !e.shiftKey && e.key.toLowerCase() === "u") {
+    e.preventDefault();
+    runCommand("file.upgrade");
+    return;
+  }
+  if (ui.upgradePanelOpen) return;
+
   // Zoom shortcuts.
   if (meta && (e.key === "=" || e.key === "+")) {
     e.preventDefault();

@@ -276,8 +276,9 @@ describe("Cycle 6 — BgRemoveSection UI", () => {
       );
     });
 
-    const btn = container.querySelector<HTMLButtonElement>('[data-testid="bg-remove-run"]')!;
-    expect(btn.disabled).toBe(true);
+    // Day 38 — at-cap surface swaps Remove BG for Upgrade-to-Pro CTA.
+    expect(container.querySelector('[data-testid="bg-remove-run"]')).toBeNull();
+    expect(container.querySelector('[data-testid="bg-remove-upgrade"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="bg-remove-cap"]')).not.toBeNull();
 
     act(() => root.unmount());

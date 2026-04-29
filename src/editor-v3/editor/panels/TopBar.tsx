@@ -127,6 +127,17 @@ function UserBadge(props: { email: string | null; avatarUrl: string | null }) {
           <button
             type="button"
             style={userMenuItem}
+            onClick={() => {
+              setOpen(false);
+              useUiStore.getState().setUpgradePanelOpen(true);
+            }}
+            data-testid="topbar-billing"
+          >
+            Billing
+          </button>
+          <button
+            type="button"
+            style={userMenuItem}
             onClick={async () => {
               setOpen(false);
               await supabase?.auth.signOut();

@@ -27,14 +27,27 @@ export function FormatSection(props: {
   onPick: (f: ExportFormat) => void;
   isPro: boolean;
 }) {
+  // Day 38 — clicking 4K as a free user opens the UpgradePanel instead
+  // of selecting the format. Pro users get the real format picker.
+  const onPickFormat = (f: ExportFormat) => {
+    if (f === "4k" && !props.isPro) {
+      // Lazy import to avoid pulling uiStore into the sections file's
+      // top-level deps unnecessarily — Day 38 wiring only.
+      import("@/state/uiStore").then((m) =>
+        m.useUiStore.getState().setUpgradePanelOpen(true),
+      );
+      return;
+    }
+    props.onPick(f);
+  };
   return (
     <div style={s.section}>
       <div style={s.sectionLabel}>Format</div>
       <div style={s.formatRow}>
-        <FormatBtn id="youtube" current={props.format} onPick={props.onPick} label="YouTube" sub="1280×720 JPEG" />
-        <FormatBtn id="png" current={props.format} onPick={props.onPick} label="PNG" sub="lossless" />
-        <FormatBtn id="jpeg" current={props.format} onPick={props.onPick} label="JPEG" sub="custom q" />
-        <FormatBtn id="4k" current={props.format} onPick={props.onPick} label="4K" sub={props.isPro ? "2560×1440" : "Pro v3.1"} pro={!props.isPro} />
+        <FormatBtn id="youtube" current={props.format} onPick={onPickFormat} label="YouTube" sub="1280×720 JPEG" />
+        <FormatBtn id="png" current={props.format} onPick={onPickFormat} label="PNG" sub="lossless" />
+        <FormatBtn id="jpeg" current={props.format} onPick={onPickFormat} label="JPEG" sub="custom q" />
+        <FormatBtn id="4k" current={props.format} onPick={onPickFormat} label="4K" sub={props.isPro ? "2560×1440" : "Upgrade"} pro={!props.isPro} />
       </div>
       <div style={helperText}>{HELPER_TEXT[props.format]}</div>
     </div>
