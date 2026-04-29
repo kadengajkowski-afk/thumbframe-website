@@ -3,6 +3,44 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 6 polish — BG remove free-path quality (date: 2026-04-30)
+
+- **Free BG-remove model is wrong for general thumbnail content.**
+  RMBG-1.4 (current default, 44 MB) is trained on human/object
+  photographs and struggles with graphics on solid backgrounds —
+  game logos, vector illustrations, screenshots, anything that's
+  not a photo. Pro (Remove.bg HD) handles all of these cleanly.
+  Verified during launch testing on a Minecraft logo: HD path =
+  perfect cutout, free path = noisy alpha. Acceptable for MVP —
+  the quality gap actively sells the Pro upgrade. Cycle 6
+  candidates:
+   - **briaai/RMBG-2.0** — newer, larger, trained on more diverse
+     data including graphics. Public on HF, ~150 MB. Test for
+     quality vs download cost trade-off.
+   - **General-purpose alternatives**: ZhengPeng7/BiRefNet
+     (general variant, not portrait), Xenova/segformer-b0-finetuned-ade-512-512.
+   - **Chroma-key fallback for solid backgrounds**: detect when
+     the source has a dominant edge color (sample corners + edge
+     pixels, find the modal color, threshold against it). For
+     solid-background graphics this beats any neural model and
+     runs in <100ms on CPU. Heuristic: if >85% of edge pixels
+     are within ΔE 5 of one another, use chroma-key; else fall
+     through to RMBG. Worth a feature-detection pass before
+     each call.
+   - **Hybrid**: run RMBG, also run chroma-key, pick the matte
+     with cleaner edges (lower edge entropy in the alpha channel).
+
+- **Free-tier "poor result" UX nudge.** When the alpha mask comes
+  back with low confidence (e.g. mean alpha gradient is high =
+  noisy edges, or the matte covers <10% / >95% of pixels =
+  obvious failure mode), show a toast: "Free model struggles with
+  this image — Pro's HD removal handles graphics + logos. Try
+  HD →" with a link that opens the upgrade modal. Pure UX work,
+  no model changes; just needs a quality-score function on the
+  Float32Array alpha output. Safe to ship the day Polar.sh
+  payments land (Cycle 4 Day 38) — without payments the upgrade
+  link is dead-end.
+
 ## Cycle 4 Day 36 — held back (date: 2026-04-30)
 
 - **BiRefNet ONNX runs ON the main thread, not in a Web Worker.**
