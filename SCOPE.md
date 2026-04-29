@@ -28,6 +28,28 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   drops a kit's palette into the ColorPicker as a "Brand · X"
   presets section, plus a small avatar+name badge in the TopBar
   that's click-to-reopen.
+- **Day 34 (2026-04-30) — Railway AI proxy + Claude routing.**
+  New `POST /api/ai/chat` endpoint on snapframe-api. Verifies the
+  caller via `flexAuthMiddleware` (Supabase access token), routes
+  intent → model: `classify` → Haiku 4.5, `edit`/`plan` → Sonnet 4.6
+  (default), `deep-think` → Opus 4.7. Streams via Anthropic
+  `messages.stream()` over SSE with `X-Accel-Buffering: no` +
+  explicit `flushHeaders()` so Railway/nginx don't buffer. Free
+  tier capped at 5 calls/24h via a `count(*)` against
+  `ai_usage_events`; Pro / dev users skip the gate. Every call
+  logs into `ai_usage_events` (model, intent, tokens_in,
+  tokens_out, cost_usd) — service-role insert, RLS-gated select.
+  New per-token pricing map in `lib/aiCost.js` (Haiku $1/$5,
+  Sonnet $3/$15, Opus $15/$75 per M tokens). Frontend
+  `lib/aiClient.ts` (179 lines) exposes `streamChat()` as an
+  async iterable yielding parsed SSE events plus `chatToString()`
+  for non-streaming consumers; raises typed `AiError` codes
+  (AUTH_REQUIRED / RATE_LIMITED / BAD_INPUT / NETWORK_ERROR /
+  UPSTREAM_ERROR / NOT_CONFIGURED). No UI surface yet —
+  ThumbFriend wiring is Day 39+.
+- Day 35 — explicit Haiku/Sonnet routing UX + per-request cost
+  metering display.
+
 - **Day 33 (2026-04-30) — Brand Kit fonts + bundle split.** Backend
   `routes/brandKit.js` now also calls Claude Sonnet 4.6 vision on
   the channel's recent thumbnails (parallel with the sharp color

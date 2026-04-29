@@ -3,6 +3,99 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 4 Day 34 — held back (date: 2026-04-30)
+
+- **No prompt caching yet.** Anthropic's prompt-cache header would
+  drop input-token cost ~75% on the system prompt. Day 34 doesn't
+  set `cache_control` on the system block. Add when ThumbFriend's
+  full personality prompts ship Cycle 5 — caching pays off when
+  the system prompt is multi-KB. Today's BASE_VOICE is ~600 chars,
+  not worth the 1024-token minimum cache cost.
+
+- **Rate limit is per-user, not per-feature.** Free tier's 5 calls
+  cover ALL ThumbFriend calls — chat, intent classify, plan, deep-
+  think. The spec says "5 messages/day" so this matches, but a
+  user who explores by typing into the palette burns the limit
+  fast. Day 35 might split classify out so it's free (it's cheap
+  Haiku tokens anyway).
+
+- **`checkRateLimit` does a count query on every call.** With
+  `ai_usage_events` indexed on (user_id, created_at DESC), this is
+  fast (<5ms) but it's still a hot-path round-trip. A small in-
+  memory LRU cache keyed by user_id would cover the common case
+  (user pressing Cmd+K rapidly) — held until telemetry shows it
+  matters.
+
+- **Pre-stream errors return JSON; post-stream errors emit an SSE
+  error frame then [DONE].** That's two error formats the client
+  has to handle (HTTP 4xx/5xx body + in-stream error event). Both
+  are wired in aiClient.ts. Worth a single-format pass if we ever
+  add a generic error-handling layer.
+
+- **Token-count for usage logging comes from Anthropic's
+  `final.usage`.** If the stream errors mid-flight, `finalMessage()`
+  may not return usage and tokensIn/Out land at 0 — so a partial
+  response gets logged as $0 cost. That undercounts but doesn't
+  over-bill. A heuristic (`max_tokens` × output rate as a worst-
+  case fallback) would be more honest if we ever enforce credit
+  caps strictly.
+
+- **System prompt is hard-coded in `lib/aiPrompts.js`.** Cycle 5
+  Day 41-42 (personality session) replaces the single BASE_VOICE
+  with five named personality prompts. Today's stub establishes
+  the non-banned-words rules; the per-personality voice is the
+  real Day 41 work.
+
+- **No streaming `tool_use` support.** Cycle 5 Day 45 lands the
+  ThumbFriend tool set (`create_text_layer`, `move_layer`, etc.).
+  The current `messages.stream()` call doesn't pass `tools` and
+  doesn't emit the `input_json_delta` events Anthropic uses for
+  tool calls. Wire when tools land.
+
+- **No SSE keepalive.** Long-running Opus 4.7 deep-think requests
+  could exceed 30s without intermediate output, which some proxies
+  treat as a hung connection. Anthropic's stream emits `text` events
+  fast enough that this isn't a problem in practice; if it surfaces
+  we'd add a `: keepalive\n\n` comment frame on a 15s timer.
+
+- **Test mocks `vi.mock("@/lib/supabase")` at top-level.** This
+  replaces the supabase singleton for the whole test file. The
+  rest of the day32/day33 tests depend on the real (null in tests)
+  supabase singleton — if we ever extract aiClient tests into a
+  shared file the mock needs to be scoped per `describe` (vitest
+  doesn't support that easily). Hold-back: keep the mock file-
+  scoped to `day34.test.ts` only.
+
+- **`canvasImage` injected as `image/png` only.** Day 34 always
+  declares the image as PNG even if the caller passes a JPEG-
+  encoded base64. Anthropic's vision API accepts a few media types;
+  if we ever export JPEGs from the canvas (Day 18 export pipeline
+  does ship JPEG via mozjpeg), the mime should be derived. Today
+  the Compositor extracts PNG so this is fine.
+
+- **Bundle: aiClient adds ~1.5 KB gzip to main.** Day 33 split
+  modal panels lazy-load; aiClient.ts is statically imported by
+  whatever consumes it (no consumers yet). When ThumbFriend lands
+  Day 39, lazy-load the panel and aiClient comes along for the
+  ride. No bundle action today.
+
+- **`AiError` is a class with `instanceof` semantics.** Tests
+  check `caught?.code === "FOO"` because `instanceof AiError`
+  fails across module boundaries when vitest hot-reloads a
+  module. Acceptable shortcut; if the caller's error-handling
+  pattern grows past code-string matching, expose a helper
+  `isAiError(err)` instead of relying on `instanceof`.
+
+- **Anthropic SDK timeout not set.** A hung vision call could
+  hold the SSE stream open until the load balancer times out
+  (Railway: 5min). Add an explicit `signal` from `AbortController`
+  with a 60s timeout when telemetry shows hangs.
+
+- **No `userId` body field used.** Spec said "userId: string from
+  auth" in the request body. We pull user from the JWT instead
+  (req.user.id) which is more secure — body fields can be spoofed
+  by the client. Body's `userId` is intentionally ignored.
+
 ## Cycle 4 Day 33 — held back (date: 2026-04-30)
 
 - **Bundle landed at 298 KB gzip, not the 280 KB target.** Day 33
