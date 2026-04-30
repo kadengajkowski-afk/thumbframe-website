@@ -98,6 +98,36 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   hover actions: "Add to canvas" (creates real ImageLayer via
   `imageGenAddToCanvas.ts`) + "Use as reference" (sets ref for the
   next call). Lazy-loaded, 4.99 KB gzip chunk.
+- **Day 40 (2026-04-30) — ThumbFriend tool-use streaming.** ThumbFriend
+  Ask mode now actually edits the canvas. New `lib/aiTools.ts` (175
+  lines) defines 10 Anthropic-shaped tools — `set_layer_fill`,
+  `set_layer_position`, `set_layer_opacity`, `set_text_content`,
+  `set_font_family`, `set_font_size`, `add_drop_shadow`,
+  `center_layer`, `duplicate_layer`, `delete_layer`. New
+  `editor/aiToolExecutor.ts` (199 lines) maps each tool to existing
+  history setters with input validation (hex regex, layer-id lookup,
+  range clamps). `executeAiToolBatch(calls)` wraps a multi-tool turn
+  in one `history.beginStroke / endStroke` so a single Cmd+Z reverts
+  the whole AI edit. New `lib/canvasState.ts` builds a compact
+  layer-list snapshot (id, type, name, x/y/w/h, opacity, color, text +
+  font for text layers, focused id) — appended to the system prompt
+  by the backend so the model can pick the right layer_id without a
+  vision round-trip. Backend `routes/ai.js` now passes `tools` to
+  `messages.stream()` and forwards each `tool_use` content block as a
+  `tool_call` SSE frame; frontend's `aiClient` parses them into typed
+  events. `aiPrompts.js` `edit` prompt rewritten for tool-use ("Use
+  them whenever the user wants a change — never say I can't"); when
+  `canvasState` is provided, `getSystemPrompt` appends it as a JSON
+  block. `useAiChat` extended with per-message `toolCalls` +
+  `toolResults` + `pendingPreview`; new `acceptPreview` /
+  `rejectPreview` / `undoTurn` callbacks. `uiStore.thumbfriendPreviewMode`
+  + setter (default off). `ThumbFriendPanel` adds a `Preview` toggle
+  in the header (Ask tab only); when on, tool calls queue on the
+  bubble with Accept/Reject buttons; when off, calls run immediately
+  and show as ✓ / ✗ rows below the assistant text with an "Undo all"
+  button. `ThumbFriendPanel.parts.tsx` (126 lines) holds `renderBubble`
+  + `ToolCallList`. Backend test count: 81. Frontend: 451.
+
 - **Day 39 (2026-04-30) — ThumbFriend Ask mode UI.** First user-
   facing surface for the AI proxy shipped Day 34. New
   `panels/ThumbFriendPanel.tsx` (261 + 163-line styles split) lives

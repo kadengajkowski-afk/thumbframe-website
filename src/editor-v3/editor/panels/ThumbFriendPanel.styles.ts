@@ -171,3 +171,79 @@ export const slashHint: CSSProperties = {
   color: "var(--text-secondary)", fontSize: 11,
 };
 export const keyframes = `@keyframes tf-blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }`;
+
+// ── Day 40 — tool-call list ─────────────────────────────────────────
+
+export const slashChip: CSSProperties = {
+  display: "inline-block",
+  margin: "2px 0",
+  padding: "2px 8px",
+  fontSize: 12,
+  fontFamily: '"Geist Mono", ui-monospace, monospace',
+  background: "var(--bg-space-2, #2a2f3a)",
+  color: "var(--accent-cream, #F9F0E1)",
+  border: "1px solid var(--accent-orange)",
+  borderRadius: 4,
+  cursor: "pointer",
+};
+
+export const toolList: CSSProperties = {
+  alignSelf: "flex-start", maxWidth: "82%",
+  display: "flex", flexDirection: "column", gap: 4,
+  padding: "6px 0",
+};
+const toolRowBase: CSSProperties = {
+  display: "flex", alignItems: "flex-start", gap: 6,
+  fontSize: 11, lineHeight: 1.4,
+  fontFamily: '"Geist Mono", ui-monospace, monospace',
+  color: "var(--text-secondary)",
+};
+export const toolRowPending: CSSProperties = { ...toolRowBase };
+export const toolRowOk: CSSProperties = { ...toolRowBase, color: "var(--accent-cream, #F9F0E1)" };
+export const toolRowFail: CSSProperties = { ...toolRowBase, color: "var(--accent-orange)" };
+export const toolGlyph: CSSProperties = {
+  display: "inline-block", minWidth: 12, textAlign: "center", fontWeight: 700,
+};
+export const toolText: CSSProperties = { flex: 1 };
+export const toolError: CSSProperties = { color: "var(--accent-orange)", fontStyle: "italic" };
+export const toolActionsRow: CSSProperties = {
+  display: "flex", gap: 6, marginTop: 4,
+};
+export const acceptBtn: CSSProperties = {
+  padding: "4px 10px", fontSize: 11, fontWeight: 600,
+  background: "var(--accent-orange)", color: "var(--bg-space-0)",
+  border: "none", borderRadius: 4, cursor: "pointer",
+};
+export const rejectBtn: CSSProperties = {
+  padding: "4px 10px", fontSize: 11,
+  background: "transparent", color: "var(--text-secondary)",
+  border: "1px solid var(--border-ghost)", borderRadius: 4, cursor: "pointer",
+};
+export const undoBtn: CSSProperties = {
+  alignSelf: "flex-start", marginTop: 2,
+  padding: "3px 8px", fontSize: 10,
+  background: "transparent", color: "var(--text-secondary)",
+  border: "1px solid var(--border-ghost)", borderRadius: 4, cursor: "pointer",
+  fontFamily: '"Geist Mono", ui-monospace, monospace',
+};
+
+// ── Day 40 — preview toggle in header ───────────────────────────────
+
+export const previewToggle: CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 6,
+  padding: "3px 8px", fontSize: 10, letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  background: "transparent", color: "var(--text-secondary)",
+  border: "1px solid var(--border-ghost)", borderRadius: 12,
+  cursor: "pointer", fontFamily: '"Geist Mono", ui-monospace, monospace',
+};
+export const previewToggleActive: CSSProperties = {
+  ...previewToggle,
+  background: "var(--accent-orange)",
+  color: "var(--bg-space-0)",
+  borderColor: "var(--accent-orange)",
+  fontWeight: 600,
+};
+export const headerLeft: CSSProperties = {
+  display: "flex", alignItems: "center", gap: 10,
+};

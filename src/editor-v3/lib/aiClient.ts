@@ -27,13 +27,28 @@ export type StreamChatOptions = {
   intent?: AiIntent;
   /** Optional base64 PNG to attach as a vision input (Day 39+). */
   canvasImage?: string;
+  /** Day 40 — Anthropic tool definitions to attach to the call.
+   * When present and the model emits tool_use blocks, the SSE stream
+   * includes `tool_call` events with the parsed input. */
+  tools?: unknown[];
+  /** Day 40 — small structured snapshot of the canvas (layer ids,
+   * types, focused id) the backend appends to the system prompt. */
+  canvasState?: unknown;
   /** Aborts the underlying fetch + reader. */
   signal?: AbortSignal;
+};
+
+export type ToolCallEvent = {
+  type: "tool_call";
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
 };
 
 export type StreamChatEvent =
   | { type: "start"; model: string; intent: AiIntent }
   | { type: "chunk"; text: string }
+  | ToolCallEvent
   | { type: "usage"; tokensIn: number; tokensOut: number }
   | { type: "error"; message: string };
 
@@ -83,9 +98,11 @@ export async function* streamChat(options: StreamChatOptions): AsyncGenerator<St
         Authorization:  `Bearer ${token}`,
       },
       body: JSON.stringify({
-        messages:    options.messages,
-        intent:      options.intent ?? "edit",
-        canvasImage: options.canvasImage,
+        messages:     options.messages,
+        intent:       options.intent ?? "edit",
+        canvasImage:  options.canvasImage,
+        tools:        options.tools,
+        canvasState:  options.canvasState,
       }),
     };
     if (options.signal) init.signal = options.signal;

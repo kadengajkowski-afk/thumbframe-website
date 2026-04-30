@@ -168,6 +168,12 @@ type UiState = {
   thumbfriendPanelOpen: boolean;
   setThumbfriendPanelOpen: (v: boolean) => void;
 
+  /** Day 40: preview-before-apply mode. When true, AI tool calls
+   * queue on the assistant bubble and only run when the user clicks
+   * Accept. Off by default — most edits should land instantly. */
+  thumbfriendPreviewMode: boolean;
+  setThumbfriendPreviewMode: (v: boolean) => void;
+
   /** Day 32: pinned Brand Kit. Persists across reloads via localStorage
    * (signed-out) or the user's most-recent saved row (signed-in, loaded
    * at boot). When pinned, the kit's palette appears as a "Brand"
@@ -374,6 +380,9 @@ export const useUiStore = create<UiState>()((set) => ({
 
   thumbfriendPanelOpen: false,
   setThumbfriendPanelOpen: (thumbfriendPanelOpen) => set({ thumbfriendPanelOpen }),
+
+  thumbfriendPreviewMode: false,
+  setThumbfriendPreviewMode: (thumbfriendPreviewMode) => set({ thumbfriendPreviewMode }),
 
   pinnedBrandKit: loadPinnedKit(),
   setPinnedBrandKit: (pinnedBrandKit) => {

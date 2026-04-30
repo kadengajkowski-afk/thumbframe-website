@@ -9,6 +9,9 @@ import {
 import { useUiStore } from "@/state/uiStore";
 import { buildSystemContext, prependContextToMessage } from "@/lib/aiContext";
 import { snapshotCanvas } from "@/lib/canvasSnapshot";
+import { AI_TOOLS, isAiToolName } from "@/lib/aiTools";
+import { buildCanvasState } from "@/lib/canvasState";
+import { executeAiToolBatch, type ToolResult } from "@/editor/aiToolExecutor";
 
 /** Day 35 — React hook wrapping aiClient.streamChat for ThumbFriend.
  *
@@ -20,8 +23,11 @@ import { snapshotCanvas } from "@/lib/canvasSnapshot";
  *   - Canvas snapshot image as canvasImage (only on intents that benefit
  *     from vision: edit/plan/deep-think)
  *
- * Day 39+ ThumbFriend's chat panel consumes this. Today the hook is the
- * entire wiring — no UI yet. */
+ * Day 40 — also attaches tool defs + canvas state. After the stream
+ * completes, queued tool calls run client-side via executeAiToolBatch,
+ * wrapped in a single history stroke so one Cmd+Z reverts the turn.
+ * In preview mode (uiStore.thumbfriendPreviewMode) execution is
+ * deferred until the user clicks Accept on the assistant bubble. */
 
 export type ChatMessage = AiMessage & {
   /** Local-only id so React can key. Server doesn't see this. */
@@ -30,18 +36,28 @@ export type ChatMessage = AiMessage & {
    * slash commands (e.g. "/center"). Renders as a muted bubble so
    * the user can tell which were AI replies vs local actions. */
   _slash?: boolean;
+  /** Day 40 — tool calls the AI emitted on this turn. Mirrors what
+   * the executor ran (or will run, in preview mode). */
+  toolCalls?: PendingToolCall[];
+  /** Day 40 — per-call execution results, populated after the batch
+   * runs. In preview mode this stays null until Accept. */
+  toolResults?: (ToolResult | null)[] | null;
+  /** Day 40 — preview-mode flag. When true, toolCalls aren't
+   * executed yet; the panel renders Accept/Reject buttons. */
+  pendingPreview?: boolean;
+};
+
+export type PendingToolCall = {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
 };
 
 export type UseAiChatState = {
   messages: ChatMessage[];
   streaming: boolean;
   error: string | null;
-  /** Day 39 — typed error code for branching the UI (rate limit →
-   * upgrade CTA, auth required → sign-in CTA, etc.). null when
-   * `error` is also null. */
   errorCode: AiErrorCode | null;
-  /** Cumulative token usage across the current session (resets on reset()).
-   * Useful for surfacing "X tokens used" in the chat surface. */
   sessionTokens: { in: number; out: number };
 };
 
@@ -60,16 +76,25 @@ export function useAiChat() {
     if (!trimmed) return;
 
     const pinnedKit = useUiStore.getState().pinnedBrandKit;
+    const previewMode = useUiStore.getState().thumbfriendPreviewMode;
     const context = buildSystemContext({ pinnedKit, intent });
     const userContent = prependContextToMessage(trimmed, context);
     const userMsg: ChatMessage = { id: makeId(), role: "user", content: trimmed };
-    const assistantMsg: ChatMessage = { id: makeId(), role: "assistant", content: "" };
+    const assistantMsg: ChatMessage = {
+      id: makeId(),
+      role: "assistant",
+      content: "",
+      toolCalls: [],
+      toolResults: null,
+      pendingPreview: previewMode,
+    };
 
     let canvasImage: string | undefined;
     if (intent !== "classify") {
       const snap = snapshotCanvas();
       if (snap.image) canvasImage = snap.image;
     }
+    const canvasState = intent === "edit" ? buildCanvasState() : undefined;
 
     setState((s) => ({
       ...s,
@@ -83,17 +108,34 @@ export function useAiChat() {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    const queuedCalls: PendingToolCall[] = [];
+
     try {
       const wireMessages: AiMessage[] = state.messages
         .map(({ role, content }) => ({ role, content }))
         .concat({ role: "user", content: userContent });
-      const opts = { messages: wireMessages, intent, signal: controller.signal } as const;
+      const opts = {
+        messages: wireMessages,
+        intent,
+        signal: controller.signal,
+        ...(intent === "edit" ? { tools: AI_TOOLS as unknown[] } : {}),
+        ...(canvasState ? { canvasState } : {}),
+      } as const;
       const stream = canvasImage
         ? streamChat({ ...opts, canvasImage })
         : streamChat(opts);
       for await (const event of stream) {
         if (event.type === "chunk") {
           setState((s) => appendChunk(s, assistantMsg.id, event.text));
+        } else if (event.type === "tool_call") {
+          if (!isAiToolName(event.name)) continue;
+          const call: PendingToolCall = {
+            id: event.id,
+            name: event.name,
+            input: event.input,
+          };
+          queuedCalls.push(call);
+          setState((s) => attachToolCall(s, assistantMsg.id, call));
         } else if (event.type === "usage") {
           setState((s) => ({
             ...s,
@@ -116,34 +158,93 @@ export function useAiChat() {
       setState((s) => ({ ...s, streaming: false }));
       useUiStore.getState().setAiStreaming(false);
     }
+
+    // Day 40 — after the stream completes, run queued tool calls.
+    // Preview mode defers execution until Accept; non-preview runs
+    // immediately and stamps results onto the assistant bubble.
+    if (queuedCalls.length > 0 && !previewMode) {
+      const results = executeAiToolBatch(queuedCalls);
+      setState((s) => attachToolResults(s, assistantMsg.id, results));
+    }
   }, [state.messages]);
 
-  /** Day 39 — push a user→assistant pair WITHOUT calling the AI.
-   * Used by slash commands so the user sees their typed line + the
-   * resulting confirmation in the same scroller. */
-  const appendLocalExchange = useCallback(
-    (userText: string, assistantText: string, kind: "slash" | "note" = "slash") => {
-      const u: ChatMessage = { id: makeId(), role: "user", content: userText };
-      const a: ChatMessage = {
-        id: makeId(),
-        role: "assistant",
-        content: assistantText,
-        _slash: kind === "slash",
-      };
-      setState((s) => ({
-        ...s,
-        messages: [...s.messages, u, a],
-        error: null,
-        errorCode: null,
-      }));
-    },
-    [],
-  );
+  /** Day 40 — accept a previewed turn. Runs the queued tool calls
+   * inside one history stroke and stamps results on the bubble. */
+  const acceptPreview = useCallback((messageId: string) => {
+    const msg = stateRefMessages(messageId);
+    if (!msg || !msg.toolCalls || msg.toolCalls.length === 0) return;
+    const results = executeAiToolBatch(msg.toolCalls);
+    setState((s) => attachToolResults(s, messageId, results, /*acceptPreview*/ true));
+  }, []);
 
-  /** Day 39 — emit a single muted note from the assistant side. Used
-   * by slash-fallback to surface "Couldn't parse hex — passing to AI"
-   * BEFORE the AI call goes out. */
-  const appendLocalNote = useCallback((noteText: string) => {
+  /** Day 40 — reject a previewed turn. Marks the bubble as rejected
+   * without running anything. */
+  const rejectPreview = useCallback((messageId: string) => {
+    setState((s) => ({
+      ...s,
+      messages: s.messages.map((m) =>
+        m.id === messageId ? { ...m, pendingPreview: false, toolResults: [] } : m,
+      ),
+    }));
+  }, []);
+
+  /** Day 40 — undo every tool call from a turn. Wrapped in one
+   * history.beginStroke at exec time, so a single history.undo()
+   * reverts all of them. */
+  const undoTurn = useCallback((_messageId: string) => {
+    // The batch already wrapped the stroke; one undo reverts it.
+    // (We keep the messageId param so future per-turn metadata can
+    // pick the right entry — today there's just one batch per turn.)
+    void _messageId;
+    // Lazy import keeps `history` out of the hook's eager deps.
+    void import("@/lib/history").then((m) => m.history.undo());
+  }, []);
+
+  // Internal — read latest message by id without re-running the
+  // memoized callback. setState's updater can't return values, so
+  // we mirror the messages list onto a ref-less helper that pulls
+  // from the closure each call.
+  function stateRefMessages(id: string): ChatMessage | undefined {
+    let found: ChatMessage | undefined;
+    setState((s) => {
+      found = s.messages.find((m) => m.id === id);
+      return s;
+    });
+    return found;
+  }
+
+  return {
+    ...state,
+    send,
+    reset,
+    appendLocalExchange,
+    appendLocalNote,
+    acceptPreview,
+    rejectPreview,
+    undoTurn,
+  };
+
+  function appendLocalExchange(
+    userText: string,
+    assistantText: string,
+    kind: "slash" | "note" = "slash",
+  ) {
+    const u: ChatMessage = { id: makeId(), role: "user", content: userText };
+    const a: ChatMessage = {
+      id: makeId(),
+      role: "assistant",
+      content: assistantText,
+      _slash: kind === "slash",
+    };
+    setState((s) => ({
+      ...s,
+      messages: [...s.messages, u, a],
+      error: null,
+      errorCode: null,
+    }));
+  }
+
+  function appendLocalNote(noteText: string) {
     const a: ChatMessage = {
       id: makeId(),
       role: "assistant",
@@ -151,9 +252,7 @@ export function useAiChat() {
       _slash: true,
     };
     setState((s) => ({ ...s, messages: [...s.messages, a] }));
-  }, []);
-
-  return { ...state, send, reset, appendLocalExchange, appendLocalNote };
+  }
 }
 
 function initialState(): UseAiChatState {
@@ -166,15 +265,46 @@ function initialState(): UseAiChatState {
   };
 }
 
-function appendChunk(
-  s: UseAiChatState,
-  id: string,
-  text: string,
-): UseAiChatState {
+function appendChunk(s: UseAiChatState, id: string, text: string): UseAiChatState {
   return {
     ...s,
     messages: s.messages.map((m) =>
       m.id === id ? { ...m, content: m.content + text } : m,
+    ),
+  };
+}
+
+function attachToolCall(
+  s: UseAiChatState,
+  id: string,
+  call: PendingToolCall,
+): UseAiChatState {
+  return {
+    ...s,
+    messages: s.messages.map((m) =>
+      m.id === id
+        ? { ...m, toolCalls: [...(m.toolCalls ?? []), call] }
+        : m,
+    ),
+  };
+}
+
+function attachToolResults(
+  s: UseAiChatState,
+  id: string,
+  results: ToolResult[],
+  acceptedPreview = false,
+): UseAiChatState {
+  return {
+    ...s,
+    messages: s.messages.map((m) =>
+      m.id === id
+        ? {
+            ...m,
+            toolResults: results,
+            ...(acceptedPreview ? { pendingPreview: false } : {}),
+          }
+        : m,
     ),
   };
 }

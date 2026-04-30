@@ -3,6 +3,120 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 4 Day 40 — held back (date: 2026-04-30)
+
+- **Tool args don't stream — they land at finalMessage time.** Anthropic
+  emits `input_json_delta` events as tool args build up; the SDK's
+  `stream.on('text')` only carries text deltas. Today the route
+  extracts `tool_use` blocks from `final.content` after the stream
+  ends. Wall-time difference is small (tool args are tiny vs the
+  text reply) but the user sees ✓ checkmarks land all at once instead
+  of progressively. Day 41+ when we move to a custom event-loop over
+  the raw event stream we can surface partial args. Held — current
+  UX reads fine because text + tool_calls land together.
+
+- **Selected-layer context is read-only at send time.** If the user
+  selects a different layer mid-stream, the AI is still reasoning
+  against the original `focused_layer_id`. Acceptable — Anthropic
+  won't change its mind mid-completion either.
+
+- **`useAiChat.send` re-creates on every messages[] change.** Same
+  Day-39 deferred note. Re-renders memoized children. Acceptable for
+  the panel.
+
+- **`stateRefMessages` triggers a setState pass to read the latest
+  state.** Inside `acceptPreview`, the hook reads the current message
+  by routing through setState's updater (zustand-style identity
+  pattern). It works but is hacky. The clean fix is a `useRef` mirror
+  of state.messages updated via useEffect — held because the current
+  pattern hasn't surfaced a bug.
+
+- **Single-undo invariant assumes the batch ran inside one stroke.**
+  `executeAiToolBatch` wraps each call list in `history.beginStroke /
+  endStroke`. If a tool's executor itself calls a method that opens
+  its own stroke (like `setShadowEnabled` → `commit` inside an active
+  stroke), it gets folded into the parent — that's why the current
+  history methods were written to be stroke-aware. If a future tool
+  forgets and ships its own commit pattern, multiple undo entries
+  will leak. Worth a runtime guard: throw if a tool executor commits
+  outside the active stroke. Cycle 5 cleanup.
+
+- **No per-tool token cost telemetry.** ai_usage_events logs tokensIn
+  + tokensOut for the whole turn but doesn't tag tool-using turns
+  separately. Cycle 5 credit ledger work needs to bucket "ask",
+  "ask-tools", and "deep-think" so we can price multi-tool edits
+  fairly. Today they all collapse to intent='edit'.
+
+- **Preview mode skips slash commands.** When preview is ON, AI tool
+  calls queue but slash commands (typed by user) still execute
+  immediately because they bypass the AI path. Acceptable — slash is
+  an explicit action — but the UX is inconsistent. Could honor
+  preview mode for slash too: queue the slash result, render
+  Accept/Reject. Held until user feedback.
+
+- **No per-message Reject revert if a turn was already applied.**
+  `rejectPreview` is only meaningful while `pendingPreview` is true.
+  Once tools have run (preview off, or user clicked Accept), only
+  "Undo all" reverses them — and that fires `history.undo()` which
+  pops the LAST stroke off the stack, not the one tied to this
+  message. If the user edited something else after the AI turn,
+  Undo All reverts the wrong thing. The clean fix is per-stroke ids
+  + targeted undo, which the patch-history doesn't expose today.
+  Cycle 5 candidate.
+
+- **Tool argument validation is per-tool.** The Anthropic schema
+  declares ranges/patterns but the SDK doesn't enforce them — we
+  re-validate in the executor. If a tool gets new args added, both
+  the schema AND the runner need updating in lockstep (flagged in
+  the file comment too). A schema-driven runtime validator (zod
+  parse) would close that gap. Cycle 5 polish.
+
+- **canvasState snapshot doesn't include z-order.** The `layers`
+  array is in z-order top-to-bottom but the snapshot doesn't tell
+  the model that. A confused model could ask "which layer is on
+  top?" — today it has to guess. Add a `z_index` field to each
+  serialized layer. Cheap; held until a real misroute.
+
+- **Tool call ids come from Anthropic.** We surface them on the wire
+  for completeness but don't use them locally — the executor doesn't
+  need to round-trip `tool_result` blocks because the AI has already
+  emitted its text response in the same turn. Cycle 5 multi-turn
+  Partner mode WILL need round-tripping (so the AI sees what its
+  tools returned and can chain). The plumbing is there.
+
+- **No tool for editing brand fills / glow / text strokes.** Day 40
+  ships the 10 most common edits; missing: fill alpha, blend mode,
+  stroke color/width on rect/ellipse, text glow, layer reorder
+  (bring to front / send to back), set selection. Each is a
+  reasonable Cycle 5 add. Held to keep the schema ≤ 10 today.
+
+- **AI can theoretically delete every layer in one turn.** The model
+  is capable of emitting 10× delete_layer calls if asked. Single-undo
+  reverts it but a confused user may not realize that. Add a
+  guardrail in the executor: if a turn includes `delete_layer` for
+  >50% of layers, prompt for confirmation. Held — no real-world
+  reports yet.
+
+- **Frontend cost-estimate display deferred.** Spec mentioned a "running
+  cost estimate in panel footer (Pro feature, hidden for free)". The
+  meta row already shows `N/5 messages left` for free + UNLIMITED pill
+  for Pro. A USD cost estimate per call would need the Pro user to
+  see meaningful tokens-spent numbers — but the typical Ask call is
+  ~$0.005 which reads as "$0.01" no matter what. Cycle 5 when the
+  credit ledger lands and pricing is more visible.
+
+- **Tool execution runs synchronously on the React thread.** A 10-call
+  turn fires 10 synchronous history mutations + Compositor reconciles
+  inside one stroke. With small N this is fine; once tools touch
+  bitmaps (paste image, crop, etc.) the synchronous pass would
+  freeze the UI. Day 41+ when image-touching tools land we'd defer
+  to a microtask scheduler.
+
+- **Preview-mode toggle persistence skipped.** The toggle is in-memory
+  per-session; refresh resets to OFF. Acceptable default; if a user
+  always wants preview, persisting via localStorage is a one-liner.
+  Held until signal.
+
 ## Cycle 4 Day 39 — held back (date: 2026-04-30)
 
 - **No chat history persistence.** Each `Cmd+/` open shows a fresh
