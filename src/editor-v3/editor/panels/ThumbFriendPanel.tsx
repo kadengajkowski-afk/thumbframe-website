@@ -4,13 +4,15 @@ import { useAiChat } from "@/editor/hooks/useAiChat";
 import { tryRunSlash, suggestSlash, type SlashSpec } from "@/lib/slashCommands";
 import { fetchTodayAiUsage, FREE_DAILY_LIMIT } from "@/lib/aiUsage";
 import * as s from "./ThumbFriendPanel.styles";
+import { renderBubble, ToolCallList } from "./ThumbFriendPanel.parts";
 
 /** Day 39 — ThumbFriend Ask mode. Single-turn AI edits via Cmd+/.
  *
- * Three tabs (Nudge/Ask/Partner) — only Ask is functional today;
- * Nudge + Partner show "Coming soon" stubs (Cycle 5). Ask wraps
- * useAiChat (Day 35). Slash commands run client-side via
- * lib/slashCommands; unknown slashes fall through to the AI. */
+ * Day 40 — Ask mode now wields tool calls. The AI can directly edit
+ * the canvas; each call renders as an inline checkmark below the
+ * assistant bubble. A preview toggle in the header defers execution
+ * until the user clicks Accept; default-off so most edits land
+ * instantly. */
 
 type Tab = "nudge" | "ask" | "partner";
 
@@ -26,13 +28,28 @@ export function ThumbFriendPanel() {
   const close = useUiStore((u) => u.setThumbfriendPanelOpen);
   const userTier = useUiStore((u) => u.userTier);
   const user = useUiStore((u) => u.user);
+  const previewMode = useUiStore((u) => u.thumbfriendPreviewMode);
+  const setPreviewMode = useUiStore((u) => u.setThumbfriendPreviewMode);
   const isPro = userTier === "pro";
   const [tab, setTab] = useState<Tab>("ask");
 
   return (
     <aside style={s.wrap} data-testid="thumbfriend-panel" aria-label="ThumbFriend">
       <header style={s.header}>
-        <span style={s.headerLabel}>ThumbFriend</span>
+        <div style={s.headerLeft}>
+          <span style={s.headerLabel}>ThumbFriend</span>
+          {tab === "ask" && (
+            <button
+              type="button"
+              style={previewMode ? s.previewToggleActive : s.previewToggle}
+              onClick={() => setPreviewMode(!previewMode)}
+              title="Preview AI edits before applying"
+              data-testid="thumbfriend-preview-toggle"
+            >
+              Preview
+            </button>
+          )}
+        </div>
         <button type="button" style={s.closeBtn} onClick={() => close(false)} aria-label="Close">×</button>
       </header>
       <nav style={s.tabs} role="tablist">
@@ -78,13 +95,11 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userId = useUiStore((u) => u.user?.id ?? null);
 
-  // Auto-scroll on every new chunk
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat.messages]);
 
-  // Refresh usage line on each completed turn (server is source of truth)
   useEffect(() => {
     if (!userId || isPro) return;
     let cancelled = false;
@@ -101,15 +116,12 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
   function submit(text: string) {
     const trimmed = text.trim();
     if (!trimmed || chat.streaming) return;
-
     const slash = tryRunSlash(trimmed);
     if (slash.kind === "handled") {
-      // Append a synthetic exchange so the user sees what happened.
       chat.appendLocalExchange(trimmed, slash.message, "slash");
       setInput("");
       return;
     }
-    // miss + fallback both go to AI; fallback prepends a hint.
     if (slash.kind === "fallback") {
       chat.appendLocalNote(slash.message);
     }
@@ -149,18 +161,28 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
           <EmptyState onPick={(t) => submit(t)} />
         ) : (
           chat.messages.map((m) => (
-            <div
-              key={m.id}
-              style={
-                m.role === "user" ? s.userBubble :
-                (m as { _slash?: boolean })._slash ? s.slashBubble :
-                s.assistantBubble
-              }
-              data-testid={`thumbfriend-msg-${m.role}`}
-            >
-              {m.content
-                ? renderBubble(m.content, m.role, (cmd) => submit(cmd))
-                : (m.role === "assistant" && chat.streaming ? <span style={s.cursor} /> : null)}
+            <div key={m.id} style={{ display: "contents" }}>
+              <div
+                style={
+                  m.role === "user" ? s.userBubble :
+                  m._slash ? s.slashBubble :
+                  s.assistantBubble
+                }
+                data-testid={`thumbfriend-msg-${m.role}`}
+              >
+                {m.content
+                  ? renderBubble(m.content, m.role, (cmd) => submit(cmd))
+                  : (m.role === "assistant" && chat.streaming ? <span style={s.cursor} /> : null)}
+              </div>
+              {m.role === "assistant" && (m.toolCalls?.length ?? 0) > 0 && (
+                <ToolCallList
+                  message={m}
+                  streaming={chat.streaming}
+                  onAccept={chat.acceptPreview}
+                  onReject={chat.rejectPreview}
+                  onUndo={chat.undoTurn}
+                />
+              )}
             </div>
           ))
         )}
@@ -168,24 +190,14 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
           <div style={s.errorRow} data-testid="thumbfriend-error">
             {chat.error}
             {showRateLimitCTA && (
-              <button
-                type="button"
-                style={s.errorBtn}
+              <button type="button" style={s.errorBtn}
                 onClick={() => useUiStore.getState().setUpgradePanelOpen(true)}
-                data-testid="thumbfriend-upgrade"
-              >
-                Upgrade
-              </button>
+                data-testid="thumbfriend-upgrade">Upgrade</button>
             )}
             {showAuthCTA && (
-              <button
-                type="button"
-                style={s.errorBtn}
+              <button type="button" style={s.errorBtn}
                 onClick={() => useUiStore.getState().setAuthPanelOpen(true)}
-                data-testid="thumbfriend-signin"
-              >
-                Sign in
-              </button>
+                data-testid="thumbfriend-signin">Sign in</button>
             )}
           </div>
         )}
@@ -194,13 +206,11 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
         {showSlash && slashOptions.length > 0 && (
           <div style={s.slashDropdown} data-testid="thumbfriend-slash-list">
             {slashOptions.map((opt, i) => (
-              <div
-                key={opt.id}
+              <div key={opt.id}
                 style={i === slashSel ? s.slashItemActive : s.slashItem}
                 onClick={() => setInput(opt.label + " ")}
                 onMouseEnter={() => setSlashSel(i)}
-                data-testid={`thumbfriend-slash-${opt.id}`}
-              >
+                data-testid={`thumbfriend-slash-${opt.id}`}>
                 <span>{opt.syntax}</span>
                 <span style={s.slashHint}>{opt.hint}</span>
               </div>
@@ -239,58 +249,6 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
     </>
   );
 }
-
-/** Day 39 fix — render assistant text with `/cmd ...` patterns
- * promoted to clickable chips. Each chip executes the slash command
- * via the same submit() pipeline so the result lands in the chat
- * scroller as a normal exchange. User bubbles render plain text — the
- * user's own slash already ran when they hit Send. */
-function renderBubble(
-  content: string,
-  role: "user" | "assistant",
-  onRun: (cmd: string) => void,
-) {
-  if (role === "user") return content;
-  const SLASH_RE = /(\/(?:color|text|shadow|center|align|font)(?:\s+\S[^\n]*)?)/g;
-  const parts: (string | { cmd: string })[] = [];
-  let last = 0;
-  for (const m of content.matchAll(SLASH_RE)) {
-    const idx = m.index ?? 0;
-    if (idx > last) parts.push(content.slice(last, idx));
-    parts.push({ cmd: m[0].trim() });
-    last = idx + m[0].length;
-  }
-  if (last < content.length) parts.push(content.slice(last));
-  if (parts.length === 1 && typeof parts[0] === "string") return parts[0];
-  return parts.map((p, i) =>
-    typeof p === "string" ? (
-      <span key={i}>{p}</span>
-    ) : (
-      <button
-        key={i}
-        type="button"
-        onClick={() => onRun(p.cmd)}
-        data-testid="thumbfriend-slash-chip"
-        style={slashChip}
-      >
-        {p.cmd}
-      </button>
-    ),
-  );
-}
-
-const slashChip: React.CSSProperties = {
-  display: "inline-block",
-  margin: "2px 0",
-  padding: "2px 8px",
-  fontSize: 12,
-  fontFamily: '"Geist Mono", ui-monospace, monospace',
-  background: "var(--bg-space-2, #2a2f3a)",
-  color: "var(--accent-cream, #F9F0E1)",
-  border: "1px solid var(--accent-orange)",
-  borderRadius: 4,
-  cursor: "pointer",
-};
 
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
