@@ -158,7 +158,9 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
               }
               data-testid={`thumbfriend-msg-${m.role}`}
             >
-              {m.content || (m.role === "assistant" && chat.streaming ? <span style={s.cursor} /> : null)}
+              {m.content
+                ? renderBubble(m.content, m.role, (cmd) => submit(cmd))
+                : (m.role === "assistant" && chat.streaming ? <span style={s.cursor} /> : null)}
             </div>
           ))
         )}
@@ -237,6 +239,58 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
     </>
   );
 }
+
+/** Day 39 fix — render assistant text with `/cmd ...` patterns
+ * promoted to clickable chips. Each chip executes the slash command
+ * via the same submit() pipeline so the result lands in the chat
+ * scroller as a normal exchange. User bubbles render plain text — the
+ * user's own slash already ran when they hit Send. */
+function renderBubble(
+  content: string,
+  role: "user" | "assistant",
+  onRun: (cmd: string) => void,
+) {
+  if (role === "user") return content;
+  const SLASH_RE = /(\/(?:color|text|shadow|center|align|font)(?:\s+\S[^\n]*)?)/g;
+  const parts: (string | { cmd: string })[] = [];
+  let last = 0;
+  for (const m of content.matchAll(SLASH_RE)) {
+    const idx = m.index ?? 0;
+    if (idx > last) parts.push(content.slice(last, idx));
+    parts.push({ cmd: m[0].trim() });
+    last = idx + m[0].length;
+  }
+  if (last < content.length) parts.push(content.slice(last));
+  if (parts.length === 1 && typeof parts[0] === "string") return parts[0];
+  return parts.map((p, i) =>
+    typeof p === "string" ? (
+      <span key={i}>{p}</span>
+    ) : (
+      <button
+        key={i}
+        type="button"
+        onClick={() => onRun(p.cmd)}
+        data-testid="thumbfriend-slash-chip"
+        style={slashChip}
+      >
+        {p.cmd}
+      </button>
+    ),
+  );
+}
+
+const slashChip: React.CSSProperties = {
+  display: "inline-block",
+  margin: "2px 0",
+  padding: "2px 8px",
+  fontSize: 12,
+  fontFamily: '"Geist Mono", ui-monospace, monospace',
+  background: "var(--bg-space-2, #2a2f3a)",
+  color: "var(--accent-cream, #F9F0E1)",
+  border: "1px solid var(--accent-orange)",
+  borderRadius: 4,
+  cursor: "pointer",
+};
 
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (

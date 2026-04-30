@@ -5,10 +5,18 @@ import type { CSSProperties } from "react";
  * cream text on muted dark fills, subtle rounded radii, no chrome. */
 
 export const wrap: CSSProperties = {
-  width: 360, minWidth: 360, height: "100%",
+  // Fixed-width sibling in the editorRow flex layout. flexShrink: 0
+  // is the load-bearing bit — without it, the canvas surface can grow
+  // past the available space and push the panel past the right edge
+  // of the viewport (the bug Day 39 shipped with). flexBasis pins the
+  // initial size so flex-grow doesn't kick in either.
+  flex: "0 0 360px",
+  width: 360, maxWidth: 360,
+  height: "100%", minHeight: 0,
   display: "flex", flexDirection: "column",
   background: "var(--bg-space-1)",
   borderLeft: "1px solid var(--border-ghost)",
+  overflow: "hidden",
 };
 export const header: CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "space-between",

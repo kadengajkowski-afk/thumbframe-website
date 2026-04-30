@@ -206,6 +206,11 @@ const editorGrid: React.CSSProperties = {
 const editorRow: React.CSSProperties = {
   display: "flex",
   minHeight: 0,
+  // Constrain the row to the viewport so flex children with
+  // explicit widths can't overflow past the right edge.
+  width: "100%",
+  minWidth: 0,
+  overflow: "hidden",
 };
 
 const canvasSurface: React.CSSProperties = {
