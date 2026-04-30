@@ -3,6 +3,7 @@ import {
   streamChat,
   AiError,
   type AiIntent,
+  type AiErrorCode,
   type AiMessage,
 } from "@/lib/aiClient";
 import { useUiStore } from "@/state/uiStore";
@@ -25,12 +26,20 @@ import { snapshotCanvas } from "@/lib/canvasSnapshot";
 export type ChatMessage = AiMessage & {
   /** Local-only id so React can key. Server doesn't see this. */
   id: string;
+  /** Day 39 — true for synthetic exchanges produced by client-side
+   * slash commands (e.g. "/center"). Renders as a muted bubble so
+   * the user can tell which were AI replies vs local actions. */
+  _slash?: boolean;
 };
 
 export type UseAiChatState = {
   messages: ChatMessage[];
   streaming: boolean;
   error: string | null;
+  /** Day 39 — typed error code for branching the UI (rate limit →
+   * upgrade CTA, auth required → sign-in CTA, etc.). null when
+   * `error` is also null. */
+  errorCode: AiErrorCode | null;
   /** Cumulative token usage across the current session (resets on reset()).
    * Useful for surfacing "X tokens used" in the chat surface. */
   sessionTokens: { in: number; out: number };
@@ -67,6 +76,7 @@ export function useAiChat() {
       messages: [...s.messages, userMsg, assistantMsg],
       streaming: true,
       error: null,
+      errorCode: null,
     }));
     useUiStore.getState().setAiStreaming(true);
 
@@ -98,7 +108,9 @@ export function useAiChat() {
       }
     } catch (err) {
       const message = err instanceof AiError ? err.message : "Couldn't reach the AI";
-      setState((s) => ({ ...s, error: message }));
+      const code: AiErrorCode | null =
+        err instanceof AiError ? err.code : "UPSTREAM_ERROR";
+      setState((s) => ({ ...s, error: message, errorCode: code }));
     } finally {
       abortRef.current = null;
       setState((s) => ({ ...s, streaming: false }));
@@ -106,7 +118,42 @@ export function useAiChat() {
     }
   }, [state.messages]);
 
-  return { ...state, send, reset };
+  /** Day 39 — push a user→assistant pair WITHOUT calling the AI.
+   * Used by slash commands so the user sees their typed line + the
+   * resulting confirmation in the same scroller. */
+  const appendLocalExchange = useCallback(
+    (userText: string, assistantText: string, kind: "slash" | "note" = "slash") => {
+      const u: ChatMessage = { id: makeId(), role: "user", content: userText };
+      const a: ChatMessage = {
+        id: makeId(),
+        role: "assistant",
+        content: assistantText,
+        _slash: kind === "slash",
+      };
+      setState((s) => ({
+        ...s,
+        messages: [...s.messages, u, a],
+        error: null,
+        errorCode: null,
+      }));
+    },
+    [],
+  );
+
+  /** Day 39 — emit a single muted note from the assistant side. Used
+   * by slash-fallback to surface "Couldn't parse hex — passing to AI"
+   * BEFORE the AI call goes out. */
+  const appendLocalNote = useCallback((noteText: string) => {
+    const a: ChatMessage = {
+      id: makeId(),
+      role: "assistant",
+      content: noteText,
+      _slash: true,
+    };
+    setState((s) => ({ ...s, messages: [...s.messages, a] }));
+  }, []);
+
+  return { ...state, send, reset, appendLocalExchange, appendLocalNote };
 }
 
 function initialState(): UseAiChatState {
@@ -114,6 +161,7 @@ function initialState(): UseAiChatState {
     messages: [],
     streaming: false,
     error: null,
+    errorCode: null,
     sessionTokens: { in: 0, out: 0 },
   };
 }

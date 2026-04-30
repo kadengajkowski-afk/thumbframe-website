@@ -309,6 +309,19 @@ const COMMANDS: Command[] = [
     run: () => useUiStore.getState().setUpgradePanelOpen(true),
   },
 
+  // Day 39 — ThumbFriend chat panel.
+  {
+    id: "view.thumbfriend",
+    label: "Toggle ThumbFriend chat",
+    section: "View",
+    hotkey: "Cmd+/",
+    aliases: ["chat", "ai", "thumbfriend", "ask", "assistant"],
+    run: () => {
+      const ui = useUiStore.getState();
+      ui.setThumbfriendPanelOpen(!ui.thumbfriendPanelOpen);
+    },
+  },
+
   // Day 34 dev — smoke-test the Railway AI proxy end-to-end. The
   // bundled aiClient can't be reached via console `import()` since
   // Vite hashes its path, so this command is the only way to verify
