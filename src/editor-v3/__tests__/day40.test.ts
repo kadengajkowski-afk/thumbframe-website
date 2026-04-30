@@ -193,6 +193,41 @@ describe("Day 40 — executeAiTool", () => {
     expect(useDocStore.getState().layers).toHaveLength(1); // not deleted
   });
 
+  it("Day 40 fix-2 — set_layer_fill coerces 'red' to '#FF0000'", () => {
+    const id = nanoid();
+    history.addLayer(makeRect(id));
+    const r = executeAiTool("set_layer_fill", { layer_id: id, color: "red" });
+    expect(r.success).toBe(true);
+    const stored = useDocStore.getState().layers[0] as Layer & { color: number };
+    expect(stored.color).toBe(hexToPixi("#FF0000"));
+  });
+
+  it("Day 40 fix-2 — set_layer_fill coerces hash-less hex 'FF0000'", () => {
+    const id = nanoid();
+    history.addLayer(makeRect(id));
+    const r = executeAiTool("set_layer_fill", { layer_id: id, color: "FF0000" });
+    expect(r.success).toBe(true);
+    const stored = useDocStore.getState().layers[0] as Layer & { color: number };
+    expect(stored.color).toBe(hexToPixi("#FF0000"));
+  });
+
+  it("Day 40 fix-2 — set_layer_fill rejects nonsense colors", () => {
+    const id = nanoid();
+    history.addLayer(makeRect(id));
+    const r = executeAiTool("set_layer_fill", { layer_id: id, color: "rainbow" });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain("rainbow");
+  });
+
+  it("Day 40 fix-2 — add_drop_shadow accepts named colors", () => {
+    const id = nanoid();
+    history.addLayer(makeText(id));
+    const r = executeAiTool("add_drop_shadow", { layer_id: id, color: "navy", blur: 4 });
+    expect(r.success).toBe(true);
+    const stored = useDocStore.getState().layers[0] as Layer & { shadowColor: number };
+    expect(stored.shadowColor).toBe(hexToPixi("#000080"));
+  });
+
   it("set_layer_position moves the layer", () => {
     const id = nanoid();
     history.addLayer(makeRect(id));

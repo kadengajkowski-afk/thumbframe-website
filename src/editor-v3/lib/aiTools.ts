@@ -40,16 +40,27 @@ export type AiToolName =
 
 const HEX_PATTERN = "^#[0-9A-Fa-f]{6}$";
 
+/** Day 40 fix-2 — layer_id description is repeated on every tool to
+ * reinforce the rule at point-of-use, not just in the system prompt.
+ * Anthropic's tool calls show this description to the model when it's
+ * deciding what to put in the parameter, so a strong inline cue is
+ * the cheapest way to prevent hallucinated ids. */
+const LAYER_ID_DESC =
+  "MUST be one of the strings in available_layer_ids from the system prompt's CANVAS STATE block. Copy character-by-character. Never invent. Never use a layer's 'name' field as the id.";
+
+const COLOR_DESC =
+  "MUST be #RRGGBB hex with the leading hash, six hex digits. Examples: '#FF0000', '#00FF00', '#0044CC'. Do not send color names like 'red'.";
+
 export const AI_TOOLS: AiTool[] = [
   {
     name: "set_layer_fill",
     description:
-      "Set the fill color of a rect, ellipse, or text layer. Use a #RRGGBB hex color.",
+      "Set the fill color of a rect, ellipse, or text layer. Color MUST be #RRGGBB hex (e.g. '#FF0000' for red). The layer_id MUST come from available_layer_ids in the system prompt.",
     input_schema: {
       type: "object",
       properties: {
-        layer_id: { type: "string", description: "id of the layer to recolor" },
-        color: { type: "string", pattern: HEX_PATTERN, description: "#RRGGBB hex" },
+        layer_id: { type: "string", description: LAYER_ID_DESC },
+        color: { type: "string", pattern: HEX_PATTERN, description: COLOR_DESC },
       },
       required: ["layer_id", "color"],
     },
@@ -61,7 +72,7 @@ export const AI_TOOLS: AiTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        layer_id: { type: "string" },
+        layer_id: { type: "string", description: LAYER_ID_DESC },
         x: { type: "number", description: "canvas x, integer pixels" },
         y: { type: "number", description: "canvas y, integer pixels" },
       },
@@ -74,7 +85,7 @@ export const AI_TOOLS: AiTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        layer_id: { type: "string" },
+        layer_id: { type: "string", description: LAYER_ID_DESC },
         opacity: { type: "number", minimum: 0, maximum: 1 },
       },
       required: ["layer_id", "opacity"],
@@ -86,7 +97,7 @@ export const AI_TOOLS: AiTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        layer_id: { type: "string" },
+        layer_id: { type: "string", description: LAYER_ID_DESC },
         text: { type: "string" },
       },
       required: ["layer_id", "text"],
@@ -99,7 +110,7 @@ export const AI_TOOLS: AiTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        layer_id: { type: "string" },
+        layer_id: { type: "string", description: LAYER_ID_DESC },
         font_name: { type: "string" },
       },
       required: ["layer_id", "font_name"],
@@ -111,7 +122,7 @@ export const AI_TOOLS: AiTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        layer_id: { type: "string" },
+        layer_id: { type: "string", description: LAYER_ID_DESC },
         size: { type: "number", minimum: 8, maximum: 512 },
       },
       required: ["layer_id", "size"],
@@ -120,12 +131,12 @@ export const AI_TOOLS: AiTool[] = [
   {
     name: "add_drop_shadow",
     description:
-      "Add a drop shadow to a TEXT layer. Color is #RRGGBB hex. Blur is in px (0–32). Distance is shadow offset in px (0–32, applied evenly to x and y).",
+      "Add a drop shadow to a TEXT layer. Color is #RRGGBB hex (e.g. '#000000'). Blur is in px (0–32). Distance is shadow offset in px (0–32, applied evenly to x and y). The layer_id MUST come from available_layer_ids in the system prompt.",
     input_schema: {
       type: "object",
       properties: {
-        layer_id: { type: "string" },
-        color: { type: "string", pattern: HEX_PATTERN, description: "#RRGGBB hex" },
+        layer_id: { type: "string", description: LAYER_ID_DESC },
+        color: { type: "string", pattern: HEX_PATTERN, description: COLOR_DESC },
         blur: { type: "number", minimum: 0, maximum: 32, default: 6 },
         distance: { type: "number", minimum: 0, maximum: 32, default: 2 },
       },

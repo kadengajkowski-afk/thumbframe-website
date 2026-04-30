@@ -15,6 +15,34 @@ import type { AiToolName } from "@/lib/aiTools";
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
 
+/** Day 40 fix-2 — named color coercion fallback. The schema asks the
+ * AI for #RRGGBB hex, the prompt repeats it, but if the model still
+ * sends "red" / "blue" / etc. we coerce common CSS names rather than
+ * fail the call. The 16 CSS-1 base colors cover ~95% of expected
+ * misroutes; everything else still rejects. */
+const NAMED_COLORS: Record<string, string> = {
+  red:    "#FF0000", green:  "#008000", blue:   "#0000FF",
+  yellow: "#FFFF00", orange: "#FFA500", purple: "#800080",
+  pink:   "#FFC0CB", brown:  "#A52A2A", gray:   "#808080",
+  grey:   "#808080", black:  "#000000", white:  "#FFFFFF",
+  cyan:   "#00FFFF", magenta:"#FF00FF", lime:   "#00FF00",
+  navy:   "#000080", teal:   "#008080", maroon: "#800000",
+  silver: "#C0C0C0", gold:   "#FFD700",
+};
+
+/** Coerce raw color input into canonical #RRGGBB. Accepts:
+ *   - "#FF0000" / "FF0000" (handled by normalizeHex)
+ *   - "red" / "Red" / "RED" (named color table)
+ * Returns null when nothing matches. */
+function coerceColor(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  const direct = normalizeHex(trimmed);
+  if (direct) return direct;
+  const named = NAMED_COLORS[trimmed.toLowerCase()];
+  return named ?? null;
+}
+
 export type ToolInput = Record<string, unknown>;
 
 export type ToolResult = {
@@ -111,8 +139,8 @@ function fellBackSuffix(fellBack: boolean) {
 function runSetFill(input: ToolInput): ToolResult {
   const { layer, fellBack } = resolveLayer(input.layer_id);
   if (!layer) return fail("set_layer_fill", layerNotFoundError());
-  const hex = normalizeHex(typeof input.color === "string" ? input.color : "");
-  if (!hex) return fail("set_layer_fill", "Invalid color (need #RRGGBB)");
+  const hex = coerceColor(input.color);
+  if (!hex) return fail("set_layer_fill", `Invalid color "${input.color}" — use #RRGGBB hex (e.g. "#FF0000")`);
   if (layer.type !== "rect" && layer.type !== "ellipse" && layer.type !== "text") {
     return fail("set_layer_fill", "That layer type doesn't take a fill color");
   }
@@ -177,8 +205,10 @@ function runAddShadow(input: ToolInput): ToolResult {
   const { layer, fellBack } = resolveLayer(input.layer_id);
   if (!layer) return fail("add_drop_shadow", layerNotFoundError());
   if (layer.type !== "text") return fail("add_drop_shadow", "Drop shadow is text-only");
-  const hex = typeof input.color === "string" ? normalizeHex(input.color) : "#000000";
-  const pixi = hex ? hexToPixi(hex) : 0;
+  // Default to black if color missing or unparseable — drop shadows
+  // without a color is still a useful default.
+  const hex = coerceColor(input.color) ?? "#000000";
+  const pixi = hexToPixi(hex);
   const blur = clamp(asNumber(input.blur) ?? 6, 0, 32);
   const distance = clamp(asNumber(input.distance) ?? 2, 0, 32);
   history.setShadowEnabled(layer.id, true);
