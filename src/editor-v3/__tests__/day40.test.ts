@@ -110,6 +110,25 @@ describe("Day 40 — AI_TOOLS schema", () => {
     const tool = TOOL_BY_NAME["set_layer_fill"];
     expect(tool.input_schema.required).toEqual(["layer_id", "color"]);
   });
+
+  it("Day 40 fix-4 — every tool's `required` is a sibling of `properties`, not nested inside it", () => {
+    for (const tool of AI_TOOLS) {
+      // The Anthropic schema needs `required` directly under input_schema.
+      // A common bug is nesting it inside `properties` which Anthropic
+      // silently ignores (so the model can fire calls with empty input).
+      const schema = tool.input_schema;
+      expect(Array.isArray(schema.required)).toBe(true);
+      expect(schema.required.length).toBeGreaterThan(0);
+      // Every required name must reference a real property
+      const propNames = Object.keys(schema.properties ?? {});
+      for (const r of schema.required) {
+        expect(propNames).toContain(r);
+      }
+      // `required` must NOT live inside `properties`
+      const props = schema.properties as Record<string, unknown>;
+      expect((props as Record<string, unknown>).required).toBeUndefined();
+    }
+  });
 });
 
 // ── canvasState snapshot ──────────────────────────────────────────────────────
