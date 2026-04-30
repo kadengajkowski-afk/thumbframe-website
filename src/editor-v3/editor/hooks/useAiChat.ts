@@ -5,6 +5,7 @@ import {
   type AiIntent,
   type AiErrorCode,
   type AiMessage,
+  type AiContentBlock,
 } from "@/lib/aiClient";
 import { useUiStore } from "@/state/uiStore";
 import { buildSystemContext, prependContextToMessage } from "@/lib/aiContext";
@@ -166,45 +167,116 @@ export function useAiChat() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const queuedCalls: PendingToolCall[] = [];
+    // Day 40 fix-7 — agentic loop. We run up to AGENTIC_LOOP_CAP rounds:
+    //   round 1: user message → assistant text + tool_use blocks
+    //   execute tools (collecting new layer ids etc.)
+    //   round 2: assistant turn + tool_results → assistant text + maybe more tool_use
+    //   ...
+    //
+    // All tool batches across rounds run inside ONE history stroke so a
+    // single Cmd+Z reverts the whole turn. Loop ends when the model
+    // returns no tool_use blocks OR the iteration cap is hit.
+    //
+    // wireMessages grows each round: we append the assistant turn we
+    // just streamed (text + tool_use blocks) and a synthetic user turn
+    // carrying tool_result blocks for each call's outcome.
+
+    const AGENTIC_LOOP_CAP = 4;
+    const wireMessages: AiMessage[] = state.messages
+      .map(({ role, content }) => ({ role, content }))
+      .concat({ role: "user", content: userContent });
+
+    // Open the history stroke once for the entire turn — preview mode
+    // skips it (we'll run a one-shot batch on Accept instead).
+    const allCallsThisTurn: PendingToolCall[] = [];
+    const allResultsThisTurn: ToolResult[] = [];
+    const strokeOpen = !previewMode && intent === "edit";
+    if (strokeOpen) {
+      // Lazy import keeps `history` out of the hook's eager deps.
+      const { history } = await import("@/lib/history");
+      history.beginStroke("ThumbFriend edit");
+    }
 
     try {
-      const wireMessages: AiMessage[] = state.messages
-        .map(({ role, content }) => ({ role, content }))
-        .concat({ role: "user", content: userContent });
-      const opts = {
-        messages: wireMessages,
-        intent,
-        signal: controller.signal,
-        ...(intent === "edit" ? { tools: AI_TOOLS as unknown[] } : {}),
-        ...(canvasState ? { canvasState } : {}),
-      } as const;
-      const stream = canvasImage
-        ? streamChat({ ...opts, canvasImage })
-        : streamChat(opts);
-      for await (const event of stream) {
-        if (event.type === "chunk") {
-          setState((s) => appendChunk(s, assistantMsg.id, event.text));
-        } else if (event.type === "tool_call") {
-          if (!isAiToolName(event.name)) continue;
-          const call: PendingToolCall = {
-            id: event.id,
-            name: event.name,
-            input: event.input,
-          };
-          queuedCalls.push(call);
-          setState((s) => attachToolCall(s, assistantMsg.id, call));
-        } else if (event.type === "usage") {
-          setState((s) => ({
-            ...s,
-            sessionTokens: {
-              in: s.sessionTokens.in + event.tokensIn,
-              out: s.sessionTokens.out + event.tokensOut,
-            },
-          }));
-        } else if (event.type === "error") {
-          setState((s) => ({ ...s, error: event.message }));
+      for (let round = 0; round < AGENTIC_LOOP_CAP; round++) {
+        const opts = {
+          messages: wireMessages,
+          intent,
+          signal: controller.signal,
+          ...(intent === "edit" ? { tools: AI_TOOLS as unknown[] } : {}),
+          ...(canvasState ? { canvasState } : {}),
+        } as const;
+        const stream = canvasImage && round === 0
+          ? streamChat({ ...opts, canvasImage })
+          : streamChat(opts);
+
+        const roundCalls: PendingToolCall[] = [];
+        let roundText = "";
+
+        for await (const event of stream) {
+          if (event.type === "chunk") {
+            roundText += event.text;
+            setState((s) => appendChunk(s, assistantMsg.id, event.text));
+          } else if (event.type === "tool_call") {
+            if (!isAiToolName(event.name)) continue;
+            const call: PendingToolCall = {
+              id: event.id,
+              name: event.name,
+              input: event.input,
+            };
+            roundCalls.push(call);
+            allCallsThisTurn.push(call);
+            setState((s) => attachToolCall(s, assistantMsg.id, call));
+          } else if (event.type === "usage") {
+            setState((s) => ({
+              ...s,
+              sessionTokens: {
+                in: s.sessionTokens.in + event.tokensIn,
+                out: s.sessionTokens.out + event.tokensOut,
+              },
+            }));
+          } else if (event.type === "error") {
+            setState((s) => ({ ...s, error: event.message }));
+          }
         }
+
+        // No tool_use this round — we're done looping.
+        if (roundCalls.length === 0) break;
+
+        // In preview mode, defer execution; tool_results aren't built
+        // for the AI either — the user reviews and Accepts/Rejects.
+        if (previewMode) break;
+
+        // Execute this round's tool batch inside the open stroke, then
+        // build tool_result blocks to feed back to the model.
+        const roundResults = executeAiToolBatch(roundCalls, { manageStroke: false });
+        allResultsThisTurn.push(...roundResults);
+        setState((s) => attachToolResults(s, assistantMsg.id, allResultsThisTurn));
+
+        // Build the assistant turn we just streamed (text + tool_use)
+        // and a synthetic user turn carrying tool_result blocks.
+        const assistantBlocks: AiContentBlock[] = [];
+        if (roundText) assistantBlocks.push({ type: "text", text: roundText });
+        for (const c of roundCalls) {
+          assistantBlocks.push({ type: "tool_use", id: c.id, name: c.name, input: c.input });
+        }
+        const toolResultBlocks: AiContentBlock[] = roundCalls.map((c, i) => {
+          const r = roundResults[i];
+          const summary = r?.summary ?? "Tool ran";
+          const data = r?.data ? ` ${JSON.stringify(r.data)}` : "";
+          const errBit = r && !r.success ? ` ERROR: ${r.error ?? "failed"}` : "";
+          return {
+            type: "tool_result",
+            tool_use_id: c.id,
+            content: `${summary}${data}${errBit}`,
+            ...(r && !r.success ? { is_error: true as const } : {}),
+          };
+        });
+
+        wireMessages.push({ role: "assistant", content: assistantBlocks });
+        wireMessages.push({ role: "user", content: toolResultBlocks });
+        // Don't re-attach the canvasImage on subsequent rounds — vision
+        // costs tokens and the model already saw the canvas in round 1.
       }
     } catch (err) {
       const message = err instanceof AiError ? err.message : "Couldn't reach the AI";
@@ -212,17 +284,19 @@ export function useAiChat() {
         err instanceof AiError ? err.code : "UPSTREAM_ERROR";
       setState((s) => ({ ...s, error: message, errorCode: code }));
     } finally {
+      if (strokeOpen) {
+        const { history } = await import("@/lib/history");
+        history.endStroke();
+      }
       abortRef.current = null;
       setState((s) => ({ ...s, streaming: false }));
       useUiStore.getState().setAiStreaming(false);
     }
 
-    // Day 40 — after the stream completes, run queued tool calls.
-    // Preview mode defers execution until Accept; non-preview runs
-    // immediately and stamps results onto the assistant bubble.
-    if (queuedCalls.length > 0 && !previewMode) {
-      const results = executeAiToolBatch(queuedCalls);
-      setState((s) => attachToolResults(s, assistantMsg.id, results));
+    // Preview mode: queue without executing. Accept/Reject runs the
+    // batch later via acceptPreview() / rejectPreview().
+    if (allCallsThisTurn.length > 0 && previewMode) {
+      // toolCalls are already attached during the stream loop.
     }
   }, [state.messages]);
 

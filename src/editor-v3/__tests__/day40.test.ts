@@ -247,6 +247,19 @@ describe("Day 40 — executeAiTool", () => {
     expect(stored.shadowColor).toBe(hexToPixi("#000080"));
   });
 
+  it("Day 40 fix-7 — duplicate_layer returns new_layer_id in data", () => {
+    const id = nanoid();
+    history.addLayer(makeRect(id));
+    const r = executeAiTool("duplicate_layer", { layer_id: id });
+    expect(r.success).toBe(true);
+    expect(r.data).toBeDefined();
+    expect(typeof r.data?.new_layer_id).toBe("string");
+    const layers = useDocStore.getState().layers;
+    expect(layers).toHaveLength(2);
+    const newLayer = layers.find((l) => l.id !== id);
+    expect(r.data?.new_layer_id).toBe(newLayer!.id);
+  });
+
   it("set_layer_position moves the layer", () => {
     const id = nanoid();
     history.addLayer(makeRect(id));
@@ -368,6 +381,34 @@ describe("Day 40 — executeAiToolBatch single-undo", () => {
   it("empty batch is a no-op", () => {
     const results = executeAiToolBatch([]);
     expect(results).toEqual([]);
+  });
+
+  it("Day 40 fix-7 — manageStroke=false leaves caller responsible for begin/endStroke", () => {
+    const a = nanoid();
+    history.addLayer(makeRect(a, 0xff0000));
+
+    // Caller-managed stroke spanning two batches simulates the
+    // agentic loop: round-1 dup + round-2 fill should fold into ONE
+    // history entry, so a single undo reverts everything.
+    const before = useDocStore.getState().layers.length;
+    history.beginStroke("ThumbFriend edit");
+    const r1 = executeAiToolBatch(
+      [{ name: "duplicate_layer", input: { layer_id: a } }],
+      { manageStroke: false },
+    );
+    expect(r1[0]!.success).toBe(true);
+    const newId = r1[0]!.data!.new_layer_id as string;
+    const r2 = executeAiToolBatch(
+      [{ name: "set_layer_fill", input: { layer_id: newId, color: "#0000FF" } }],
+      { manageStroke: false },
+    );
+    expect(r2[0]!.success).toBe(true);
+    history.endStroke();
+
+    expect(useDocStore.getState().layers).toHaveLength(before + 1);
+    history.undo();
+    // Single undo reverts BOTH the duplicate and the recolor.
+    expect(useDocStore.getState().layers).toHaveLength(before);
   });
 });
 

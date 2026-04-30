@@ -170,7 +170,7 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
                 }
                 data-testid={`thumbfriend-msg-${m.role}`}
               >
-                {m.content
+                {typeof m.content === "string" && m.content
                   ? renderBubble(m.content, m.role, (cmd) => submit(cmd))
                   : (m.role === "assistant" && chat.streaming ? <span style={s.cursor} /> : null)}
               </div>

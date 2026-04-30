@@ -50,6 +50,10 @@ export type ToolResult = {
   /** Short past-tense summary used for the inline checkmark. */
   summary: string;
   error?: string;
+  /** Day 40 fix-7 — tool-specific outputs the AI needs to chain a
+   * follow-up call. Example: duplicate_layer returns `{ new_layer_id }`
+   * so the next set_layer_fill can target the new layer. */
+  data?: Record<string, unknown>;
 };
 
 export function executeAiTool(name: string, input: ToolInput): ToolResult {
@@ -113,8 +117,8 @@ function resolveLayer(layerId: unknown) {
   return { layer: null, fellBack: false };
 }
 
-function ok(summary: string): ToolResult {
-  return { success: true, summary };
+function ok(summary: string, data?: Record<string, unknown>): ToolResult {
+  return data ? { success: true, summary, data } : { success: true, summary };
 }
 
 function labelize(name: string) {
@@ -233,7 +237,9 @@ function runDuplicate(input: ToolInput): ToolResult {
   if (!layer) return fail("duplicate_layer", layerNotFoundError());
   const newId = history.duplicateLayer(layer.id);
   if (!newId) return fail("duplicate_layer", "Duplicate failed");
-  return ok(`Duplicated ${layer.name}${fellBackSuffix(fellBack)}`);
+  // Day 40 fix-7 — return the new id so a follow-up tool_result can
+  // hand it to the AI for chained edits ("duplicate and make blue").
+  return ok(`Duplicated ${layer.name}${fellBackSuffix(fellBack)}`, { new_layer_id: newId });
 }
 
 function runDelete(input: ToolInput): ToolResult {
@@ -251,20 +257,26 @@ function clamp(n: number, lo: number, hi: number) {
 }
 
 /** Run a list of tool calls inside a single history stroke so that
- * one Cmd+Z reverts the whole AI turn. Returns per-call results. */
+ * one Cmd+Z reverts the whole AI turn. Returns per-call results.
+ *
+ * Day 40 fix-7 — agentic-loop callers want one stroke spanning many
+ * batches. Pass `manageStroke: false` to leave the stroke open; the
+ * caller is then responsible for begin/end. Default is true for
+ * single-batch callers (legacy single-pass send). */
 export function executeAiToolBatch(
   calls: { name: string; input: ToolInput }[],
-  label = "ThumbFriend edit",
+  options: { label?: string; manageStroke?: boolean } = {},
 ): ToolResult[] {
+  const { label = "ThumbFriend edit", manageStroke = true } = options;
   if (calls.length === 0) return [];
-  history.beginStroke(label);
+  if (manageStroke) history.beginStroke(label);
   const results: ToolResult[] = [];
   try {
     for (const call of calls) {
       results.push(executeAiTool(call.name, call.input));
     }
   } finally {
-    history.endStroke();
+    if (manageStroke) history.endStroke();
   }
   return results;
 }
