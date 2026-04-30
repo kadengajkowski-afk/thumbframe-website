@@ -9,7 +9,17 @@ import { supabase } from "./supabase";
  *
  * Day 39+ wires this into ThumbFriend's UI. Day 34 is plumbing — no
  * editor surface consumes streamChat yet. Manual smoke test from the
- * console (see SCOPE Day-34 entry). */
+ * console (see SCOPE Day-34 entry).
+ *
+ * Day 40 fix-5 — server-side max_tokens budgets are owned by
+ * snapframe-api/routes/ai.js (`MAX_TOKENS` const). Current floors:
+ *   edit:        4096  (tool-use turns need headroom for system prompt
+ *                       + per-turn CANVAS STATE block + JSON tool args)
+ *   deep-think:  8192  (Opus reasoning room)
+ *   plan:        1024
+ *   classify:    32    (single-label output)
+ * If the model is truncating mid-tool-use, bump these — the budget
+ * lives backend-side; this comment is the cross-repo breadcrumb. */
 
 const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ||
