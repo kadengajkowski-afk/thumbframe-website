@@ -88,6 +88,18 @@ export function useAiChat() {
     // do NOT carry this prefix (it's only added on the wire), so older
     // user messages don't pollute the context with stale ids.
     const canvasStateForMsg = intent === "edit" ? buildCanvasState() : null;
+    // Day 40 fix-6 — diagnostic so we can verify selection flows from
+    // the canvas through to the AI proxy. If focused_layer_id reads
+    // null here while the user has a selected layer, the bug is in
+    // buildCanvasState or uiStore — not the backend.
+    if (canvasStateForMsg && typeof console !== "undefined") {
+      console.log(
+        "[ThumbFriend] canvasState",
+        "layers=" + canvasStateForMsg.layers.length,
+        "focused=" + (canvasStateForMsg.focused_layer_id ?? "null"),
+        "selectedIds=" + JSON.stringify(useUiStore.getState().selectedLayerIds),
+      );
+    }
     if (canvasStateForMsg) {
       const ids = canvasStateForMsg.layers.map((l) => l.id);
       const focused = canvasStateForMsg.focused_layer_id;
