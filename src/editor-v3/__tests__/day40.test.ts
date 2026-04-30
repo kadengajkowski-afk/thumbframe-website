@@ -81,8 +81,8 @@ beforeEach(() => {
 // ── aiTools schema ────────────────────────────────────────────────────────────
 
 describe("Day 40 — AI_TOOLS schema", () => {
-  it("ships exactly 10 tools", () => {
-    expect(AI_TOOLS.length).toBe(10);
+  it("ships at least 10 tools (Day 40 baseline; Day 43 adds 4 more)", () => {
+    expect(AI_TOOLS.length).toBeGreaterThanOrEqual(10);
   });
 
   it("each tool has name, description, input_schema with required[]", () => {
@@ -103,7 +103,7 @@ describe("Day 40 — AI_TOOLS schema", () => {
   it("isAiToolName narrows valid names", () => {
     expect(isAiToolName("set_layer_fill")).toBe(true);
     expect(isAiToolName("nonexistent_tool")).toBe(false);
-    expect(TOOL_NAMES.size).toBe(10);
+    expect(TOOL_NAMES.size).toBeGreaterThanOrEqual(10);
   });
 
   it("set_layer_fill requires layer_id + color", () => {
