@@ -3,6 +3,126 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 4 Day 39 — held back (date: 2026-04-30)
+
+- **No chat history persistence.** Each `Cmd+/` open shows a fresh
+  scroller. Closing + reopening the panel keeps the in-memory
+  history (the panel doesn't unmount; uiStore.thumbfriendPanelOpen
+  just hides via the right-slot swap), but a refresh wipes it.
+  Spec said "defer to user request" and that holds — Cycle 5 when
+  Partner mode lands (multi-turn agent state) is the right place
+  to introduce a persisted conversation table.
+
+- **No tool-use streaming.** Day 39 ships the chat surface but the
+  AI proxy still doesn't pass `tools=[]` to Anthropic — assistant
+  replies are plain text. Day 40 lands the tool set (`create_text_layer`,
+  `move_layer`, `apply_color`, etc.) and the in-stream
+  `input_json_delta` parsing so the model can run real edits without
+  the user having to translate "make this red" into a slash command
+  themselves. ThumbFriendPanel today shows the model's words, not
+  its actions.
+
+- **Nudge + Partner tabs are click-able stubs.** Tapping them swaps
+  the body to "Coming soon" copy, which is honest but feels like
+  dead weight when Ask is the only functional mode. Could disable
+  the tabs entirely (visually grayed) until Cycle 5 — held because
+  the discoverability hint matters more than the dead-tab annoyance
+  during MVP.
+
+- **Slash autocomplete dropdown blocks pointer events on the
+  bubbles immediately above it.** When the dropdown renders (`/c`
+  typed), it absolute-positions over the lower portion of the
+  scroller. Clicking a bubble that lives behind the dropdown does
+  nothing. Acceptable — the dropdown closes the moment the user
+  hits space or backspaces past the slash. Move to a popover that
+  flips upward only when there's room would be cleaner; Cycle 6
+  polish.
+
+- **`/center` math is hardcoded against a 1280×720 canvas.** Same
+  as buildImageLayer + several other places. When canvas resize
+  lands (Cycle 5+) all of these have to read from `docStore.canvas`.
+  Tracked across the broader 1280-literal sweep.
+
+- **Slash fallback notes are styled like AI replies.** They share
+  the assistant-bubble shape (with a dashed border + italic text
+  to differentiate). Some users will read them as "the AI said
+  that," which is wrong — the slash parser surfaced them. A
+  separate "system" message style (centered, gray, no bubble)
+  would be honest. Cosmetic; held until a real user is confused.
+
+- **Quick-suggestion chips don't preview what they'll send.**
+  Clicking "Make it pop" sends the literal text "Make it pop" — no
+  context expansion or prompt augmentation. The AI doesn't know
+  what "it" refers to until canvas snapshot + brand kit context
+  are auto-injected by useAiChat. Works today because Sonnet 4.6
+  is good at inferring "it = whatever's selected"; if Haiku
+  misroutes get worse, prompt-augment the chip text before
+  send.
+
+- **Token-usage line uses cached `fetchTodayAiUsage`.** 60s memory
+  cache means a fresh chat call doesn't immediately decrement the
+  visible counter — the "N/5 left" text lags by up to a minute.
+  The server's rate limiter is the source of truth at request
+  time, so a user who actually hits the cap does get blocked
+  correctly; the UI just shows stale optimism. Acceptable; flag
+  if a Pro-conversion user complains.
+
+- **`/text <prompt>` always falls through to AI.** Spec asked for
+  a "generate text suggestion" handler but the right shape is
+  prompt-augmenting ("Suggest a title for this thumbnail: <prompt>")
+  before sending — and that depends on the canvas snapshot which
+  useAiChat already injects. Plain fall-through works; there's no
+  client-side text generator we'd run instead of the AI. Could
+  prepend a "Suggest 3 titles, comma-separated" wrapper to the
+  prompt before calling send — held until we see what the AI
+  actually returns for `/text` calls.
+
+- **Cmd+/ on a non-US keyboard lands on the wrong key.** AZERTY's
+  `/` lives at Shift+: which never fires `e.key === "/"`. ESC
+  layouts vary similarly. The hotkey works on US/UK keyboards
+  (Mac + Windows). Settings-screen rebind is the long-term fix.
+
+- **Slash commands don't appear in the Cmd+K command palette.**
+  They're a separate input model (typed into the chat textarea,
+  not the global palette). A power user might expect "/color"
+  to be reachable from Cmd+K too. Adding them as palette commands
+  doubles the slash registry; held until user signal.
+
+- **No "regenerate last reply" affordance.** If the AI gives a
+  bad answer, the user has to re-type their prompt. A small
+  "↻" button on the last assistant bubble would re-fire the same
+  prompt with a slightly higher temperature. Cycle 5 polish.
+
+- **Streaming cursor is a static blink, not token-paced.** The
+  cursor (`tf-blink` keyframe) blinks at 1Hz regardless of stream
+  rate. A subtle pulse that follows incoming chunks would feel
+  more "alive" but the math (debounce per chunk, fade out, retrigger)
+  isn't worth the LOC. Held.
+
+- **Errors render in a single error row, not as a chat bubble.**
+  This is intentional (the row carries the upgrade/sign-in CTA
+  buttons), but it means a user can't scroll back to see the
+  error after retrying. The error clears on the next successful
+  send. Acceptable; the typed errorCode hangs on the hook so the
+  UI could surface it as a phantom bubble too.
+
+- **No accessibility audit.** Tabs use `role="tablist"` + buttons
+  but tabpanel role + aria-controls on each tab → its corresponding
+  body isn't wired. Screen-reader users will hear "Ask, button"
+  three times without knowing the tab semantics. ARIA pass is
+  Cycle 6 polish across all panels.
+
+- **`useAiChat.send` re-creates on every messages[] change.** That
+  re-renders any consumer that passes send into a memoized child.
+  Same callback pattern as Day 35's deferred note — acceptable for
+  the panel, swap to a ref-based history snapshot if a perf signal
+  surfaces.
+
+- **No way to clear chat history.** No "Clear" button, no Cmd+
+  shortcut. `useAiChat.reset()` exists but isn't exposed in the
+  UI. Add a small trash icon in the panel header alongside the
+  close button. Held until users ask for it.
+
 ## Cycle 4 Day 38 — held back (date: 2026-04-30)
 
 - **`customer.subscription.trial_will_end` doesn't sync to Supabase

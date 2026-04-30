@@ -98,6 +98,34 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   hover actions: "Add to canvas" (creates real ImageLayer via
   `imageGenAddToCanvas.ts`) + "Use as reference" (sets ref for the
   next call). Lazy-loaded, 4.99 KB gzip chunk.
+- **Day 39 (2026-04-30) — ThumbFriend Ask mode UI.** First user-
+  facing surface for the AI proxy shipped Day 34. New
+  `panels/ThumbFriendPanel.tsx` (261 + 163-line styles split) lives
+  in the right rail; mutually exclusive with PreviewRack +
+  ContextPanel (only one right-side panel at a time). Three tabs
+  (Nudge / Ask / Partner) — only Ask is functional today; Nudge +
+  Partner show "Coming soon" stubs (Cycle 5 personalities). Ask
+  mode wraps Day 35's `useAiChat`: pinned brand kit context +
+  canvas snapshot auto-injected, tokens stream in real-time into
+  iMessage-style bubbles (cream text on muted dark fills, asymmetric
+  rounded radii). `Cmd+/` toggles the panel. Slash commands run
+  client-side in `lib/slashCommands.ts` with no AI round-trip:
+  `/color <hex>` (rect/ellipse/text fill, falls back to lastFillColor
+  if no selection), `/center` (snaps to canvas center), `/align
+  left|center|right` (text only), `/font <name>` (selected text or
+  lastFontFamily), `/shadow` (drop shadow on text), `/text <prompt>`
+  (always falls through to AI). Slash autocomplete dropdown surfaces
+  matches with arrow-key nav + Tab to complete. Quick-suggestion
+  chips on empty state ("Make it pop", "Add drop shadow",
+  "Try a different color", "Suggest a title", "Improve readability").
+  Token-usage line under input shows `N/5 messages left today` for
+  free, `UNLIMITED` pill for Pro. Error states route to upgrade
+  (rate-limited → UpgradePanel) or sign-in (auth required →
+  AuthPanel) CTAs via the typed `errorCode` on `useAiChat`. New
+  `appendLocalExchange` + `appendLocalNote` on `useAiChat` so slash
+  results render in the same scroller as AI replies without burning
+  the daily quota.
+
 - **Day 38 (2026-04-30) — Stripe billing wiring (v3).** Reuses v1's
   existing pipeline, doesn't rebuild. `POST /api/create-checkout-session`
   + webhook flow already write `is_pro` / `plan` / `subscription_status`

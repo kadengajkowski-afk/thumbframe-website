@@ -120,6 +120,15 @@ function handleKeydown(e: KeyboardEvent) {
   }
   if (ui.upgradePanelOpen) return;
 
+  // Day 39 — Cmd+/ toggles ThumbFriend chat. Different from Cmd+K
+  // (command palette) — both reachable while typing isn't, the
+  // editable-target gate already runs above.
+  if (meta && !e.shiftKey && e.key === "/") {
+    e.preventDefault();
+    runCommand("view.thumbfriend");
+    return;
+  }
+
   // Zoom shortcuts.
   if (meta && (e.key === "=" || e.key === "+")) {
     e.preventDefault();

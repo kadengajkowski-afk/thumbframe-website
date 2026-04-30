@@ -6,6 +6,7 @@ import { BgRemoveOverlay } from "@/editor/BgRemoveOverlay";
 import { TopBar } from "@/editor/panels/TopBar";
 import { LayerPanel } from "@/editor/panels/LayerPanel";
 import { ContextPanel } from "@/editor/panels/ContextPanel";
+import { ThumbFriendPanel } from "@/editor/panels/ThumbFriendPanel";
 import { ShipComingAlive } from "@/editor/transitions/ShipComingAlive";
 import { EmptyState } from "@/editor/EmptyState";
 import { DropZone } from "@/editor/DropZone";
@@ -126,9 +127,10 @@ export function App() {
 
 function EditorShell() {
   const cursor = useUiStore(deriveCursor);
-  // Day 21: PreviewRack replaces the ContextPanel slot when open.
-  // Single right-side panel — never both at once.
+  // Day 21 / 39: right slot is mutually exclusive — ThumbFriend ▸
+  // PreviewRack ▸ ContextPanel (default). Cmd+/ wins over Cmd+Shift+P.
   const previewOpen = useUiStore((s) => s.previewRackOpen);
+  const thumbfriendOpen = useUiStore((s) => s.thumbfriendPanelOpen);
   return (
     <div style={editorGrid}>
       <TopBar />
@@ -140,7 +142,7 @@ function EditorShell() {
           <BgRemoveOverlay />
           <ZoomIndicator />
         </main>
-        {previewOpen ? <PreviewRack /> : <ContextPanel />}
+        {thumbfriendOpen ? <ThumbFriendPanel /> : previewOpen ? <PreviewRack /> : <ContextPanel />}
       </div>
       <LayerPanel />
     </div>

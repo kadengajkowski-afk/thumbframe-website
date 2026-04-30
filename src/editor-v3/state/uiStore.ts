@@ -162,6 +162,12 @@ type UiState = {
    * route through this panel. */
   upgradePanelOpen: boolean; setUpgradePanelOpen: (v: boolean) => void;
 
+  /** Day 39: ThumbFriend chat panel visibility. Cmd+/ toggles. Lives
+   * in the right rail and is mutually exclusive with PreviewRack +
+   * ContextPanel — only one right-side panel at a time. */
+  thumbfriendPanelOpen: boolean;
+  setThumbfriendPanelOpen: (v: boolean) => void;
+
   /** Day 32: pinned Brand Kit. Persists across reloads via localStorage
    * (signed-out) or the user's most-recent saved row (signed-in, loaded
    * at boot). When pinned, the kit's palette appears as a "Brand"
@@ -365,6 +371,9 @@ export const useUiStore = create<UiState>()((set) => ({
 
   upgradePanelOpen: false,
   setUpgradePanelOpen: (upgradePanelOpen) => set({ upgradePanelOpen }),
+
+  thumbfriendPanelOpen: false,
+  setThumbfriendPanelOpen: (thumbfriendPanelOpen) => set({ thumbfriendPanelOpen }),
 
   pinnedBrandKit: loadPinnedKit(),
   setPinnedBrandKit: (pinnedBrandKit) => {
