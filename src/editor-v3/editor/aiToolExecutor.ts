@@ -1,5 +1,6 @@
 import { history } from "@/lib/history";
 import { useDocStore } from "@/state/docStore";
+import { useUiStore } from "@/state/uiStore";
 import { hexToPixi, normalizeHex } from "@/lib/color";
 import type { AiToolName } from "@/lib/aiTools";
 
@@ -47,8 +48,41 @@ function getLayer(layerId: unknown) {
   return useDocStore.getState().layers.find((l) => l.id === layerId) ?? null;
 }
 
+/** Day 40 fix — when the AI sends a layer_id we don't have, list the
+ * valid ids in the error so future retries can self-correct, and
+ * surface the user's currently selected layer first since that's the
+ * single most likely intended target. */
+function layerNotFoundError(): string {
+  // Lazy import — keeps useUiStore out of the tool executor's eager
+  // deps (executor stays usable from non-UI contexts like tests).
+  const focused = useUiStore.getState().selectedLayerIds[0] ?? null;
+  const layers = useDocStore.getState().layers;
+  if (layers.length === 0) {
+    return "Layer not found — the canvas has no layers yet.";
+  }
+  const ids = layers.map((l) => `"${l.id}" (${l.type} "${l.name}")`).join(", ");
+  const focusedHint = focused ? ` Currently selected: "${focused}".` : "";
+  return `Layer not found.${focusedHint} Valid ids: ${ids}.`;
+}
+
 function fail(name: string, error: string): ToolResult {
   return { success: false, summary: `Couldn't ${labelize(name)}`, error };
+}
+
+/** Day 40 fix — if the AI sent a bogus layer_id but the user has a
+ * single layer selected, fall back to that layer. Most "Layer not
+ * found" errors are the AI hallucinating an id when the obvious
+ * intent is "the layer the user picked." Returns the layer it
+ * resolved to, or null if no fallback is appropriate. */
+function resolveLayer(layerId: unknown) {
+  const direct = getLayer(layerId);
+  if (direct) return { layer: direct, fellBack: false };
+  const focused = useUiStore.getState().selectedLayerIds[0] ?? null;
+  if (focused) {
+    const fallback = useDocStore.getState().layers.find((l) => l.id === focused);
+    if (fallback) return { layer: fallback, fellBack: true };
+  }
+  return { layer: null, fellBack: false };
 }
 
 function ok(summary: string): ToolResult {
@@ -70,9 +104,13 @@ function asNumber(v: unknown): number | null {
 
 // ── Tool runners ────────────────────────────────────────────────────
 
+function fellBackSuffix(fellBack: boolean) {
+  return fellBack ? " (used selected layer)" : "";
+}
+
 function runSetFill(input: ToolInput): ToolResult {
-  const layer = getLayer(input.layer_id);
-  if (!layer) return fail("set_layer_fill", "Layer not found");
+  const { layer, fellBack } = resolveLayer(input.layer_id);
+  if (!layer) return fail("set_layer_fill", layerNotFoundError());
   const hex = normalizeHex(typeof input.color === "string" ? input.color : "");
   if (!hex) return fail("set_layer_fill", "Invalid color (need #RRGGBB)");
   if (layer.type !== "rect" && layer.type !== "ellipse" && layer.type !== "text") {
@@ -81,63 +119,63 @@ function runSetFill(input: ToolInput): ToolResult {
   const pixi = hexToPixi(hex);
   if (pixi === null) return fail("set_layer_fill", "Color parse failed");
   history.setLayerFillColor(layer.id, pixi);
-  return ok(`Set ${layer.name} to ${hex}`);
+  return ok(`Set ${layer.name} to ${hex}${fellBackSuffix(fellBack)}`);
 }
 
 function runSetPosition(input: ToolInput): ToolResult {
-  const layer = getLayer(input.layer_id);
-  if (!layer) return fail("set_layer_position", "Layer not found");
+  const { layer, fellBack } = resolveLayer(input.layer_id);
+  if (!layer) return fail("set_layer_position", layerNotFoundError());
   const x = asNumber(input.x);
   const y = asNumber(input.y);
   if (x === null || y === null) return fail("set_layer_position", "x and y must be numbers");
   history.moveLayer(layer.id, Math.round(x), Math.round(y));
-  return ok(`Moved ${layer.name} to (${Math.round(x)}, ${Math.round(y)})`);
+  return ok(`Moved ${layer.name} to (${Math.round(x)}, ${Math.round(y)})${fellBackSuffix(fellBack)}`);
 }
 
 function runSetOpacity(input: ToolInput): ToolResult {
-  const layer = getLayer(input.layer_id);
-  if (!layer) return fail("set_layer_opacity", "Layer not found");
+  const { layer, fellBack } = resolveLayer(input.layer_id);
+  if (!layer) return fail("set_layer_opacity", layerNotFoundError());
   const opacity = asNumber(input.opacity);
   if (opacity === null) return fail("set_layer_opacity", "opacity must be 0..1");
   const clamped = Math.max(0, Math.min(1, opacity));
   history.setLayerOpacity(layer.id, clamped);
-  return ok(`Set ${layer.name} opacity to ${Math.round(clamped * 100)}%`);
+  return ok(`Set ${layer.name} opacity to ${Math.round(clamped * 100)}%${fellBackSuffix(fellBack)}`);
 }
 
 function runSetText(input: ToolInput): ToolResult {
-  const layer = getLayer(input.layer_id);
-  if (!layer) return fail("set_text_content", "Layer not found");
+  const { layer, fellBack } = resolveLayer(input.layer_id);
+  if (!layer) return fail("set_text_content", layerNotFoundError());
   if (layer.type !== "text") return fail("set_text_content", "Not a text layer");
   const text = typeof input.text === "string" ? input.text : "";
   history.setText(layer.id, text);
   const preview = text.length > 24 ? `${text.slice(0, 24)}…` : text;
-  return ok(`Set ${layer.name} to "${preview}"`);
+  return ok(`Set ${layer.name} to "${preview}"${fellBackSuffix(fellBack)}`);
 }
 
 function runSetFont(input: ToolInput): ToolResult {
-  const layer = getLayer(input.layer_id);
-  if (!layer) return fail("set_font_family", "Layer not found");
+  const { layer, fellBack } = resolveLayer(input.layer_id);
+  if (!layer) return fail("set_font_family", layerNotFoundError());
   if (layer.type !== "text") return fail("set_font_family", "Not a text layer");
   const fontName = typeof input.font_name === "string" ? input.font_name.trim() : "";
   if (!fontName) return fail("set_font_family", "Missing font_name");
   history.setFontFamily(layer.id, fontName);
-  return ok(`Set ${layer.name} font to ${fontName}`);
+  return ok(`Set ${layer.name} font to ${fontName}${fellBackSuffix(fellBack)}`);
 }
 
 function runSetFontSize(input: ToolInput): ToolResult {
-  const layer = getLayer(input.layer_id);
-  if (!layer) return fail("set_font_size", "Layer not found");
+  const { layer, fellBack } = resolveLayer(input.layer_id);
+  if (!layer) return fail("set_font_size", layerNotFoundError());
   if (layer.type !== "text") return fail("set_font_size", "Not a text layer");
   const size = asNumber(input.size);
   if (size === null) return fail("set_font_size", "size must be a number");
   const clamped = Math.max(8, Math.min(512, size));
   history.setFontSize(layer.id, Math.round(clamped));
-  return ok(`Set ${layer.name} font size to ${Math.round(clamped)}px`);
+  return ok(`Set ${layer.name} font size to ${Math.round(clamped)}px${fellBackSuffix(fellBack)}`);
 }
 
 function runAddShadow(input: ToolInput): ToolResult {
-  const layer = getLayer(input.layer_id);
-  if (!layer) return fail("add_drop_shadow", "Layer not found");
+  const { layer, fellBack } = resolveLayer(input.layer_id);
+  if (!layer) return fail("add_drop_shadow", layerNotFoundError());
   if (layer.type !== "text") return fail("add_drop_shadow", "Drop shadow is text-only");
   const hex = typeof input.color === "string" ? normalizeHex(input.color) : "#000000";
   const pixi = hex ? hexToPixi(hex) : 0;
@@ -148,29 +186,32 @@ function runAddShadow(input: ToolInput): ToolResult {
   history.setShadowAlpha(layer.id, 0.6);
   history.setShadowBlur(layer.id, blur);
   history.setShadowOffset(layer.id, distance, distance);
-  return ok(`Added drop shadow to ${layer.name}`);
+  return ok(`Added drop shadow to ${layer.name}${fellBackSuffix(fellBack)}`);
 }
 
 function runCenter(input: ToolInput): ToolResult {
-  const layer = getLayer(input.layer_id);
-  if (!layer) return fail("center_layer", "Layer not found");
+  const { layer, fellBack } = resolveLayer(input.layer_id);
+  if (!layer) return fail("center_layer", layerNotFoundError());
   const x = Math.round((CANVAS_W - layer.width) / 2);
   const y = Math.round((CANVAS_H - layer.height) / 2);
   history.moveLayer(layer.id, x, y);
-  return ok(`Centered ${layer.name}`);
+  return ok(`Centered ${layer.name}${fellBackSuffix(fellBack)}`);
 }
 
 function runDuplicate(input: ToolInput): ToolResult {
-  const layer = getLayer(input.layer_id);
-  if (!layer) return fail("duplicate_layer", "Layer not found");
+  const { layer, fellBack } = resolveLayer(input.layer_id);
+  if (!layer) return fail("duplicate_layer", layerNotFoundError());
   const newId = history.duplicateLayer(layer.id);
   if (!newId) return fail("duplicate_layer", "Duplicate failed");
-  return ok(`Duplicated ${layer.name}`);
+  return ok(`Duplicated ${layer.name}${fellBackSuffix(fellBack)}`);
 }
 
 function runDelete(input: ToolInput): ToolResult {
+  // Day 40 fix — DON'T fall back to focused for delete. Deleting the
+  // wrong layer is destructive even with single-undo. Require an exact
+  // match on the layer_id.
   const layer = getLayer(input.layer_id);
-  if (!layer) return fail("delete_layer", "Layer not found");
+  if (!layer) return fail("delete_layer", layerNotFoundError());
   history.deleteLayer(layer.id);
   return ok(`Deleted ${layer.name}`);
 }

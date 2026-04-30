@@ -164,6 +164,35 @@ describe("Day 40 — executeAiTool", () => {
     expect(r.error).toMatch(/not found/i);
   });
 
+  it("Day 40 fix — error lists valid layer ids when AI sends a bogus one", () => {
+    const id = nanoid();
+    history.addLayer(makeRect(id, 0xff0000));
+    // No selection → no fallback → bogus id should fail with valid-ids hint.
+    useUiStore.getState().setSelectedLayerIds([]);
+    const r = executeAiTool("set_layer_fill", { layer_id: "fake_id", color: "#abcdef" });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain(id); // valid id surfaced in the error string
+  });
+
+  it("Day 40 fix — falls back to selected layer when AI hallucinates layer_id", () => {
+    const id = nanoid();
+    history.addLayer(makeRect(id, 0xff0000));
+    useUiStore.getState().setSelectedLayerIds([id]);
+    const r = executeAiTool("set_layer_fill", { layer_id: "wrong_id", color: "#00ff00" });
+    expect(r.success).toBe(true);
+    const stored = useDocStore.getState().layers[0] as Layer & { color: number };
+    expect(stored.color).toBe(hexToPixi("#00ff00"));
+  });
+
+  it("Day 40 fix — delete_layer does NOT fall back to selected (destructive)", () => {
+    const id = nanoid();
+    history.addLayer(makeRect(id));
+    useUiStore.getState().setSelectedLayerIds([id]);
+    const r = executeAiTool("delete_layer", { layer_id: "wrong_id" });
+    expect(r.success).toBe(false);
+    expect(useDocStore.getState().layers).toHaveLength(1); // not deleted
+  });
+
   it("set_layer_position moves the layer", () => {
     const id = nanoid();
     history.addLayer(makeRect(id));

@@ -78,7 +78,24 @@ export function useAiChat() {
     const pinnedKit = useUiStore.getState().pinnedBrandKit;
     const previewMode = useUiStore.getState().thumbfriendPreviewMode;
     const context = buildSystemContext({ pinnedKit, intent });
-    const userContent = prependContextToMessage(trimmed, context);
+    let userContent = prependContextToMessage(trimmed, context);
+    // Day 40 fix — also stamp the focused-layer hint onto the user
+    // message so it's at maximum salience. The system-prompt canvas
+    // block carries the full layer list; this is a one-line nudge that
+    // sits right next to the request the model is reading.
+    const canvasStateForMsg = intent === "edit" ? buildCanvasState() : null;
+    if (canvasStateForMsg) {
+      const focused = canvasStateForMsg.focused_layer_id;
+      if (focused) {
+        const focusedLayer = canvasStateForMsg.layers.find((l) => l.id === focused);
+        const desc = focusedLayer
+          ? `${focusedLayer.type} "${focusedLayer.name}"`
+          : "a layer";
+        userContent = `[Currently selected layer_id: "${focused}" (${desc}) — use this exact id when the request is about "this" / "it".]\n\n${userContent}`;
+      } else if (canvasStateForMsg.layers.length === 0) {
+        userContent = `[The canvas is empty — no layers exist yet. Don't call layer tools; suggest the user add a layer first.]\n\n${userContent}`;
+      }
+    }
     const userMsg: ChatMessage = { id: makeId(), role: "user", content: trimmed };
     const assistantMsg: ChatMessage = {
       id: makeId(),
@@ -94,7 +111,9 @@ export function useAiChat() {
       const snap = snapshotCanvas();
       if (snap.image) canvasImage = snap.image;
     }
-    const canvasState = intent === "edit" ? buildCanvasState() : undefined;
+    // Reuse the snapshot we already computed above for the user-message
+    // hint so the system prompt + user message agree on the same id set.
+    const canvasState = canvasStateForMsg ?? undefined;
 
     setState((s) => ({
       ...s,
