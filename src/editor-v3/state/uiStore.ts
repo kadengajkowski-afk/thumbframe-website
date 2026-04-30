@@ -185,6 +185,13 @@ type UiState = {
   crewIntroDismissed: boolean;
   setCrewIntroDismissed: (v: boolean) => void;
 
+  /** Days 41-42 polish: crew picker dropdown open state. Lifted to
+   * uiStore (rather than panel-local) so the dropdown can render in
+   * the panel body — full panel width — while the trigger lives in
+   * the header. Not persisted. */
+  crewPickerOpen: boolean;
+  setCrewPickerOpen: (v: boolean) => void;
+
   /** Day 32: pinned Brand Kit. Persists across reloads via localStorage
    * (signed-out) or the user's most-recent saved row (signed-in, loaded
    * at boot). When pinned, the kit's palette appears as a "Brand"
@@ -406,6 +413,9 @@ export const useUiStore = create<UiState>()((set) => ({
     persistString("thumbframe-crew-intro-dismissed", crewIntroDismissed ? "1" : "0");
     set({ crewIntroDismissed });
   },
+
+  crewPickerOpen: false,
+  setCrewPickerOpen: (crewPickerOpen) => set({ crewPickerOpen }),
 
   pinnedBrandKit: loadPinnedKit(),
   setPinnedBrandKit: (pinnedBrandKit) => {

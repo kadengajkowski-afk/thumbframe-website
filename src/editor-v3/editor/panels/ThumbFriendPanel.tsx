@@ -5,7 +5,7 @@ import { tryRunSlash, suggestSlash, type SlashSpec } from "@/lib/slashCommands";
 import { fetchTodayAiUsage, FREE_DAILY_LIMIT } from "@/lib/aiUsage";
 import * as s from "./ThumbFriendPanel.styles";
 import { renderBubble, ToolCallList, CrewLabel, CrewIntroCard } from "./ThumbFriendPanel.parts";
-import { ThumbFriendCrewPicker } from "./ThumbFriendCrewPicker";
+import { ThumbFriendCrewTrigger, ThumbFriendCrewDropdown } from "./ThumbFriendCrewPicker";
 
 /** Day 39 — ThumbFriend Ask mode. Single-turn AI edits via Cmd+/.
  *
@@ -39,7 +39,7 @@ export function ThumbFriendPanel() {
       <header style={s.header}>
         <div style={s.headerLeft}>
           <span style={s.headerLabel}>ThumbFriend</span>
-          <ThumbFriendCrewPicker />
+          <ThumbFriendCrewTrigger />
           {tab === "ask" && (
             <button
               type="button"
@@ -54,6 +54,8 @@ export function ThumbFriendPanel() {
         </div>
         <button type="button" style={s.closeBtn} onClick={() => close(false)} aria-label="Close">×</button>
       </header>
+      {/* Crew picker dropdown — flows below the header, full panel width. */}
+      <ThumbFriendCrewDropdown />
       <nav style={s.tabs} role="tablist">
         <Tab id="nudge"   active={tab} onPick={setTab} label="Nudge" />
         <Tab id="ask"     active={tab} onPick={setTab} label="Ask" />
