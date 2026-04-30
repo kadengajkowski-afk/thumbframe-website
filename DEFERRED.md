@@ -3,6 +3,110 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 5 Days 41-42 — held back (date: 2026-04-30)
+
+- **30-prompt manual voice testing wasn't run autonomously.** Spec
+  asked for 5 prompts × 6 crew = 30 conversations to verify each
+  personality's voice. The system-prompt strings have been written
+  with explicit voice cues + banned-words guards (every prompt
+  forbids 'oops' / 'sorry' / 'welcome back' / 'AI-powered'), and
+  the First Mate prompt explicitly instructs the AI to flex
+  registers — but actual on-network testing against Sonnet 4.6
+  needs Kaden to run through it. Drift will surface as the user
+  uses each crew member; bake-in fixes as patches to the
+  CREW[i].systemPrompt + lib/crewPrompts.js pair.
+
+- **Source-of-truth dance: frontend lib/crew.ts and backend
+  lib/crewPrompts.js carry the same systemPrompt strings.** The
+  frontend needs the prompts for the picker UI (taglines, role
+  descriptions); the backend needs them for the actual AI calls.
+  Two repos = no shared module. Editing a prompt requires editing
+  both files. A shared `shared/crew.json` published as an npm
+  package (or copied into both repos via a build step) is the
+  long-term fix. Cycle 6.
+
+- **Avatar illustrations are geometric placeholders.** Real
+  illustrated crew avatars are Cycle 6. Today's badges (hexagon
+  shield + ship wheel for Captain, etc.) are recognizable enough
+  for the picker dropdown but won't carry the brand voice.
+
+- **No Supabase user_preferences sync.** activeCrewMember and the
+  intro-dismissed flag persist to localStorage only. Switching
+  devices loses the preference. Spec mentioned reusing/creating a
+  user_preferences table; held until we have a real cross-device
+  use case (most editor users work on one machine). Day 47-style
+  "ThumbFriend deep memory" work will revisit the right shape.
+
+- **Crew member rotation/scheduling logic deferred per spec.** No
+  "auto-rotate crew based on time of day / project type" feature.
+  Static-pick-and-stick model.
+
+- **No "AI suggests which crew member" auto-routing.** Cycle 6
+  candidate. Today the user picks; the AI doesn't volunteer
+  "the Doctor would be better for this."
+
+- **Crew-specific catchphrase tooltips deferred.** Catchphrases
+  live on each CrewMember.catchphrases array but only the picker
+  card surfaces the role + tagline + use-case — the catchphrases
+  themselves don't render. Could surface as hover tooltips or as
+  Easter-egg-style ambient text. Held until UX feedback.
+
+- **First-run intro card hard-codes the Captain's intro line.**
+  "I'm the Captain. I tell you the truth about your work." If a
+  user has switched their default crew member before opening the
+  panel for the first time (e.g. via uiStore manipulation in
+  dev), the intro still says "I'm the Captain" while the active
+  picker shows the other crew member. Dismissing the intro is
+  one click so the rare-edge-case dissonance is short-lived.
+  Could make the intro line dynamic per crew member. Cycle 6.
+
+- **Crew prompts hard-code the banned phrases inline.** Every
+  crew system prompt ends with "You never use 'oops', 'sorry',
+  'welcome back', 'AI-powered'." Repeating this 6× burns a small
+  number of input tokens on every chat call. A shared
+  voice-rules block prepended ONCE in getSystemPrompt would dedupe
+  it. Held — the redundancy reinforces the rule and the token
+  cost is trivial.
+
+- **Panel header gets crowded on narrow viewports.** Header now
+  carries: "ThumbFriend" label + crew picker trigger + Preview
+  toggle + close button. flex-wrap is on, so it stacks gracefully
+  at <360px panel width, but doesn't look great. Cycle 6 layout
+  pass.
+
+- **CrewLabel renders for every assistant bubble.** When the user
+  has a long back-and-forth with one crew member, the repeated
+  small-caps name above every reply gets noisy. Could collapse
+  consecutive same-author messages (like iMessage's grouped
+  bubbles) so the label only shows once per author run. Cycle 6.
+
+- **No way to see catchphrases of an INACTIVE crew member without
+  switching to them.** The picker card shows tagline + role +
+  use-case but not the catchphrases. Could expand-on-hover or
+  add a "preview voice" sample. Held.
+
+- **Tool calls run identically across crew.** This is the
+  intended invariant — personality affects voice only — but a
+  designer might expect the Cook to suggest more options before
+  acting, the Lookout to refuse trivial requests, etc. The
+  prompts shape behavior at the language level; no enforcement
+  at the schema level. If a crew member behaves wrong (Doctor
+  workshop-ing instead of triaging), bake the constraint into
+  their system prompt rather than the executor.
+
+- **No crew-aware token budget split.** All six crew use the same
+  4096 max_tokens (edit intent). The Cook's three-options pattern
+  spends more tokens on ideation; the Doctor spends fewer on
+  prose and more on tool calls. Could parametrize but the
+  difference is small in practice.
+
+- **CREW_PROMPTS strings are tagged "you never use 'oops'..."**.
+  When the model echoes the rule inline (rare), the response
+  itself contains 'oops' / 'sorry' as part of the rule text.
+  Real ban enforcement at output-time would need a regex sweep
+  on assistant text, which we don't do. Acceptable since the
+  pattern hasn't surfaced in practice with similar prompts.
+
 ## Cycle 4 Day 40 — held back (date: 2026-04-30)
 
 - **Tool args don't stream — they land at finalMessage time.** Anthropic

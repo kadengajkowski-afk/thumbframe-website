@@ -53,6 +53,10 @@ export type StreamChatOptions = {
   /** Day 40 — small structured snapshot of the canvas (layer ids,
    * types, focused id) the backend appends to the system prompt. */
   canvasState?: unknown;
+  /** Days 41-42 — id of the active crew member (captain / first-mate /
+   * cook / navigator / doctor / lookout). The backend prepends the
+   * matching personality block to the system prompt. */
+  crewId?: string;
   /** Aborts the underlying fetch + reader. */
   signal?: AbortSignal;
 };
@@ -122,6 +126,7 @@ export async function* streamChat(options: StreamChatOptions): AsyncGenerator<St
         canvasImage:  options.canvasImage,
         tools:        options.tools,
         canvasState:  options.canvasState,
+        crew_id:      options.crewId,
       }),
     };
     if (options.signal) init.signal = options.signal;
