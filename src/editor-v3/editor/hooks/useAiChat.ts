@@ -79,21 +79,48 @@ export function useAiChat() {
     const previewMode = useUiStore.getState().thumbfriendPreviewMode;
     const context = buildSystemContext({ pinnedKit, intent });
     let userContent = prependContextToMessage(trimmed, context);
-    // Day 40 fix — also stamp the focused-layer hint onto the user
-    // message so it's at maximum salience. The system-prompt canvas
-    // block carries the full layer list; this is a one-line nudge that
-    // sits right next to the request the model is reading.
+
+    // Day 40 fix-3 — embed the FULL canvas state (available_layer_ids
+    // + focused id + per-layer details) directly in the latest user
+    // message, not just in the system prompt. Sonnet 4.6 attends to
+    // the most-recent user content far more reliably than to the
+    // system block for tool parameters. Earlier turns in state.messages
+    // do NOT carry this prefix (it's only added on the wire), so older
+    // user messages don't pollute the context with stale ids.
     const canvasStateForMsg = intent === "edit" ? buildCanvasState() : null;
     if (canvasStateForMsg) {
+      const ids = canvasStateForMsg.layers.map((l) => l.id);
       const focused = canvasStateForMsg.focused_layer_id;
-      if (focused) {
-        const focusedLayer = canvasStateForMsg.layers.find((l) => l.id === focused);
-        const desc = focusedLayer
-          ? `${focusedLayer.type} "${focusedLayer.name}"`
-          : "a layer";
-        userContent = `[Currently selected layer_id: "${focused}" (${desc}) — use this exact id when the request is about "this" / "it".]\n\n${userContent}`;
-      } else if (canvasStateForMsg.layers.length === 0) {
-        userContent = `[The canvas is empty — no layers exist yet. Don't call layer tools; suggest the user add a layer first.]\n\n${userContent}`;
+      if (canvasStateForMsg.layers.length === 0) {
+        userContent =
+          "[CANVAS STATE]\n" +
+          "available_layer_ids = []\n" +
+          "The canvas is empty. DO NOT call any layer tool. " +
+          "Reply telling the user to add or upload a layer first.\n" +
+          "[/CANVAS STATE]\n\n" +
+          userContent;
+      } else {
+        const layerDetails = canvasStateForMsg.layers.map((l) => {
+          const bits: string[] = [`id=${JSON.stringify(l.id)}`, `type=${l.type}`, `name=${JSON.stringify(l.name)}`];
+          if (l.color) bits.push(`color=${l.color}`);
+          if (l.text) bits.push(`text=${JSON.stringify(l.text)}`);
+          if (l.font_family) bits.push(`font=${l.font_family}`);
+          return `  - ${bits.join(", ")}`;
+        }).join("\n");
+        userContent =
+          "[CANVAS STATE — read this BEFORE calling any tool]\n" +
+          `available_layer_ids = ${JSON.stringify(ids)}\n` +
+          `focused_layer_id = ${focused ? JSON.stringify(focused) : "null"}` +
+          (focused ? "  // user has this selected — use it for ambiguous requests" : "") +
+          "\n\nLayers:\n" +
+          layerDetails +
+          "\n\nRULES:\n" +
+          "  1. Every tool call MUST set layer_id to one of the strings in available_layer_ids above.\n" +
+          "  2. Copy the id verbatim. Do NOT use a layer's name as the id.\n" +
+          "  3. For colors, use #RRGGBB hex (e.g. \"#FF0000\" for red).\n" +
+          "[/CANVAS STATE]\n\n" +
+          "User request: " +
+          userContent;
       }
     }
     const userMsg: ChatMessage = { id: makeId(), role: "user", content: trimmed };
