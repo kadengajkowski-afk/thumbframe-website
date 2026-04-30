@@ -174,6 +174,17 @@ type UiState = {
   thumbfriendPreviewMode: boolean;
   setThumbfriendPreviewMode: (v: boolean) => void;
 
+  /** Days 41-42: crew member id (one of CREW). Default "captain".
+   * Persists to localStorage; on send, useAiChat passes it to the
+   * backend so the right personality system prompt is used. */
+  activeCrewMember: string;
+  setActiveCrewMember: (id: string) => void;
+
+  /** Days 41-42: first-run intro card dismissal flag. Once dismissed
+   * the panel skips the intro on every open. Persisted. */
+  crewIntroDismissed: boolean;
+  setCrewIntroDismissed: (v: boolean) => void;
+
   /** Day 32: pinned Brand Kit. Persists across reloads via localStorage
    * (signed-out) or the user's most-recent saved row (signed-in, loaded
    * at boot). When pinned, the kit's palette appears as a "Brand"
@@ -383,6 +394,18 @@ export const useUiStore = create<UiState>()((set) => ({
 
   thumbfriendPreviewMode: false,
   setThumbfriendPreviewMode: (thumbfriendPreviewMode) => set({ thumbfriendPreviewMode }),
+
+  activeCrewMember: loadString("thumbframe-crew", "captain"),
+  setActiveCrewMember: (activeCrewMember) => {
+    persistString("thumbframe-crew", activeCrewMember);
+    set({ activeCrewMember });
+  },
+
+  crewIntroDismissed: loadBool("thumbframe-crew-intro-dismissed", false),
+  setCrewIntroDismissed: (crewIntroDismissed) => {
+    persistString("thumbframe-crew-intro-dismissed", crewIntroDismissed ? "1" : "0");
+    set({ crewIntroDismissed });
+  },
 
   pinnedBrandKit: loadPinnedKit(),
   setPinnedBrandKit: (pinnedBrandKit) => {

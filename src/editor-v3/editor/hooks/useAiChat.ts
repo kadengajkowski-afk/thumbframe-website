@@ -46,6 +46,10 @@ export type ChatMessage = AiMessage & {
   /** Day 40 — preview-mode flag. When true, toolCalls aren't
    * executed yet; the panel renders Accept/Reject buttons. */
   pendingPreview?: boolean;
+  /** Days 41-42 — id of the crew member who authored this assistant
+   * reply. User messages don't carry this. Set at send time so
+   * historical messages keep their author after a crew switch. */
+  crewId?: string;
 };
 
 export type PendingToolCall = {
@@ -78,6 +82,7 @@ export function useAiChat() {
 
     const pinnedKit = useUiStore.getState().pinnedBrandKit;
     const previewMode = useUiStore.getState().thumbfriendPreviewMode;
+    const crewId = useUiStore.getState().activeCrewMember;
     const context = buildSystemContext({ pinnedKit, intent });
     let userContent = prependContextToMessage(trimmed, context);
 
@@ -144,6 +149,8 @@ export function useAiChat() {
       toolCalls: [],
       toolResults: null,
       pendingPreview: previewMode,
+      crewId, // Days 41-42 — stamp who's speaking so UI labels stay
+              // correct after the user switches crew mid-session.
     };
 
     let canvasImage: string | undefined;
@@ -203,6 +210,7 @@ export function useAiChat() {
           messages: wireMessages,
           intent,
           signal: controller.signal,
+          crewId,
           ...(intent === "edit" ? { tools: AI_TOOLS as unknown[] } : {}),
           ...(canvasState ? { canvasState } : {}),
         } as const;

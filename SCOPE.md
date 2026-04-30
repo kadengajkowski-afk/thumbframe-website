@@ -128,6 +128,39 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   button. `ThumbFriendPanel.parts.tsx` (126 lines) holds `renderBubble`
   + `ToolCallList`. Backend test count: 81. Frontend: 451.
 
+- **Days 41-42 (2026-04-30) — ThumbFriend Crew (5 personalities + First Mate).**
+  Replaces the single ThumbFriend voice with six selectable crew
+  members: Captain (default — veteran, blunt critique), First Mate
+  (all-rounder — flexes between specialties), Cook (creative —
+  brainstorming, food metaphors), Navigator (technical — design rules
+  taught with bearings), Doctor (fixer — clinical triage), Lookout
+  (refined taste — restraint, removal-first). New `lib/crew.ts`
+  (115 lines) ships the crew data structure + per-member system
+  prompts; `editor/crewAvatars.tsx` ships geometric SVG badges
+  (placeholder; illustrated avatars are Cycle 6). Backend mirrors
+  via new `lib/crewPrompts.js` (single source-of-truth dance: two
+  files in two repos, kept in sync by hand). `getSystemPrompt(intent,
+  context)` now prepends the crew block before the intent rules.
+  `uiStore.activeCrewMember` persists to localStorage
+  (`thumbframe-crew`); `crewIntroDismissed` to
+  `thumbframe-crew-intro-dismissed`. `aiClient.streamChat` accepts
+  `crewId` and forwards as `crew_id` in the request body;
+  `useAiChat` reads from the store on every send and stamps the
+  crew id on each assistant message so older bubbles keep their
+  author after a crew switch. Panel UI: `ThumbFriendCrewPicker.tsx`
+  (136 lines) replaces the static "ThumbFriend" header label with a
+  trigger that drops a 6-card menu (avatar + name + role + tagline +
+  use-case, active card with `--accent-orange` border).
+  `ThumbFriendPanel.parts.tsx` adds a `CrewLabel` (Geist Mono cream
+  caption rendered above every assistant bubble showing who's
+  speaking) and a `CrewIntroCard` (first-run intro inside the
+  scroller — the Captain pitches the crew + a "tap my name to meet
+  them" pointer; dismiss button persists the flag). Tool calls run
+  identically across all six crew — personality affects voice only.
+  19 new tests (backend: 6 covering crew prompts + system-prompt
+  routing; frontend: 13 covering data shape + persistence + wire +
+  panel render). Full suites: backend 99 / frontend 474.
+
 - **Day 39 (2026-04-30) — ThumbFriend Ask mode UI.** First user-
   facing surface for the AI proxy shipped Day 34. New
   `panels/ThumbFriendPanel.tsx` (261 + 163-line styles split) lives

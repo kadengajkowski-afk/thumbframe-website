@@ -246,4 +246,38 @@ export const previewToggleActive: CSSProperties = {
 };
 export const headerLeft: CSSProperties = {
   display: "flex", alignItems: "center", gap: 10,
+  flexWrap: "wrap",
+};
+
+// ── Days 41-42 — crew label + intro card ────────────────────────────
+
+export const crewLabel: CSSProperties = {
+  alignSelf: "flex-start",
+  display: "inline-flex", alignItems: "center", gap: 4,
+  marginTop: 4, marginBottom: -2,
+  fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase",
+  color: "var(--text-secondary)",
+  fontFamily: '"Geist Mono", ui-monospace, monospace',
+};
+export const introCard: CSSProperties = {
+  margin: "8px 0", padding: 14,
+  background: "var(--bg-space-0)", color: "var(--text-primary)",
+  border: "1px solid var(--accent-orange)", borderRadius: 8,
+  display: "flex", flexDirection: "column", gap: 6,
+};
+export const introHeader: CSSProperties = {
+  display: "flex", alignItems: "center", gap: 8,
+};
+export const introName: CSSProperties = { fontSize: 13, fontWeight: 600 };
+export const introLine: CSSProperties = {
+  margin: 0, fontSize: 13, lineHeight: 1.4,
+};
+export const introLineMuted: CSSProperties = {
+  margin: 0, fontSize: 12, lineHeight: 1.4, color: "var(--text-secondary)",
+};
+export const introDismiss: CSSProperties = {
+  alignSelf: "flex-start", marginTop: 4,
+  padding: "5px 12px", fontSize: 12, fontWeight: 600,
+  background: "var(--accent-orange)", color: "var(--bg-space-0)",
+  border: "none", borderRadius: 6, cursor: "pointer",
 };

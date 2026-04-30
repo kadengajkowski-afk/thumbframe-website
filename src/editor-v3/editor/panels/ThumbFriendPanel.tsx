@@ -4,7 +4,8 @@ import { useAiChat } from "@/editor/hooks/useAiChat";
 import { tryRunSlash, suggestSlash, type SlashSpec } from "@/lib/slashCommands";
 import { fetchTodayAiUsage, FREE_DAILY_LIMIT } from "@/lib/aiUsage";
 import * as s from "./ThumbFriendPanel.styles";
-import { renderBubble, ToolCallList } from "./ThumbFriendPanel.parts";
+import { renderBubble, ToolCallList, CrewLabel, CrewIntroCard } from "./ThumbFriendPanel.parts";
+import { ThumbFriendCrewPicker } from "./ThumbFriendCrewPicker";
 
 /** Day 39 — ThumbFriend Ask mode. Single-turn AI edits via Cmd+/.
  *
@@ -38,6 +39,7 @@ export function ThumbFriendPanel() {
       <header style={s.header}>
         <div style={s.headerLeft}>
           <span style={s.headerLabel}>ThumbFriend</span>
+          <ThumbFriendCrewPicker />
           {tab === "ask" && (
             <button
               type="button"
@@ -153,15 +155,22 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
   const remaining = usage?.remaining ?? FREE_DAILY_LIMIT;
   const showRateLimitCTA = chat.errorCode === "RATE_LIMITED";
   const showAuthCTA      = chat.errorCode === "AUTH_REQUIRED" || (!signedIn && chat.error);
+  const introDismissed = useUiStore((u) => u.crewIntroDismissed);
+  const dismissIntro = useUiStore((u) => u.setCrewIntroDismissed);
+  const activeCrewId = useUiStore((u) => u.activeCrewMember);
 
   return (
     <>
       <div style={s.scroller} ref={scrollRef} data-testid="thumbfriend-scroller">
+        {chat.messages.length === 0 && !introDismissed && (
+          <CrewIntroCard crewId={activeCrewId} onDismiss={() => dismissIntro(true)} />
+        )}
         {chat.messages.length === 0 ? (
           <EmptyState onPick={(t) => submit(t)} />
         ) : (
           chat.messages.map((m) => (
             <div key={m.id} style={{ display: "contents" }}>
+              {m.role === "assistant" && !m._slash && <CrewLabel crewId={m.crewId} />}
               <div
                 style={
                   m.role === "user" ? s.userBubble :

@@ -1,6 +1,8 @@
 import * as s from "./ThumbFriendPanel.styles";
 import type { ChatMessage } from "@/editor/hooks/useAiChat";
 import type { ToolResult } from "@/editor/aiToolExecutor";
+import { getCrew } from "@/lib/crew";
+import { CrewAvatar } from "../crewAvatars";
 
 /** Day 40 — bubble + tool-call subcomponents extracted from
  * ThumbFriendPanel.tsx so the parent file stays under the 300-line
@@ -123,4 +125,46 @@ export function ToolCallList(props: {
 
 function humanizeCall(name: string) {
   return name.replace(/_/g, " ");
+}
+
+/** Days 41-42 — small cream label above each assistant bubble showing
+ * which crew member spoke. User bubbles render plain. */
+export function CrewLabel({ crewId }: { crewId: string | undefined }) {
+  if (!crewId) return null;
+  const crew = getCrew(crewId);
+  return (
+    <div style={s.crewLabel} data-testid={`thumbfriend-crew-label-${crew.id}`}>
+      <CrewAvatar id={crew.id} size={12} />
+      <span>{crew.name}</span>
+    </div>
+  );
+}
+
+/** Days 41-42 — first-run intro card. Mounted inside the panel before
+ * any messages have streamed. Captain pitches the crew + a "tap my
+ * name to meet them" pointer at the picker. Dismissed via the Got-it
+ * button → uiStore.crewIntroDismissed flag (persisted). */
+export function CrewIntroCard({
+  crewId,
+  onDismiss,
+}: {
+  crewId: string;
+  onDismiss: () => void;
+}) {
+  const crew = getCrew(crewId);
+  return (
+    <div style={s.introCard} data-testid="thumbfriend-crew-intro">
+      <div style={s.introHeader}>
+        <CrewAvatar id={crew.id} size={32} />
+        <span style={s.introName}>{crew.name}</span>
+      </div>
+      <p style={s.introLine}>I&apos;m the Captain. I tell you the truth about your work.</p>
+      <p style={s.introLineMuted}>
+        5 other crew members are aboard. Tap my name above to meet them.
+      </p>
+      <button type="button" style={s.introDismiss} onClick={onDismiss} data-testid="thumbfriend-crew-intro-dismiss">
+        Got it
+      </button>
+    </div>
+  );
 }
