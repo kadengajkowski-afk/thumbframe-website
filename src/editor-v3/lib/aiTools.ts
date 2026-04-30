@@ -36,7 +36,12 @@ export type AiToolName =
   | "add_drop_shadow"
   | "center_layer"
   | "duplicate_layer"
-  | "delete_layer";
+  | "delete_layer"
+  // Day 43 — creation tools
+  | "add_text_layer"
+  | "add_rect_layer"
+  | "add_ellipse_layer"
+  | "set_canvas_background";
 
 const HEX_PATTERN = "^#[0-9A-Fa-f]{6}$";
 
@@ -166,8 +171,73 @@ export const AI_TOOLS: AiTool[] = [
     description: "Delete a layer. The user can undo with Cmd+Z.",
     input_schema: {
       type: "object",
-      properties: { layer_id: { type: "string" } },
+      properties: { layer_id: { type: "string", description: LAYER_ID_DESC } },
       required: ["layer_id"],
+    },
+  },
+  // ── Day 43 — creation tools ───────────────────────────────────────
+  {
+    name: "add_text_layer",
+    description:
+      "Create a new text layer on the canvas. Returns the new layer's id in the tool_result so you can chain follow-up edits. Use this when the user wants to add a title, subtitle, or any text element. content is REQUIRED. All other params have sensible defaults: position 'center', size 80px, color '#FFFFFF', font 'Inter'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        content:  { type: "string", description: "Text to display (the layer name will be derived from this)." },
+        x:        { type: "number", description: "Optional canvas x in px. Defaults to centered." },
+        y:        { type: "number", description: "Optional canvas y in px. Defaults to centered." },
+        font:     { type: "string", description: "Font family name (e.g. 'Anton', 'Bebas Neue'). Defaults to the user's last-used font." },
+        size:     { type: "number", minimum: 8, maximum: 512, description: "Font size in px. Defaults to 80." },
+        color:    { type: "string", pattern: HEX_PATTERN, description: COLOR_DESC + " Defaults to white." },
+        position: { type: "string", enum: ["center", "top", "bottom"], description: "Quick placement preset; ignored if x/y are provided." },
+      },
+      required: ["content"],
+    },
+  },
+  {
+    name: "add_rect_layer",
+    description:
+      "Create a new rectangle layer. Returns the new layer's id in the tool_result. Use for accent shapes, color blocks, frames, or background panels. color is REQUIRED. Other params have defaults: position 'center', size 400×200, opacity 1.",
+    input_schema: {
+      type: "object",
+      properties: {
+        x:        { type: "number" },
+        y:        { type: "number" },
+        width:    { type: "number", minimum: 1, description: "Width in px. Defaults to 400." },
+        height:   { type: "number", minimum: 1, description: "Height in px. Defaults to 200." },
+        color:    { type: "string", pattern: HEX_PATTERN, description: COLOR_DESC },
+        opacity:  { type: "number", minimum: 0, maximum: 1, description: "0..1. Defaults to 1." },
+        position: { type: "string", enum: ["center", "background", "overlay"], description: "Quick placement preset; ignored if x/y are provided. 'background' places at z-index 0 covering the canvas; 'overlay' adds at the top." },
+      },
+      required: ["color"],
+    },
+  },
+  {
+    name: "add_ellipse_layer",
+    description:
+      "Create a new ellipse / circle layer. Returns the new layer's id. color is REQUIRED. Other params default to centered placement, 100-px radius, opacity 1.",
+    input_schema: {
+      type: "object",
+      properties: {
+        x:        { type: "number", description: "Top-left x of the bounding box." },
+        y:        { type: "number", description: "Top-left y of the bounding box." },
+        radius:   { type: "number", minimum: 1, description: "Radius in px (the ellipse is drawn as a circle of 2*radius diameter). Defaults to 100." },
+        color:    { type: "string", pattern: HEX_PATTERN, description: COLOR_DESC },
+        opacity:  { type: "number", minimum: 0, maximum: 1, description: "0..1. Defaults to 1." },
+      },
+      required: ["color"],
+    },
+  },
+  {
+    name: "set_canvas_background",
+    description:
+      "Set the canvas background to a solid color. Adds a full-canvas (1280×720) rectangle at z-index 0. If you've previously called this tool in the same project, it REPLACES the prior background rather than stacking another one. Returns the layer's id.",
+    input_schema: {
+      type: "object",
+      properties: {
+        color: { type: "string", pattern: HEX_PATTERN, description: COLOR_DESC },
+      },
+      required: ["color"],
     },
   },
 ];

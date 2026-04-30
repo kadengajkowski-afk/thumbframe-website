@@ -3,6 +3,7 @@ import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import { hexToPixi, normalizeHex } from "@/lib/color";
 import type { AiToolName } from "@/lib/aiTools";
+import { nanoid } from "nanoid";
 
 /** Day 40 — execute a tool_use block emitted by the AI proxy.
  *
@@ -58,16 +59,21 @@ export type ToolResult = {
 
 export function executeAiTool(name: string, input: ToolInput): ToolResult {
   switch (name as AiToolName) {
-    case "set_layer_fill":     return runSetFill(input);
-    case "set_layer_position": return runSetPosition(input);
-    case "set_layer_opacity":  return runSetOpacity(input);
-    case "set_text_content":   return runSetText(input);
-    case "set_font_family":    return runSetFont(input);
-    case "set_font_size":      return runSetFontSize(input);
-    case "add_drop_shadow":    return runAddShadow(input);
-    case "center_layer":       return runCenter(input);
-    case "duplicate_layer":    return runDuplicate(input);
-    case "delete_layer":       return runDelete(input);
+    case "set_layer_fill":         return runSetFill(input);
+    case "set_layer_position":     return runSetPosition(input);
+    case "set_layer_opacity":      return runSetOpacity(input);
+    case "set_text_content":       return runSetText(input);
+    case "set_font_family":        return runSetFont(input);
+    case "set_font_size":          return runSetFontSize(input);
+    case "add_drop_shadow":        return runAddShadow(input);
+    case "center_layer":           return runCenter(input);
+    case "duplicate_layer":        return runDuplicate(input);
+    case "delete_layer":           return runDelete(input);
+    // Day 43 — creation tools
+    case "add_text_layer":         return runAddText(input);
+    case "add_rect_layer":         return runAddRect(input);
+    case "add_ellipse_layer":      return runAddEllipse(input);
+    case "set_canvas_background":  return runSetCanvasBg(input);
     default:
       return fail(name, `Unknown tool: ${name}`);
   }
@@ -254,6 +260,233 @@ function runDelete(input: ToolInput): ToolResult {
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
+}
+
+// ── Day 43 — creation runners ───────────────────────────────────────
+
+const TEXT_DEFAULT_SIZE = 80;
+const TEXT_DEFAULT_COLOR = "#FFFFFF";
+const RECT_DEFAULT_W = 400;
+const RECT_DEFAULT_H = 200;
+const ELLIPSE_DEFAULT_R = 100;
+
+/** Centered xy for a layer of the given size on the 1280×720 canvas. */
+function centerXY(width: number, height: number) {
+  return {
+    x: Math.round((CANVAS_W - width) / 2),
+    y: Math.round((CANVAS_H - height) / 2),
+  };
+}
+
+function topXY(width: number) {
+  return { x: Math.round((CANVAS_W - width) / 2), y: 80 };
+}
+
+function bottomXY(width: number, height: number) {
+  return { x: Math.round((CANVAS_W - width) / 2), y: CANVAS_H - height - 80 };
+}
+
+function runAddText(input: ToolInput): ToolResult {
+  const content = typeof input.content === "string" ? input.content.trim() : "";
+  if (!content) return fail("add_text_layer", "Missing required field 'content'");
+
+  const ui = useUiStore.getState();
+  const fontFamily = (typeof input.font === "string" && input.font) || ui.lastFontFamily || "Inter";
+  const fontSize = clamp(asNumber(input.size) ?? TEXT_DEFAULT_SIZE, 8, 512);
+  // Estimate width from font + glyph count for placement preset math.
+  // The Compositor auto-resizes on first paint; this is just a sane
+  // initial bbox.
+  const estW = Math.max(120, Math.round(content.length * fontSize * 0.55));
+  const estH = Math.max(40, Math.round(fontSize * 1.2));
+
+  let x = asNumber(input.x);
+  let y = asNumber(input.y);
+  if (x === null || y === null) {
+    const pos = typeof input.position === "string" ? input.position : "center";
+    const p =
+      pos === "top"    ? topXY(estW) :
+      pos === "bottom" ? bottomXY(estW, estH) :
+                         centerXY(estW, estH);
+    if (x === null) x = p.x;
+    if (y === null) y = p.y;
+  }
+
+  const colorHex = coerceColor(input.color) ?? TEXT_DEFAULT_COLOR;
+  const color = hexToPixi(colorHex) ?? 0xffffff;
+
+  const id = nanoid();
+  history.addLayer({
+    id,
+    type: "text",
+    x: Math.round(x),
+    y: Math.round(y),
+    width: estW,
+    height: estH,
+    text: content,
+    fontFamily,
+    fontSize: Math.round(fontSize),
+    fontWeight: ui.lastFontWeight ?? 700,
+    fontStyle: "normal",
+    align: "left",
+    color,
+    fillAlpha: 1,
+    strokeColor: 0x000000,
+    strokeWidth: 0,
+    strokeAlpha: 1,
+    lineHeight: 1.1,
+    letterSpacing: 0,
+    opacity: 1,
+    hidden: false,
+    locked: false,
+    blendMode: "normal",
+    name: content.length > 24 ? `Text "${content.slice(0, 24)}…"` : `Text "${content}"`,
+  });
+  return ok(`Added text "${content.length > 24 ? content.slice(0, 24) + "…" : content}"`, { new_layer_id: id });
+}
+
+function runAddRect(input: ToolInput): ToolResult {
+  const colorHex = coerceColor(input.color);
+  if (!colorHex) return fail("add_rect_layer", "Missing or invalid 'color' (need #RRGGBB)");
+  const color = hexToPixi(colorHex);
+  if (color === null) return fail("add_rect_layer", "Color parse failed");
+
+  const pos = typeof input.position === "string" ? input.position : "center";
+  let width = clamp(asNumber(input.width) ?? RECT_DEFAULT_W, 1, CANVAS_W);
+  let height = clamp(asNumber(input.height) ?? RECT_DEFAULT_H, 1, CANVAS_H);
+  if (pos === "background") {
+    width = CANVAS_W;
+    height = CANVAS_H;
+  }
+  let x = asNumber(input.x);
+  let y = asNumber(input.y);
+  if (x === null || y === null) {
+    const p =
+      pos === "background" ? { x: 0, y: 0 } :
+      pos === "overlay"    ? centerXY(width, height) :
+                             centerXY(width, height);
+    if (x === null) x = p.x;
+    if (y === null) y = p.y;
+  }
+  const opacity = clamp(asNumber(input.opacity) ?? 1, 0, 1);
+
+  const id = nanoid();
+  history.addLayer({
+    id,
+    type: "rect",
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(width),
+    height: Math.round(height),
+    color,
+    opacity,
+    fillAlpha: 1,
+    strokeColor: 0x000000,
+    strokeWidth: 0,
+    strokeAlpha: 1,
+    name: pos === "background" ? "Background" : `Rect ${id.slice(0, 4)}`,
+    hidden: false,
+    locked: false,
+    blendMode: "normal",
+  });
+  // Background goes to bottom of layer stack (z-index 0). The default
+  // history.addLayer pushes to the top — for "background" we move it
+  // to position 0 so existing layers stack on top.
+  if (pos === "background") {
+    history.reorderLayer(id, 0);
+  }
+  return ok(`Added rect ${colorHex}${pos === "background" ? " (background)" : ""}`, { new_layer_id: id });
+}
+
+function runAddEllipse(input: ToolInput): ToolResult {
+  const colorHex = coerceColor(input.color);
+  if (!colorHex) return fail("add_ellipse_layer", "Missing or invalid 'color' (need #RRGGBB)");
+  const color = hexToPixi(colorHex);
+  if (color === null) return fail("add_ellipse_layer", "Color parse failed");
+
+  const radius = clamp(asNumber(input.radius) ?? ELLIPSE_DEFAULT_R, 1, Math.min(CANVAS_W, CANVAS_H) / 2);
+  const size = radius * 2;
+  let x = asNumber(input.x);
+  let y = asNumber(input.y);
+  if (x === null || y === null) {
+    const p = centerXY(size, size);
+    if (x === null) x = p.x;
+    if (y === null) y = p.y;
+  }
+  const opacity = clamp(asNumber(input.opacity) ?? 1, 0, 1);
+
+  const id = nanoid();
+  history.addLayer({
+    id,
+    type: "ellipse",
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(size),
+    height: Math.round(size),
+    color,
+    opacity,
+    fillAlpha: 1,
+    strokeColor: 0x000000,
+    strokeWidth: 0,
+    strokeAlpha: 1,
+    name: `Ellipse ${id.slice(0, 4)}`,
+    hidden: false,
+    locked: false,
+    blendMode: "normal",
+  });
+  return ok(`Added ellipse ${colorHex}`, { new_layer_id: id });
+}
+
+/** Module-scoped tracker for the AI-set canvas background. Lives
+ * outside React state because it's a runtime-only invariant — if the
+ * user reloads the project, any "background" layer is just a normal
+ * rect; the AI would need to set one again to use this tool's
+ * replace-prior-bg behavior in the new session. */
+let aiCanvasBgLayerId: string | null = null;
+
+function runSetCanvasBg(input: ToolInput): ToolResult {
+  const colorHex = coerceColor(input.color);
+  if (!colorHex) return fail("set_canvas_background", "Missing or invalid 'color' (need #RRGGBB)");
+  const color = hexToPixi(colorHex);
+  if (color === null) return fail("set_canvas_background", "Color parse failed");
+
+  // If we previously set a bg in this session and that layer still
+  // exists, recolor it in place. Otherwise add a fresh full-canvas
+  // rect at z-index 0.
+  if (aiCanvasBgLayerId) {
+    const existing = useDocStore.getState().layers.find((l) => l.id === aiCanvasBgLayerId);
+    if (existing) {
+      history.setLayerFillColor(existing.id, color);
+      return ok(`Recolored background to ${colorHex}`, { new_layer_id: existing.id });
+    }
+  }
+
+  const id = nanoid();
+  history.addLayer({
+    id,
+    type: "rect",
+    x: 0,
+    y: 0,
+    width: CANVAS_W,
+    height: CANVAS_H,
+    color,
+    opacity: 1,
+    fillAlpha: 1,
+    strokeColor: 0x000000,
+    strokeWidth: 0,
+    strokeAlpha: 1,
+    name: "Background",
+    hidden: false,
+    locked: false,
+    blendMode: "normal",
+  });
+  history.reorderLayer(id, 0);
+  aiCanvasBgLayerId = id;
+  return ok(`Set canvas background to ${colorHex}`, { new_layer_id: id });
+}
+
+/** Test hook — clear the in-memory bg tracker between tests. */
+export function _resetCanvasBgTracker() {
+  aiCanvasBgLayerId = null;
 }
 
 /** Run a list of tool calls inside a single history stroke so that
