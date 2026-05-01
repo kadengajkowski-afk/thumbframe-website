@@ -53,8 +53,33 @@ export function ExportPanel() {
   const previewTimer = useRef<number | null>(null);
   const filenameRef = useRef<HTMLInputElement>(null);
 
-  // Reset filename ext when format changes.
-  useEffect(() => setFilename(makeFilename(format)), [format]);
+  // When format changes, swap the FILENAME EXTENSION but preserve
+  // the user's typed basename. The previous behavior wiped the
+  // typed name with `makeFilename(format)` — destructive.
+  // Day 49 — keep basename, just retarget extension to match format.
+  useEffect(() => {
+    setFilename((cur) => {
+      const targetExt = format === "png" || format === "4k" ? "png" : "jpg";
+      const m = cur.match(/^(.*?)(?:\.(?:png|jpg|jpeg|webp))?$/i);
+      const base = m?.[1] || cur || makeFilename(format).replace(/\.[a-z]+$/, "");
+      const next = `${base}.${targetExt}`;
+      return next === cur ? cur : next;
+    });
+  }, [format]);
+
+  // Day 49 — when the user TYPES a filename ending in a known image
+  // extension that doesn't match the active format, swap the format
+  // to match. Catches "type 'foo.png' while format=jpeg → JPEG named
+  // foo.png" foot-gun. The format-change effect above is now extension-
+  // aware, so it won't loop / overwrite the user's basename.
+  useEffect(() => {
+    const m = filename.toLowerCase().match(/\.(png|jpg|jpeg|webp)$/);
+    if (!m) return;
+    const ext = m[1] === "jpg" ? "jpeg" : m[1];
+    if (ext === "png" && format === "jpeg") setFormat("png");
+    else if (ext === "jpeg" && format === "png") setFormat("jpeg");
+    // webp — not a v3 format yet (deferred); leave alone.
+  }, [filename, format]);
 
   // Esc closes.
   useEffect(() => {
