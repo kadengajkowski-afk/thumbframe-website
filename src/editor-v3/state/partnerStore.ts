@@ -83,6 +83,13 @@ export type PartnerState = {
 
   // ── settings ─────────────────────────────────────────────────
   setAutoApprove: (v: boolean) => void;
+
+  /** Day 52 — one-shot message to fire when PartnerMode next
+   * mounts. Used by the onboarding handoff so the user lands on
+   * the Partner tab with the AI already greeting. PartnerMode
+   * reads this on mount and clears it. */
+  pendingInitialMessage: string | null;
+  setPendingInitialMessage: (text: string | null) => void;
 };
 
 function makeId(): string {
@@ -109,6 +116,7 @@ export const usePartnerStore = create<PartnerState>()((set, get) => {
     sessionsToday: initialDaily.count,
     sessionsDayKey: initialDaily.dayKey,
     autoApprove: loadAutoApprove(),
+    pendingInitialMessage: null,
 
     beginSession: () => {
       const today = utcDayKey();
@@ -178,6 +186,9 @@ export const usePartnerStore = create<PartnerState>()((set, get) => {
       persistAutoApprove(autoApprove);
       set({ autoApprove });
     },
+
+    setPendingInitialMessage: (pendingInitialMessage) =>
+      set({ pendingInitialMessage }),
   };
 });
 

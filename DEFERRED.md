@@ -3,6 +3,124 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 6 Day 52 — held back (date: 2026-04-30)
+
+- **Tour mode is centered modal, not positional tooltips.** Day 52
+  ships a centered card with stop counter + Next/Skip — functional
+  but not the spec's "painterly tooltip overlays anchored to the
+  actual editor surface element with spotlight dim". Building the
+  Portal-based bounding-rect anchor + spotlight cutout is ~150-200
+  lines of measured-rect React with edge cases (panel resize during
+  tour, scrolling, overflow). Held — the centered version still
+  walks users through 5 stops; spec expansion is Cycle 6 polish day.
+
+- **Welcome card has no parallax star drift.** Spec asked for
+  "subtle parallax on background (small star drift in dark mode,
+  gentle wave shimmer in light mode)". The Nebula component already
+  paints a static star field behind the editor; layering an
+  animated parallax over it during onboarding only would need a
+  dedicated component + an rAF loop. Cosmetic; held until first-
+  wave invitee feedback.
+
+- **No X icon top-right on each onboarding step.** Spec mentioned
+  "Esc key or X icon top right" as the persistent escape hatch.
+  Esc is wired (window-level listener in OnboardingFlow); the X
+  icon isn't. The "Skip" / "Skip tour" links serve the same role
+  but live bottom-right, not top-right. Easy add — held because
+  the visual real-estate is tight on the smaller welcome card.
+
+- **dominantColorFromBitmap is a 64-pixel grid sampler with
+  saturation pickup.** Brand Kit's server-side sharp + LAB
+  k-means is more accurate but lives on Railway and would add a
+  network round-trip to the upload step. Today's sampler is
+  client-side, sub-millisecond, and good enough for "set a
+  sensible canvas accent." Saturation threshold (0.25) was tuned
+  by eye; if a near-grayscale image's accent looks wrong, adjust.
+
+- **Starter recipes are 2-layer (background + 1 title).** Spec
+  said "loads basic template structure (background + text
+  placeholder + nothing else)." Current recipes match. The text
+  content is generic ("DAY ONE", "How to start", "Today's vlog")
+  and not personalized from Brand Kit context. Cycle 6 Day 53
+  (Brand Kit ↔ Partner) is the right place to wire personalized
+  starter copy.
+
+- **Existing-user migration races onboarding's startOnboarding.**
+  App.tsx fires startOnboarding() in a synchronous useEffect on
+  mount; the Supabase auth resolution + countProjectsForUser is
+  asynchronous. Result: an existing user with projects briefly
+  sees Step A flash before migrateExistingUser fires
+  markCompletedSilent and the overlay dismisses. Acceptable — the
+  flash is <500ms and only affects existing users on devices they
+  haven't used the editor on. Could be eliminated by deferring
+  startOnboarding until auth resolves, but that adds a noticeable
+  pause for genuinely-new users which is worse.
+
+- **markCompletedSilent doesn't reset firstExportCelebrated.**
+  An existing user marked silent gets `completed: true` +
+  `firstExportCelebrated: false`. Their next export fires the
+  celebration toast even though they're a returning user, not a
+  first-time exporter. Acceptable — the celebration is once-per-
+  device and isn't claiming "your first ever thumbnail," just
+  "first thumbnail in this app." Could rebrand the copy if user
+  feedback says it feels wrong.
+
+- **Per-crew greeting copy is 6 hand-written strings.** No shared
+  template with `{voice}` interpolation; future crew additions
+  need a new branch in `greetingFor`. Keep simple until we add a
+  7th crew or want runtime per-crew customization.
+
+- **partnerStore.pendingInitialMessage is set/get only — no
+  persistence.** A user who closes the panel mid-onboarding-handoff
+  before PartnerMode mounts loses the queued message. Acceptable
+  edge case (very short window between Step D click and panel
+  mount; Esc-to-close mid-handoff is rare). If repeats surface in
+  bug reports, add a 60s TTL + localStorage mirror.
+
+- **Empty-state starter chips show only when `completed: true`.**
+  A user mid-onboarding shouldn't see the chips behind the overlay
+  because the overlay's backdrop dims them. But a user who skipped
+  via Esc on the very first welcome card sees them immediately —
+  which is correct for the post-skip state. The visual transition
+  (overlay closes → chips appear) is uncoordinated; Day 52 doesn't
+  animate the chip mount. Cosmetic.
+
+- **Playfair Display is the welcome heading font, not Fraunces.**
+  Spec asked for Fraunces; not in our 25-OFL bundle. Adding
+  Fraunces adds ~30-50KB woff2 to the bundle for a single onboarding
+  surface. Playfair Display ships today and gives a similar
+  editorial register. If Fraunces becomes a brand mandate, ship it
+  in the Cycle 6 bundle pass (Day 58) alongside other size cuts.
+
+- **applyStarter uses executeAiTool internally.** Loops through
+  set_canvas_background + add_text_layer via the same code path
+  the AI uses. Pro: single source of truth, validation/normalization
+  is shared. Con: starter recipes can't access fields the AI tool
+  schema doesn't expose (e.g. text stroke / shadow). For 2-layer
+  recipes it's fine; if Day 53 personalizes starters with stroked
+  display text, refactor to direct history.addLayer calls.
+
+- **No tests for the OnboardingFlow component itself (just the
+  state machine + helpers).** Component tests would need React +
+  Vitest browser harness mounted with onboardingStore in a known
+  state, then assert which step renders. The state-machine
+  coverage today is solid; component-level tests would catch
+  rendering regressions like "Step D doesn't render when step
+  === 'thumbfriend'." Cycle 6 polish.
+
+- **No retry on Supabase countProjectsForUser failure.** Returns
+  0 silently which routes the user into onboarding. A genuinely-
+  existing user with a momentary Supabase blip would see the
+  flow they shouldn't see. Acceptable — they can skip — but worth
+  a single retry with backoff if telemetry shows non-zero rates.
+
+- **First-export celebration is a plain toast** ("First thumbnail
+  shipped! ⚓"), not a sailship-arriving animation. Spec said
+  "Subtle confetti or sailship arriving animation (don't be
+  cheesy — Observatory aesthetic, not party)". The toast lands
+  but doesn't visually celebrate. Polish for Cycle 6 if
+  invitees mention it falls flat.
+
 ## Cycle 5 Days 48-50 — held back (date: 2026-04-30)
 
 - **Voice testing is human-in-the-loop only.** Day 48 ships a

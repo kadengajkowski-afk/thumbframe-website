@@ -67,6 +67,17 @@ export async function shipExport(opts: ShipOptions): Promise<ExportResult | null
   };
   useUiStore.getState().pushRecentExport(entry);
   useUiStore.getState().setLastExport(entry);
+  // Day 52 — first-export celebration. markFirstExport returns true
+  // exactly once, after onboarding has completed. Async-import the
+  // store so this module stays light for the export hot path.
+  void (async () => {
+    const { useOnboardingStore } = await import("@/state/onboardingStore");
+    if (useOnboardingStore.getState().markFirstExport()) {
+      // Wait one tick so the "Shipped foo.png" toast above doesn't
+      // visually compete with the celebration.
+      setTimeout(() => toast("First thumbnail shipped! ⚓"), 700);
+    }
+  })();
   return result;
 }
 

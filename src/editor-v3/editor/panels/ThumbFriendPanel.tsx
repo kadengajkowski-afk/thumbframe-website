@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePartnerStore } from "@/state/partnerStore";
 import { useUiStore } from "@/state/uiStore";
 import { useAiChat } from "@/editor/hooks/useAiChat";
 import { tryRunSlash, suggestSlash, type SlashSpec } from "@/lib/slashCommands";
@@ -39,6 +40,28 @@ export function ThumbFriendPanel() {
   // mode, we stash the prefill prompt here so AskMode picks it up on
   // mount. Cleared after AskMode consumes it.
   const [askPrefill, setAskPrefill] = useState<string | null>(null);
+
+  // Day 52 — onboarding handoff. When the panel opens with an
+  // initial-tab override set, switch + clear the override so future
+  // opens don't keep snapping to the same tab.
+  const initialTab = useUiStore((u) => u.thumbfriendInitialTab);
+  const setInitialTab = useUiStore((u) => u.setThumbfriendInitialTab);
+  useEffect(() => {
+    if (initialTab) {
+      setTab(initialTab);
+      setInitialTab(null);
+    }
+  }, [initialTab, setInitialTab]);
+
+  // Day 52 — if Partner mode arrives with a pending initial message
+  // queued (onboarding "Yes let's build" path), make sure we're on
+  // the Partner tab so PartnerMode mounts and consumes it.
+  const pendingPartner = usePartnerStore((p) => p.pendingInitialMessage);
+  useEffect(() => {
+    if (pendingPartner && tab !== "partner") {
+      setTab("partner");
+    }
+  }, [pendingPartner, tab]);
 
   function openInAsk(text: string) {
     setAskPrefill(text);
