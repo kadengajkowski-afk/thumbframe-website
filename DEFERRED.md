@@ -3,6 +3,116 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 5 Days 48-50 — held back (date: 2026-04-30)
+
+- **Voice testing is human-in-the-loop only.** Day 48 ships a
+  30-prompt matrix in `docs/crew-voice-test-script.md` that the
+  user runs by hand. Subjective voice evaluation ("does this
+  sound like the Captain?") can't be automated reliably without
+  another LLM judge — and a model-judges-model loop has its own
+  drift. If first-wave invitee feedback flags consistent voice
+  drift, Cycle 6 candidate is a nightly cron that fires the
+  matrix against staging + posts the responses to a review
+  channel for manual scoring. Today the script is the contract.
+
+- **Day 48 First-Mate flex examples are 5 mappings, not adaptive
+  reasoning.** "Tell me what's wrong → Captain register" is a
+  literal lookup. The model could plausibly map "I think this
+  needs work" to Captain too, but the prompt doesn't tell it to
+  generalize. If real conversations land in the gaps between
+  the 5 examples, the model defaults to "balanced" (intentional
+  per the prompt — but that's the same blandness the fix was
+  trying to avoid). Track via the voice test results; if drift
+  surfaces in the gap zones, expand the example set or replace
+  the lookup with explicit register-pick reasoning instructions.
+
+- **Day 48 reflexive-action rule lives in IDENTITY_PREAMBLE,
+  not per-crew examples.** Captain got one new "User: 'add a drop
+  shadow' → on it + tool call" example; the other 5 crew didn't.
+  The IDENTITY_PREAMBLE rule covers them in principle, but a
+  per-crew worked example would land harder. Held — adding 5 more
+  examples bloats every system prompt and most users won't notice
+  the difference. Re-evaluate after Day 48's voice test if
+  reflexive firing fails for non-Captain crew.
+
+- **Day 49 Try-Again on dismissed nudges has no daily quota
+  awareness.** Free tier has 20 nudge calls/day; clicking Try
+  Again burns one per click. A user could blow their daily
+  bucket in 2 minutes by mashing Try Again on history cards.
+  Acceptable today (the watcher already burns nudges; explicit
+  retry is just letting the user spend faster). If telemetry
+  shows abuse, gate Try Again behind a per-card "you've already
+  retried this" flag.
+
+- **Day 49 ColorSwatchButton vertical edge-flip uses a hard-coded
+  POPOVER_H = 360.** ColorPicker height is computed from its
+  rendered content — if the picker grows (e.g. brand-presets
+  section pushes it past 360px), the flip threshold becomes
+  wrong. Could measure the rendered popover after first paint
+  and re-flip if needed, but that needs a layout-sensitive
+  effect that's overkill for the current layout. Hold until a
+  picker variant grows past 360.
+
+- **Day 49 filename ↔ format auto-sync only handles png/jpeg.**
+  WebP detection exists but is intentionally not wired (WebP
+  isn't a v3 export format). When WebP lands (Cycle 6+), wire
+  it. 4K format ignores typed extension entirely (always PNG)
+  — that's correct since 4K-as-jpg wouldn't preserve the alpha
+  the format was designed for, but the user doesn't see that
+  reasoning in the UI. A small tooltip on the 4K format button
+  explaining "4K is always PNG" would close the gap. Cycle 6
+  polish.
+
+- **Day 49 Clear chat button uses native `window.confirm`.**
+  Same shortcut as ProjectsPanel's delete (the existing pattern
+  in v3). Branded modal is Cycle 6 polish across all
+  destructive-confirm surfaces.
+
+- **Day 49 MultiSelectPanel "Match" button uses opacity mode
+  bucketed to 2 decimal places.** A selection of (0.51, 0.52,
+  0.53) all bucket to 0.5/0.5/0.5 → mode is 0.5 (3-way tie at
+  0.5). For most editor work this is fine — opacity drift
+  inside a 5% window reads as "approximately the same" — but
+  pixel-perfect users may want 3-decimal resolution. Tunable
+  via the bucket size in `modeNumber`; held until someone asks.
+
+- **Day 49 Partner plan dupe detection still doesn't catch
+  semantic-only dupes.** "DAY 47" + "DAY FORTY-SEVEN" both
+  normalize to distinct strings + neither contains the other.
+  Same DEFERRED note from Day 47-quality applies — vector
+  embeddings would close the gap but aren't worth the build
+  cost given the model rarely emits semantic dupes.
+
+- **Day 49 partner plan dupe `prefix containment` is order-
+  insensitive.** "DAY 47" + "DAY 47 HARDCORE" catches both
+  ways. But "ALMOST DONE" + "ALMOST" — the second is a strict
+  prefix and the first contains it. Currently flags. Could be
+  noisy if the model legitimately uses a one-word title + a
+  longer subtitle that starts the same way. Acceptable —
+  flagging is a soft signal; user picks which to keep on the
+  Plan card.
+
+- **Day 49 brand-kit drag image always uses the rendered
+  thumbnail.** Some images have very wide aspect ratios; the
+  drag image preview becomes tiny when the cursor center
+  anchors at half-width. Could clamp to a 96×54 preview canvas
+  but that requires drawing into an offscreen canvas at
+  dragstart — adds complexity for marginal visual gain.
+
+- **No Cycle 5 → Cycle 6 hand-off doc.** The transition is
+  documented in SCOPE.md + soft-launch.md but lives across two
+  files. Could consolidate into a single "cycle-transition.md"
+  per cycle, but that's a process refactor, not a fix.
+
+- **Frontend `lib/crew.ts` and backend `lib/crewPrompts.js`
+  STILL hand-synced.** Day 48 added more shared content (Day 48
+  prompt fixes for IDENTITY_PREAMBLE + First Mate + Lookout +
+  Captain examples). Drift surface remains the same — character
+  divergence between the two files breaks parity. The shared/
+  package fix flagged in earlier DEFERRED notes is still the
+  right answer; Day 48 continues to live with the manual sync
+  because no one owns the cross-repo refactor yet.
+
 ## Cycle 5 Day 47-quality — held back (date: 2026-04-30)
 
 - **Rect width/height floor is 4, not the spec's 50.** Spec said
