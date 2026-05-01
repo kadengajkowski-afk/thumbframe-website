@@ -266,6 +266,17 @@ export const headerLeft: CSSProperties = {
   flexWrap: "wrap",
 };
 
+// Day 49 — Clear chat button in the panel header (Ask tab only).
+// Sized to match closeBtn so the right-edge cluster stays balanced.
+export const clearBtn: CSSProperties = {
+  fontSize: 11, padding: "2px 8px",
+  background: "transparent", color: "var(--text-secondary)",
+  border: "1px solid var(--border-ghost)", borderRadius: 10,
+  cursor: "pointer",
+  letterSpacing: "0.04em",
+  fontFamily: '"Geist Mono", ui-monospace, monospace',
+};
+
 // ── Days 41-42 — crew label + intro card ────────────────────────────
 
 export const crewLabel: CSSProperties = {
