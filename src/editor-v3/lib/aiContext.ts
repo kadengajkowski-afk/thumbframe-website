@@ -18,15 +18,17 @@ export type BuildSystemContextArgs = {
    * Day 36+ can ship a resize-friendly context block. */
   canvasState?: { width: number; height: number; layerCount: number };
   /** AiIntent. Classify + nudge are cheap Haiku routes — skip the
-   * heavy brand-context block to keep tokens minimal. Edit/plan/
-   * deep-think all benefit from the full block. */
-  intent?: "classify" | "edit" | "plan" | "deep-think" | "nudge";
+   * heavy brand-context block to keep tokens minimal. Partner builds
+   * its own canvas context inline (usePartner.buildCanvasContextString)
+   * so it also skips the system block. Edit/plan/deep-think all
+   * benefit from the full block. */
+  intent?: "classify" | "edit" | "plan" | "deep-think" | "nudge" | "partner";
 };
 
 export function buildSystemContext(args: BuildSystemContextArgs): string {
   const { pinnedKit, canvasState, intent = "edit" } = args;
   if (!pinnedKit) return "";
-  if (intent === "classify" || intent === "nudge") return "";
+  if (intent === "classify" || intent === "nudge" || intent === "partner") return "";
 
   const lines: string[] = [];
   lines.push("## Brand context");
