@@ -25,6 +25,12 @@ export function MultiSelectPanel() {
   const sharedBlend = sharedString<BlendMode>(layers, (l) => l.blendMode);
   const allHidden = layers.every((l) => l.hidden);
   const allLocked = layers.every((l) => l.locked);
+  // Day 49 — Reset on Mixed opacity now snaps to the MOST-COMMON
+  // value across the selection instead of an arbitrary 100%. Tighter
+  // intuition: clicking Reset usually means "make these match,"
+  // not "make these all visible." Falls back to 1 (full opacity) on
+  // perfect-N-way-tie.
+  const opacityModeValue = modeNumber(layers.map((l) => l.opacity), 1);
 
   return (
     <aside
@@ -42,10 +48,10 @@ export function MultiSelectPanel() {
             <button
               type="button"
               style={resetButton}
-              onClick={() => applyOpacity(layers, 1)}
-              title="Set all to 100%"
+              onClick={() => applyOpacity(layers, opacityModeValue)}
+              title={`Match all to ${Math.round(opacityModeValue * 100)}%`}
             >
-              Reset
+              Match
             </button>
           </div>
         ) : (
@@ -116,6 +122,27 @@ function sharedNumber(
     if (Math.abs(pick(layers[i]!) - first) > 1e-3) return null;
   }
   return first;
+}
+
+/** Day 49 — return the most-common value in a numeric list, with a
+ * fallback for empty arrays / N-way ties. Buckets values to 2-decimal
+ * resolution so 0.5 and 0.5000001 count as the same value. */
+function modeNumber(values: readonly number[], fallback: number): number {
+  if (values.length === 0) return fallback;
+  const counts = new Map<number, number>();
+  for (const v of values) {
+    const key = Math.round(v * 100) / 100;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  let best = fallback;
+  let bestCount = 0;
+  for (const [k, c] of counts) {
+    if (c > bestCount) { best = k; bestCount = c; }
+  }
+  // True tie (every value distinct) → fall back to the supplied
+  // default rather than picking arbitrarily.
+  if (bestCount === 1 && counts.size === values.length) return fallback;
+  return best;
 }
 
 function sharedString<T extends string>(

@@ -1,27 +1,82 @@
 # Soft Launch — ThumbFrame v3 editor
 
-Cycle 3 closed 2026-04-28. The editor at `thumbframe.com/editor`
-is feature-complete for a soft-launch invite list. This doc holds
-the plan to invite ~21 trusted YouTubers / designers, gather
-honest feedback, and decide what ships in Cycle 4.
+Cycle 5 closed 2026-04-30 (Day 50). Cycles 1-5 shipped: editor
+foundation + content/persistence + multi-surface preview + Brand
+Kit + ThumbFriend AI suite (Ask + Nudge + Partner) + 6-crew
+personalities + Stripe billing + AI image generation +
+background remover. The editor at `thumbframe.com/editor` is
+launch-ready pending the items below. Cycle 6 (Days 51-60) is
+launch prep: onboarding flow, mobile editor, support surfaces,
+analytics wiring.
+
+## Cycle 5 — what shipped (2026-04-29 → 2026-04-30)
+
+- **Day 31** — Brand Kit v1 (channel URL → palette + 10 thumbnails)
+- **Day 32** — Brand Kit applies + persists + pins; per-user
+  `brand_kits` table + shared L2 cache
+- **Day 33** — Brand Kit fonts (Sonnet 4.6 vision pass) + bundle
+  split (302 → 298 KB gzip main)
+- **Day 34** — Railway AI proxy + Claude routing (Haiku 4.5 /
+  Sonnet 4.6 / Opus 4.7); SSE streaming; per-user 5/day cap
+- **Day 35** — `useAiChat` + canvas snapshot + brand context
+  injection + AI status badge
+- **Day 36** — Background remover (BiRefNet ONNX browser path +
+  Remove.bg HD Pro path); Pro 100/month + free 10/month gates
+- **Day 37** — AI image generation (fal.ai pipeline); 3 models
+  routed by intent; 4-variant grid
+- **Day 38** — Stripe billing wiring (reuses v1's webhook flow);
+  `profiles` RLS + `userTier` resolution + UpgradePanel
+- **Day 39** — ThumbFriend Ask mode UI (Cmd+/); slash commands;
+  iMessage-style bubbles
+- **Day 40** — Tool-use streaming (10 tools); preview-mode toggle;
+  single-undo invariant
+- **Days 41-42** — Crew (6 personalities + First Mate); per-crew
+  prompts + voice rules + crew picker + intro card
+- **Day 44** — Nudge mode (background watcher; debounced 8s
+  Haiku call); per-crew voice flavors; 5-tool auto-apply allow-
+  list; pause control
+- **Day 45** — Partner mode (multi-turn agent; Sonnet 4.6
+  planning; structured Plan card with Approve/Edit/Reject);
+  separate `partnerStore`; 5 sessions/day UX cap
+- **Day 47-quality** — ThumbFriend quality overhaul; shared
+  expertise + canvas rules across all 6 crew; tool input
+  validation; Partner plan validation with retry; canvas state v2
+  with `composition_status` + `detected_issues`
+- **Day 48** — crew prompt structural fixes (capability scope,
+  First Mate flex, Lookout generative-but-restrained, reflexive
+  action). 30-prompt voice test script in `docs/crew-voice-test-
+  script.md` (hand-runnable matrix)
+- **Day 49** — 8 user-impact DEFERRED items fixed:
+  ColorSwatchButton vertical edge-flip, slash notes as system
+  messages, Try-Again on dismissed nudges, partner plan dupe
+  detection (normalized + prefix containment), filename ↔ format
+  auto-sync, Clear chat in ThumbFriend, MultiSelectPanel mode-
+  based Mixed reset, custom drag image for brand kit thumbnails
+- **Day 50** — Cycle 5 finale (this doc + CHANGELOG)
 
 ## Pre-flight checklist
 
 ### Code
 
-- [x] Cycles 1-3 merged to main, deploy on Vercel verified
-- [x] All 281 tests green; typecheck clean
-- [x] Bundle audited (302 KB gzipped main; lazy chunks for Pixi +
-      mozjpeg WASM)
+- [x] Cycles 1-5 merged to main, deploy on Vercel verified
+- [x] All 603 frontend tests + 88 backend tests green; typecheck
+      clean
+- [x] Bundle audited (336 KB gzipped main, +34 KB across Cycles
+      4-5 for ThumbFriend + Brand Kit + AI gen + BG remove; lazy
+      chunks for Pixi + mozjpeg WASM + ONNX runtime)
 - [x] Toast copy reads in Observatory voice (no Oops/Sorry/AI-
       powered/Welcome back)
 - [x] Layer-duplication-on-load bug fixed
-- [x] DEFERRED items triaged; 5 quick wins shipped Day 30
+- [x] DEFERRED items triaged; 5 quick wins Day 30 + 8 more Day 49
+- [x] ThumbFriend voice tested via 30-prompt matrix (Day 48 ships
+      the script; user runs the manual evaluation)
 - [ ] Run Lighthouse manually in browser (target 90+ Performance
       on `/editor` cold load)
 - [ ] Test on Safari (iPad + macOS), Chrome (Mac + Windows),
       Firefox — confirm save / load / export round-trip
 - [ ] Verify Sentry error reporting fires on a manufactured error
+- [ ] Run the 30-prompt crew voice test (`docs/crew-voice-test-
+      script.md`) end-to-end before sending invites
 
 ### Infra / accounts
 
@@ -147,8 +202,61 @@ If they engage, follow up with:
 - Affiliate / referral program
 
 Soft launch is a feedback round, not a growth event. Public
-launch ships after Cycle 4 (Brand Kit + ThumbFriend + real Pro
-tier).
+launch ships after Cycle 6 (onboarding + mobile + analytics + a
+final pass over voice + bugs).
+
+## What ships in Cycle 6 (Days 51-60)
+
+Launch-prep cycle. Already known unknowns from Cycle 5 fold in
+here, plus the conversion-bottleneck items from soft-launch
+analytics (21 signups, 0 paid users — the editor itself is solid;
+the funnel is what's broken).
+
+- **Day 51-52** — onboarding flow (5 steps + tour). First-time
+  user: lands → signs up → makes first thumb → ships in <60s.
+- **Day 53** — Brand Kit ↔ Partner integration (Brand Kit
+  context lands in Partner planning prompts; pinned-channel
+  references become reference-pattern injections per the Day 47
+  DEFERRED note)
+- **Day 54** — mobile editor (read-only first; full edit later)
+- **Day 55** — support surfaces (in-app help, contact form,
+  feedback channel)
+- **Day 56** — PostHog analytics wiring (events for export,
+  ThumbFriend turn, Pro upgrade, drop-off detection)
+- **Day 57** — voice fine-tuning round 2 (act on Day 48 voice-
+  test findings; iterate on per-crew prompt deltas)
+- **Day 58** — bundle pass (target 320 KB main; lazy-load Pixi
+  past first paint; split FontPicker / TextProperties off main)
+- **Day 59-60** — final smoke + launch readiness review
+
+## Known limitations to disclose to soft-launch users
+
+Honest list — set expectations so feedback targets the right
+gaps, not the things we already know:
+
+- **Mobile is desktop-only redirect.** No mobile editor yet;
+  Day 54 closes that.
+- **Onboarding is barebones.** "Upload to set sail" is the
+  whole tutorial. Day 51-52 builds a real first-run flow.
+- **No PostHog wiring yet.** Day 56. We're flying blind on
+  drop-off until then.
+- **ThumbFriend voice still drifts on edge cases.** Day 48
+  fixed the structural issues (Lookout brainstorming, First
+  Mate flex, capability scope). Real voice testing happens
+  via the manual 30-prompt script. Cycle 6 Day 57 acts on
+  findings.
+- **No template library.** Cycle 6+ work; Brand Kit gives users
+  a starting palette but not a layout.
+- **HEIC images rejected.** Decision: most YouTubers don't ship
+  HEIC. Reconsider if invitee feedback says otherwise.
+- **iPad / Safari WebGPU support is browser-conditional.** BG
+  remove falls back to wasm on no-WebGPU; works but slower.
+- **Free tier 5 ThumbFriend messages/day** is the cap. Free
+  Nudge bucket is 20/day, free Partner is 25/day backend +
+  5 sessions/day frontend UX cap. Pro is unlimited.
+- **No "regenerate this AI image" button.** Day 37 deferred —
+  click Generate again gets fresh variants with the same
+  prompt.
 
 ## Decision criteria for "is this ready to scale invites"
 

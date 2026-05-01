@@ -1,10 +1,62 @@
-# SCOPE.md — Cycle 4 in progress
+# SCOPE.md — Cycle 5 closed; Cycle 6 next
 
-Cycles 1, 2, 3 closed on 2026-04-28. The soft-launch quality bar
-is met (see `docs/soft-launch.md`). Cycle 4 (Brand Kit +
-ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
+Cycles 1, 2, 3 closed on 2026-04-28. Cycles 4 and 5 closed on
+2026-04-30 (Day 50). Cycle 6 (Days 51-60) opens with Day 51 —
+onboarding flow scaffold. See `docs/soft-launch.md` for what
+ships in Cycle 6.
 
-## Cycle 4 in flight
+## Cycle 5 — closed (Days 31-50, 2026-04-29 → 2026-04-30)
+
+Cycle 4 in spec language but tracked as one continuous cycle in
+practice — Brand Kit, AI proxy, BG remove, image gen, billing,
+ThumbFriend Ask/Nudge/Partner, 6-crew personalities, quality
+overhaul, voice fine-tuning, DEFERRED triage. Tests at close:
+603 frontend / 88 backend. Bundle: 336 KB gzip main.
+
+Day-by-day record:
+
+- **Days 48-50 (2026-04-30) — Cycle 5 finale.** Day 48 audited
+  the six crew prompts for structural issues and fixed four:
+  (1) `IDENTITY_PREAMBLE`'s capability claim was unbounded
+  (leaked "BUILD entire thumbnails from scratch" into Nudge mode
+  where only 5 non-destructive tools exist) — now mode-aware,
+  with the intent block downstream scoping the actual tool set.
+  (2) First Mate "Adapts voice" was vague — Sonnet was defaulting
+  to bland-balanced forever. Tightened to PICK ONE register at
+  start of each turn, with 5 register-mapping examples
+  (critique → Captain, brainstorm → Cook, technical → Navigator,
+  restraint → Lookout, fix → Doctor). (3) Lookout had no
+  generative-but-restrained guidance. Added explicit ideation
+  rule (asked for 5, give 3; one option always "do less") plus
+  a worked example. (4) None of the crew modeled the reflexive-
+  action pattern. Added `IDENTITY_PREAMBLE` rule + Captain
+  example showing direct-request → direct-action. Both backend
+  `lib/crewPrompts.js` and frontend `lib/crew.ts` updated in
+  lockstep. 30-prompt voice test script published to
+  `docs/crew-voice-test-script.md` for manual evaluation.
+
+  Day 49 fixed 8 user-impact DEFERRED items: ColorSwatchButton
+  popover vertical edge-flip; slash fallback notes restyled as
+  centered system-divider rows (no longer mistaken for AI
+  replies); "↻ Try again" affordance on dismissed nudge cards
+  (nudgeStore gains `requestImmediate()` + `requestCounter`;
+  watcher subscribes via `subscribeWithSelector` middleware,
+  bypasses 8s debounce); partner plan validator gets normalized
+  + prefix-containment dupe detection (catches "DAY 47" vs
+  "DAY 47!" vs "DAY 47 HARDCORE"); ExportPanel filename ↔
+  format auto-sync (typing .png swaps format, format change
+  preserves typed basename); Clear chat button in ThumbFriend
+  Ask footer; MultiSelectPanel mixed-opacity reset uses mode
+  (most-common value) instead of arbitrary 100%, button
+  relabeled to "Match"; custom drag image for brand kit
+  thumbnails (centered cursor anchor; cross-browser preview
+  guarantee).
+
+  Day 50 closed the cycle: typecheck clean, 603 frontend +
+  88 backend tests pass, bundle 336 KB gzip main (under 340 KB
+  Cycle 5 target). CHANGELOG entry for v0.5 + soft-launch.md
+  refreshed with Cycle 5 inventory + Cycle 6 outlook + known
+  limitations to disclose to invitees.
 
 - **Day 31 (2026-04-29) — Brand Kit v1.** Paste channel URL /
   @handle / channel id; server-side YouTube Data API call

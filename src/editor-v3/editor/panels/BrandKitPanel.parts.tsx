@@ -126,6 +126,23 @@ export function BrandKitResult({
                   e.dataTransfer.setData(THUMBNAIL_DRAG_MIME, payload);
                   e.dataTransfer.setData("text/plain", t.url);
                   e.dataTransfer.effectAllowed = "copy";
+                  // Day 49 — explicit drag image. Default browser
+                  // ghost works on Chrome/Firefox but Safari sometimes
+                  // shows a generic placeholder icon. Using the
+                  // <img> itself as drag image guarantees a thumbnail
+                  // preview cross-browser. Guard for test envs where
+                  // DataTransfer is mocked without setDragImage.
+                  if (
+                    e.currentTarget instanceof HTMLImageElement &&
+                    typeof e.dataTransfer.setDragImage === "function"
+                  ) {
+                    const img = e.currentTarget;
+                    e.dataTransfer.setDragImage(
+                      img,
+                      Math.round(img.width / 2),
+                      Math.round(img.height / 2),
+                    );
+                  }
                 }}
                 data-testid="brand-kit-thumb"
               />

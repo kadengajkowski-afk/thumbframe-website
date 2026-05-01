@@ -2,12 +2,16 @@
 
 ThumbFrame v3. YouTube thumbnail editor. Solo founder + Claude Code.
 
-## Status (Day 30 — 2026-04-28)
+## Status (Day 50 — 2026-04-30)
 
-Cycles 1, 2, 3 complete. Soft launch ready. Editor lives at
-`/editor` on the production Vercel deploy; v1 still owns the
-marketing site root. See `docs/soft-launch.md` for the launch
-checklist + invitee list.
+Cycles 1-5 complete. Editor + Brand Kit + ThumbFriend AI suite
+(Ask + Nudge + Partner) + 6-crew personalities + Stripe billing +
+AI image generation + browser/HD background remover all shipped
+to `/editor` on the production Vercel deploy. v1 still owns the
+marketing site root. Cycle 6 (Days 51-60) is launch prep —
+onboarding, mobile, support, analytics — see `SCOPE.md`. Soft-
+launch readiness: see `docs/soft-launch.md`. Manual voice testing
+of crew personalities: `docs/crew-voice-test-script.md`.
 
 ## Stack (LOCKED — do not propose alternatives)
 - React 19 + TypeScript strict

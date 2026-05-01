@@ -119,11 +119,27 @@ export function useNudgeWatcher() {
       () => schedule(),
     );
 
+    // Day 49 — explicit "Try again" subscription. When requestCounter
+    // bumps, run a tick IMMEDIATELY (bypass the 8s debounce). The
+    // store's requestImmediate() already cleared lastFiredAt + pause
+    // so shouldFire() will pass.
+    const unsubRequest = useNudgeStore.subscribe(
+      (s) => s.requestCounter,
+      (next, prev) => {
+        if (next === prev) return;
+        if (timer) clearTimeout(timer);
+        timer = null;
+        // Fire-and-forget; tick handles its own state.
+        void tick();
+      },
+    );
+
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
       abort?.abort();
       unsubLayers();
+      unsubRequest();
     };
   }, []);
 }

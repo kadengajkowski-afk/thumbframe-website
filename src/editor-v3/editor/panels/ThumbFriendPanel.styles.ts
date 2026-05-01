@@ -96,12 +96,29 @@ export const assistantBubble: CSSProperties = {
   borderRadius: "14px 14px 14px 4px",
   whiteSpace: "pre-wrap", wordBreak: "break-word",
 };
+// Day 49 #2 — slash-fallback notes now render as system messages
+// (centered, no bubble, no avatar-shaped corners) so users don't
+// confuse them with AI replies. The previous shape (dashed-border
+// bubble inheriting assistantBubble) read as "the AI said that"
+// which was wrong — slash results are local actions.
 export const slashBubble: CSSProperties = {
-  ...assistantBubble,
-  background: "transparent",
+  alignSelf: "center",
+  maxWidth: "92%",
+  padding: "4px 0",
+  fontSize: 11,
+  lineHeight: 1.4,
+  textAlign: "center",
   color: "var(--text-secondary)",
   fontStyle: "italic",
-  border: "1px dashed var(--border-ghost)",
+  letterSpacing: 0.2,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+  background: "transparent",
+  border: "none",
+  // Subtle hairline above + below to look like a divider, not a bubble.
+  borderTop: "1px solid var(--border-ghost)",
+  borderBottom: "1px solid var(--border-ghost)",
+  margin: "4px 8px",
 };
 export const cursor: CSSProperties = {
   display: "inline-block", width: 6, height: 12,
@@ -247,6 +264,17 @@ export const previewToggleActive: CSSProperties = {
 export const headerLeft: CSSProperties = {
   display: "flex", alignItems: "center", gap: 10,
   flexWrap: "wrap",
+};
+
+// Day 49 — Clear chat button in the panel header (Ask tab only).
+// Sized to match closeBtn so the right-edge cluster stays balanced.
+export const clearBtn: CSSProperties = {
+  fontSize: 11, padding: "2px 8px",
+  background: "transparent", color: "var(--text-secondary)",
+  border: "1px solid var(--border-ghost)", borderRadius: 10,
+  cursor: "pointer",
+  letterSpacing: "0.04em",
+  fontFamily: '"Geist Mono", ui-monospace, monospace',
 };
 
 // ── Days 41-42 — crew label + intro card ────────────────────────────

@@ -72,26 +72,53 @@ export function validatePlan(plan: PartnerPlan): PlanValidation {
   }
 
   // Duplicate text content — flag two add_text_layer calls with the
-  // same trimmed content. Same content twice is almost always a
-  // mistake (model echoing itself).
-  const textContents = new Map<string, number>();
+  // same content. Same content twice is almost always a mistake
+  // (model echoing itself).
+  //
+  // Day 49 — exact-match was too weak. "DAY 47" + "DAY 47!" + "Day
+  // 47 " all snuck through. Now uses normalizeForDupe (strips
+  // non-alphanumeric, collapses whitespace, lowercases). Also
+  // detects prefix-containment ("DAY 47" + "DAY 47 HARDCORE") which
+  // is the most common shape of "model added a second variant of
+  // the same headline."
+  const normalizedContents: { norm: string; raw: string; idx: number }[] = [];
   for (let i = 0; i < plan.steps.length; i++) {
     const step = plan.steps[i]!;
     if (step.tool !== "add_text_layer") continue;
-    const c = typeof step.input.content === "string"
-      ? step.input.content.trim().toLowerCase()
-      : "";
-    if (!c) continue;
-    const prev = textContents.get(c);
-    if (prev !== undefined) {
+    const raw = typeof step.input.content === "string" ? step.input.content : "";
+    const norm = normalizeForDupe(raw);
+    if (!norm) continue;
+    // Exact-normalized match.
+    const exact = normalizedContents.find((e) => e.norm === norm);
+    if (exact) {
       issues.push(
-        `Steps ${prev + 1} and ${i + 1} both add the same text "${
-          truncate(c)
-        }". Either drop one or change the second's content (subtitle, hashtag, etc.).`,
+        `Steps ${exact.idx + 1} and ${i + 1} both add the same text "${
+          truncate(raw)
+        }" (after normalizing case + punctuation). Drop one, or change the second's content.`,
       );
-    } else {
-      textContents.set(c, i);
+      continue;
     }
+    // Prefix/suffix containment — "DAY 47" + "DAY 47 HARDCORE" type.
+    // Only flag when one is at least 4 chars and the other contains
+    // it as a whole-word prefix/suffix; avoids tripping on common
+    // short fragments ("a", "the").
+    const containment = normalizedContents.find((e) => {
+      if (e.norm.length < 4 || norm.length < 4) return false;
+      return (
+        norm.startsWith(e.norm + " ") || norm.endsWith(" " + e.norm) ||
+        e.norm.startsWith(norm + " ") || e.norm.endsWith(" " + norm)
+      );
+    });
+    if (containment) {
+      issues.push(
+        `Steps ${containment.idx + 1} ("${truncate(containment.raw)}") and ${
+          i + 1
+        } ("${truncate(raw)}") look like variants of the same headline. ` +
+        `Pick one as the title; if the second is a subtitle, make it visually distinct (smaller font, different color).`,
+      );
+      continue;
+    }
+    normalizedContents.push({ norm, raw, idx: i });
   }
 
   // No-op plan — model returned an empty plan or all steps got
@@ -117,6 +144,17 @@ export function buildRevisionPrompt(issues: string[]): string {
 
 function truncate(s: string): string {
   return s.length > 32 ? s.slice(0, 32) + "…" : s;
+}
+
+/** Normalize a string for dupe-detection: lowercase, strip non-
+ * alphanumeric (so punctuation doesn't matter), collapse whitespace.
+ * "DAY 47!", "Day 47 ", "  day-47!!" all collapse to "day 47". */
+function normalizeForDupe(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ") // unicode-aware: letters + digits, others → space
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Reasoning: also expose the raw constants for tests + spec audits. */

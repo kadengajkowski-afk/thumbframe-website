@@ -286,7 +286,25 @@ function AskMode({
               ? <span style={s.proPill}>UNLIMITED</span>
               : `${remaining}/${FREE_DAILY_LIMIT} messages left today`}
           </span>
-          <span>Shift+Enter = newline</span>
+          {chat.messages.length > 0 ? (
+            <button
+              type="button"
+              style={s.clearBtn}
+              onClick={() => {
+                if (chat.streaming) return;
+                if (window.confirm("Clear this chat? Your canvas won't change.")) {
+                  chat.reset();
+                }
+              }}
+              disabled={chat.streaming}
+              data-testid="thumbfriend-clear"
+              title="Clear conversation history"
+            >
+              Clear
+            </button>
+          ) : (
+            <span>Shift+Enter = newline</span>
+          )}
         </div>
       </div>
     </>
