@@ -1,6 +1,12 @@
 import { useRef, type ChangeEvent, type CSSProperties } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { handleUploadedFile } from "@/lib/uploadFlow";
+import {
+  STARTER_TEMPLATES,
+  useOnboardingStore,
+  type StarterTemplateId,
+} from "@/state/onboardingStore";
+import { applyStarter } from "@/lib/applyStarter";
 
 /**
  * Pre-editor state. A single big call-to-action opens the file picker;
@@ -24,6 +30,13 @@ export function EmptyState() {
   const setHasEntered = useUiStore((s) => s.setHasEntered);
   const setProjectsPanelOpen = useUiStore((s) => s.setProjectsPanelOpen);
   const user = useUiStore((s) => s.user);
+  // Day 52 — for users who have completed (or skipped) onboarding,
+  // the empty state surfaces the same 4 starter shortcuts + upload
+  // they saw during onboarding. Returning-user superpower: no
+  // tutorial, just the choices. Pre-onboarding users see this same
+  // surface BEHIND the onboarding overlay, so the cards are
+  // discoverable post-skip too.
+  const completed = useOnboardingStore((s) => s.completed);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -32,6 +45,15 @@ export function EmptyState() {
     e.target.value = "";
     if (file) await handleUploadedFile(file);
   };
+
+  function pickStarter(id: StarterTemplateId) {
+    if (id === "blank") {
+      setHasEntered(true);
+      return;
+    }
+    applyStarter(id);
+    setHasEntered(true);
+  }
 
   return (
     <div style={wrap}>
@@ -76,6 +98,26 @@ export function EmptyState() {
           </>
         )}
       </div>
+      {/* Day 52 — starter shortcuts. Visible for completed-onboarding
+          users (so they can still pick a starter without re-running
+          the flow) and for skip-from-onboarding users (the cards they
+          would have seen are still here). Hidden during onboarding
+          itself because the overlay is in front. */}
+      {completed && (
+        <div style={starterRow} data-testid="empty-state-starters">
+          {STARTER_TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              style={starterChip}
+              onClick={() => pickStarter(t.id)}
+              data-testid={`empty-state-starter-${t.id}`}
+            >
+              {t.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -166,4 +208,28 @@ const separator: CSSProperties = {
   color: "var(--text-secondary)",
   opacity: 0.5,
   fontSize: 13,
+};
+
+// Day 52 — starter shortcut chips for the post-onboarding empty
+// state. Tighter visual than the onboarding cards — designed for
+// returning users who know what they want.
+const starterRow: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+  marginTop: 8,
+  justifyContent: "center",
+  maxWidth: 480,
+};
+
+const starterChip: CSSProperties = {
+  padding: "8px 14px",
+  fontSize: 12,
+  letterSpacing: "0.04em",
+  background: "transparent",
+  color: "var(--text-secondary)",
+  border: "1px solid var(--border-ghost)",
+  borderRadius: 14,
+  cursor: "pointer",
+  fontFamily: '"Geist Mono", ui-monospace, monospace',
 };

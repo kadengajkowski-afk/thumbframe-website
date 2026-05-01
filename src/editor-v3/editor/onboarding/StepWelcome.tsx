@@ -17,6 +17,8 @@ export function StepWelcome() {
 
   return (
     <div style={card} data-testid="onboarding-step-welcome">
+      {/* Day 52 — fade-in + scale-up keyframe animation. */}
+      <style>{keyframes}</style>
       <h1 style={heading}>Welcome aboard.</h1>
       <p style={sub}>Let&apos;s make your first thumbnail.</p>
       <div style={ctaRow}>
@@ -49,7 +51,25 @@ export function StepWelcome() {
   );
 }
 
-// Day 51 — placeholder styling. Day 52 polishes.
+// Day 52 — animated entrance keyframes (fade in from below + scale up).
+const keyframes = `
+@keyframes onboard-welcome-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="onboarding-step-welcome"] {
+    animation: none !important;
+  }
+}
+`;
+
 const card: CSSProperties = {
   position: "relative",
   width: "min(560px, 92vw)",
@@ -62,14 +82,19 @@ const card: CSSProperties = {
   alignItems: "center",
   gap: 16,
   boxShadow: "0 16px 60px rgba(0, 0, 0, 0.4)",
+  animation: "onboard-welcome-in 320ms cubic-bezier(0.22, 0.85, 0.34, 1) both",
 };
 
 const heading: CSSProperties = {
   margin: 0,
-  fontSize: 36,
+  fontSize: 40,
+  // Day 52 — Spec asked for Fraunces; not in our 25-OFL bundle.
+  // Playfair Display is the closest editorial serif we ship today
+  // (it's already loaded by the FontPicker). Same brand register.
+  fontFamily: '"Playfair Display", "Iowan Old Style", Georgia, serif',
   color: "var(--accent-cream)",
   fontWeight: 500,
-  letterSpacing: "0.01em",
+  letterSpacing: "-0.01em",
 };
 
 const sub: CSSProperties = {

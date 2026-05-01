@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { useOnboardingStore } from "@/state/onboardingStore";
 import { useUiStore } from "@/state/uiStore";
+import { usePartnerStore } from "@/state/partnerStore";
 import { getCrew } from "@/lib/crew";
 
 /** Day 51 — Step D scaffold. Meet ThumbFriend (the wow moment).
@@ -23,12 +24,23 @@ export function StepThumbFriend() {
   const finishTourOrComplete = useOnboardingStore((s) => s.goToStep);
   const startTour = useOnboardingStore((s) => s.startTour);
   const skip = useOnboardingStore((s) => s.skipFromCurrent);
+  const selectedStarter = useOnboardingStore((s) => s.selectedStarter);
+  const dominantColor = useOnboardingStore((s) => s.pickedDominantColor);
   const activeCrewId = useUiStore((s) => s.activeCrewMember);
   const crew = getCrew(activeCrewId);
 
   function startBuild() {
-    // Day 52 — open ThumbFriend panel on Partner tab + pre-fill
-    // initial user message with onboarding context.
+    // Day 52 — open ThumbFriend panel, force the Partner tab, and
+    // queue an initial message that gives the AI useful onboarding
+    // context (selected starter or uploaded image's dominant color).
+    // PartnerMode reads `pendingInitialMessage` on mount and fires
+    // partner.send(text); the panel's tab effect snaps to "partner"
+    // because we set thumbfriendInitialTab here.
+    const ui = useUiStore.getState();
+    ui.setThumbfriendPanelOpen(true);
+    ui.setThumbfriendInitialTab("partner");
+    const message = buildInitialMessage(selectedStarter, dominantColor);
+    usePartnerStore.getState().setPendingInitialMessage(message);
     finishTourOrComplete("complete");
   }
 
@@ -40,10 +52,7 @@ export function StepThumbFriend() {
     <div style={card} data-testid="onboarding-step-thumbfriend">
       <div style={greeting}>
         <span style={crewLabel}>{crew.name}</span>
-        <p style={greetingText}>
-          Welcome aboard. I see your canvas. Want me to help build this
-          thumbnail with you?
-        </p>
+        <p style={greetingText}>{greetingFor(crew.id)}</p>
       </div>
       <div style={ctaCol}>
         <button
@@ -81,6 +90,46 @@ export function StepThumbFriend() {
       </button>
     </div>
   );
+}
+
+/** Day 52 — per-crew greeting on the Step D card. Each greeting
+ * matches the crew's voice register so the user gets a small dose
+ * of personality before they pick a CTA. Captain blunt, Cook playful,
+ * Doctor clinical, Navigator teaching, Lookout restrained, First
+ * Mate adaptive. */
+function greetingFor(id: string): string {
+  switch (id) {
+    case "captain":
+      return "Welcome aboard. I see your canvas. Want me to help build this thumbnail with you?";
+    case "first-mate":
+      return "I'm here when you need a hand. Want me to help build this, or are you steering?";
+    case "cook":
+      return "What's cooking? I've got ideas — let me cook up some directions for this thumbnail.";
+    case "navigator":
+      return "Let me chart this with you. We'll start from hierarchy and work outward — sound good?";
+    case "doctor":
+      return "Canvas opens. Let me look it over. Want a quick triage, or building from here?";
+    case "lookout":
+      return "From up here, simpler reads better. Want me to help, or do less?";
+    default:
+      return "Welcome aboard. I see your canvas. Want me to help build this thumbnail with you?";
+  }
+}
+
+/** Day 52 — build a context-rich first message for Partner mode.
+ * The AI gets enough to react meaningfully: which starter the user
+ * picked OR the dominant color of an uploaded image. */
+function buildInitialMessage(
+  starter: ReturnType<typeof useOnboardingStore.getState>["selectedStarter"],
+  color: string | null,
+): string {
+  if (starter && starter !== "blank") {
+    return `Help me build this thumbnail. I picked the ${starter} starter — what do you suggest first?`;
+  }
+  if (color) {
+    return `Help me build this thumbnail. I uploaded an image; the dominant color is ${color} — what would you do with it?`;
+  }
+  return "Help me build this thumbnail.";
 }
 
 const card: CSSProperties = {

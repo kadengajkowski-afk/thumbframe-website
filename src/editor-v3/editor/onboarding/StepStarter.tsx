@@ -4,6 +4,8 @@ import {
   useOnboardingStore,
   type StarterTemplate,
 } from "@/state/onboardingStore";
+import { applyStarter } from "@/lib/applyStarter";
+import { useUiStore } from "@/state/uiStore";
 
 /** Day 51 — Step B scaffold. 4 starter cards in a 2×2 grid.
  *
@@ -25,12 +27,21 @@ export function StepStarter() {
 
   function pick(id: StarterTemplate["id"]) {
     pickStarter(id);
-    // Day 52 — animate dismissal here, then transition.
+    // Day 52 — apply the basic starter structure to the canvas.
+    // Blank is intentionally a no-op. The user lands at Step D
+    // (ThumbFriend) with a non-empty canvas so the Captain greeting
+    // has something to react to.
+    applyStarter(id);
+    // Day 52 — set hasEntered so the editor surface mounts behind
+    // the (still-open) onboarding overlay. When Step D dismisses
+    // the overlay, the editor is already there.
+    useUiStore.getState().setHasEntered(true);
     goToStep("thumbfriend");
   }
 
   return (
     <div style={card} data-testid="onboarding-step-starter">
+      <style>{starterKeyframes}</style>
       <h2 style={heading}>Pick your starting point</h2>
       <p style={sub}>Each starter is a basic structure — refine it as you go.</p>
       <div style={grid}>
@@ -86,7 +97,27 @@ function StarterCard({
   );
 }
 
-// Day 51 — placeholder styling.
+// Day 52 — entrance + hover lift keyframes.
+const starterKeyframes = `
+@keyframes onboard-card-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+[data-testid^="onboarding-starter-"] {
+  transition: transform 160ms cubic-bezier(0.22, 0.85, 0.34, 1),
+              border-color 160ms ease-out,
+              box-shadow 160ms ease-out;
+}
+[data-testid^="onboarding-starter-"]:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-orange);
+  box-shadow: 0 8px 24px rgba(249, 115, 22, 0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-testid^="onboarding-starter-"]:hover { transform: none; }
+}
+`;
+
 const card: CSSProperties = {
   position: "relative",
   width: "min(720px, 94vw)",
@@ -99,6 +130,7 @@ const card: CSSProperties = {
   alignItems: "center",
   gap: 20,
   boxShadow: "0 16px 60px rgba(0, 0, 0, 0.4)",
+  animation: "onboard-card-in 320ms cubic-bezier(0.22, 0.85, 0.34, 1) both",
 };
 
 const heading: CSSProperties = {

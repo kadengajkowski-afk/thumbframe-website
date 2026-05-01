@@ -1,6 +1,9 @@
 import { useRef, type CSSProperties, type ChangeEvent } from "react";
 import { useOnboardingStore } from "@/state/onboardingStore";
 import { handleUploadedFile } from "@/lib/uploadFlow";
+import { dominantColorFromBitmap } from "@/lib/dominantColor";
+import { executeAiTool } from "@/editor/aiToolExecutor";
+import { useUiStore } from "@/state/uiStore";
 
 /** Day 51 — Step C scaffold. Drag-drop or click-to-browse upload.
  *
@@ -18,12 +21,34 @@ export function StepUpload() {
   const skip = useOnboardingStore((s) => s.skipFromCurrent);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const setDominantColor = useOnboardingStore((s) => s.setDominantColor);
+
   async function onPick(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    // Day 52 — extract dominant color from the file BEFORE we hand
+    // it off to the upload flow. The file is read once for both
+    // (createImageBitmap is fast on a Blob; the upload flow does
+    // its own decode for the layer texture).
+    let dominantHex: string | null = null;
+    try {
+      const bitmap = await createImageBitmap(file);
+      dominantHex = await dominantColorFromBitmap(bitmap);
+      bitmap.close();
+    } catch {
+      // Non-decodable file. handleUploadedFile will surface its own
+      // error; we just skip the auto-bg.
+    }
     await handleUploadedFile(file);
-    // Day 52 — extract dominant color, set as canvas bg, animate.
+    // Apply the dominant color as canvas background so the uploaded
+    // image visually "lands" on a complementary surface. Stored on
+    // the onboarding store too so Step D can mention it in greetings.
+    if (dominantHex) {
+      setDominantColor(dominantHex);
+      executeAiTool("set_canvas_background", { color: dominantHex });
+    }
+    useUiStore.getState().setHasEntered(true);
     goToStep("thumbfriend");
   }
 

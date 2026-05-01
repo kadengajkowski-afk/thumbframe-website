@@ -8,6 +8,10 @@ import {
   type StarterTemplateId,
 } from "./onboardingPersistence";
 
+// Day 52 — re-export StarterTemplateId so consumers (applyStarter,
+// StepStarter, etc.) can import from one place.
+export type { StarterTemplateId };
+
 /** Day 51 — Onboarding state machine.
  *
  * Lives in its own store (not uiStore — uiStore is already at the
@@ -63,6 +67,9 @@ export type OnboardingState = {
   finishTour: () => void;
   skipFromCurrent: () => void;
   completeOnboarding: () => void;
+  /** Day 52 — silent mark-complete (no analytics event). Used by
+   * the existing-user migration path. */
+  markCompletedSilent: () => void;
   /** First-export detection — call once when user actually exports
    * post-onboarding. Idempotent: re-calls are no-ops if already
    * celebrated. Returns true on the first call (caller renders the
@@ -137,6 +144,21 @@ export const useOnboardingStore = create<OnboardingState>()((set, get) => ({
       step: "idle",
       completed: true,
       tourStop: -1,
+    });
+  },
+
+  /** Day 52 — silent mark-complete for existing-user migration. No
+   * analytics events (the user didn't go through the flow). Same
+   * persistence side effect as completeOnboarding. */
+  markCompletedSilent: () => {
+    if (get().completed) return;
+    persistCompleted(true);
+    set({
+      step: "idle",
+      completed: true,
+      tourStop: -1,
+      selectedStarter: null,
+      pickedDominantColor: null,
     });
   },
 
