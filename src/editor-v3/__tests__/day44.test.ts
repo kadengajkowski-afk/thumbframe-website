@@ -41,6 +41,7 @@ import { NUDGE_MAX } from "@/state/nudgePersistence";
 import { _internals as nudgeClientInternals } from "@/lib/nudgeClient";
 import { _internals as watcherInternals } from "@/editor/hooks/useNudgeWatcher";
 import { _internals as nudgeModeInternals } from "@/editor/panels/NudgeMode";
+import { detectIssues, formatIssuesBlock } from "@/lib/nudgeDetectors";
 import { useDocStore } from "@/state/docStore";
 import { useUiStore } from "@/state/uiStore";
 import { history } from "@/lib/history";
@@ -368,5 +369,143 @@ describe("Day 44 — fetchNudge end-to-end", () => {
     const { fetchNudge } = await import("@/lib/nudgeClient");
     const out = await fetchNudge({ canvasContext: "x" });
     expect(out.suggestion).toBeNull();
+  });
+});
+
+// ── Day 44 fix-2 — deterministic detectors ──────────────────────────────────
+
+describe("Day 44 fix — detectIssues", () => {
+  it("flags a layer extending past the canvas left edge", () => {
+    const cropped: Layer = {
+      ...makeRect("R1"),
+      x: -40, y: 100, width: 200, height: 60,
+    };
+    const issues = detectIssues([cropped]);
+    expect(issues.some((i) => i.hint === "crop" && i.message.includes("R1"))).toBe(true);
+    expect(issues[0]!.severity).toBe("critical");
+  });
+
+  it("flags a rect covering >40% of the canvas as 'dominates'", () => {
+    const fat: Layer = {
+      ...makeRect("BIG"),
+      x: 100, y: 100, width: 800, height: 500,
+    };
+    const issues = detectIssues([fat]);
+    const dom = issues.find((i) => i.hint === "composition");
+    expect(dom).toBeDefined();
+    expect(dom!.message).toMatch(/BIG/);
+    expect(dom!.message).toMatch(/\d+%/);
+  });
+
+  it("flags timestamp-zone overlap (bottom-right corner)", () => {
+    const overlap: Layer = {
+      ...makeRect("BR"),
+      x: 1100, y: 660, width: 200, height: 80,
+    };
+    const issues = detectIssues([overlap]);
+    expect(issues.some((i) => i.message.includes("timestamp"))).toBe(true);
+  });
+
+  it("flags two layers stacked at the same point", () => {
+    const a: Layer = { ...makeRect("A"), x: 500, y: 300, width: 100, height: 80 };
+    const b: Layer = { ...makeRect("B"), x: 510, y: 305, width: 100, height: 80 };
+    const issues = detectIssues([a, b]);
+    expect(issues.some((i) => i.hint === "overlap")).toBe(true);
+  });
+
+  it("flags missing title (no text layer at all)", () => {
+    const issues = detectIssues([makeRect("R1")]);
+    expect(issues.some((i) => i.message.toLowerCase().includes("no title text"))).toBe(true);
+  });
+
+  it("flags placeholder title text", () => {
+    const placeholder: Layer = {
+      id: "T1", type: "text",
+      x: 100, y: 100, width: 200, height: 60,
+      color: 0xffffff, opacity: 1,
+      name: "Title",
+      hidden: false, locked: false,
+      blendMode: "normal",
+      text: "Type something",
+      fontFamily: "Inter", fontSize: 48, fontWeight: 700,
+      fontStyle: "normal", align: "left",
+      lineHeight: 1.2, letterSpacing: 0,
+      fillAlpha: 1,
+      strokeColor: 0, strokeWidth: 0, strokeAlpha: 1,
+    } as unknown as Layer;
+    const issues = detectIssues([placeholder]);
+    expect(issues.some((i) => i.message.includes("placeholder"))).toBe(true);
+  });
+
+  it("flags a generic single-color background rect", () => {
+    const bg: Layer = {
+      ...makeRect("BG"),
+      x: 0, y: 0, width: 1280, height: 720,
+    };
+    const issues = detectIssues([bg]);
+    // Should fire BOTH "no title" + "generic background" — two
+    // separate issues, both surfaced.
+    expect(issues.some((i) => i.hint === "color" && i.message.includes("Generic"))).toBe(false);
+    // (The wording uses "generic, no depth" lowercase)
+    expect(issues.some((i) => i.message.toLowerCase().includes("generic"))).toBe(true);
+  });
+
+  it("returns no issues for an empty canvas (silence is OK)", () => {
+    expect(detectIssues([])).toEqual([]);
+  });
+
+  it("orders critical → high → medium severity", () => {
+    const cropped: Layer = { ...makeRect("R1"), x: -40 };
+    const stacked1: Layer = { ...makeRect("R2"), x: 500, y: 300 };
+    const stacked2: Layer = { ...makeRect("R3"), x: 510, y: 305 };
+    const issues = detectIssues([cropped, stacked1, stacked2]);
+    // Critical (crop) must come before medium (overlap).
+    const critIdx = issues.findIndex((i) => i.severity === "critical");
+    const medIdx = issues.findIndex((i) => i.severity === "medium");
+    expect(critIdx).toBeGreaterThanOrEqual(0);
+    if (medIdx >= 0) expect(critIdx).toBeLessThan(medIdx);
+  });
+});
+
+describe("Day 44 fix — formatIssuesBlock", () => {
+  it("returns empty string when no issues", () => {
+    expect(formatIssuesBlock([])).toBe("");
+  });
+
+  it("renders PRE-DETECTED ISSUES header + bulleted lines", () => {
+    const block = formatIssuesBlock([
+      { severity: "critical", hint: "crop", message: "L1 off-canvas" },
+      { severity: "medium", hint: "overlap", message: "L2 stacked" },
+    ]);
+    expect(block).toMatch(/PRE-DETECTED ISSUES/);
+    expect(block).toMatch(/CRITICAL/);
+    expect(block).toMatch(/MEDIUM/);
+    expect(block).toMatch(/L1 off-canvas/);
+    expect(block).toMatch(/L2 stacked/);
+  });
+
+  it("caps at 6 issues so the prompt block stays bounded", () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      severity: "high" as const,
+      hint: "composition" as const,
+      message: `issue-${i}`,
+    }));
+    const block = formatIssuesBlock(many);
+    const lines = block.split("\n").filter((l) => l.startsWith("  - "));
+    expect(lines.length).toBe(6);
+  });
+});
+
+describe("Day 44 fix — buildCanvasContext includes pre-detected issues", () => {
+  it("emits a PRE-DETECTED ISSUES block when problems exist", () => {
+    history.addLayer({ ...makeRect("R1"), x: -40 } as Layer);
+    const ctx = buildCanvasContext();
+    expect(ctx).toMatch(/PRE-DETECTED ISSUES/);
+    expect(ctx).toMatch(/R1/);
+  });
+
+  it("omits the PRE-DETECTED block when no problems exist (empty canvas)", () => {
+    const ctx = buildCanvasContext();
+    expect(ctx).not.toMatch(/PRE-DETECTED/);
   });
 });

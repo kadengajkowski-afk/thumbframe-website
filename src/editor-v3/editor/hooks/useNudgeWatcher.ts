@@ -7,6 +7,7 @@ import { snapshotCanvas } from "@/lib/canvasSnapshot";
 import { fetchNudge } from "@/lib/nudgeClient";
 import { executeAiTool } from "@/editor/aiToolExecutor";
 import { AiError } from "@/lib/aiClient";
+import { detectIssues, formatIssuesBlock } from "@/lib/nudgeDetectors";
 
 /** Day 44 — ThumbFriend Nudge background watcher.
  *
@@ -150,9 +151,17 @@ function shouldFire(): boolean {
 /** Build the plain-language [CANVAS STATE] block the prompt expects.
  * Mirrors the shape useAiChat injects for tool calls — same layer ids,
  * focused id, and key per-layer fields — but stripped of the multi-line
- * "RULES" block since nudge mode isn't running tools. */
+ * "RULES" block since nudge mode isn't running tools.
+ *
+ * Day 44 fix-2 — prepends a PRE-DETECTED ISSUES block computed by
+ * `detectIssues` over the layer JSON. The model is told to lead with
+ * these (they're facts, not guesses) and add anything vision catches.
+ * This is what flips Haiku from "stay silent unless certain" to
+ * "name the obvious problem first." */
 function buildCanvasContext(): string {
   const cs = buildCanvasState();
+  const issues = detectIssues();
+  const issuesBlock = formatIssuesBlock(issues);
   const ids = cs.layers.map((l) => l.id);
   const focusedLine = cs.focused_layer_id
     ? `focused_layer_id = ${JSON.stringify(cs.focused_layer_id)}`
@@ -171,14 +180,19 @@ function buildCanvasContext(): string {
     return `  - ${bits.join(", ")}`;
   }).join("\n");
 
-  return [
+  const parts: string[] = [
     `canvas = ${cs.canvas.width}×${cs.canvas.height}`,
     `available_layer_ids = ${JSON.stringify(ids)}`,
     focusedLine,
-    "",
-    "Layers:",
-    layerLines || "  (none)",
-  ].join("\n");
+  ];
+  if (issuesBlock) {
+    parts.push("");
+    parts.push(issuesBlock);
+  }
+  parts.push("");
+  parts.push("Layers:");
+  parts.push(layerLines || "  (none)");
+  return parts.join("\n");
 }
 
 /** Test-only — exported so tests can pre-compute the context block
