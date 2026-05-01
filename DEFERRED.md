@@ -3,6 +3,144 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 5 Day 47-quality — held back (date: 2026-04-30)
+
+- **Rect width/height floor is 4, not the spec's 50.** Spec said
+  "width must be between 50 and 1280, height must be between 50 and
+  720" — but Day 43's existing build-from-scratch test uses an 8px-
+  tall accent rect as a divider line (a real, valid pattern). 50
+  would block thin underlines, frame edges, divider bars. Lowered to
+  4 (still blocks zero-size and 1-3px invisible rects). If users
+  start abusing this with hairline shapes that don't read at small
+  sizes, raise the floor by content type instead of one global
+  number.
+
+- **`estimateTextWidth` uses a constant 0.6 char-ratio.** Display
+  fonts (Anton, Bebas Neue, Impact) are narrower per character;
+  monospace and Press Start 2P are wider. The estimator over-
+  estimates display fonts (false positives — rejects a placement
+  that would actually fit) and under-estimates monospace
+  (false negatives — accepts something that overflows). 0.6 is the
+  sans-serif average. Per-font ratios would be more accurate but
+  the bias is intentionally toward false-positives (safer to reject
+  ambiguous placements than ship off-canvas).
+
+- **No vision-based detection of low contrast.** The detected_issues
+  list catches geometric problems but not perceptual ones. A black-
+  on-dark-grey title is invisible at 168×94 but every detector here
+  reads "valid bounds, valid layer." Vision-pass via Haiku/Sonnet
+  is the right place for that and Nudge already has it; Ask/Partner
+  pre-flight could add a contrast check using WCAG luminance ratios
+  on layers with `color` + their backing layer's `color`. Held —
+  most contrast misses come from background images, not solid rects,
+  so the perceptual check would need pixel sampling.
+
+- **Plan validation runs after the model already paid for the bad
+  plan.** Each retry costs another Sonnet 4.6 round (~$0.02-0.05
+  per call). A hostile prompt that consistently produces invalid
+  plans burns 3 calls before the error surfaces. Cost is bounded
+  by Partner's 25/day backend cap, but a single user could exhaust
+  their budget faster than expected. Tradeoff is acceptable —
+  validation that fires AFTER the model commits is the only place
+  to catch model drift, and showing broken plans to the user is
+  worse than burning the budget quietly. If real telemetry shows
+  high retry rates per session, harden the prompt.
+
+- **Plan duplicate-text detector is exact-match only.** "DAY 47"
+  twice gets caught. "DAY 47" + "Day 47" (case difference) gets
+  caught (we lowercase before compare). "DAY 47" + "DAY FORTY-SEVEN"
+  (semantic dupe) doesn't get caught. The model usually doesn't
+  emit semantic dupes — when it does, the user can spot it on the
+  Plan card before approving. Held.
+
+- **`detected_issues` is capped at 8 entries.** A truly broken canvas
+  (12+ overlapping layers, all off-canvas, all stacked) gets the top
+  8 by severity; the rest hide. With the layer cap of 6 in the
+  prompt, it's hard to construct a canvas that exceeds 8 issues
+  legitimately. Acceptable.
+
+- **Token budget audit assumes 4 chars/token.** That's an English-
+  text average. Tokens with whitespace + JSON-style content can land
+  closer to 3 chars/token. A 32K-char limit at 3:1 = 10.7K tokens —
+  still under the 8K target by a meaningful margin in the worst
+  case. Real Anthropic counts come back with `usage.input_tokens`;
+  if a real call exceeds the budget, the test catches the source
+  of growth at the prompt-shape level.
+
+- **`composition_status: 'cluttered'` is the only place the layer cap
+  surfaces in the in-message context.** A user with 6 layers gets
+  "cluttered" + the new rule "prefer editing existing layers." But
+  the model could still call `add_text_layer` and the executor would
+  let it through (no per-call cap check at execute time). Partner's
+  plan validation catches this at the plan level; Ask mode does not.
+  Acceptable today — single-call adds are usually intentional;
+  cluttered prompt nudges the model away from over-adding.
+
+- **Partner revision prompt is wire-only — store has no record.** A
+  developer debugging "why did the AI re-plan twice?" can't see the
+  retry payloads in the panel. The browser DevTools network tab does
+  show the wire (and the `[AI nudge]` log line works for nudge); for
+  partner, the diagnostic story is "open the network tab." Cycle 6
+  candidate: a debug-mode toggle that surfaces wire-only messages
+  as collapsible system rows.
+
+- **`buildRevisionPrompt` doesn't tell the model WHICH steps to keep.**
+  When 1 of 5 steps fails validation, the revision asks the model to
+  "tighten the steps" — but the model often re-thinks the whole plan
+  and changes the 4 valid steps too. A "preserve steps 1, 2, 4, 5;
+  fix step 3" pattern would be tighter. Held — current wire shape
+  is short and the model usually does the right thing.
+
+- **Reference thumbnails are 5, hand-curated.** No Veritasium-style
+  thumbnail in user's specific niche means the model leans on the
+  generic "tech" guidance. A pinned-channel reference (use the user's
+  Brand Kit recent thumbnails as additional reference patterns)
+  would close the gap. Cycle 6 — Brand Kit + AI integration day.
+
+- **`detectIssues` runs twice per turn now.** Once in Nudge mode (via
+  `useNudgeWatcher.buildCanvasContext`) + once in Ask/Partner mode
+  (via `buildCanvasState.canvas_summary`). Pure function, cheap (no
+  GPU / DOM access), so the duplicate compute is negligible. If
+  per-frame perf becomes a concern, memoize on `useDocStore.layers`
+  reference equality.
+
+- **Frontend `lib/crew.ts` and backend `lib/crewPrompts.js` are
+  STILL hand-synced.** Day 47 added more shared content (expertise +
+  rules + reference thumbnails + identity preamble) which means the
+  drift surface area is bigger. Tests assert byte-equal blocks
+  inside resolved prompts, so a regression FAILS but doesn't AUTO-
+  CORRECT. A shared `shared/crew.json` package is the long-term fix
+  (Day 41-42 deferred note still applies).
+
+- **No test for the actual on-the-wire JSON Anthropic receives.**
+  Frontend tests cover the prompt-string construction; backend
+  tests cover system-prompt routing and rate limits. The contract
+  between them — that the canvas state landed in the latest user
+  message, that crew_id flows through, that the model sees what we
+  intended — is exercised manually + in production. Cassette-based
+  end-to-end tests would close that gap. Cycle 6.
+
+- **`composition_status` thresholds are fixed (0/1-2/3-5/6+).** A
+  vlog with one big face + one big title is "sparse" but reads as
+  "complete." A complex finance thumbnail with 5 well-organized
+  layers is "balanced" but might already be cluttered for that
+  niche. Niche-aware thresholds (gaming tolerates more layers than
+  tech) would be more accurate. Held — overengineering today.
+
+- **Validators don't check semantic incoherence.** "Add a face image
+  on a canvas with no image upload" passes structural validation
+  (it's a creation tool) but is nonsense — there's no face to add.
+  Tools currently don't have access to the user's image library at
+  validation time. Acceptable today; the model usually doesn't try
+  to add faces it doesn't have access to.
+
+- **`MAX_TOTAL_LAYERS = 6` is the same number in two places.** Once
+  in the canvas-rules block of every crew prompt, once in
+  `partnerPlanValidation.ts`. If we lower the cap, BOTH need updates.
+  Worth a shared constants module exposed to both backend (Node) and
+  frontend (TS) — the cross-repo dance is the same shared/crew.json
+  thing flagged above.
+
 ## Cycle 5 Day 45 — held back (date: 2026-04-30)
 
 - **Sessions persist across reloads but messages don't.** sessionsToday

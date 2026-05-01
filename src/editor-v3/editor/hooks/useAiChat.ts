@@ -109,33 +109,56 @@ export function useAiChat() {
     if (canvasStateForMsg) {
       const ids = canvasStateForMsg.layers.map((l) => l.id);
       const focused = canvasStateForMsg.focused_layer_id;
+      const summary = canvasStateForMsg.canvas_summary;
       if (canvasStateForMsg.layers.length === 0) {
         userContent =
           "[CANVAS STATE]\n" +
+          "canvas_summary = { total_layers: 0, composition_status: \"empty\" }\n" +
           "available_layer_ids = []\n" +
-          "The canvas is empty. DO NOT call any layer tool. " +
-          "Reply telling the user to add or upload a layer first.\n" +
+          "The canvas is empty. You CAN call creation tools " +
+          "(set_canvas_background, add_text_layer, add_rect_layer, " +
+          "add_ellipse_layer) to build from scratch. Other tools that " +
+          "require layer_id will fail until layers exist.\n" +
           "[/CANVAS STATE]\n\n" +
           userContent;
       } else {
         const layerDetails = canvasStateForMsg.layers.map((l) => {
-          const bits: string[] = [`id=${JSON.stringify(l.id)}`, `type=${l.type}`, `name=${JSON.stringify(l.name)}`];
+          const bits: string[] = [
+            `id=${JSON.stringify(l.id)}`,
+            `type=${l.type}`,
+            `name=${JSON.stringify(l.name)}`,
+            `xy=(${l.x},${l.y})`,
+            `wh=(${l.width},${l.height})`,
+            `pct=${Math.round(l.percentage_of_canvas * 100)}%`,
+            `z=${l.z_order}`,
+          ];
+          if (l.is_off_canvas) bits.push("OFF_CANVAS");
+          if (l.overlaps_timestamp_zone) bits.push("OVERLAPS_TIMESTAMP");
           if (l.color) bits.push(`color=${l.color}`);
           if (l.text) bits.push(`text=${JSON.stringify(l.text)}`);
           if (l.font_family) bits.push(`font=${l.font_family}`);
+          if (l.font_size) bits.push(`size=${l.font_size}`);
           return `  - ${bits.join(", ")}`;
         }).join("\n");
+        const issuesBlock = summary.detected_issues.length > 0
+          ? "\n\ndetected_issues (computed by the editor — these are FACTS):\n" +
+            summary.detected_issues.map((m) => `  - ${m}`).join("\n")
+          : "";
         userContent =
           "[CANVAS STATE — read this BEFORE calling any tool]\n" +
+          `canvas_summary = { total_layers: ${summary.total_layers}, composition_status: ${JSON.stringify(summary.composition_status)}, has_image: ${summary.has_image_layer}, has_title_text: ${summary.has_title_text} }\n` +
           `available_layer_ids = ${JSON.stringify(ids)}\n` +
           `focused_layer_id = ${focused ? JSON.stringify(focused) : "null"}` +
           (focused ? "  // user has this selected — use it for ambiguous requests" : "") +
-          "\n\nLayers:\n" +
+          issuesBlock +
+          "\n\nLayers (z-order: 0 = back, higher = front):\n" +
           layerDetails +
           "\n\nRULES:\n" +
           "  1. Every tool call MUST set layer_id to one of the strings in available_layer_ids above.\n" +
           "  2. Copy the id verbatim. Do NOT use a layer's name as the id.\n" +
           "  3. For colors, use #RRGGBB hex (e.g. \"#FF0000\" for red).\n" +
+          "  4. If composition_status is 'cluttered' (6+ layers), prefer EDITING existing layers over adding new ones.\n" +
+          "  5. If detected_issues lists a problem with a specific layer_id, you can ignore that layer's id is referenced — just fix the issue.\n" +
           "[/CANVAS STATE]\n\n" +
           "User request: " +
           userContent;

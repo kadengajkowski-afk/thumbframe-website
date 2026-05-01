@@ -81,15 +81,17 @@ describe("Days 41-42 — CREW data", () => {
     expect(getCrew(undefined).id).toBe("captain");
   });
 
-  it("First Mate prompt explicitly tells the AI to flex specialties", () => {
+  it("First Mate prompt establishes adaptive cross-crew voice", () => {
+    // Day 47 — voice block was rewritten to use "Adapts" /
+    // "Apprenticed everywhere" / "Trained under all crew" instead of
+    // the prior "flex specialties" wording. Same intent, tighter
+    // prose. Per-archetype mentions moved out of the per-crew voice
+    // block (kept lean) into the shared expertise block where every
+    // crew sees them. The First Mate's voice prompt itself now just
+    // signals adaptability.
     const fm = CREW_BY_ID["first-mate"];
-    expect(fm.systemPrompt.toLowerCase()).toContain("flex");
-    // Mentions every other crew member by archetype.
-    expect(fm.systemPrompt).toContain("Captain");
-    expect(fm.systemPrompt).toContain("Cook");
-    expect(fm.systemPrompt).toContain("Navigator");
-    expect(fm.systemPrompt).toContain("Doctor");
-    expect(fm.systemPrompt).toContain("Lookout");
+    expect(fm.systemPrompt.toLowerCase()).toContain("adapts");
+    expect(fm.systemPrompt.toLowerCase()).toContain("trained under all crew");
   });
 });
 

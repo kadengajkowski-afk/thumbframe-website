@@ -128,6 +128,76 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   button. `ThumbFriendPanel.parts.tsx` (126 lines) holds `renderBubble`
   + `ToolCallList`. Backend test count: 81. Frontend: 451.
 
+- **Day 47-quality (2026-04-30) — ThumbFriend Quality Overhaul.**
+  Prompt + validation engineering, no new features, no UI changes.
+  Five surfaces upgraded so Sonnet 4.6 / Haiku 4.5 stop putting text
+  off-canvas, adding random shapes, and building chaotic compositions.
+
+  **Crew prompts (backend `lib/crewPrompts.js` + frontend `lib/crew.ts`)**
+  rewritten as 4-section blocks: A) voice + role (crew-specific,
+  concise) → B) shared `THUMBNAIL_EXPERTISE` (hierarchy, readability
+  at 168px, composition, color, niche conventions, anti-patterns,
+  what gets clicked, plus 5 reference thumbnails — MrBeast,
+  Veritasium, LTT, MKBHD, Mark Rober, each with a "Why it works"
+  rationale) → C) shared `CANVAS_RULES` (1280×720 dimensions, 6-layer
+  cap, positioning math for text width, font sizing 100-180px for
+  titles, work-with-existing-layers rules) → D) per-crew examples
+  (voice-flavored few-shot tail). `getCrewPrompt(crewId)` assembles
+  the four blocks; `IDENTITY_PREAMBLE` carries the ThumbFriend frame
+  + capability scope and leads every prompt. Token budget audit:
+  largest assembled prompt (Partner + Captain) is 13,565 chars
+  ~3,391 tokens — well under the 8K budget. All 6 crew prompts +
+  every intent stay under 32K chars.
+
+  **Canvas state context (lib/canvasState.ts)** v2 — every layer
+  entry now carries computed `right`, `bottom`, `percentage_of_canvas`
+  (0..1 rounded to 2 decimals), `is_off_canvas` (bounds extend past
+  1280×720 with 8px tolerance), `overlaps_timestamp_zone` (intersects
+  bottom-right 1080..1280 × 640..720), `z_order` (array index, 0 = back).
+  New `canvas_summary` block above the layer list: `total_layers`,
+  `has_image_layer`, `has_title_text` (any text layer ≥80px font),
+  `composition_status` (`empty` 0 / `sparse` 1-2 / `balanced` 3-5 /
+  `cluttered` 6+), `detected_issues` array (reuses Day 44's
+  `detectIssues` engine — off-canvas, dominates >40%, timestamp
+  overlap, stacked centers, missing title, generic background).
+  Ask mode's in-message canvas state block embeds the new fields +
+  detected_issues + a 5th rule ("if composition_status is 'cluttered',
+  prefer EDITING existing layers over adding new ones").
+
+  **Tool input validation (`editor/aiToolValidation.ts`)** — new
+  pre-flight gates for the 4 creation tools, runs BEFORE the executor
+  mutates state. `add_text_layer`: font_size 40-250, estimated text
+  width (chars × size × 0.6) must fit canvas with a 40px margin.
+  `add_rect_layer`: width 4-1280, height 4-720 (4px floor instead of
+  spec's 50 because thin accent rects / underlines are a real pattern;
+  documented in DEFERRED). `add_ellipse_layer`: radius 20-600, center
+  inside canvas. `set_canvas_background`: valid #RRGGBB hex. Failures
+  return one-sentence error strings the AI sees in tool_result so it
+  can self-correct on the next round (e.g. "Text 'supercalifragilistic'
+  at x=900 with size=100 would overflow canvas right edge — lower x,
+  shorten content, or reduce font_size").
+
+  **Partner plan validation (`lib/partnerPlanValidation.ts`)** — when
+  Sonnet returns a planning turn, run pre-flight: every step through
+  the same `validateToolInput` gates, total layer count (existing +
+  creations + duplicates − deletions) ≤ 6, no duplicate
+  `add_text_layer.content` (case-insensitive trim), reject empty
+  plans. On failure, `usePartner` retries up to 2 times (3 attempts
+  total) by appending the AI's prior plan + `buildRevisionPrompt(issues)`
+  to a WIRE-ONLY conversation array — the user never sees the broken
+  plans, only the validated one OR a clear error after retries
+  exhausted ("ThumbFriend is having trouble with this request. Try
+  asking more specifically.").
+
+  **Reference thumbnails (Section 5)** are inside the shared
+  `THUMBNAIL_EXPERTISE` block so all 4 modes (Ask + Nudge + Partner +
+  intent='edit') benefit. Each reference carries pattern + Why it
+  works so the model adapts the principle to user's niche, not just
+  copies the visual.
+
+  43 new frontend tests + 9 new backend tests (full suites: frontend
+  603, backend 88). Bundle main +6 KB gzip → 335 KB.
+
 - **Day 45 (2026-04-30) — ThumbFriend Partner mode (multi-turn agent).**
   Multi-turn conversational agent that PLANS before executing. Backend
   routes `intent='partner'` → Sonnet 4.6 (better at planning than

@@ -4,6 +4,7 @@ import { useUiStore } from "@/state/uiStore";
 import { hexToPixi, normalizeHex } from "@/lib/color";
 import type { AiToolName } from "@/lib/aiTools";
 import { nanoid } from "nanoid";
+import { validateToolInput } from "./aiToolValidation";
 
 /** Day 40 — execute a tool_use block emitted by the AI proxy.
  *
@@ -58,6 +59,13 @@ export type ToolResult = {
 };
 
 export function executeAiTool(name: string, input: ToolInput): ToolResult {
+  // Day 47 — pre-flight validation for creation tools. The check
+  // returns a human-readable error string that lands in the
+  // tool_result; the AI sees it on the next round and can self-
+  // correct (or rephrase the user's request as a fail-with-text reply).
+  const validationError = validateToolInput(name, input);
+  if (validationError) return fail(name, validationError);
+
   switch (name as AiToolName) {
     case "set_layer_fill":         return runSetFill(input);
     case "set_layer_position":     return runSetPosition(input);
