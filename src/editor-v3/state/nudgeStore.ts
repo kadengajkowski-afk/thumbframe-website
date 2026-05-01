@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { subscribeWithSelector } from "zustand/middleware";
 import {
   loadAutoApply,
   loadNudges,
@@ -42,6 +43,12 @@ export type NudgeState = {
    * execute on arrival (single undo entry). Off by default — nudges
    * should be opt-in actions, not surprises. */
   autoApply: boolean;
+  /** Day 49 — incremented on requestImmediate(). The watcher subscribes
+   * to this counter; a bump triggers an immediate tick that bypasses
+   * the cooldown + debounce gates (the user explicitly asked for
+   * another perspective, so make them wait for the 30-90s cooldown
+   * felt wrong). */
+  requestCounter: number;
 
   addNudge: (content: NudgeContent) => Nudge;
   dismissNudge: (id: string) => void;
@@ -53,6 +60,10 @@ export type NudgeState = {
   setLastFiredAt: (ms: number) => void;
   setPausedUntil: (ms: number) => void;
   setAutoApply: (v: boolean) => void;
+  /** Day 49 — "Try again" affordance for dismissed nudges. Clears the
+   * cooldown gate + bumps the request counter so the watcher fires
+   * one fresh tick immediately. */
+  requestImmediate: () => void;
   /** Test hook + dev-mode reset. */
   _reset: () => void;
 };
@@ -61,13 +72,15 @@ function makeId(): string {
   return `n_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 }
 
-export const useNudgeStore = create<NudgeState>()((set) => ({
+export const useNudgeStore = create<NudgeState>()(
+  subscribeWithSelector((set) => ({
   nudges: loadNudges(),
   fetching: false,
   lastFiredAt: 0,
   dismissStreak: 0,
   pausedUntil: 0,
   autoApply: loadAutoApply(),
+  requestCounter: 0,
 
   addNudge: (content) => {
     const nudge: Nudge = {
@@ -124,15 +137,27 @@ export const useNudgeStore = create<NudgeState>()((set) => ({
     set({ autoApply });
   },
 
+  requestImmediate: () =>
+    set((s) => ({
+      // Clear the cooldown gate so shouldFire() doesn't bounce the
+      // explicit re-try, and clear pause too — the user just clicked
+      // "Try again", they obviously want a nudge right now.
+      lastFiredAt: 0,
+      pausedUntil: 0,
+      requestCounter: s.requestCounter + 1,
+    })),
+
   _reset: () => {
     persistNudges([]);
     persistAutoApply(false);
     set({
       nudges: [], fetching: false, lastFiredAt: 0,
       dismissStreak: 0, pausedUntil: 0, autoApply: false,
+      requestCounter: 0,
     });
   },
-}));
+  })),
+);
 
 /** Selector helper — most-recent pending nudge, or null. The Nudge
  * tab surfaces this as the "latest card." */

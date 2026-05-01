@@ -29,6 +29,7 @@ export function NudgeMode({ openInAsk }: { openInAsk: (text: string) => void }) 
   const setPausedUntil = useNudgeStore((n) => n.setPausedUntil);
   const dismissNudge = useNudgeStore((n) => n.dismissNudge);
   const markApplied = useNudgeStore((n) => n.markApplied);
+  const requestImmediate = useNudgeStore((n) => n.requestImmediate);
 
   const userTier = useUiStore((u) => u.userTier);
   const isPro = userTier === "pro";
@@ -112,6 +113,7 @@ export function NudgeMode({ openInAsk }: { openInAsk: (text: string) => void }) 
                 onApply={() => applyNudge(n)}
                 onTellMore={() => openInAsk(`Tell me more about: ${n.content.title}. ${n.content.body}`)}
                 onDismiss={() => dismissNudge(n.id)}
+                onTryAgain={requestImmediate}
               />
             ))}
           </div>
@@ -126,6 +128,9 @@ function NudgeCard(props: {
   onApply: () => void;
   onTellMore: () => void;
   onDismiss: () => void;
+  /** Day 49 — only set on history-list cards. The latest pending
+   * card never offers Try-Again because it's a current nudge. */
+  onTryAgain?: () => void;
 }) {
   const { nudge } = props;
   const crew = getCrew(nudge.content.crewId);
@@ -135,6 +140,9 @@ function NudgeCard(props: {
                                    s.card;
   const hasAction = !!nudge.content.action;
   const isPending = nudge.status === "pending";
+  // Day 49 — Try Again only renders on dismissed cards. Applied
+  // cards are intentionally final (the user accepted; no re-roll).
+  const showTryAgain = nudge.status === "dismissed" && !!props.onTryAgain;
 
   return (
     <div style={cardStyle} data-testid={`thumbfriend-nudge-card-${nudge.id}`}>
@@ -146,9 +154,22 @@ function NudgeCard(props: {
       <p style={s.cardTitle}>{nudge.content.title}</p>
       <p style={s.cardBody}>{nudge.content.body}</p>
       {!isPending && (
-        <span style={s.statusTag} data-testid={`thumbfriend-nudge-tag-${nudge.status}`}>
-          {nudge.status === "applied" ? "Applied" : "Dismissed"}
-        </span>
+        <div style={s.statusRow}>
+          <span style={s.statusTag} data-testid={`thumbfriend-nudge-tag-${nudge.status}`}>
+            {nudge.status === "applied" ? "Applied" : "Dismissed"}
+          </span>
+          {showTryAgain && (
+            <button
+              type="button"
+              style={s.tryAgainBtn}
+              onClick={props.onTryAgain}
+              data-testid="thumbfriend-nudge-try-again"
+              title="Get another perspective on this canvas"
+            >
+              ↻ Try again
+            </button>
+          )}
+        </div>
       )}
       {isPending && (
         <div style={s.actions}>

@@ -137,7 +137,20 @@ export const statusTag: CSSProperties = {
   fontSize: 10, color: "var(--text-secondary)",
   fontFamily: '"Geist Mono", ui-monospace, monospace',
   letterSpacing: "0.06em", textTransform: "uppercase",
-  marginTop: 2,
+};
+// Day 49 — row that wraps statusTag + Try-Again button so they
+// share a baseline on dismissed cards.
+export const statusRow: CSSProperties = {
+  display: "flex", alignItems: "center", justifyContent: "space-between",
+  gap: 8, marginTop: 2,
+};
+export const tryAgainBtn: CSSProperties = {
+  padding: "3px 8px", fontSize: 10, letterSpacing: "0.04em",
+  textTransform: "uppercase",
+  background: "transparent", color: "var(--accent-orange)",
+  border: "1px solid var(--accent-orange)", borderRadius: 10,
+  cursor: "pointer", fontFamily: '"Geist Mono", ui-monospace, monospace',
+  fontWeight: 600,
 };
 
 export const historyToggle: CSSProperties = {
