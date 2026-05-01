@@ -30,6 +30,7 @@ export function ColorSwatchButton({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [flipRight, setFlipRight] = useState(false);
+  const [flipUp, setFlipUp] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,6 +41,14 @@ export function ColorSwatchButton({
     const r = rootRef.current?.getBoundingClientRect();
     if (r && r.left + 240 > window.innerWidth - 8) setFlipRight(true);
     else setFlipRight(false);
+
+    // Day 49 — vertical edge-flip. ColorPicker height ≈ 360px (HSV
+    // square + sliders + hex/rgb/alpha rows + presets). When there's
+    // not enough room BELOW the swatch, flip ABOVE so the picker
+    // stays fully on-screen.
+    const POPOVER_H = 360;
+    if (r && r.bottom + POPOVER_H > window.innerHeight - 8) setFlipUp(true);
+    else setFlipUp(false);
 
     const onDown = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) close();
@@ -90,7 +99,8 @@ export function ColorSwatchButton({
         <div
           className={
             "color-swatch__popover" +
-            (flipRight ? " color-swatch__popover--right" : "")
+            (flipRight ? " color-swatch__popover--right" : "") +
+            (flipUp ? " color-swatch__popover--up" : "")
           }
           role="dialog"
         >

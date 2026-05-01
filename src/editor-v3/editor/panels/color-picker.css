@@ -46,6 +46,14 @@
   left: auto;
   right: 0;
 }
+/* Day 49 — vertical edge-flip: when there's no room below the swatch
+ * for the popover (typical on short browser windows / when the swatch
+ * lives in a panel near the viewport bottom), flip ABOVE the swatch
+ * so the picker stays fully on-screen. */
+.color-swatch__popover--up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
 @keyframes swatch-pop-open {
   from {
     opacity: 0;
