@@ -7,6 +7,7 @@ import * as s from "./ThumbFriendPanel.styles";
 import { renderBubble, ToolCallList, CrewLabel, CrewIntroCard } from "./ThumbFriendPanel.parts";
 import { ThumbFriendCrewTrigger, ThumbFriendCrewDropdown } from "./ThumbFriendCrewPicker";
 import { NudgeMode } from "./NudgeMode";
+import { PartnerMode } from "./PartnerMode";
 
 /** Day 39 — ThumbFriend Ask mode. Single-turn AI edits via Cmd+/.
  *
@@ -80,11 +81,7 @@ export function ThumbFriendPanel() {
         />
       )}
       {tab === "nudge" && <NudgeMode openInAsk={openInAsk} />}
-      {tab === "partner" && (
-        <div style={s.stub} data-testid="thumbfriend-stub-partner">
-          Partner mode lands in Cycle 5 — multi-turn AI agent runs your edits.
-        </div>
-      )}
+      {tab === "partner" && <PartnerMode />}
       <style>{s.keyframes}</style>
     </aside>
   );

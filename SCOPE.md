@@ -128,6 +128,54 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   button. `ThumbFriendPanel.parts.tsx` (126 lines) holds `renderBubble`
   + `ToolCallList`. Backend test count: 81. Frontend: 451.
 
+- **Day 45 (2026-04-30) — ThumbFriend Partner mode (multi-turn agent).**
+  Multi-turn conversational agent that PLANS before executing. Backend
+  routes `intent='partner'` → Sonnet 4.6 (better at planning than
+  Haiku), `MAX_TOKENS.partner=2048`, no tools (JSON-output only with
+  `stage` field). Free tier gets its own 25 calls/day backend bucket
+  (`.eq('intent','partner')`); chat 5/day cap excludes partner +
+  nudge via `.not('intent','in','("nudge","partner")')`. Frontend
+  wraps the call counter in a UX cap of 5 SESSIONS/day (counted
+  client-side via localStorage); a new conversation begins on the
+  first user message after `reset()`, increments the counter, blocks
+  at 6.
+
+  Stages: `questioning` → `planning` → `executing` → `reviewing`. The
+  AI returns a typed JSON object with `stage`, `text`, optional
+  `questions`, optional `plan` (title + steps[] each carrying tool +
+  input + description). New `lib/partnerClient.ts` parses the
+  response into `PartnerTurn` and validates each plan step's tool
+  against an 11-tool allow-list (set_canvas_background, add_text/
+  rect/ellipse_layer, set_layer_fill/position/opacity, add_drop_shadow,
+  center_layer, duplicate_layer, delete_layer — destructive tools
+  ARE allowed because user explicitly approves the plan; not
+  autonomous like nudge).
+
+  New `state/partnerStore.ts` (separate zustand store) holds the
+  conversation: messages array, current stage, sessionsToday counter,
+  autoApprove toggle. `state/partnerPersistence.ts` persists
+  sessionsToday + autoApprove to localStorage; messages are NOT
+  persisted (partner conversations are session-scoped on purpose).
+  New `editor/hooks/usePartner.ts` (~190 lines) drives send/receive,
+  approvePlan, rejectPlan, editPlan, resetSession. approvePlan
+  executes plan steps through `executeAiTool` inside one
+  `history.beginStroke / endStroke` (single Cmd+Z reverts the whole
+  build), then sends a synthetic "PLAN APPROVED — execute round
+  complete" follow-up so the AI moves to `stage='reviewing'`.
+
+  Partner tab in `ThumbFriendPanel` replaces the Day 39 stub. New
+  `editor/panels/PartnerMode.tsx` (~165 lines) renders chat + stage
+  indicator + Auto-approve toggle + Reset button. New
+  `editor/panels/PartnerPlanCard.tsx` (~110 lines) renders the
+  structured plan as a checklist with Approve / Edit / Reject
+  buttons. Edit reveals an inline textarea — user types changes,
+  AI re-plans. Empty state shows 4 starter chips ("Help me make a
+  thumbnail from scratch", "Improve this thumbnail", "Match a
+  reference style", "Build variations").
+
+  21 new frontend tests (538 → 559 total) + 10 new backend tests
+  (67 → 77 total). Bundle main +5 KB gzip → 329 KB.
+
 - **Day 44 (2026-04-30) — ThumbFriend Nudge mode (ambient suggestions).**
   Background watcher subscribes to `docStore.layers`; debounces 8s after
   the user pauses editing, then fires `intent='nudge'` against the AI

@@ -3,6 +3,131 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 5 Day 45 — held back (date: 2026-04-30)
+
+- **Sessions persist across reloads but messages don't.** sessionsToday
+  is mirrored to localStorage so the 5/day cap survives a refresh,
+  but the in-flight conversation is wiped on boot. Some users will
+  hit refresh expecting to resume their Partner planning session and
+  lose context. The intentional version: Partner is goal-driven and
+  short-lived — most sessions are 2-4 turns over a few minutes —
+  bringing yesterday's plan back on a fresh boot would feel
+  ghostly. If first-wave feedback says "I refreshed and lost my
+  plan," persist the messages array too (~1KB per session, well
+  within localStorage budget).
+
+- **No cross-session memory.** Each Partner session starts fresh —
+  the AI doesn't remember "this user always picks dark backgrounds"
+  or "they hate yellow." Day 47 ("ThumbFriend deep memory") is the
+  right place for that. Today's behavior is correct for cycle scope.
+
+- **Backend `partner` rate limit is per-CALL, not per-SESSION.** A
+  single chatty session that runs 30 turns would burn the backend
+  cap before the frontend session-counter blocks anything. The 25/day
+  call cap covers ~5 well-behaved sessions × 5 turns each plus
+  headroom; if a user generates 30-turn sessions regularly, they'd
+  hit the call cap mid-session and get a 429 with no clean recovery
+  path. Acceptable today; Cycle 6 candidate is a session_id field on
+  ai_usage_events so the backend enforces SESSIONS instead of CALLS.
+
+- **`approvePlan` runs steps synchronously on the React thread.** A
+  10-step plan that touches text + rect + image creation can briefly
+  freeze the UI. With small plan sizes (typical 3-5 steps) it's
+  imperceptible; once Partner starts proposing 10+ step builds, fan
+  out the execution to a microtask queue.
+
+- **Synthetic "PLAN APPROVED" message is sent as a literal user
+  turn.** The AI sees it as if the user said it. If the user then
+  scrolls back through the conversation, they see a message they
+  never typed. Today this is filtered out as a `_local` note from the
+  wire (so the model gets the synthetic message but the UI shows the
+  user-friendly version), but the wire-side text leaks if the user
+  ever views the raw conversation. Acceptable; if Partner adds a
+  conversation-export feature, filter `_local` there too.
+
+- **Edit plan flow re-plans from scratch.** When the user clicks
+  Edit + types "make the title smaller", the AI gets the prior plan
+  in conversation history + the user's edit notes, but no
+  step-by-step diff anchor. It re-plans the WHOLE thing, which can
+  drop steps the user wanted preserved. A diff-based "modify steps
+  3 + 5" approach would need the model to emit step ids. Cycle 6.
+
+- **Stage indicator is a single label.** A 4-turn session shows
+  "Asking…" → "Planning" → "Building" → "Reviewing" but no
+  history of which round the user is on. A breadcrumb ("Round 3 of
+  ~4") would help users understand where they are. Spec mentioned
+  this; cosmetic, held until first-wave feedback.
+
+- **Auto-approve runs on every planning round, including revisions.**
+  If the user clicks Edit + supplies revisions + the AI returns a
+  new plan AND auto-approve is on, the new plan auto-runs. That's
+  consistent but could surprise a user who expected one round of
+  manual review post-edit. Could split into "auto-approve initial
+  plans" vs "auto-approve revisions" — over-engineering today.
+
+- **`questioning` stage isn't visually distinct.** Questions render
+  inline in the assistant bubble's text, not as separate UI rows.
+  Users can answer in free text but there's no "tap question 2 to
+  reply" affordance. Cycle 6 polish — keep all questions inline
+  until usability testing flags it.
+
+- **No retry on Partner JSON parse failure.** If Sonnet returns
+  malformed JSON (rare but happens with markdown-wrapped output we
+  don't catch), the user sees `Partner returned non-JSON output`.
+  We could re-fire the same turn with a "respond as JSON only"
+  appendix, but that doubles cost on a turn that already failed.
+  Held — extractJsonObject + permissive coerce already handle the
+  common drift; if real users hit it, we'd add a single retry.
+
+- **No cancel-mid-plan.** Once `approvePlan` starts, the steps
+  execute synchronously to completion. The user can't stop midway
+  if they realize step 3 was wrong. Cmd+Z reverts the whole turn,
+  but partial-stop would be nicer. Tied to the synchronous
+  execution issue above; same fix.
+
+- **No way to view the raw plan JSON.** Power users debugging a
+  weird plan would benefit from "show the raw JSON the model
+  returned". Cycle 6 dev-mode hover.
+
+- **Plan steps don't carry layer-id provenance for chained edits.**
+  A plan that says "add text layer, then make it red" can't
+  reference the text layer's id at plan-time (it doesn't exist yet).
+  The current plan schema has each step independent — works for
+  creation-then-modification chains because executeAiTool returns
+  `new_layer_id` in its result, but the prompt doesn't tell the
+  model how to chain. Sonnet usually figures it out (uses the most-
+  recently-created layer as the target) but a step-result schema
+  with `step.id` + `inputs.from_step` references would be cleaner.
+  Cycle 6.
+
+- **Starter chips don't remember user choice.** Every session
+  shows the same 4 starters. If the user always picks "Improve
+  this thumbnail," surfacing that more prominently would help.
+  PostHog telemetry first.
+
+- **No Partner-specific crew picker.** Partner inherits the global
+  active crew member. Some users might want "Captain for Ask but
+  Cook for Partner" — different modes for different feels. Today
+  switching crew flips it everywhere.
+
+- **`_local` notes don't render the crew label.** Local notes
+  ("Plan approved — built 2/2 steps") show as italic dashed-border
+  bubbles without a crew name. Correct (they're system messages,
+  not crew speech) but breaks the visual rhythm.
+
+- **No backend test for the Partner SSE round-trip.** Same gap as
+  edit/plan/deep-think tests. Frontend mocks the wire; backend
+  unit tests cover prompt + rate limit math.
+
+- **PartnerMode is NOT lazy-loaded.** Statically imported into
+  ThumbFriendPanel. Bundle delta ~5 KB; same Cycle 6 split
+  opportunity as NudgeMode.
+
+- **No telemetry on Approve vs Edit vs Reject ratios.** Once
+  PostHog lands (Cycle 4+), tracking these would tell us how often
+  users trust Partner's first plan. If the ratio is bad, the
+  planning prompt needs more constraints.
+
 ## Cycle 5 Day 44 — held back (date: 2026-04-30)
 
 - **Nudges are signed-in only.** `shouldFire()` early-returns when
