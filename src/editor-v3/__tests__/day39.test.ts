@@ -229,7 +229,7 @@ describe("Day 39 — ThumbFriendPanel renders", () => {
     container.remove();
   });
 
-  it("Nudge tab shows Coming-soon stub", async () => {
+  it("Nudge tab renders the Day 44 NudgeMode (replaces the prior stub)", async () => {
     useUiStore.setState({ thumbfriendPanelOpen: true });
     const React = await import("react");
     const { act } = await import("react");
@@ -242,7 +242,11 @@ describe("Day 39 — ThumbFriendPanel renders", () => {
     act(() => root.render(React.createElement(ThumbFriendPanel)));
     const nudgeBtn = container.querySelector<HTMLButtonElement>('[data-testid="thumbfriend-tab-nudge"]')!;
     act(() => nudgeBtn.click());
-    expect(container.querySelector('[data-testid="thumbfriend-stub-nudge"]')).not.toBeNull();
+    // Day 44 — Nudge tab now shows the real NudgeMode component, not
+    // a Coming-soon stub. Verify the mount + status indicator render.
+    expect(container.querySelector('[data-testid="thumbfriend-nudge-mode"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="thumbfriend-nudge-status"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="thumbfriend-stub-nudge"]')).toBeNull();
     act(() => root.unmount());
     container.remove();
   });

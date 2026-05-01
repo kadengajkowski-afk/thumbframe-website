@@ -25,7 +25,7 @@ const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ||
   "https://thumbframe-api-production.up.railway.app";
 
-export type AiIntent = "classify" | "edit" | "plan" | "deep-think";
+export type AiIntent = "classify" | "edit" | "plan" | "deep-think" | "nudge";
 
 /** Day 40 fix-7 — agentic loop. Messages can now carry structured
  * content blocks so the frontend can echo a previous assistant turn's

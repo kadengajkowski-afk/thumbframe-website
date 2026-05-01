@@ -128,6 +128,37 @@ ThumbFriend + Polar.sh) opened on 2026-04-29 with Day 31.
   button. `ThumbFriendPanel.parts.tsx` (126 lines) holds `renderBubble`
   + `ToolCallList`. Backend test count: 81. Frontend: 451.
 
+- **Day 44 (2026-04-30) — ThumbFriend Nudge mode (ambient suggestions).**
+  Background watcher subscribes to `docStore.layers`; debounces 8s after
+  the user pauses editing, then fires `intent='nudge'` against the AI
+  proxy. Backend routes `nudge` → Haiku 4.5 (claude-haiku-4-5-20251001),
+  `MAX_TOKENS.nudge=256`, no tools, JSON-only output (parsed by
+  `lib/nudgeClient.ts` extractJsonObject + coerceContent). Free tier
+  bucket is its own 20/day cap (queried by `intent='nudge'` filter on
+  `ai_usage_events`); chat 5/day cap excludes nudges via `.neq('intent','nudge')`.
+  New `state/nudgeStore.ts` (separate zustand store so `uiStore` stays
+  under the 400-line ceiling) holds nudges + autoApply + dismissStreak +
+  pausedUntil. `state/nudgePersistence.ts` mirrors nudges +
+  auto-apply to localStorage (`thumbframe-nudges`, capped at 20).
+  Frequency control: max 1 nudge call every 30s; same-type dedupe
+  inside a 2-min window; cooldown stretches to 90s after 3 consecutive
+  dismissals; 60-min auto-pause when the proxy returns RATE_LIMITED.
+  Pause control offers 5min / 1hr / until-unpause / Resume. New
+  `editor/hooks/useNudgeWatcher.ts` (mounted at App level) handles the
+  full lifecycle. Nudge tab in `ThumbFriendPanel` renders a status
+  indicator (Watching… / All clear / Nudge available / Paused), the
+  latest pending nudge as a card (crew avatar + type tag + Apply / Tell
+  me more / Dismiss buttons), plus a collapsible 5-entry history.
+  "Tell me more" prefills the Ask tab with the nudge title + body so
+  the user can drill in; "Apply" runs the suggested action through
+  `executeAiTool` (only the 5 non-destructive tools — set_layer_fill /
+  set_layer_position / set_layer_opacity / add_drop_shadow /
+  center_layer — are allow-listed in nudgeClient's coerceContent;
+  destructive tools are stripped even when the model emits them).
+  Auto-apply toggle (default OFF, persisted) auto-runs the action at
+  arrival. 29 frontend tests + 11 backend tests added (full suites:
+  frontend 524, backend 73).
+
 - **Days 41-42 (2026-04-30) — ThumbFriend Crew (5 personalities + First Mate).**
   Replaces the single ThumbFriend voice with six selectable crew
   members: Captain (default — veteran, blunt critique), First Mate

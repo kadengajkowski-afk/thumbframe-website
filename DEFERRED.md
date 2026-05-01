@@ -3,6 +3,164 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 5 Day 44 — held back (date: 2026-04-30)
+
+- **Nudges are signed-in only.** `shouldFire()` early-returns when
+  `uiStore.user` is null — anonymous editors don't pay AI costs, but
+  they also don't see the watcher value. A guest-mode nudge bucket
+  could surface the feature to users who haven't signed in; today's
+  call is "auth gate keeps cost predictable." Cycle 6 if telemetry
+  shows guests staying past first save.
+
+- **Watcher debounce is fixed at 8s.** Spec asked for 8s; that lands
+  comfortably between "user is still typing" and "user is staring at
+  their thumbnail." Some workflows (heavy paint passes, many small
+  position tweaks during smart-guide alignment) generate dozens of
+  layer mutations per second — each one resets the timer. A user who
+  drags continuously for 30s gets zero nudges, then one fires 8s
+  after they stop. That's correct, but a "smart" debounce that fires
+  during sustained idle (every 60s or so even mid-drag) could surface
+  bigger-picture nudges ("you've been positioning that headline for
+  3 minutes"). Held — no signal it's needed.
+
+- **Frequency floors run client-side only.** The `lastFiredAt` /
+  cooldown check lives in `useNudgeWatcher`; clearing localStorage +
+  refreshing resets it. Server-side, the only real protection is the
+  20/day intent='nudge' bucket. A user with the panel pinned on a
+  fast machine could spam ~20 calls in a few minutes by repeatedly
+  triggering layer mutations. Acceptable — burning a free user's
+  daily nudge bucket in 5 minutes only hurts them, not the API. Pro
+  bucket is unlimited. If we ever surface a "nudges paused" toast
+  for hitting frequency floors, server-side enforcement matters more.
+
+- **Vision attachment is best-effort.** When the compositor isn't
+  mounted (initial boot, tests without harness), the canvas image is
+  empty and Haiku gets the layer JSON only. The model does fine with
+  layer JSON for most nudge types (hierarchy, overlap, missing
+  contrast on color tags) but degrades on vision-only types (face
+  cropping, focal-point split). A boot-time gate that suppresses
+  nudges entirely until the compositor is up would be more correct;
+  today's behavior errs toward "more nudges, weaker on vision when
+  unavailable" which feels right for the editor lifecycle.
+
+- **Nudge JSON parser is forgiving but silent.** `extractJsonObject`
+  strips fences + finds the outermost `{ … }` pair. `coerceContent`
+  validates the type allow-list + clips title/body word counts +
+  filters destructive action tools. Any failure path returns
+  `{ suggestion: null }` — the cost was already incurred (Haiku call
+  ran), but the user sees nothing. Logging parse failures to a
+  Sentry breadcrumb would let us tune the prompt; today's silent
+  fallback is the simplest correct behavior.
+
+- **No telemetry on which nudge types actually drive applies vs
+  dismissals.** When we have analytics wiring (PostHog EU per
+  CLAUDE.md), counting `nudge.applied` / `nudge.dismissed` /
+  `nudge.tell_me_more` per type would tell us which categories are
+  pulling weight. The Cook's three-options pattern + Doctor's
+  triage-mode prompts likely produce different apply rates from
+  Captain's blunt critique — we'd refine the per-crew prompts based
+  on that signal. Held until analytics lands.
+
+- **"Tell me more" prefills the input but doesn't auto-submit.**
+  Clicking the button drops the nudge title + body into the Ask
+  textarea + switches tabs; the user clicks Send to actually fire
+  the chat. Some users will expect the AI reply to start streaming
+  immediately. Auto-submit is a one-line change but I don't want
+  the panel to feel like it's making decisions for the user — the
+  tab switch is already a strong nudge that "this is now Ask mode."
+  Reconsider after first-wave feedback.
+
+- **Auto-apply doesn't show what just happened.** When the toggle is
+  on and a nudge with an action arrives, the action runs in one
+  history stroke (Cmd+Z reverts) and the card lands in the panel
+  with status='applied'. The user might not notice because the
+  panel might not be open. A small toast ("ThumbFriend applied a
+  nudge — Cmd+Z to undo") would close the gap. Held until users
+  actually turn auto-apply on; today's default is OFF.
+
+- **Action allow-list is a 5-tool subset of edit-mode tools.** Spec
+  said "set_layer_fill, set_layer_position, set_layer_opacity,
+  add_drop_shadow, center_layer". Missing from auto-applyable:
+  set_text_content (text rewrites need user intent), set_font_family
+  (font swaps are user-creative-direction), set_font_size,
+  duplicate_layer, delete_layer, add_text/rect/ellipse/canvas_bg
+  (creation needs intent). Today the prompt declares the allow-list
+  + nudgeClient's coerceContent re-filters defensively. If we ever
+  want "auto-apply text rewrites," coerceContent's allow-list is
+  the single place to flip the rule.
+
+- **Same-type dedupe applies to ALL nudges, including dismissed.**
+  `hasRecentSameType` walks `nudges` regardless of status — a
+  dismissed contrast nudge from 90s ago will block another contrast
+  nudge from being added now. That's the right call (don't pester
+  the user about something they just rejected) but it also means a
+  user who genuinely WANTS another contrast nudge after dismissing
+  the first has to wait the 2-min window. Cycle 6 polish: filter
+  by status when dedupe-ing.
+
+- **`pausedUntil` is session-only.** Pause-1-hour survives a
+  refresh-during-the-hour because we mirror nudgePausedUntil to no
+  storage today. Per the store's comment, that's intentional —
+  pause is an in-the-moment decision, not a long-term setting.
+  Could persist to localStorage if a user complains.
+
+- **Crew picker change doesn't immediately re-route in-flight
+  nudges.** The watcher reads `activeCrewMember` at fire time, so
+  switching crews during a fetch leaves the in-flight nudge
+  authored by the OLD crew. The card label still shows the old
+  crew (correct — that crew did write it). Acceptable.
+
+- **No "regenerate" affordance.** If the user dismisses a nudge but
+  wants another perspective on the same canvas state, they have to
+  wait the cooldown for the next watcher fire. A small "Try again"
+  button on dismissed nudges would re-fire immediately. Held —
+  manual retry on a 8s-debounced ambient feature defeats the
+  ambient-ness.
+
+- **Status indicator doesn't surface RATE_LIMITED clearly.** When
+  the proxy returns 429, the watcher silently bumps `pausedUntil`
+  by an hour. The status reads "Paused" but doesn't say WHY —
+  could be the user paused, could be the daily cap. Add a separate
+  `pausedReason` field if a user reports confusion.
+
+- **Backend tool-suppression is intent-based, not schema-driven.**
+  `intent !== 'nudge'` gates `tools` propagation. If we ever add
+  another tool-free intent (e.g. `summarize`), the gate needs to
+  list it. A `TOOL_FREE_INTENTS` set would scale better; deferred
+  until the second tool-free intent.
+
+- **Free 20/day nudge cap counts the API call, not the visible
+  nudge.** A null-suggestion response still burns one slot. That
+  matches how Haiku is priced (we paid for the inference) but the
+  user-facing intuition is "I got 0 nudges and lost a slot." Could
+  surface "X canvas checks used today" copy instead of "X nudges
+  used" — more honest.
+
+- **No backend test for the nudge route's full SSE round-trip.**
+  Frontend mocks the wire entirely; backend unit tests cover prompt
+  routing + rate limit math. The end-to-end "POST → SSE → JSON
+  suggestion" loop against a real Anthropic mock cassette is the
+  same gap as edit/plan/deep-think tests. Same TODO.
+
+- **NudgeMode is NOT lazy-loaded.** The component is statically
+  imported into ThumbFriendPanel which itself isn't lazy. Bundle
+  delta is small (~15 KB) but the panel + nudge mode together pay
+  the cost on first paint even when the user never opens
+  ThumbFriend. Cycle 6 bundle pass — same opportunity as
+  PreviewRack / ContextPanel splitting.
+
+- **No "Pause until I unpause" actually-indefinite pause.** The
+  control writes 24 hours into `pausedUntil`. After 24h the
+  watcher resumes silently. Real "indefinite" would need a
+  separate `pausedIndefinitely: boolean` flag; the 24h fallback
+  matches "the user is gone for the day, fresh-start tomorrow"
+  more often than not.
+
+- **NudgeCard layout is identical for pending / applied / dismissed
+  states** (only color + button absence differs). Some users will
+  miss the visual cue and try to click an applied card's
+  (non-existent) Apply button. Cosmetic.
+
 ## Cycle 5 Days 41-42 — held back (date: 2026-04-30)
 
 - **30-prompt manual voice testing wasn't run autonomously.** Spec
