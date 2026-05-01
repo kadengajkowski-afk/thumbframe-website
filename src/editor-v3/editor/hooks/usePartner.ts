@@ -5,11 +5,16 @@ import {
   selectPendingPlanMessage,
   type PartnerPlan,
 } from "@/state/partnerStore";
-import { sendPartnerTurn } from "@/lib/partnerClient";
+import { sendPartnerTurn, type PartnerTurn } from "@/lib/partnerClient";
 import { AiError, type AiMessage } from "@/lib/aiClient";
 import { history } from "@/lib/history";
 import { executeAiTool } from "@/editor/aiToolExecutor";
 import { buildCanvasState } from "@/lib/canvasState";
+import {
+  buildRevisionPrompt,
+  MAX_PARTNER_PLAN_RETRIES,
+  validatePlan,
+} from "@/lib/partnerPlanValidation";
 
 /** Day 45 — Partner mode hook.
  *
@@ -59,16 +64,66 @@ export function usePartner() {
     abortRef.current = controller;
 
     try {
-      const wireMessages = buildWireMessages();
       const canvasContext = buildCanvasContextString();
-      const turn = await sendPartnerTurn({
-        messages: wireMessages,
-        crewId: useUiStore.getState().activeCrewMember,
-        canvasContext,
-        signal: controller.signal,
-      });
-
       const crewId = useUiStore.getState().activeCrewMember;
+
+      // Day 47 — when the model returns a planning turn, run pre-flight
+      // validation. If it fails, send a synthetic revision prompt back
+      // and retry up to MAX_PARTNER_PLAN_RETRIES (2 = 3 attempts total).
+      // The user never sees a broken plan; they see the validated one
+      // OR a clear error after all retries fail.
+      //
+      // The revision prompt + the rejected assistant turn are appended
+      // to a WIRE-ONLY conversation array (not the store) so the user
+      // sees a single clean exchange. Same store-derived messages on
+      // every retry; only the wire array grows.
+      const wireConversation: AiMessage[] = buildWireMessages();
+      let attempt = 0;
+      let turn: PartnerTurn | null = null;
+      let lastIssues: string[] = [];
+      while (true) {
+        turn = await sendPartnerTurn({
+          messages: wireConversation,
+          crewId,
+          canvasContext,
+          signal: controller.signal,
+        });
+
+        if (turn.stage !== "planning" || !turn.plan) break;
+        const result = validatePlan(turn.plan);
+        if (result.ok) break;
+
+        lastIssues = result.issues;
+        if (attempt >= MAX_PARTNER_PLAN_RETRIES) {
+          turn = null; // signal "retries exhausted" below
+          break;
+        }
+        attempt++;
+        // Echo the rejected plan back to the AI as its prior assistant
+        // turn so it has its own response in context, then append the
+        // revision request as a user turn. This stays wire-only.
+        wireConversation.push({
+          role: "assistant",
+          content: JSON.stringify({
+            stage: turn.stage,
+            text: turn.text,
+            plan: turn.plan,
+          }),
+        });
+        wireConversation.push({
+          role: "user",
+          content: buildRevisionPrompt(result.issues),
+        });
+      }
+
+      if (!turn) {
+        usePartnerStore.getState().appendLocalNote(
+          `ThumbFriend is having trouble with this request. Try asking more specifically.\n` +
+          `(Plan validation issues: ${lastIssues.join("; ")})`,
+        );
+        return;
+      }
+
       const stored = usePartnerStore.getState().appendAssistantMessage({
         text: turn.text,
         stage: turn.stage,
