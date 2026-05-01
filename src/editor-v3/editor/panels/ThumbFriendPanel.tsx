@@ -6,6 +6,7 @@ import { fetchTodayAiUsage, FREE_DAILY_LIMIT } from "@/lib/aiUsage";
 import * as s from "./ThumbFriendPanel.styles";
 import { renderBubble, ToolCallList, CrewLabel, CrewIntroCard } from "./ThumbFriendPanel.parts";
 import { ThumbFriendCrewTrigger, ThumbFriendCrewDropdown } from "./ThumbFriendCrewPicker";
+import { NudgeMode } from "./NudgeMode";
 
 /** Day 39 — ThumbFriend Ask mode. Single-turn AI edits via Cmd+/.
  *
@@ -33,6 +34,15 @@ export function ThumbFriendPanel() {
   const setPreviewMode = useUiStore((u) => u.setThumbfriendPreviewMode);
   const isPro = userTier === "pro";
   const [tab, setTab] = useState<Tab>("ask");
+  // Day 44 — when NudgeMode's "Tell me more" routes the user into Ask
+  // mode, we stash the prefill prompt here so AskMode picks it up on
+  // mount. Cleared after AskMode consumes it.
+  const [askPrefill, setAskPrefill] = useState<string | null>(null);
+
+  function openInAsk(text: string) {
+    setAskPrefill(text);
+    setTab("ask");
+  }
 
   return (
     <aside style={s.wrap} data-testid="thumbfriend-panel" aria-label="ThumbFriend">
@@ -61,13 +71,18 @@ export function ThumbFriendPanel() {
         <Tab id="ask"     active={tab} onPick={setTab} label="Ask" />
         <Tab id="partner" active={tab} onPick={setTab} label="Partner" />
       </nav>
-      {tab === "ask" ? (
-        <AskMode isPro={isPro} signedIn={!!user} />
-      ) : (
-        <div style={s.stub} data-testid={`thumbfriend-stub-${tab}`}>
-          {tab === "nudge"
-            ? "Nudge mode lands in Cycle 5 — proactive suggestions on canvas idle."
-            : "Partner mode lands in Cycle 5 — multi-turn AI agent runs your edits."}
+      {tab === "ask" && (
+        <AskMode
+          isPro={isPro}
+          signedIn={!!user}
+          prefill={askPrefill}
+          consumePrefill={() => setAskPrefill(null)}
+        />
+      )}
+      {tab === "nudge" && <NudgeMode openInAsk={openInAsk} />}
+      {tab === "partner" && (
+        <div style={s.stub} data-testid="thumbfriend-stub-partner">
+          Partner mode lands in Cycle 5 — multi-turn AI agent runs your edits.
         </div>
       )}
       <style>{s.keyframes}</style>
@@ -91,7 +106,17 @@ function Tab(props: { id: Tab; active: Tab; onPick: (t: Tab) => void; label: str
   );
 }
 
-function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
+function AskMode({
+  isPro,
+  signedIn,
+  prefill,
+  consumePrefill,
+}: {
+  isPro: boolean;
+  signedIn: boolean;
+  prefill?: string | null;
+  consumePrefill?: () => void;
+}) {
   const chat = useAiChat();
   const [input, setInput] = useState("");
   const [usage, setUsage] = useState<{ used: number; remaining: number } | null>(null);
@@ -103,6 +128,16 @@ function AskMode({ isPro, signedIn }: { isPro: boolean; signedIn: boolean }) {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat.messages]);
+
+  // Day 44 — Nudge "Tell me more" hand-off. When the panel routes a
+  // prefill string through to Ask mode, drop it into the input and
+  // clear the parent's stash so a tab toggle doesn't re-fire it.
+  useEffect(() => {
+    if (prefill) {
+      setInput(prefill);
+      consumePrefill?.();
+    }
+  }, [prefill, consumePrefill]);
 
   useEffect(() => {
     if (!userId || isPro) return;

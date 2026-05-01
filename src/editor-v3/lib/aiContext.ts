@@ -17,16 +17,16 @@ export type BuildSystemContextArgs = {
    * the working dimensions. Currently 1280×720 for v3; included so
    * Day 36+ can ship a resize-friendly context block. */
   canvasState?: { width: number; height: number; layerCount: number };
-  /** AiIntent. Classify is a cheap Haiku route — skip the heavy
-   * brand-context block to keep tokens minimal. Edit/plan/deep-think
-   * all benefit from the full block. */
-  intent?: "classify" | "edit" | "plan" | "deep-think";
+  /** AiIntent. Classify + nudge are cheap Haiku routes — skip the
+   * heavy brand-context block to keep tokens minimal. Edit/plan/
+   * deep-think all benefit from the full block. */
+  intent?: "classify" | "edit" | "plan" | "deep-think" | "nudge";
 };
 
 export function buildSystemContext(args: BuildSystemContextArgs): string {
   const { pinnedKit, canvasState, intent = "edit" } = args;
   if (!pinnedKit) return "";
-  if (intent === "classify") return "";
+  if (intent === "classify" || intent === "nudge") return "";
 
   const lines: string[] = [];
   lines.push("## Brand context");

@@ -45,6 +45,7 @@ import { ToastHost } from "@/toasts/Toast";
 import { supabase } from "@/lib/supabase";
 import { startAutoSave } from "@/lib/autoSave";
 import { resolveUserTier } from "@/lib/userTier";
+import { useNudgeWatcher } from "@/editor/hooks/useNudgeWatcher";
 
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
@@ -53,6 +54,11 @@ export function App() {
   const dragActive = useDropTarget();
 
   useEffect(() => installHotkeys(), []);
+
+  // Day 44 — ThumbFriend Nudge watcher. Fires Haiku-backed nudge
+  // requests after 8s of layer idle. Costs only when signed-in users
+  // are actively editing; cheap (~$0.001/call, 20/day free cap).
+  useNudgeWatcher();
 
   // Day 36 fix — auto-load-most-recent-project on boot was removed.
   // Refresh now ALWAYS lands on the empty state (Figma / Photoshop
