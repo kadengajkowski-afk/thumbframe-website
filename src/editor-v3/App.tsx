@@ -46,6 +46,13 @@ import { supabase } from "@/lib/supabase";
 import { startAutoSave } from "@/lib/autoSave";
 import { resolveUserTier } from "@/lib/userTier";
 import { useNudgeWatcher } from "@/editor/hooks/useNudgeWatcher";
+import { useOnboardingStore } from "@/state/onboardingStore";
+
+// Day 51 — onboarding flow is lazy-loaded. Returning users (the
+// vast majority after the first wave) never pay for it on boot.
+const OnboardingFlow = lazy(() =>
+  import("@/editor/onboarding/OnboardingFlow").then((m) => ({ default: m.OnboardingFlow })),
+);
 
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
@@ -59,6 +66,18 @@ export function App() {
   // requests after 8s of layer idle. Costs only when signed-in users
   // are actively editing; cheap (~$0.001/call, 20/day free cap).
   useNudgeWatcher();
+
+  // Day 51 — Onboarding first-run detection. On boot, if the user
+  // hasn't completed onboarding, kick into Step A. Day 52 will add
+  // the existing-user migration: signed-in users with v3_projects
+  // rows get auto-marked completed (they're not new). For Day 51
+  // this is local-flag-only.
+  useEffect(() => {
+    const ob = useOnboardingStore.getState();
+    if (!ob.completed && ob.step === "idle") {
+      ob.startOnboarding();
+    }
+  }, []);
 
   // Day 36 fix — auto-load-most-recent-project on boot was removed.
   // Refresh now ALWAYS lands on the empty state (Figma / Photoshop
@@ -125,6 +144,7 @@ export function App() {
         <BrandKitPanel />
         <ImageGenPanel />
         <UpgradePanel />
+        <OnboardingFlow />
       </Suspense>
       <ToastHost />
     </div>
