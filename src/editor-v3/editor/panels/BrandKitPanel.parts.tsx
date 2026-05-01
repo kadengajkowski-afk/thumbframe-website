@@ -130,11 +130,13 @@ export function BrandKitResult({
                   // ghost works on Chrome/Firefox but Safari sometimes
                   // shows a generic placeholder icon. Using the
                   // <img> itself as drag image guarantees a thumbnail
-                  // preview cross-browser.
-                  if (e.currentTarget instanceof HTMLImageElement) {
+                  // preview cross-browser. Guard for test envs where
+                  // DataTransfer is mocked without setDragImage.
+                  if (
+                    e.currentTarget instanceof HTMLImageElement &&
+                    typeof e.dataTransfer.setDragImage === "function"
+                  ) {
                     const img = e.currentTarget;
-                    // Center the drag image under the cursor for a
-                    // more intuitive feel than top-left anchor.
                     e.dataTransfer.setDragImage(
                       img,
                       Math.round(img.width / 2),
