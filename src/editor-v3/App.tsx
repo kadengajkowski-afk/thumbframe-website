@@ -6,7 +6,11 @@ import { BgRemoveOverlay } from "@/editor/BgRemoveOverlay";
 import { TopBar } from "@/editor/panels/TopBar";
 import { LayerPanel } from "@/editor/panels/LayerPanel";
 import { ContextPanel } from "@/editor/panels/ContextPanel";
-import { ThumbFriendPanel } from "@/editor/panels/ThumbFriendPanel";
+// Day 56 — ThumbFriendPanel lazy-loaded. Pulls in NudgeMode + PartnerMode +
+// the crew picker + the AI client off the main bundle.
+const ThumbFriendPanel = lazy(() =>
+  import("@/editor/panels/ThumbFriendPanel").then((m) => ({ default: m.ThumbFriendPanel })),
+);
 import { ShipComingAlive } from "@/editor/transitions/ShipComingAlive";
 import { EmptyState } from "@/editor/EmptyState";
 import { DropZone } from "@/editor/DropZone";
@@ -186,7 +190,11 @@ function EditorShell() {
           <BgRemoveOverlay />
           <ZoomIndicator />
         </main>
-        {thumbfriendOpen ? <ThumbFriendPanel /> : previewOpen ? <PreviewRack /> : <ContextPanel />}
+        {thumbfriendOpen ? (
+          <Suspense fallback={<aside style={{ width: 320, background: "var(--bg-space-1)", borderLeft: "1px solid var(--border-ghost)" }} />}>
+            <ThumbFriendPanel />
+          </Suspense>
+        ) : previewOpen ? <PreviewRack /> : <ContextPanel />}
       </div>
       <LayerPanel />
     </div>

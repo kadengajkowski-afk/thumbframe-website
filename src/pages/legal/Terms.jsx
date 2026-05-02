@@ -13,7 +13,7 @@ export default function Terms({ setPage }) {
       setPage={setPage}
       eyebrow="Legal"
       title="Terms of Service"
-      lastUpdated="April 2026"
+      lastUpdated="May 2026"
       palette={{
         core:      '#050818',
         mid:       '#1a1a38',
@@ -74,18 +74,42 @@ export default function Terms({ setPage }) {
         for details on refunds.
       </p>
 
-      <h2>5. Acceptable use</h2>
+      <h2>5. Acceptable Use Policy</h2>
       <p>Don't use ThumbFrame to:</p>
       <ul>
-        <li>Create content that's illegal, defamatory, or infringes
-          someone else's rights.</li>
-        <li>Generate thumbnails depicting real people without their
-          consent.</li>
-        <li>Create sexual content involving minors, or any other content
-          prohibited by law.</li>
+        <li><strong>CSAM:</strong> upload, generate, or share child
+          sexual abuse material. We use automated detection (PhotoDNA
+          / Hive) on every upload and AI generation. Positive matches
+          result in immediate account suspension and a report to the
+          National Center for Missing &amp; Exploited Children
+          (NCMEC) as required by U.S. law (18 U.S.C. §2258A).</li>
+        <li><strong>Deepfakes of real people without consent:</strong>
+          do not generate or upload AI-manipulated thumbnails depicting
+          identifiable real people without their explicit permission.</li>
+        <li><strong>Hate / harassment:</strong> no thumbnails promoting
+          hate speech, harassment, or violence against any group.</li>
+        <li><strong>Deceptive impersonation:</strong> do not create
+          thumbnails that impersonate other channels, brands, or news
+          outlets in a way intended to mislead viewers.</li>
+        <li><strong>Copyright infringement:</strong> only use images,
+          fonts, and assets you have the right to use. Submit DMCA
+          takedown notices to{' '}
+          <a href="mailto:dmca@thumbframe.com">dmca@thumbframe.com</a>{' '}
+          (see our <a href="/dmca" onClick={(e) => { e.preventDefault(); setPage('dmca'); }}>DMCA page</a>).</li>
+        <li><strong>NSFW content:</strong> we use moderation APIs
+          (Sightengine / Hive) to automatically block nudity, gore,
+          and graphic violence at upload time and on AI generation.</li>
         <li>Reverse engineer, scrape, or resell the service.</li>
-        <li>Disrupt or overload our infrastructure.</li>
+        <li>Disrupt or overload our infrastructure (rate-limited at
+          the API; abuse triggers account suspension).</li>
       </ul>
+      <p>
+        Violations may result in content removal, account suspension,
+        or referral to law enforcement where applicable. We reserve
+        the right to remove content and terminate accounts at our
+        sole discretion. Report abuse to{' '}
+        <a href="mailto:trust@thumbframe.com">trust@thumbframe.com</a>.
+      </p>
 
       <h2>6. Your content</h2>
       <p>
@@ -102,16 +126,40 @@ export default function Terms({ setPage }) {
 
       <h2>7. AI-generated content</h2>
       <p>
-        ThumbFrame uses third-party AI services (including OpenAI's
-        DALL-E 3 for image generation and other providers for background
-        removal and face enhancement). When you use these features, your
-        prompt and/or images are sent to the provider's API.
+        ThumbFrame uses third-party AI services (Anthropic Claude for
+        the ThumbFriend assistant; fal.ai for image generation via
+        Flux Schnell, Ideogram 3, and Nano Banana; Remove.bg for
+        background removal). When you use these features, your prompt,
+        canvas state, and/or reference images are sent to the
+        provider's API.
+      </p>
+      <p>
+        <strong>Your data is not used for AI training.</strong>{' '}
+        Anthropic and fal.ai both contractually guarantee that data
+        sent through their APIs is not used to train their models.
+        See our <a href="/privacy" onClick={(e) => { e.preventDefault(); setPage('privacy'); }}>Privacy Policy</a> for the
+        full sub-processor list.
+      </p>
+      <p>
+        <strong>Ownership of AI outputs.</strong> To the extent
+        copyright in AI-generated images is assignable, you own the
+        outputs you generate through ThumbFrame. AI outputs may not
+        always be eligible for copyright protection under U.S. law
+        (see U.S. Copyright Office guidance, March 2023).
+      </p>
+      <p>
+        <strong>No warranty of non-infringement.</strong> AI outputs
+        may inadvertently resemble existing copyrighted works,
+        trademarks, or likenesses. We don't warrant that AI outputs
+        are free from third-party rights claims. You agree to
+        indemnify ThumbFrame for any claims arising from your use,
+        modification, or distribution of AI outputs.
       </p>
       <p>
         AI outputs are provided as-is. We don't guarantee that
         AI-generated content is original, accurate, or safe for
-        commercial use. You're responsible for how you use these
-        outputs, including verifying usage rights before publishing.
+        commercial use. You're responsible for verifying usage rights
+        before publishing.
       </p>
 
       <h2>8. Intellectual property</h2>
@@ -152,7 +200,34 @@ export default function Terms({ setPage }) {
         due to a service outage).
       </p>
 
-      <h2>12. Changes and contact</h2>
+      <h2>12. Governing law and arbitration</h2>
+      <p>
+        These terms are governed by the laws of the State of California,
+        USA, without regard to conflict-of-laws principles.
+      </p>
+      <p>
+        Any dispute arising from these terms or your use of ThumbFrame
+        will be resolved by binding individual arbitration administered
+        by the American Arbitration Association under its Consumer
+        Arbitration Rules. Arbitration will take place in California or
+        another mutually agreed location, or online if the dispute
+        amount is below the threshold for an in-person hearing.
+        <strong> You waive the right to a jury trial and to participate
+        in any class action.</strong>
+      </p>
+      <p>
+        Either party may bring an individual claim in small-claims
+        court if eligible. Either party may seek injunctive relief in
+        court for IP infringement.
+      </p>
+      <p>
+        You may opt out of this arbitration clause within 30 days of
+        first accepting these terms by emailing{' '}
+        <a href="mailto:legal@thumbframe.com">legal@thumbframe.com</a>{' '}
+        with "ARBITRATION OPT-OUT" in the subject.
+      </p>
+
+      <h2>13. Changes and contact</h2>
       <p>
         We may update these terms from time to time. If the changes are
         material, we'll email you or show a notice in the app before
@@ -161,6 +236,8 @@ export default function Terms({ setPage }) {
       <p>
         Questions? Email{' '}
         <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>.
+        For abuse / safety reports:{' '}
+        <a href="mailto:trust@thumbframe.com">trust@thumbframe.com</a>.
       </p>
     </LegalPageTemplate>
   );
