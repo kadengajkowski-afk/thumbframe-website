@@ -11,6 +11,70 @@ pass. See `docs/soft-launch.md` for the rest of Cycle 6.
 
 ## Cycle 6 — in progress (Days 51-60, 2026-05-01 → )
 
+- **Day 56 (2026-05-02) — Performance + legal pages + AI cost cap.**
+
+  Bundle audit + ThumbFriendPanel lazy-split. Pre: main 340 KB
+  gzip (1182 KB raw). Post: main **324 KB gzip** (1119 KB raw,
+  −16 KB / −4.7%). ThumbFriendPanel + NudgeMode + PartnerMode +
+  the crew picker land in their own **17.7 KB gzip** chunk
+  loaded only when the user opens the panel via Cmd+/ or the
+  toolbar ship icon. Suspense fallback renders an empty 320px-
+  wide aside while the chunk loads (matches the panel's
+  background so the slot doesn't flash).
+
+  Privacy + Terms updates with AI-specific clauses:
+   - Sub-processor list expanded (Anthropic, fal.ai, Cloudflare,
+     Sightengine/Hive added; OpenAI/Replicate removed since v3
+     doesn't use them).
+   - Explicit "AI prompts and uploads are NOT used to train any
+     model" clause (contractually true for both Anthropic and
+     fal.ai).
+   - Acceptable Use Policy section in Terms expanded: CSAM
+     (with NCMEC reporting commitment), deepfakes-of-real-people,
+     hate, deceptive impersonation, copyright (with DMCA pointer),
+     NSFW (with Sightengine/Hive moderation note).
+   - Governing law (California) + binding individual arbitration
+     (AAA Consumer Rules) + class-action waiver + 30-day opt-out
+     to legal@.
+   - AI ownership clause (user owns outputs to extent assignable);
+     no warranty of non-infringement; user indemnifies for misuse.
+   - DSAR pointer to Settings → Account + privacy@.
+
+  Per-user-per-day AI cost cap (`lib/aiCostCap.js`). Ceilings:
+  free $0.50/day, pro $5/day, dev unlimited. Aggregates `cost_usd`
+  from `ai_usage_events` over the trailing 24h with a 60s in-process
+  cache per user. Chained as Express middleware AFTER flexAuth on
+  the AI chat route + the image-gen route. Returns 429 +
+  `AI_COST_CAP` code with friendly tier-aware message ("Resets at
+  midnight UTC. Upgrade to Pro for higher daily limits." for free;
+  "If this is a real workload, email support@thumbframe.com." for
+  pro). Cap-hits log to Railway with user_id + spent + ceiling
+  for telemetry.
+
+  DSAR endpoints (`routes/account.js`):
+   - `POST /api/account/export` — returns full user data (profile,
+     v3_projects, brand_kits, ai_usage_events summary,
+     moderation_events) as a downloadable JSON. Honors GDPR
+     Right to Access + CCPA Right to Know.
+   - `POST /api/account/delete` — cascade-deletes across Stripe
+     (cancels active subscriptions) + Supabase (profiles,
+     v3_projects, brand_kits, ai_usage_events, auth.users via
+     admin). Requires `{ confirm: true }` body. Returns
+     per-step status so the user knows what succeeded.
+
+  Day 56 backend tests: 9 new (cost cap middleware). Full backend
+  suite: **170 passing**. Frontend: 625 passing (no new tests —
+  ThumbFriendPanel split + legal text changes don't need new
+  coverage; existing thumbfriend tests still pass through the
+  Suspense boundary).
+
+  **Manual steps Kaden needs (no code blocker):**
+   1. Cloudflare Email Routing for legal@thumbframe.com +
+      privacy@thumbframe.com (companion to support@/dmca@/trust@
+      from Day 55).
+   2. (Optional) Override the cost ceilings via Railway env:
+      `AI_CAP_FREE_USD` and `AI_CAP_PRO_USD`.
+
 - **Day 55 (2026-05-02) — Customer support + trust & safety +
   content moderation.**
 

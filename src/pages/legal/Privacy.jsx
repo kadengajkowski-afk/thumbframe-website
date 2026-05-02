@@ -13,7 +13,7 @@ export default function Privacy({ setPage }) {
       setPage={setPage}
       eyebrow="Legal"
       title="Privacy Policy"
-      lastUpdated="April 2026"
+      lastUpdated="May 2026"
       palette={{
         core:      '#081408',
         mid:       '#1a3a20',
@@ -62,20 +62,35 @@ export default function Privacy({ setPage }) {
         privacy policy covering how they handle data sent from us.
       </p>
       <ul>
-        <li><strong>Supabase</strong> — authentication and database.</li>
-        <li><strong>Stripe</strong> — payment processing.</li>
-        <li><strong>Resend</strong> — transactional email delivery.</li>
-        <li><strong>OpenAI (DALL-E 3)</strong> — AI image generation.
-          When you use this feature, your prompt is sent to OpenAI's
-          API.</li>
-        <li><strong>Replicate</strong> — face enhancement models.</li>
-        <li><strong>Remove.bg</strong> — background removal.</li>
-        <li><strong>Railway</strong> — backend hosting.</li>
+        <li><strong>Supabase</strong> — authentication, database,
+          and image storage (US-East).</li>
+        <li><strong>Stripe</strong> — payment processing and
+          subscription management.</li>
+        <li><strong>Cloudflare</strong> — DNS, email routing
+          (support@/dmca@/trust@), and edge security.</li>
         <li><strong>Vercel</strong> — frontend hosting and CDN.</li>
+        <li><strong>Railway</strong> — backend / API hosting.</li>
+        <li><strong>Resend</strong> — transactional email delivery.</li>
+        <li><strong>Anthropic (Claude)</strong> — ThumbFriend AI
+          assistant. Prompts and canvas state are sent to Anthropic's
+          API. <strong>Anthropic does not train on data sent via
+          their API</strong> — this is contractually guaranteed.</li>
+        <li><strong>fal.ai</strong> — AI image generation (Flux
+          Schnell, Ideogram 3, Nano Banana). Your prompt + reference
+          image (when supplied) are sent to fal.ai's API. <strong>fal.ai
+          does not train on data sent via their API</strong>.</li>
+        <li><strong>Remove.bg</strong> — HD background removal
+          (Pro tier opt-in).</li>
+        <li><strong>Sightengine / Hive Moderation</strong> — NSFW
+          and CSAM content moderation. We send a hashed version
+          of every uploaded and generated image for compliance
+          screening. No metadata is shared.</li>
       </ul>
       <p>
         We don't sell data. We don't share data with advertisers. We
         only share what's needed for each service to do its job.
+        AI prompts and uploads are <strong>NOT used to train any
+        model</strong> at any provider listed above.
       </p>
 
       <h2>4. Where we store data</h2>
@@ -148,7 +163,14 @@ export default function Privacy({ setPage }) {
       <h2>11. Contact</h2>
       <p>
         For any privacy question, request, or concern, email{' '}
-        <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>.
+        <a href="mailto:privacy@thumbframe.com">privacy@thumbframe.com</a>{' '}
+        or <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>.
+      </p>
+      <p>
+        For data export or deletion requests (GDPR / CCPA), use the
+        Settings → Account page or email{' '}
+        <a href="mailto:privacy@thumbframe.com">privacy@thumbframe.com</a>.
+        We respond within 30 days.
       </p>
     </LegalPageTemplate>
   );

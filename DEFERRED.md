@@ -3,6 +3,99 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 6 Day 56 — held back (date: 2026-05-02)
+
+- **Bundle still warns at 1119 KB raw (over 500 KB threshold).**
+  Day 56 split ThumbFriendPanel off; further wins require
+  splitting Pixi v8's renderer chunks more aggressively (already
+  partially done by Pixi itself), splitting FontPicker /
+  TextProperties off the main bundle, and possibly moving
+  hotkeys.ts behind a lazy boundary. Each is a small
+  refactor; held until a real perf signal lands.
+
+- **AI cost cap aggregates raw cost_usd column.** If a model
+  pricing constant in `lib/aiCost.js` is wrong, the cap inherits
+  the error. Acceptable — pricing constants are reviewed when
+  Anthropic / fal change their rates anyway.
+
+- **Cost cap cache is per-process in-memory.** A user hitting two
+  Railway pods round-robin sees 2× the budget effectively. Same
+  scaling caveat as Day 54's IP velocity store. Move to Redis if
+  Railway scale-out happens.
+
+- **Cost cap log alert ("if >5 users hit cap in 1 hour suggests
+  abuse") is intentionally not wired today.** The log line is
+  there; the alerting consumer (Slack webhook / email digest) is
+  not. v3.1 observability work.
+
+- **DSAR export returns inline JSON, not a streamed ZIP.** A
+  user with hundreds of saved projects could push the JSON past
+  Express's 50MB limit. Today's typical user has <10 projects so
+  the ceiling is fine; switch to a streamed JSONL response if a
+  real user complains.
+
+- **DSAR delete is best-effort step-by-step.** If Stripe cancel
+  succeeds but Supabase profiles delete fails, the user is left
+  in a half-deleted state (no Pro tier, but profile row still
+  exists). The response surfaces the per-step status so the user
+  knows; we don't auto-rollback because Stripe doesn't support
+  reversing a cancellation cleanly. Manual cleanup is required
+  for partial-failure cases — log loudly so support can finish.
+
+- **DSAR delete doesn't purge Stripe customer record.** Cancels
+  active subscriptions but leaves the Stripe customer in place
+  (legitimate accounting reason — historical invoices need the
+  customer reference). Per CCPA / GDPR this is acceptable as long
+  as the customer is locked from future charges (which it is,
+  since the subscription is cancelled). Document for the Privacy
+  Policy if a regulator asks.
+
+- **DSAR delete has no email confirmation flow.** The endpoint
+  requires `{ confirm: true }` in the body, but doesn't email
+  the user a confirmation link before pulling the trigger. A
+  malicious actor with the user's session token can wipe the
+  account without a second factor. Acceptable for v3 launch (the
+  attack vector requires session compromise, which is bigger
+  problem than account deletion); add an email-link
+  double-confirm in v3.1.
+
+- **CookieBanner exists but only on the v1 marketing pages
+  (`tf-marketing-shell`).** The v3 `/editor` route doesn't show
+  it. Acceptable today — the editor only sets one functional
+  cookie (Supabase auth, which is essential and exempt from
+  consent under EU law's "strictly necessary" carve-out). If we
+  ever add tracking analytics inside the editor, the banner
+  needs to land there too.
+
+- **ThumbFriendPanel chunk pulls in Anthropic SDK dependencies
+  via aiClient.** First-open of the panel triggers a 17.7 KB
+  gzip download. On a slow network the panel might briefly show
+  the empty Suspense fallback aside before content lands. Not a
+  regression (a panel that takes 200ms to mount on a 3G connection
+  is acceptable), but the Suspense fallback could carry a tiny
+  spinner if anyone complains.
+
+- **Cost cap doesn't track failed calls.** A user whose chat
+  request errors mid-stream still consumed Anthropic tokens that
+  we logged via logUsage. We bill those toward the cap correctly.
+  But if the request fails BEFORE we log usage (network blip
+  client-side, 503 from Anthropic), no cost is recorded. Slightly
+  friendlier to users than strict "every attempt costs" but
+  means a determined abuser could DoS Anthropic with mid-stream
+  aborts and pay nothing toward their cap.
+
+- **Cost cap test for free users assumes the env override doesn't
+  raise the ceiling.** Tests run with default `FREE_DAILY_USD_CAP=
+  0.5`. If `AI_CAP_FREE_USD=10` is in dev env, the "$0.60 should
+  block" test fails. Acceptable — env overrides are a dev tool,
+  not a test surface.
+
+- **Privacy Policy mentions OpenAI removed but doesn't surface a
+  changelog of when sub-processors changed.** Per GDPR, material
+  changes should notify users in advance. The "Last updated"
+  date suffices for most jurisdictions; a sub-processor changelog
+  page is the polish ask. Held until first real legal review.
+
 ## Cycle 6 Day 55 — held back (date: 2026-05-02)
 
 - **CSAM detection has a stub PhotoDNA path.** Real PhotoDNA Cloud
