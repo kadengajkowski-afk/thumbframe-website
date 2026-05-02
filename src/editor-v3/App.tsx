@@ -49,19 +49,39 @@ import { supabase } from "@/lib/supabase";
 import { startAutoSave } from "@/lib/autoSave";
 import { resolveUserTier } from "@/lib/userTier";
 import { useNudgeWatcher } from "@/editor/hooks/useNudgeWatcher";
+import { MobileGate, useIsMobileViewport } from "@/editor/MobileGate";
+import { PastDueBanner } from "@/editor/panels/PastDueBanner";
 
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
 export function App() {
   const hasEntered = useUiStore((s) => s.hasEntered);
   const dragActive = useDropTarget();
+  // Day 54 — gate the editor on mobile viewports BEFORE the Pixi
+  // boot. Returning the gate short-circuits installHotkeys + auth
+  // resolution + Compositor mount; mobile users see a "use desktop"
+  // card instead of a half-broken canvas.
+  const isMobile = useIsMobileViewport();
 
-  useEffect(() => installHotkeys(), []);
+  useEffect(() => {
+    if (isMobile) return;
+    return installHotkeys();
+  }, [isMobile]);
 
   // Day 44 — ThumbFriend Nudge watcher. Fires Haiku-backed nudge
   // requests after 8s of layer idle. Costs only when signed-in users
   // are actively editing; cheap (~$0.001/call, 20/day free cap).
+  // Skipped on mobile — gate short-circuits the editor mount.
   useNudgeWatcher();
+
+  if (isMobile) {
+    return (
+      <div style={shell}>
+        <Nebula />
+        <MobileGate />
+      </div>
+    );
+  }
 
   // Day 36 fix — auto-load-most-recent-project on boot was removed.
   // Refresh now ALWAYS lands on the empty state (Figma / Photoshop
@@ -146,6 +166,7 @@ function EditorShell() {
   const thumbfriendOpen = useUiStore((s) => s.thumbfriendPanelOpen);
   return (
     <div style={editorGrid}>
+      <PastDueBanner />
       <TopBar />
       <div style={editorRow}>
         <ToolPalette />
@@ -219,7 +240,10 @@ const editorGrid: React.CSSProperties = {
   width: "100%",
   height: "100%",
   display: "grid",
-  gridTemplateRows: "48px 1fr 200px",
+  // Day 54: extra `auto` row at the top for the past-due banner.
+  // Row collapses to 0 when PastDueBanner returns null so healthy
+  // subscriptions get the prior 3-row layout unchanged.
+  gridTemplateRows: "auto 48px 1fr 200px",
 };
 
 const editorRow: React.CSSProperties = {
