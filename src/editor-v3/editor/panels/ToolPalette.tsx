@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { TOOLS, type Tool } from "@/editor/tools/tools";
-import { ToolIcon } from "./ToolPalette.icons";
+import { ToolIcon, UploadIcon } from "./ToolPalette.icons";
+import { runCommand } from "@/lib/commands";
 import "./tool-palette.css";
 
 const DROP_SESSION_KEY = "thumbframe:tool-drop:played";
@@ -11,6 +12,13 @@ const DROP_SESSION_KEY = "thumbframe:tool-drop:played";
  * or V/H/R shortcut (wired in hotkeys.ts). On first mount per tab,
  * tool buttons sail-drop in from above — aligns with the tail of
  * the ship-alive left-rail reveal.
+ *
+ * Upload-image action ships at the tail end as a non-tool button —
+ * click opens the file picker (same path as Cmd+I + the Cmd+K
+ * "Upload image…" command). Lives next to the tools instead of as
+ * its own surface so users who don't know about drag-drop or the
+ * command palette have a discoverable button right where they're
+ * already looking.
  */
 export function ToolPalette() {
   const activeTool = useUiStore((s) => s.activeTool);
@@ -42,7 +50,27 @@ export function ToolPalette() {
           onClick={() => setTool(tool.id)}
         />
       ))}
+      <UploadActionButton index={TOOLS.length} />
     </aside>
+  );
+}
+
+function UploadActionButton({ index }: { index: number }) {
+  return (
+    <button
+      type="button"
+      className="tool-button"
+      onClick={() => runCommand("file.upload")}
+      aria-label="Upload image (Cmd+I)"
+      data-testid="tool-palette-upload"
+      style={{ ["--tool-index" as string]: index }}
+    >
+      <UploadIcon />
+      <span className="tool-button__tooltip" role="tooltip">
+        Upload image
+        <span className="tool-button__tooltip-kbd">⌘I</span>
+      </span>
+    </button>
   );
 }
 

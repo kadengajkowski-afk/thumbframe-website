@@ -40,25 +40,6 @@ export async function listProjects(): Promise<ProjectRow[]> {
   return (data ?? []) as ProjectRow[];
 }
 
-/** Day 52 — count projects for a given user without pulling rows.
- * Used by the existing-user-migration path to short-circuit the
- * onboarding flow ("if you've already saved a project, you're not
- * new"). Cheap HEAD count, doesn't pay for the row payload. */
-export async function countProjectsForUser(userId: string): Promise<number> {
-  if (!supabase) return 0;
-  const { count, error } = await supabase
-    .from("v3_projects")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
-  if (error) {
-    // Silent — migration is best-effort. If the count fails the
-    // user falls into onboarding which is a recoverable annoyance,
-    // not a data-loss event.
-    return 0;
-  }
-  return count ?? 0;
-}
-
 /** Open a project: fetch the row, deserialize the doc, swap docStore.
  * Sets currentProjectId + projectName so subsequent auto-saves write
  * back to this row instead of creating a new one. */

@@ -150,7 +150,7 @@ const COMMANDS: Command[] = [
   { id: "view.400", label: "Zoom 400%", section: "View", run: () => getCurrentCompositor()?.setZoomPercent(400, true) },
 
   // File
-  { id: "file.upload", label: "Upload image…", section: "File", aliases: ["open", "pick"], run: openFilePicker },
+  { id: "file.upload", label: "Upload image…", section: "File", hotkey: "Cmd+I", aliases: ["open", "pick", "image", "add image", "import"], run: openFilePicker },
 
   // Canvas
   { id: "canvas.deselect", label: "Deselect all", section: "Canvas", run: () => useUiStore.getState().setSelectedLayerIds([]) },

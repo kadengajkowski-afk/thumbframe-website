@@ -9,7 +9,9 @@ Cycle 6.
 ## v0.5 — Cycle 5 (2026-04-30)
 
 End of Cycle 5. Editor is now feature-complete for soft launch
-pending Cycle 6 launch-prep work (onboarding, mobile, analytics).
+pending Cycle 6 launch-prep work (mobile, analytics; the Day 51-52
+onboarding scaffold + implementation was reverted on 2026-05-01
+and deferred to a dedicated phase).
 Tests: 603 frontend + 88 backend. Bundle: 336 KB gzip main.
 
 ### Added — Brand Kit

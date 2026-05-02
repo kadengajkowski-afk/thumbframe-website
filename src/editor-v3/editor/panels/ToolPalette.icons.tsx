@@ -13,6 +13,36 @@ export function ToolIcon({ id }: { id: ToolId }) {
   return <RectIcon />;
 }
 
+/** Upload-image action icon. Not a tool — shipped alongside tools in
+ * the left rail as a one-shot action that opens the file picker. */
+export function UploadIcon() {
+  return (
+    <svg
+      width={ICON_SIZE}
+      height={ICON_SIZE}
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 14 V16 Q4 17 5 17 H15 Q16 17 16 16 V14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10 13 V4 M6.5 7.5 L10 4 L13.5 7.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function SelectIcon() {
   return (
     <svg

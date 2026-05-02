@@ -168,14 +168,6 @@ type UiState = {
   thumbfriendPanelOpen: boolean;
   setThumbfriendPanelOpen: (v: boolean) => void;
 
-  /** Day 52: one-shot tab override. When set to a non-null value,
-   * ThumbFriendPanel reads it on mount/open, switches to that tab,
-   * and the consumer (e.g. onboarding's "Yes let's build" CTA)
-   * clears it. Used by Step D to land the user directly on the
-   * Partner tab with a pre-filled message. */
-  thumbfriendInitialTab: "ask" | "nudge" | "partner" | null;
-  setThumbfriendInitialTab: (tab: "ask" | "nudge" | "partner" | null) => void;
-
   /** Day 40: preview-before-apply mode. When true, AI tool calls
    * queue on the assistant bubble and only run when the user clicks
    * Accept. Off by default — most edits should land instantly. */
@@ -406,9 +398,6 @@ export const useUiStore = create<UiState>()((set) => ({
 
   thumbfriendPanelOpen: false,
   setThumbfriendPanelOpen: (thumbfriendPanelOpen) => set({ thumbfriendPanelOpen }),
-
-  thumbfriendInitialTab: null,
-  setThumbfriendInitialTab: (thumbfriendInitialTab) => set({ thumbfriendInitialTab }),
 
   thumbfriendPreviewMode: false,
   setThumbfriendPreviewMode: (thumbfriendPreviewMode) => set({ thumbfriendPreviewMode }),

@@ -129,6 +129,15 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
+  // Cmd+I — open file picker for image upload. Mirrors the toolbar
+  // upload button + Cmd+K "Upload image…" command. Same code path
+  // as drag-drop and clipboard paste downstream of file.upload.
+  if (meta && !e.shiftKey && e.key.toLowerCase() === "i") {
+    e.preventDefault();
+    runCommand("file.upload");
+    return;
+  }
+
   // Zoom shortcuts.
   if (meta && (e.key === "=" || e.key === "+")) {
     e.preventDefault();
