@@ -75,6 +75,93 @@ export async function loadImageFromFile(file: File): Promise<ImageBitmap> {
   }
 }
 
+/** Day 55 — server-side sanitization wrapper.
+ *
+ * POSTs the file as a base64 dataURL to /api/upload/image. The server
+ * Sharp-re-encodes (strips EXIF / GPS / color profiles, downscales to
+ * ≤4096×4096), runs NSFW + CSAM moderation, and returns a clean
+ * dataURL we round-trip back into createImageBitmap so the rest of
+ * the editor pipeline is unchanged.
+ *
+ * Best-effort: if the server is unreachable OR returns a non-block
+ * error, fall back to the local decode path. The server WILL block
+ * with HTTP 451 on moderation hits + 415 on unsupported formats —
+ * those errors propagate so the caller can surface a toast.
+ */
+export class ContentBlockedError extends Error {
+  readonly code = "content-blocked" as const;
+  constructor(public readonly reason: string) {
+    super(`Content blocked: ${reason}`);
+  }
+}
+
+export async function sanitizeFileViaApi(
+  file: File,
+  apiBase: string,
+  authToken: string | null,
+): Promise<ImageBitmap> {
+  if (!isAcceptedFormat(file)) {
+    throw new UnsupportedFormatError(file.type);
+  }
+  if (file.size > MAX_FILE_BYTES) {
+    throw new FileTooLargeError(file.size);
+  }
+  const dataUrl = await fileToDataUrl(file);
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+  let res: Response;
+  try {
+    res = await fetch(apiBase.replace(/\/$/, "") + "/api/upload/image", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ dataUrl }),
+    });
+  } catch (cause) {
+    // Network failure — fall back to local decode rather than
+    // blocking the user.
+    console.warn("[upload] sanitize API unreachable, falling back:", cause);
+    return loadImageFromFile(file);
+  }
+  if (res.status === 451) {
+    const body = await res.json().catch(() => ({} as { code?: string }));
+    throw new ContentBlockedError(body.code || "FLAGGED");
+  }
+  if (res.status === 415) {
+    throw new UnsupportedFormatError(file.type);
+  }
+  if (!res.ok) {
+    // Non-block error — log + fall back. Better to ship the local
+    // decode than to dead-end on a transient server problem.
+    console.warn("[upload] sanitize API returned", res.status, "— falling back to local decode");
+    return loadImageFromFile(file);
+  }
+  const body = (await res.json()) as { url: string };
+  if (!body.url) {
+    return loadImageFromFile(file);
+  }
+  // Convert the dataURL back to a Blob → ImageBitmap.
+  const blob = await dataUrlToBlob(body.url);
+  try {
+    return await createImageBitmap(blob);
+  } catch (cause) {
+    throw new DecodeFailedError(cause);
+  }
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error || new Error("FileReader failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const res = await fetch(dataUrl);
+  return await res.blob();
+}
+
 function isAcceptedFormat(file: File): boolean {
   const mime = (file.type || "").toLowerCase();
   if (mime && ACCEPTED_MIME.has(mime)) return true;

@@ -174,6 +174,12 @@ type UiState = {
   shortcutsPanelOpen: boolean;
   setShortcutsPanelOpen: (v: boolean) => void;
 
+  /** Day 55: Help & support panel (how-to / shortcuts / get help /
+   * feedback form / legal links). Cmd+K → "Help" or the ? icon in
+   * the TopBar. Lazy-loaded. */
+  helpPanelOpen: boolean;
+  setHelpPanelOpen: (v: boolean) => void;
+
   /** Day 39: ThumbFriend chat panel visibility. Cmd+/ toggles. Lives
    * in the right rail and is mutually exclusive with PreviewRack +
    * ContextPanel — only one right-side panel at a time. */
@@ -413,6 +419,9 @@ export const useUiStore = create<UiState>()((set) => ({
 
   shortcutsPanelOpen: false,
   setShortcutsPanelOpen: (shortcutsPanelOpen) => set({ shortcutsPanelOpen }),
+
+  helpPanelOpen: false,
+  setHelpPanelOpen: (helpPanelOpen) => set({ helpPanelOpen }),
 
   thumbfriendPanelOpen: false,
   setThumbfriendPanelOpen: (thumbfriendPanelOpen) => set({ thumbfriendPanelOpen }),

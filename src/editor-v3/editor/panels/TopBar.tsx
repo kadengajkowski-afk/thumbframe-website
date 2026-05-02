@@ -45,6 +45,17 @@ export function TopBar() {
       <div style={rightGroup}>
         <AiStatusBadge />
         <PinnedKitBadge />
+        <Tooltip label="Help & support" position="below">
+          <button
+            type="button"
+            style={helpBtn}
+            onClick={() => useUiStore.getState().setHelpPanelOpen(true)}
+            aria-label="Open help and support"
+            data-testid="topbar-help"
+          >
+            ?
+          </button>
+        </Tooltip>
         {user ? (
           <UserBadge email={user.email} avatarUrl={user.avatarUrl} />
         ) : (
@@ -347,4 +358,16 @@ const aiUsage: CSSProperties = {
   fontSize: 10, color: "var(--text-secondary)",
   padding: "2px 6px", border: "1px solid var(--border-ghost)",
   borderRadius: 10, cursor: "help", letterSpacing: "0.04em",
+};
+// Day 55 — Help & support trigger. Sits between AI usage badge and
+// the Sign-in / avatar button. Compact 24px circular ?.
+const helpBtn: CSSProperties = {
+  width: 24, height: 24, padding: 0,
+  display: "inline-flex", alignItems: "center", justifyContent: "center",
+  background: "transparent",
+  border: "1px solid var(--border-ghost)",
+  borderRadius: "50%",
+  color: "var(--text-secondary)",
+  fontSize: 13, fontWeight: 600, cursor: "pointer",
+  fontFamily: "inherit",
 };

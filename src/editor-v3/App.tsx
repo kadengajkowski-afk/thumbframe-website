@@ -43,6 +43,9 @@ const UpgradePanel = lazy(() =>
 const ShortcutsPanel = lazy(() =>
   import("@/editor/panels/ShortcutsPanel").then((m) => ({ default: m.ShortcutsPanel })),
 );
+const HelpPanel = lazy(() =>
+  import("@/editor/panels/HelpPanel").then((m) => ({ default: m.HelpPanel })),
+);
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 import { supabase } from "@/lib/supabase";
@@ -152,6 +155,7 @@ export function App() {
         <ImageGenPanel />
         <UpgradePanel />
         <ShortcutsPanel />
+        <HelpPanel />
       </Suspense>
       <ToastHost />
     </div>

@@ -23,6 +23,7 @@ const Support   = lazy(() => import('./pages/Support'));
 const Privacy   = lazy(() => import('./pages/legal/Privacy'));
 const Terms     = lazy(() => import('./pages/legal/Terms'));
 const Refund    = lazy(() => import('./pages/legal/Refund'));
+const Dmca      = lazy(() => import('./pages/legal/Dmca'));
 const Changelog = lazy(() => import('./pages/legal/Changelog'));
 const NotFound  = lazy(() => import('./pages/NotFound'));
 const Login     = lazy(() => import('./pages/Login'));
@@ -426,6 +427,7 @@ function getInitialPage() {
   if (path === '/privacy') return 'privacy';
   if (path === '/terms') return 'terms';
   if (path === '/refund' || path === '/refunds') return 'refund';
+  if (path === '/dmca') return 'dmca';
   if (path === '/changelog') return 'changelog';
   return path === '/' ? 'home' : 'notfound';
 }
@@ -512,6 +514,7 @@ export default function App() {
     privacy:     <Privacy setPage={setPage} />,
     terms:       <Terms setPage={setPage} />,
     refund:      <Refund setPage={setPage} />,
+    dmca:        <Dmca setPage={setPage} />,
     changelog:   <Changelog setPage={setPage} />,
     notfound:    <NotFound setPage={setPage} />,
   };

@@ -31,6 +31,7 @@ const LEGAL_LINKS = [
   { label: 'Terms',          page: 'terms'   },
   { label: 'Privacy',        page: 'privacy' },
   { label: 'Refund policy',  page: 'refund'  },
+  { label: 'DMCA',           page: 'dmca'    },
   { label: 'Support',        page: 'support' },
 ];
 
