@@ -3,6 +3,7 @@ import { useUiStore, type SaveStatus } from "@/state/uiStore";
 import { supabase } from "@/lib/supabase";
 import { fetchTodayAiUsage, type AiUsage } from "@/lib/aiUsage";
 import { FileMenu } from "./FileMenu";
+import { Tooltip } from "./Tooltip";
 
 /** Day 18 + 20 — TopBar. Logo / project name / Ship It on the right.
  * Day 20 adds a save-status indicator + sign-in button (or avatar
@@ -47,25 +48,29 @@ export function TopBar() {
         {user ? (
           <UserBadge email={user.email} avatarUrl={user.avatarUrl} />
         ) : (
+          <Tooltip label="Sign in to sync your work" position="below">
+            <button
+              type="button"
+              style={signInBtn}
+              onClick={() => openAuth(true)}
+              aria-label="Sign in to sync"
+              data-testid="topbar-signin"
+            >
+              Sign in to sync
+            </button>
+          </Tooltip>
+        )}
+        <Tooltip label="Ship it" shortcut="⌘E" position="below">
           <button
             type="button"
-            style={signInBtn}
-            onClick={() => openAuth(true)}
-            title="Sign in to sync your work across devices"
-            data-testid="topbar-signin"
+            style={shipItBtn}
+            onClick={() => openExport(true)}
+            aria-label="Ship it (Cmd+E)"
+            data-testid="topbar-ship"
           >
-            Sign in to sync
+            Ship it
           </button>
-        )}
-        <button
-          type="button"
-          style={shipItBtn}
-          title="Export the canvas (Cmd+E)"
-          onClick={() => openExport(true)}
-          data-testid="topbar-ship"
-        >
-          Ship it
-        </button>
+        </Tooltip>
       </div>
     </header>
   );
@@ -108,19 +113,23 @@ function UserBadge(props: { email: string | null; avatarUrl: string | null }) {
   const initials = (props.email ?? "?").charAt(0).toUpperCase();
   return (
     <div style={userBadgeWrap}>
-      <button
-        type="button"
-        style={userBadgeBtn}
-        onClick={() => setOpen((o) => !o)}
-        title={props.email ?? ""}
-        data-testid="topbar-user"
-      >
-        {props.avatarUrl ? (
-          <img src={props.avatarUrl} alt="" style={avatarImg} />
-        ) : (
-          <span style={avatarFallback}>{initials}</span>
-        )}
-      </button>
+      <Tooltip label={props.email ?? "Account"} position="below">
+        <button
+          type="button"
+          style={userBadgeBtn}
+          onClick={() => setOpen((o) => !o)}
+          aria-label={`Account menu (${props.email ?? "signed in"})`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          data-testid="topbar-user"
+        >
+          {props.avatarUrl ? (
+            <img src={props.avatarUrl} alt="" style={avatarImg} />
+          ) : (
+            <span style={avatarFallback}>{initials}</span>
+          )}
+        </button>
+      </Tooltip>
       {open && (
         <div style={userMenu} onMouseLeave={() => setOpen(false)}>
           <div style={userMenuEmail}>{props.email}</div>
@@ -206,20 +215,22 @@ function PinnedKitBadge() {
   const openKit = useUiStore((s) => s.setBrandKitPanelOpen);
   if (!pinned) return null;
   return (
-    <button
-      type="button"
-      style={pinnedBadge}
-      onClick={() => openKit(true)}
-      title={`Brand Kit: ${pinned.channelTitle} — click to manage`}
-      data-testid="topbar-pinned-kit"
-    >
-      {pinned.avatarUrl ? (
-        <img src={pinned.avatarUrl} alt="" style={pinnedAvatar} />
-      ) : (
-        <span style={pinnedAvatarFallback}>{pinned.channelTitle.charAt(0).toUpperCase()}</span>
-      )}
-      <span style={pinnedLabel}>{pinned.channelTitle}</span>
-    </button>
+    <Tooltip label={`Brand Kit: ${pinned.channelTitle}`} shortcut="⌘B" position="below">
+      <button
+        type="button"
+        style={pinnedBadge}
+        onClick={() => openKit(true)}
+        aria-label={`Open Brand Kit for ${pinned.channelTitle}`}
+        data-testid="topbar-pinned-kit"
+      >
+        {pinned.avatarUrl ? (
+          <img src={pinned.avatarUrl} alt="" style={pinnedAvatar} />
+        ) : (
+          <span style={pinnedAvatarFallback}>{pinned.channelTitle.charAt(0).toUpperCase()}</span>
+        )}
+        <span style={pinnedLabel}>{pinned.channelTitle}</span>
+      </button>
+    </Tooltip>
   );
 }
 

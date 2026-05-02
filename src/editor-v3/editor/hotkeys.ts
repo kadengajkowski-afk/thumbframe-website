@@ -138,6 +138,16 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
+  // Day 53 — Cmd+? opens the keyboard-shortcuts reference. Most
+  // browsers report "?" on Shift+/, so this fires on either Cmd+?
+  // or Cmd+Shift+/ — covers both common keyboard layouts.
+  if (meta && (e.key === "?" || (e.shiftKey && e.key === "/"))) {
+    e.preventDefault();
+    runCommand("help.shortcuts");
+    return;
+  }
+  if (ui.shortcutsPanelOpen) return;
+
   // Zoom shortcuts.
   if (meta && (e.key === "=" || e.key === "+")) {
     e.preventDefault();

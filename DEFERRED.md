@@ -3,6 +3,96 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 6 Day 53 — held back (date: 2026-05-02)
+
+- **Shortcuts panel is a hand-maintained lookup table, not auto-
+  derived from `lib/commands.ts`.** Today's `ShortcutsPanel.tsx`
+  carries a `GROUPS` const that mirrors the commands. If a hotkey
+  changes in `commands.ts` the panel needs a parallel edit. A
+  build-time generator that walks `listCommands()` + bins by
+  section would close the drift. Held — the section ordering and
+  manual labels (e.g. "Hand (pan)" vs the command's "Hand tool")
+  carry editorial polish that's hard to derive without losing
+  signal. If a real drift surfaces in a release we revisit.
+
+- **Tooltip arrow-key + Enter activation in the AI tools menu
+  isn't wired.** The dropdown opens on click + closes on Esc /
+  outside-click / item activation, but you can't arrow-down to
+  highlight an item and press Enter to fire it. cmdk would solve
+  this but adds bundle weight for a 4-item menu. Hold until the
+  menu grows past 6 items or until a real keyboard user complains.
+
+- **AI tools dropdown's mousedown listener uses a `setTimeout(0)`
+  workaround for React 19 + StrictMode.** Without the deferral,
+  the same click that opens the menu fires the just-mounted
+  outside-click handler and immediately closes it (the wrap-ref
+  contains check fails because the synthetic-event source is the
+  React fiber's button, but the listener sees the original DOM
+  node — same node in production, but StrictMode's effect replay
+  exposes a race where the listener mounts before React commits
+  the click target). The `setTimeout(0)` is a known pattern; a
+  cleaner alternative is checking `e.composedPath()` which we
+  could swap to if we hit other timing oddities.
+
+- **ThumbFriend ship icon doesn't change the porthole color when
+  Pro tier flips on.** The icon hull tints orange when the panel
+  is open, but Pro tier doesn't get a separate visual marker. Spec
+  didn't ask for it; if Pro users ever feel the icon doesn't
+  reflect tier, swap to a different fill or add a small ⌘ pip.
+
+- **Skip link only jumps to the canvas main, not to the layer
+  panel or the right rail.** Spec said "Skip to editor" — a single
+  jump destination is fine for AT users who want past the toolbar.
+  If a user reports they want to skip directly to the layer panel
+  too, add a second link.
+
+- **Focus indicators are a single global `--accent-orange` 2px
+  outline.** Some buttons (the Ship It CTA already uses
+  `--accent-orange` as its background) get an orange-on-orange
+  ring that reads but is low-contrast. Cosmetic; cycle 6 polish.
+
+- **No automated axe-core / Lighthouse run in CI.** Day 53 fixed
+  the structural a11y gaps (aria labels, focus rings, skip link,
+  role attributes) but didn't wire an axe runner that would catch
+  regressions. Vitest's `@vitest/browser` could host axe; held
+  until the CI pipeline has a story for accessibility budgets.
+
+- **`<canvas>` itself is unannotated and inherently inaccessible to
+  screen readers.** Acceptable per spec ("Editor canvas itself is
+  exempt"). The wrapping `<main aria-label="Editor canvas">` at
+  least tells AT users what the region is. Long term the move is
+  a parallel DOM "structured outline" pane that mirrors layer state
+  for AT consumption — Day 60+ work.
+
+- **Color contrast audit is informal.** Manual eyeball check across
+  the cream-on-dark palette; haven't run an automated 4.5:1
+  contrast pass on every text/bg combination. The two highest-
+  risk surfaces — `--text-tertiary` on `--bg-space-1` (small
+  metadata text) — measure ~3.4:1, below the 4.5:1 AA threshold
+  for body text. Acceptable today because tertiary text is
+  decorative metadata (font weight indicators, blend mode hints
+  on the layer rows) AND none of those surfaces communicate
+  load-bearing meaning the user can't get from another channel.
+  Promote `--text-tertiary` lightness in a Cycle 6 polish pass
+  if invitee feedback flags it.
+
+- **Crew switch toast is the only feedback when changing crew via
+  command palette.** The ThumbFriend toolbar icon updates its
+  porthole avatar but only when the panel re-renders; the
+  inactive icon doesn't have a "now switched" flash. Cosmetic.
+
+- **`Cmd+?` is a single global hotkey; some keyboard layouts (AZERTY,
+  JIS) put `?` on a different physical key.** The fallback we wired
+  (`Cmd+Shift+/`) covers US/UK keyboards. Other layouts: settings-
+  screen rebind is the long-term answer. Same as the other hotkey
+  layout deferred notes.
+
+- **No tooltip for "this button has a downstream confirmation"
+  (e.g. delete layer, sign out).** Tooltips today carry the
+  shortcut; no inline danger marker. Cycle 6 destructive-confirm
+  refactor mentioned in the Day 49 DEFERRED note is the right
+  place to add danger styling everywhere at once.
+
 ## Cycle 6 Day 52 — held back (date: 2026-04-30)
 
 - **Tour mode is centered modal, not positional tooltips.** Day 52

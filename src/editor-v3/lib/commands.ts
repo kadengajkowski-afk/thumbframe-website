@@ -4,6 +4,7 @@ import { useUiStore } from "@/state/uiStore";
 import { getCurrentCompositor } from "@/editor/compositorRef";
 import { nanoid } from "nanoid";
 import { hexToPixi } from "@/lib/color";
+import { CREW } from "@/lib/crew";
 
 /**
  * Command registry. Every user-invokable action the editor exposes
@@ -309,6 +310,43 @@ const COMMANDS: Command[] = [
     run: () => useUiStore.getState().setUpgradePanelOpen(true),
   },
 
+  // Day 53 — Keyboard shortcuts reference modal.
+  {
+    id: "help.shortcuts",
+    label: "Keyboard shortcuts",
+    section: "View",
+    hotkey: "Cmd+?",
+    aliases: ["help", "shortcuts", "keys", "hotkeys", "kbd"],
+    run: () => useUiStore.getState().setShortcutsPanelOpen(true),
+  },
+
+  // Day 53 — bg-remove "focus" command. The actual remove flow lives
+  // in the ContextPanel's BgRemoveSection (only rendered when an
+  // image layer is selected). The command opens nothing on its own
+  // but routes through here so the AI tools menu has a single
+  // command-id contract instead of inlining the gate logic.
+  {
+    id: "ai.bg-remove-focus",
+    label: "Background remove (image layers)",
+    section: "View",
+    aliases: ["bg", "background", "remove", "cutout", "matte"],
+    run: () => {
+      const ui = useUiStore.getState();
+      const ids = ui.selectedLayerIds;
+      if (ids.length === 0) {
+        void import("@/toasts/toastStore").then((m) =>
+          m.toast("Select an image layer first"),
+        );
+        return;
+      }
+      // Surface the ContextPanel's BG section by ensuring the right
+      // rail isn't on ThumbFriend / PreviewRack — the section auto-
+      // shows for image selections.
+      ui.setThumbfriendPanelOpen(false);
+      ui.setPreviewRackOpen(false);
+    },
+  },
+
   // Day 39 — ThumbFriend chat panel.
   {
     id: "view.thumbfriend",
@@ -321,6 +359,23 @@ const COMMANDS: Command[] = [
       ui.setThumbfriendPanelOpen(!ui.thumbfriendPanelOpen);
     },
   },
+
+  // Day 53 — Crew switcher entries. One palette command per crew so
+  // the user can switch personalities without opening the panel +
+  // dropdown. Source-of-truth: lib/crew.ts. The {{crew-id}} command
+  // ids are stable so muscle memory survives crew renames.
+  ...CREW.map((crew) => ({
+    id: `crew.switch.${crew.id}`,
+    label: `Switch to ${crew.name}`,
+    section: "View" as CommandSection,
+    aliases: ["crew", "switch crew", crew.id, crew.role.toLowerCase()],
+    run: () => {
+      useUiStore.getState().setActiveCrewMember(crew.id);
+      void import("@/toasts/toastStore").then((m) =>
+        m.toast(`Now on watch: ${crew.name}`),
+      );
+    },
+  })),
 
   // Day 34 dev — smoke-test the Railway AI proxy end-to-end. The
   // bundled aiClient can't be reached via console `import()` since
