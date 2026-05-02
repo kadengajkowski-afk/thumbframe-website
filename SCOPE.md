@@ -1,13 +1,58 @@
-# SCOPE.md — Cycle 5 closed; Cycle 6 next
+# SCOPE.md — Cycle 5 closed; Cycle 6 in progress
 
 Cycles 1, 2, 3 closed on 2026-04-28. Cycles 4 and 5 closed on
 2026-04-30 (Day 50). Cycle 6 (Days 51-60) opened with Day 51-52
 onboarding scaffold + implementation; both were ripped out on
 2026-05-01 and deferred to a dedicated phase (decision: launch
 without an onboarding flow — "Upload to set sail" stays the
-whole first-run surface). Cycle 6 now skips ahead to Day 53
-(Brand Kit ↔ Partner). See `docs/soft-launch.md` for what
-ships in Cycle 6.
+whole first-run surface). Day 53 (2026-05-02) shipped toolbar
+discoverability + tooltips + keyboard shortcuts reference + WCAG
+pass. See `docs/soft-launch.md` for the rest of Cycle 6.
+
+## Cycle 6 — in progress (Days 51-60, 2026-05-01 → )
+
+- **Day 53 (2026-05-02) — Toolbar polish + a11y pass.** Reorganized
+  left toolbar into two groups (drawing tools + AI features) split
+  by a divider. Drawing-tools row carries Select/Hand/Rect/Ellipse/
+  Text/Upload. AI features row carries the new dedicated ThumbFriend
+  ship icon (animated bobbing SVG with a porthole that frames the
+  active crew avatar; pauses + tints --accent-orange when the panel
+  is open) and an "AI tools" dropdown that surfaces Generate Image
+  (Cmd+G) / Brand Kit (Cmd+B) / Preview Rack (Cmd+Shift+P) /
+  Background Remove (gated on image-layer selection).
+
+  New shared `<Tooltip>` primitive (`editor/panels/Tooltip.tsx`):
+  400ms hover delay, surfaces on both `:hover` AND `:focus` so
+  keyboard users see the same hints, position right (toolbar) or
+  below (top bar). Wires `aria-describedby` so screen readers
+  announce the tooltip text after the trigger's own label. Replaces
+  the old CSS-only tool-palette tooltip rules.
+
+  Keyboard-shortcuts reference modal (`ShortcutsPanel.tsx`,
+  lazy-loaded). Trigger: Cmd+? OR Cmd+Shift+/. Six sections
+  (Tools / AI / Editing / File / View / Modifiers) rendered as
+  grouped definition lists with `<kbd>` chips. New
+  `uiStore.shortcutsPanelOpen` flag + `help.shortcuts` command.
+  Reachable via Cmd+K palette as well.
+
+  Command palette expanded: 6 new `crew.switch.{id}` commands
+  (one per crew member; switches `activeCrewMember` + emits a
+  toast). New `ai.bg-remove-focus` entry the AI tools dropdown
+  routes through. `file.upload` confirmed at Cmd+I.
+
+  WCAG pass: skip-to-editor link (`<a class="tf-skip-link">`)
+  hidden until Tab focus, lands first in the tab order and jumps
+  focus to the canvas main (now `<main id="tf-canvas" tabIndex={-1}
+  aria-label="Editor canvas">`). Global `:focus-visible` outline
+  switched from `--accent-cream` (low contrast against cream text)
+  to `--accent-orange` for stronger keyboard-focus visibility.
+  ToolPalette is `role="region"` with aria-label; every toolbar
+  button carries an `aria-label` including the shortcut. Top-bar
+  Sign-in / Ship-it / pinned-kit / user-avatar buttons all wired
+  through the new Tooltip + carry aria-labels (no more raw
+  `title=""` attributes).
+
+  11 new frontend tests; full suite 614 frontend / 88 backend.
 
 ## Cycle 5 — closed (Days 31-50, 2026-04-29 → 2026-04-30)
 

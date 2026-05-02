@@ -57,37 +57,31 @@
   border-radius: 1px;
 }
 
-/* Tooltip. CSS-only 600ms hover delay — no JS timer. */
-.tool-button__tooltip {
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
-  background: var(--bg-space-2);
-  color: var(--text-primary);
-  padding: 4px 10px;
-  border-radius: 5px;
-  border: 1px solid var(--border-ghost);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  z-index: 10;
-  transition: opacity var(--motion-fast) var(--ease-standard);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+/* Day 53 — focus ring. Keyboard tab through the toolbar lands here.
+ * Inset so it doesn't clip against the divider / right border. */
+.tool-button:focus-visible {
+  outline: 2px solid var(--accent-orange);
+  outline-offset: -2px;
+  border-radius: 6px;
 }
 
-.tool-button__tooltip-kbd {
-  margin-left: 8px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: 11px;
+/* Day 53 — divider between drawing tools and AI features group. */
+.tool-palette__divider {
+  width: 24px;
+  height: 1px;
+  background: var(--border-ghost);
+  margin: 8px 0;
+  display: block;
 }
 
-.tool-button:hover .tool-button__tooltip {
-  opacity: 1;
-  transition-delay: 600ms;
+/* Day 53 — AI features group container. Same column flex but no extra
+ * spacing — the buttons inside reuse .tool-button styling. */
+.tool-palette__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
 }
 
 /* Sail-drop: tools fall in from above. Start timed to the tail of

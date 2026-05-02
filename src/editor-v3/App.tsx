@@ -40,6 +40,9 @@ const ImageGenPanel = lazy(() =>
 const UpgradePanel = lazy(() =>
   import("@/editor/panels/UpgradePanel").then((m) => ({ default: m.UpgradePanel })),
 );
+const ShortcutsPanel = lazy(() =>
+  import("@/editor/panels/ShortcutsPanel").then((m) => ({ default: m.ShortcutsPanel })),
+);
 import { installHotkeys } from "@/editor/hotkeys";
 import { ToastHost } from "@/toasts/Toast";
 import { supabase } from "@/lib/supabase";
@@ -110,6 +113,9 @@ export function App() {
 
   return (
     <div style={shell}>
+      {/* Day 53 a11y — skip-to-editor link. Hidden until Tab focus,
+          jumps focus past the toolbar to the canvas main element. */}
+      <a href="#tf-canvas" className="tf-skip-link">Skip to editor</a>
       <Nebula />
       <ShipComingAlive
         hasEntered={hasEntered}
@@ -125,6 +131,7 @@ export function App() {
         <BrandKitPanel />
         <ImageGenPanel />
         <UpgradePanel />
+        <ShortcutsPanel />
       </Suspense>
       <ToastHost />
     </div>
@@ -142,7 +149,13 @@ function EditorShell() {
       <TopBar />
       <div style={editorRow}>
         <ToolPalette />
-        <main style={{ ...canvasSurface, cursor }} data-alive="canvas">
+        <main
+          id="tf-canvas"
+          tabIndex={-1}
+          aria-label="Editor canvas"
+          style={{ ...canvasSurface, cursor }}
+          data-alive="canvas"
+        >
           <CompositorHost />
           <TextEditor />
           <BgRemoveOverlay />

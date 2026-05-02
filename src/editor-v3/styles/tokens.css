@@ -82,14 +82,42 @@ button {
   font-family: inherit;
 }
 
-/* Selection rings — clean, not the gray system default. */
+/* Selection rings — clean, not the gray system default.
+ * Day 53 accessibility pass: focus rings switched from cream to
+ * --accent-orange so they're visible against both the cream-on-dark
+ * panel chrome and the secondary text color. Outline offset of 2px
+ * keeps them clear of icon glyphs. */
 :focus {
   outline: none;
 }
 :focus-visible {
-  outline: 2px solid var(--accent-cream);
+  outline: 2px solid var(--accent-orange);
   outline-offset: 2px;
   border-radius: 3px;
+}
+
+/* Day 53 — skip-to-editor link. Hidden until focused via Tab from
+ * the page top. Lands first in the Tab order so screen-reader users
+ * can jump past the toolbar / topbar straight to the canvas. */
+.tf-skip-link {
+  position: absolute;
+  top: -40px;
+  left: 12px;
+  padding: 8px 14px;
+  background: var(--accent-orange);
+  color: var(--bg-space-0);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  z-index: 9999;
+  transition: top var(--motion-fast) var(--ease-standard);
+}
+.tf-skip-link:focus,
+.tf-skip-link:focus-visible {
+  top: 12px;
+  outline: 2px solid var(--accent-cream);
+  outline-offset: 2px;
 }
 
 /* Global utility keyframes. Named so inline `animation:` references

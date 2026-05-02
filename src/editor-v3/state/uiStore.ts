@@ -162,6 +162,12 @@ type UiState = {
    * route through this panel. */
   upgradePanelOpen: boolean; setUpgradePanelOpen: (v: boolean) => void;
 
+  /** Day 53: Keyboard shortcuts reference modal. Cmd+? opens; also
+   * reachable via Cmd+K command palette. Lazy-loaded — the lookup
+   * table only mounts on first open. */
+  shortcutsPanelOpen: boolean;
+  setShortcutsPanelOpen: (v: boolean) => void;
+
   /** Day 39: ThumbFriend chat panel visibility. Cmd+/ toggles. Lives
    * in the right rail and is mutually exclusive with PreviewRack +
    * ContextPanel — only one right-side panel at a time. */
@@ -395,6 +401,9 @@ export const useUiStore = create<UiState>()((set) => ({
 
   upgradePanelOpen: false,
   setUpgradePanelOpen: (upgradePanelOpen) => set({ upgradePanelOpen }),
+
+  shortcutsPanelOpen: false,
+  setShortcutsPanelOpen: (shortcutsPanelOpen) => set({ shortcutsPanelOpen }),
 
   thumbfriendPanelOpen: false,
   setThumbfriendPanelOpen: (thumbfriendPanelOpen) => set({ thumbfriendPanelOpen }),
