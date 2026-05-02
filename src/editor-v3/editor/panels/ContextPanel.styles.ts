@@ -19,6 +19,9 @@ export const panelHeader: CSSProperties = {
   textTransform: "uppercase",
   color: "var(--text-tertiary)",
   fontWeight: 500,
+  // Day 57 — thin cream divider beneath the panel title.
+  paddingBottom: 8,
+  borderBottom: "1px solid rgba(249, 240, 225, 0.10)",
 };
 
 export const emptyHint: CSSProperties = {
@@ -26,9 +29,15 @@ export const emptyHint: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 13,
-  color: "var(--text-tertiary)",
+  // Day 57 — serif treatment for the "Select something" empty
+  // state. Playfair Display already loaded as part of the
+  // bundled OFL set.
+  fontFamily: '"Playfair Display", Georgia, serif',
+  fontSize: 16,
+  color: "var(--accent-cream)",
+  opacity: 0.65,
   fontStyle: "italic",
+  letterSpacing: "0.01em",
 };
 
 export const section: CSSProperties = {

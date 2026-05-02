@@ -47,6 +47,8 @@ export const tab: CSSProperties = {
 export const tabActive: CSSProperties = {
   ...tab, color: "var(--text-primary)",
   borderBottomColor: "var(--accent-orange)",
+  // Day 57 — soft orange glow under the active tab.
+  boxShadow: "0 4px 8px -4px rgba(249, 115, 22, 0.45)",
 };
 export const stub: CSSProperties = {
   flex: 1, display: "flex", alignItems: "center", justifyContent: "center",

@@ -90,7 +90,15 @@ export function TopBar() {
 function SaveStatusBadge({ status, signedIn }: { status: SaveStatus; signedIn: boolean }) {
   if (status.kind === "idle") return null;
   if (status.kind === "saving") {
-    return <span style={saveBadge} data-testid="save-status">Saving…</span>;
+    // Day 57 — wave shimmer accompanies the saving state. Themed
+    // alternative to a generic spinner.
+    return (
+      <span style={saveBadge} data-testid="save-status">
+        <WaveIcon />
+        <span>Saving…</span>
+        <style>{SAVE_KEYFRAMES}</style>
+      </span>
+    );
   }
   if (status.kind === "error") {
     return (
@@ -104,10 +112,45 @@ function SaveStatusBadge({ status, signedIn }: { status: SaveStatus; signedIn: b
   // whether their work is reachable from another device.
   return (
     <span style={saveBadge} data-testid="save-status">
-      {relativeTime(status.at, signedIn)}
+      <AnchorIcon />
+      <span>{relativeTime(status.at, signedIn)}</span>
     </span>
   );
 }
+
+function AnchorIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
+      <circle cx="6" cy="2.6" r="1.1" fill="none" stroke="currentColor" strokeWidth="1" />
+      <line x1="6" y1="3.7" x2="6" y2="9.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+      <line x1="3.5" y1="5.4" x2="8.5" y2="5.4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+      <path d="M 2.6 8 Q 2.6 10.2 6 10.2 Q 9.4 10.2 9.4 8" stroke="currentColor" strokeWidth="1" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function WaveIcon() {
+  return (
+    <svg width="14" height="11" viewBox="0 0 14 12" aria-hidden="true" className="tf-wave-icon">
+      <path
+        d="M 0 6 Q 1.75 3 3.5 6 Q 5.25 9 7 6 Q 8.75 3 10.5 6 Q 12.25 9 14 6"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+const SAVE_KEYFRAMES = `
+@keyframes tf-wave-drift {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-2px); }
+}
+.tf-wave-icon { animation: tf-wave-drift 1.4s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) { .tf-wave-icon { animation: none; } }
+`;
 
 function relativeTime(at: number, signedIn: boolean): string {
   const suffix = signedIn ? "" : " locally";
@@ -247,21 +290,41 @@ function PinnedKitBadge() {
 
 function Logo() {
   return (
-    <div style={logoGroup} aria-label="thumbframe">
-      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+    <div style={logoGroup} aria-label="thumbframe" className="tf-logo-group">
+      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" className="tf-logo-mark">
         <line x1="10" y1="2.5" x2="10" y2="17" stroke="var(--accent-cream)" strokeWidth="1" strokeLinecap="round" />
         <path d="M 10.5 4 L 17 14.5 L 10.5 14.5 Z" fill="var(--accent-cream)" fillOpacity="0.9" />
         <path d="M 3 15 L 17 15 L 14.5 17.5 L 5.5 17.5 Z" fill="var(--accent-cream)" fillOpacity="0.72" />
       </svg>
       <span style={wordmark}>thumbframe</span>
+      <style>{LOGO_KEYFRAMES}</style>
     </div>
   );
 }
 
+const LOGO_KEYFRAMES = `
+@keyframes tf-logo-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-1px); }
+}
+.tf-logo-group:hover .tf-logo-mark { animation: tf-logo-bob 4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .tf-logo-group:hover .tf-logo-mark { animation: none; }
+}
+`;
+
 const bar: CSSProperties = {
   display: "flex", alignItems: "center", gap: 12, padding: "0 16px",
-  height: 48, borderBottom: "1px solid var(--border-ghost)",
-  background: "var(--bg-space-1)", color: "var(--text-primary)",
+  height: 48,
+  // Day 57 — atmospheric gradient. Slightly darker at top, fading
+  // toward bg-space-1 at bottom. The bottom border becomes a hint
+  // of "horizon line" — cream tint at very low opacity.
+  background:
+    "linear-gradient(180deg, var(--bg-space-0) 0%, var(--bg-space-1) 100%)",
+  borderBottom: "1px solid var(--border-ghost)",
+  boxShadow: "inset 0 -1px 0 rgba(249, 240, 225, 0.03)",
+  color: "var(--text-primary)",
+  position: "relative",
 };
 const leftGroup: CSSProperties = { display: "flex", alignItems: "center", gap: 10, minWidth: 200 };
 const centerGroup: CSSProperties = {
@@ -283,6 +346,7 @@ const projectNameInput: CSSProperties = {
 };
 const saveBadge: CSSProperties = {
   fontSize: 11, color: "var(--text-secondary)", fontStyle: "italic",
+  display: "inline-flex", alignItems: "center", gap: 5,
 };
 const signInBtn: CSSProperties = {
   background: "transparent", color: "var(--text-primary)",
