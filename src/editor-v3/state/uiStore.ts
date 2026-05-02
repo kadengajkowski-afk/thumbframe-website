@@ -127,6 +127,12 @@ type UiState = {
   userTier: "free" | "pro";
   setUserTier: (tier: "free" | "pro") => void;
 
+  /** Day 54: Stripe-backed subscription status. Used to surface a
+   * past-due dunning banner. Source of truth: Supabase profiles.
+   * Resolved alongside userTier on boot + auth state change. */
+  subscriptionStatus: string | null;
+  setSubscriptionStatus: (status: string | null) => void;
+
   /** Day 19: most-recent export settings, capped at 10, persisted
    * to localStorage. ExportPanel surfaces these as a "Recent"
    * section — clicking re-applies the same format / quality. */
@@ -352,6 +358,9 @@ export const useUiStore = create<UiState>()((set) => ({
     persistDevTier(userTier);
     set({ userTier });
   },
+
+  subscriptionStatus: null,
+  setSubscriptionStatus: (subscriptionStatus) => set({ subscriptionStatus }),
 
   recentExports: loadRecentExports(),
   pushRecentExport: (entry) =>

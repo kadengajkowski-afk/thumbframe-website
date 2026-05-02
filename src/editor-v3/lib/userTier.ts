@@ -66,8 +66,12 @@ export function tierFromProfile(profile: ProfileRow | null): "free" | "pro" {
  * if devOverrideEngaged() is true we do NOT clobber it). */
 export async function resolveUserTier(email: string | null | undefined): Promise<void> {
   if (!email) return;
-  if (devOverrideEngaged()) return;
   const profile = await fetchUserProfile(email);
+  // Day 54 — propagate subscription status regardless of dev
+  // override so the past-due banner still surfaces real Stripe
+  // state to a developer overriding tier flags locally.
+  useUiStore.getState().setSubscriptionStatus(profile?.subscription_status ?? null);
+  if (devOverrideEngaged()) return;
   const tier = tierFromProfile(profile);
   useUiStore.getState().setUserTier(tier);
 }

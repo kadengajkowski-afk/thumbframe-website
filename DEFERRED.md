@@ -3,6 +3,90 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 6 Day 54 — held back (date: 2026-05-02)
+
+- **IP signup velocity store is in-memory.** A Railway restart
+  resets the counter. Acceptable as a soft guardrail, not a
+  security boundary; if abuse rises a Redis-backed store is the
+  right answer (still no manual setup if Redis runs as a Railway
+  add-on). Today's 3/hour cap is also per-Railway-instance —
+  multi-instance Railway scale would let an attacker round-robin
+  through pods. Single-instance is the production reality today.
+
+- **Disposable-email blocklist is npm-package-pinned.** The
+  `disposable-email-domains` list updates upstream but our package
+  version is locked. New disposable domains slip through until we
+  bump the dep. Cycle 6 polish: a weekly cron (or build-time fetch
+  of the upstream JSON) would auto-refresh.
+
+- **`requireEmailConfirmed` is wired to the AI chat route only.**
+  BG-remove HD, image-gen, brand-kit endpoints all skip the gate.
+  Acceptable today since chat is the highest-cost surface and the
+  others are also Pro-gated (where the email-confirmed check is
+  irrelevant). When free-tier image-gen ships at a non-trivial
+  daily cap, wire the gate there too.
+
+- **`requireEmailConfirmed` cache is per-process Map.** Same
+  scaling caveat as the IP velocity store. 60s TTL keeps the
+  staleness window short.
+
+- **Stripe Smart Retries detection is heuristic.** Stripe's API
+  doesn't expose the toggle as a single boolean — we infer from
+  whether failed invoices have `next_payment_attempt` set. With
+  zero failed invoices in the account, the check returns
+  "presumed ON" (correct default since 2023). Detection drift if
+  the check sees old paid invoices with no retry context. The
+  WARN-only failure mode means a false negative leads to a
+  noisy log line, not a broken billing surface — acceptable
+  trade-off for a no-manual-setup check.
+
+- **Past-due banner has no per-session "dismiss" affordance.** If
+  the user ignores it, it shows on every editor boot until Stripe
+  marks the subscription `active` again. Intentional — past-due
+  is load-bearing financial info, not a polite hint — but if a
+  user complains we'd add a 24h dismiss with a re-show on next
+  failed retry.
+
+- **MobileGate breakpoint is fixed at 768px.** A landscape iPad
+  Mini sits right at the threshold. The `?desktop=1` escape hatch
+  covers QA; real users on edge-case viewports might slip to the
+  desktop layout and hit Pixi crashes. If telemetry surfaces
+  width=769 sessions failing, raise the breakpoint to 820 or add
+  a touch-only second check.
+
+- **MobileGate's Discord link is a placeholder.** `discord.gg/
+  thumbframe` is the URL but the server itself hasn't been
+  provisioned (Day 55's work). When the real invite lands, swap
+  the URL — until then the link 404s.
+
+- **Stripe health check runs only at boot.** A setting that
+  changes mid-runtime (Kaden flips a Dashboard toggle) won't be
+  re-detected until the next deploy. Acceptable since these
+  settings rarely change; if they do, Kaden sees the WARN on the
+  next push.
+
+- **No test for the `/api/signup-check` Express route end-to-end.**
+  The handler is unit-tested with mock req/res. The Express
+  mounting + body-parser interaction is verified manually only.
+  Same gap as the other API routes; cassette-based integration
+  testing is a Cycle 6 candidate.
+
+- **No frontend integration with `/api/signup-check`.** The
+  endpoint exists but the AuthPanel doesn't pre-flight against it
+  yet — magic-link sends still go straight to Supabase, which
+  then re-receives the same disposable-email signup. Wiring the
+  pre-flight into AuthPanel is a Cycle 6 polish (and reduces
+  Supabase auth invocations on disposable-email attempts). Today
+  the disposable-email check still fires downstream when the user
+  tries to use the AI features (the email-confirmed gate catches
+  them since disposable-email Supabase signups never confirm).
+
+- **Past-due banner doesn't link to invoice history.** Users
+  whose card was charged successfully on a retry won't see the
+  banner clear until `subscriptionStatus` refreshes (next auth
+  state change or boot). A periodic refresh (every 5 min) would
+  reduce the staleness window.
+
 ## Cycle 6 Day 53 — held back (date: 2026-05-02)
 
 - **Shortcuts panel is a hand-maintained lookup table, not auto-

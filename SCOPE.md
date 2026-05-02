@@ -11,6 +11,43 @@ pass. See `docs/soft-launch.md` for the rest of Cycle 6.
 
 ## Cycle 6 — in progress (Days 51-60, 2026-05-01 → )
 
+- **Day 54 (2026-05-02) — Mobile flows + signup abuse + dunning
+  (no manual setup).** /editor route now short-circuits to a
+  "MobileGate" card on viewports ≤768px or coarse-pointer-only
+  devices. Card carries a Discord CTA + a `?desktop=1` escape
+  hatch for tablet QA. Skips installHotkeys + auth resolution +
+  Pixi mount entirely so mobile users don't see a half-broken
+  canvas.
+
+  Backend: new `/api/signup-check` route on snapframe-api with
+  three layers — (1) IP velocity limit (3 signups/hour, in-memory
+  Map keyed on x-forwarded-for first hop), (2) disposable-email
+  blocklist via the `disposable-email-domains` npm package
+  (~3500 known providers), (3) email-confirmed gate
+  (`requireEmailConfirmed` middleware) chained AFTER flexAuth on
+  the AI chat route — free users without `email_confirmed_at`
+  get 403 EMAIL_NOT_CONFIRMED. Pro / dev users skip the gate.
+  60s memory cache on the Supabase admin lookup so a busy chat
+  loop doesn't hot-path the auth endpoint.
+
+  Stripe Smart Retries verification at boot. New
+  `lib/stripeHealthCheck.js` calls `stripe.accounts.retrieve()`
+  + `stripe.invoices.list({status:'open'})` on first run; logs
+  WARN to Railway if customer-emails or smart-retries appear
+  off (best-effort — both are default-on for accounts created
+  since 2023). Frontend past-due banner reads
+  `subscriptionStatus` (now propagated from Supabase profiles
+  by `resolveUserTier` regardless of dev override) and renders
+  a cream-on-orange `role="alert"` strip with an "Update
+  billing" CTA that opens the Customer Portal. EditorGrid grew
+  an `auto` row at the top so the banner pushes the editor
+  down by 33px when present, collapses to 0 otherwise.
+
+  7 backend tests (signup gate + disposable + IP velocity +
+  requireEmailConfirmed) and 5 frontend tests (PastDueBanner +
+  uiStore round-trip). Full suites: 619 frontend / 145 backend
+  (node --test count).
+
 - **Day 53 (2026-05-02) — Toolbar polish + a11y pass.** Reorganized
   left toolbar into two groups (drawing tools + AI features) split
   by a divider. Drawing-tools row carries Select/Hand/Rect/Ellipse/
