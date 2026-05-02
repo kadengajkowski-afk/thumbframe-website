@@ -3,6 +3,109 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 6 Day 55 — held back (date: 2026-05-02)
+
+- **CSAM detection has a stub PhotoDNA path.** Real PhotoDNA Cloud
+  Service requires Microsoft per-platform approval, a legal
+  agreement, and a different request shape than what we sketched.
+  Until that approval lands we route through Hive (paid) when
+  `CSAM_PROVIDER=hive`, otherwise the gate is OPEN with a WARN.
+  This is a real legal-compliance risk for production launch —
+  Kaden must enable Hive (or get PhotoDNA approval) before public
+  launch. Documented as a manual step in SCOPE.
+
+- **NCMEC reporting on a CSAM match is manual.** The moderation
+  code logs the match, writes to moderation_events, optionally
+  alerts the founder via console.error, and blocks the upload —
+  but submitting the legally-required NCMEC CyberTipline report
+  is a human workflow today. Cycle 6+ infrastructure: the report
+  submission has its own API (file form), and we'd queue
+  outbound submissions in a separate moderation_pending table.
+
+- **Image upload sanitization round-trips a base64 dataURL.** On
+  a 25 MB upload that's ~33 MB of JSON over the wire each way.
+  Acceptable today (the Day 36 BG-remove flow already does this);
+  if upload latency becomes a complaint, swap to a multipart/
+  form-data shape with multer or busboy.
+
+- **Sanitize fallback to local decode masks server outages.** When
+  /api/upload/image is unreachable, `sanitizeFileViaApi` silently
+  falls back to local `loadImageFromFile`. This is intentional
+  (better than dead-ending users) but means images uploaded
+  during an API outage are NOT sanitized + NOT moderated. If the
+  outage lasts hours, NSFW content could land on canvas. Trade-
+  off acceptable today — outages are short. If we want a strict
+  mode for production, gate on `import.meta.env.VITE_API_REQUIRED`.
+
+- **Sightengine free tier is 1000 calls/month.** A single user
+  uploading 10 images burns 10 calls. The first 100 power users
+  could exhaust the bucket in a week. Bumping to the paid plan
+  ($29/mo for 50K calls) is a billing decision Kaden makes when
+  the cap actually hits.
+
+- **Sightengine score parsing is best-effort.** The Sightengine
+  schema varies by model (nudity-2.0 returns `sexual_activity`,
+  the older `nudity` model returns `raw`/`partial`/`safe`). Our
+  parser takes the max across the known fields. If they ship a
+  new field name we'd silently miss it and pass a real NSFW
+  image through. Worth a periodic schema sniff against test
+  fixtures (cycle-6 polish).
+
+- **Animated GIFs are first-frame only.** Sharp's `animated:false`
+  flag drops frames 2..N. A user uploading a meme GIF expecting
+  it to play sees a static image. Acceptable for a thumbnail
+  editor (YouTube thumbs aren't animated) but worth surfacing in
+  the upload toast: "GIFs are flattened to a single frame."
+
+- **moderation_events table has no RLS policy.** The DDL event
+  trigger that auto-enables RLS makes the table service-role-only
+  (correct for an admin audit log). But we have no admin UI to
+  query it — Cycle 6+ when /admin/moderation lands. For now
+  Kaden queries via Supabase Studio when investigating.
+
+- **/api/feedback context payload has no PII filter.** We attach
+  user_id + URL + first 200 chars of UA to every submission.
+  Acceptable since these go to support@ (Kaden's inbox), not
+  third parties. If we ever add Slack / Discord webhook
+  forwarding, scrub before pushing externally.
+
+- **HelpPanel doesn't expose a "view recent submissions" UI.**
+  Users who submit feedback can't see whether it was received or
+  Kaden's reply other than via their email reply-to inbox. Sufficient
+  for one-way feedback; if we ever build two-way support
+  conversations, integrate with Linear / Help Scout via webhook.
+
+- **DMCA page uses dmca@thumbframe.com email but the alias
+  isn't set up yet.** Cloudflare Email Routing is the planned
+  fix (manual one-time task per Day 55 spec). Until then the
+  link 404s on send. Same applies to trust@ and privacy@.
+
+- **CSAM check runs BEFORE NSFW check.** Order matters because
+  CSAM is non-negotiable hard block + has the loudest log. NSFW
+  is a softer block (user can retry with a different image).
+  When both providers fire, that's two API calls per upload.
+  Cycle 6+ cost optimization: skip the NSFW call if CSAM
+  doesn't return positive (current behavior — we only skip on
+  CSAM positive, not on null). Acceptable cost today.
+
+- **Frontend HelpPanel form context.canvasState isn't sent.** The
+  Day 55 spec asked for a "current canvas state (compact summary,
+  not full data)" in feedback bodies. We send `user_id + url +
+  ua` only — the canvas summary would require a getCurrentCompositor
+  + serializer call which adds dependency weight to the panel.
+  If a user reports "the image was wrong" we lose the context.
+  Add when a real bug surfaces that needed the canvas state.
+
+- **CookieBanner not added today.** Spec called it out for Day 56;
+  the v1 codebase already has a CookieBanner mounted via
+  `tf-marketing-shell` so the hook is there. Day 56 wires the
+  per-category consent surface.
+
+- **/help route renders nothing today.** HelpPanel is editor-only.
+  A separate /help server-rendered HTML page (per spec) would let
+  unauthenticated visitors read the support content without
+  loading the editor bundle. Cycle 6+ marketing work.
+
 ## Cycle 6 Day 54 — held back (date: 2026-05-02)
 
 - **IP signup velocity store is in-memory.** A Railway restart

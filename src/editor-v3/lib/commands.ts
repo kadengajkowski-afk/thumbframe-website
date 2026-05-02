@@ -320,6 +320,15 @@ const COMMANDS: Command[] = [
     run: () => useUiStore.getState().setShortcutsPanelOpen(true),
   },
 
+  // Day 55 — Help & support panel.
+  {
+    id: "help.open",
+    label: "Help & support",
+    section: "View",
+    aliases: ["help", "support", "feedback", "bug", "contact", "discord"],
+    run: () => useUiStore.getState().setHelpPanelOpen(true),
+  },
+
   // Day 53 — bg-remove "focus" command. The actual remove flow lives
   // in the ContextPanel's BgRemoveSection (only rendered when an
   // image layer is selected). The command opens nothing on its own

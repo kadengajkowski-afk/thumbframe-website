@@ -11,6 +11,84 @@ pass. See `docs/soft-launch.md` for the rest of Cycle 6.
 
 ## Cycle 6 — in progress (Days 51-60, 2026-05-01 → )
 
+- **Day 55 (2026-05-02) — Customer support + trust & safety +
+  content moderation.**
+
+  Help & support panel (`HelpPanel.tsx`, lazy-loaded, ~190 lines).
+  Sections: Quick guides (5 one-liners), Keyboard shortcuts (links
+  to Day 53 panel), Get help (mailto support@/trust@ + Discord
+  invite), Send feedback / report a bug (form posts to new
+  `/api/feedback`), Legal (links to /dmca / /terms / /privacy).
+  Trigger: Cmd+K → "Help" or new ? icon in TopBar (24px circular
+  button between AI usage badge and Sign-in). New
+  `uiStore.helpPanelOpen` flag + `help.open` palette command.
+
+  Backend: new `POST /api/feedback` route forwards via Resend to
+  support@thumbframe.com. Anonymous OK (email optional → reply-to
+  when supplied), rate-limited 5/hour per IP, max 10000 char
+  message. Graceful: when RESEND_API_KEY is missing the route
+  accepts + logs only so the form doesn't dead-end pre-launch.
+
+  Image upload sanitization — new `POST /api/upload/image` route
+  on snapframe-api (`routes/uploadImage.js`) backed by
+  `lib/imageSanitize.js` (Sharp pipeline). Magic-byte detection
+  for PNG / JPEG / WebP / GIF; rejects SVG with HTTP 415; rejects
+  garbage (UNSUPPORTED_FORMAT). Re-encodes via Sharp at
+  ≤4096×4096 (downscale, fit:inside, no enlargement); strips ALL
+  metadata (EXIF / GPS / color profiles / IPTC / XMP — Sharp
+  defaults strip when withMetadata is omitted); outputs PNG
+  (alpha-preserving) or JPEG (no alpha, q90 + mozjpeg). Returns a
+  base64 dataURL. 30 MB raw payload cap.
+
+  Frontend `lib/upload.ts` gained `sanitizeFileViaApi(file,
+  apiBase, authToken)` + new `ContentBlockedError` type.
+  `uploadFlow.ts` opt-in routes through the API when
+  `VITE_API_URL` is configured; falls back silently to local
+  decode on network failure (so signed-out + offline users
+  aren't dead-ended). HTTP 451 surfaces as a "This image was
+  flagged" toast.
+
+  NSFW + CSAM moderation (`lib/moderation.js`). NSFW backend:
+  Sightengine free tier (1000/mo) when `SIGHTENGINE_API_USER` +
+  `SIGHTENGINE_API_SECRET` set; checks nudity-2.0, gore,
+  violence, weapon scores; threshold `MODERATION_THRESHOLD=0.7`.
+  CSAM backend: pluggable provider — `CSAM_PROVIDER=hive` wires
+  Hive's API; `CSAM_PROVIDER=photodna` is stubbed pending
+  Microsoft approval. Without provider keys both gates are OPEN
+  with one-shot WARN logs (graceful degradation per spec).
+  Every blocked verdict writes to new `moderation_events` table
+  (uuid pk, user_id FK, event_type, source, scores jsonb,
+  image_hash sha256, created_at). Migration shipped:
+  `supabase/migrations/20260502120000_moderation_events.sql`.
+  Moderation hooks invoked from both upload route AND AI image-
+  gen pipeline (after fal.ai returns each variant URL we fetch
+  it server-side, run moderation, and either emit `variant` or
+  `error` SSE per-variant).
+
+  /dmca page (`pages/legal/Dmca.jsx`) — public §512 surface:
+  takedown notice requirements, designated agent contact at
+  dmca@thumbframe.com, counter-notice flow, repeat-infringer
+  policy. Wired into URL routing (`/dmca`) and the landing
+  Footer's LEGAL_LINKS array.
+
+  16 new backend tests (sanitize + moderation). 6 new frontend
+  tests (HelpPanel + uiStore + commands). Full suites: 625
+  frontend / 161 backend.
+
+  **Manual steps Kaden needs (no blocker — code ships without):**
+   1. Set up Discord server (one-time). Update DISCORD_URL
+      constant in `HelpPanel.tsx` once the real invite lands.
+   2. Configure Cloudflare Email Routing for support@ /
+      dmca@ / trust@ / privacy@ aliases all forwarding to
+      Kaden's primary inbox.
+   3. Subscribe to Sightengine (or Hive Moderation), set
+      `SIGHTENGINE_API_USER` + `SIGHTENGINE_API_SECRET` (or
+      `CSAM_PROVIDER=hive` + `HIVE_API_KEY`) in Railway env.
+   4. File DMCA Designated Agent registration ($6, copyright.gov
+      every 3 years) for full §512 safe harbor.
+   5. Apply the moderation_events migration (run the SQL file
+      against the Supabase project).
+
 - **Day 54 (2026-05-02) — Mobile flows + signup abuse + dunning
   (no manual setup).** /editor route now short-circuits to a
   "MobileGate" card on viewports ≤768px or coarse-pointer-only
