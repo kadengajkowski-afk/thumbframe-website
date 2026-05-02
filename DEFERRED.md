@@ -3,6 +3,113 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 6 Day 57 — held back (date: 2026-05-02)
+
+- **Light mode (ocean) wave shimmer not implemented.** Spec called
+  for `--bg-ocean-0/1/2` tokens + a wave shimmer animation in the
+  same slot the dark-mode star field occupies. Tokens.css today
+  ships `color-scheme: dark` only — the entire light-mode pipeline
+  (token swap, theme toggle, ocean palette) is unbuilt. The
+  Day 57 atmosphere only renders the dark-mode treatment;
+  CanvasAtmosphere doesn't conditionally short-circuit because
+  there's nothing to short-circuit on yet. When light mode lands
+  (separate Cycle 6 polish day), drop a `prefers-color-scheme:
+  light` media-query branch into CanvasAtmosphere's KEYFRAMES.
+
+- **Star field is 150 dots at fixed seed.** Spec said 100-200 with
+  varied opacity/size — we're in range. The seed produces an
+  evenly-distributed field; a real "sky" might cluster more. If
+  visual polish day comes back, swap the LCG to a Halton sequence
+  for less-uniform distribution.
+
+- **Star field uses an SVG mask gradient that some browsers
+  ignore.** WebKit / Blink honor `mask-image: linear-gradient(...)`,
+  Firefox honors it on the `mask` shorthand only with feature flag
+  enabled in older versions. Today's Firefox supports it; older
+  Firefox sees a uniform field, which still reads fine.
+
+- **TopBar logo bob is hover-only.** Spec asked for "hover only"
+  and that's what shipped, but the bob is subtle (1px) — most
+  users won't notice. If we want it to register, increase to 2px
+  amplitude or add a tiny rotation.
+
+- **Save indicator wave icon doesn't reflect ACTUAL save progress.**
+  Animation runs at a fixed 1.4s cycle whether the upload takes
+  150ms or 3s. Acceptable since most saves are sub-second; if a
+  user is on a slow connection the wave just keeps running until
+  the status flips. Truth-bearing progress bar would need real
+  upload chunking.
+
+- **Anchor save icon doesn't have a "first-time-saved" celebration.**
+  Day 53 stripped the first-export celebration toast (post-Day-52
+  cleanup); a parallel "first save" anchor flash would be a nice
+  one-time reward. Held — celebrations layer on top of celebrations
+  fast.
+
+- **Empty-state ship-at-horizon is a static SVG.** No parallax,
+  no subtle drift on the sun/moon disc. A 30s gentle horizontal
+  drift on the disc would give the empty state a "world is alive"
+  feel. CSS keyframe is a one-line add when polish day comes back.
+
+- **Crew avatar halos use `border-radius: 50%` + box-shadow.** The
+  hexagon shield avatar (Captain) and triangle shield avatar
+  (Lookout) don't actually fit a circle — the halo bleeds slightly
+  past the corners on those two. Acceptable visually (halo is
+  soft); to match exactly you'd need per-avatar mask paths.
+
+- **No global theme toggle.** Day 57 doesn't ship a "switch to
+  ocean mode" button anywhere. The dark-mode-only state is
+  consistent with `color-scheme: dark` in tokens.css. When light
+  mode is built, add the toggle to the Help panel or Settings.
+
+- **WCAG re-audit didn't change tokens.** Star field at 10-30%
+  cream on `bg-space-1` is well below the 4.5:1 contrast threshold
+  but that's intentional (decorative, not load-bearing). Body
+  text + buttons unchanged from Day 53's audit. The Playfair
+  italic empty-state hint at 65% opacity on `bg-space-1` reads
+  ~3.6:1 — below AA for body text but above AA for large text
+  (16px+ at 700 weight). Empty states are large + decorative so
+  this is acceptable; flagged here so a future audit doesn't
+  read it as an unintentional regression.
+
+- **Lighthouse perf score not re-measured.** Day 57 added
+  ~155 SVG circles + 4 keyframe animations + nebula gradients.
+  The pure-CSS approach should keep the editor at 60fps idle
+  (no JS animation loop), but a real Lighthouse run on
+  production would confirm. Held — Lighthouse infrastructure is
+  Day 56 + Cycle 6 polish.
+
+- **Lighthouse beam loading animation for AI image gen NOT
+  shipped.** Spec asked for a "lighthouse beam sweeping" loader
+  on AI image gen. Today's ImageGenPanel uses a scanning-line
+  loader (existing). The lighthouse pattern was promised in
+  the BG-remove flow (Day 36 BgRemoveOverlay) — that's where the
+  motif was established, and it stays there. Migrating the
+  scanning-line to a lighthouse beam would require a new SVG
+  asset. Cycle 6 polish.
+
+- **Compass loader for Brand Kit NOT shipped.** Spec wanted a
+  compass/sextant rotation as the Brand Kit loading state.
+  Today's loader is the Day 33 phase-cycling text ("Fetching
+  channel… → Extracting colors… → Detecting fonts…"). The text
+  loader is more informative than a generic spinner; replacing
+  with a compass would lose the per-phase visibility. Cycle 6
+  could ship BOTH (compass icon + text underneath).
+
+- **Page transition "ship sailing" between projects NOT shipped.**
+  Spec called it out; the current project-switch path is
+  immediate (open project → docStore swap → re-render). A 300ms
+  ship-sailing transition would need to gate the docStore swap
+  on the animation completion + handle ESC mid-transition. Real
+  usability hazard for users trying to switch quickly. Held.
+
+- **Crew avatar "filled rather than outlined" guidance is met but
+  the underlying SVGs are still simple geometry.** Spec expectation
+  was "feels CRAFTED" — today's halo-wrapped avatars look more
+  intentional than bare badges, but they're still a lookup table
+  away from a real illustrated set. v3.1 illustrated avatars per
+  spec.
+
 ## Cycle 6 Day 56 — held back (date: 2026-05-02)
 
 - **Bundle still warns at 1119 KB raw (over 500 KB threshold).**

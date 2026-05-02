@@ -51,6 +51,10 @@ export function EmptyState() {
       >
         <span style={ghostFrame} aria-hidden="true">
           <span style={ghostInner} />
+          {/* Day 57 — painterly ship at horizon, overlaid on the
+              ghost frame. Subtle (low opacity), centered, doesn't
+              compete with the upload affordance. */}
+          <ShipAtHorizon />
         </span>
         <span style={heading}>Upload to set sail</span>
       </button>
@@ -121,12 +125,51 @@ const ghostInner: CSSProperties = {
 };
 
 const heading: CSSProperties = {
-  fontSize: 22,
+  // Day 57 — Playfair Display for the marquee headline. Cream,
+  // italic, larger letter-spacing for editorial feel.
+  fontFamily: '"Playfair Display", Georgia, serif',
+  fontSize: 28,
+  fontStyle: "italic",
   fontWeight: 500,
-  letterSpacing: "0.01em",
+  letterSpacing: "0.005em",
   color: "var(--accent-cream)",
   margin: 0,
 };
+
+function ShipAtHorizon() {
+  // Painterly silhouette: horizon line + small ship + faint
+  // sun/moon disc behind it. Pure SVG, fixed positioning inside
+  // the ghostFrame parent.
+  return (
+    <svg
+      viewBox="0 0 600 340"
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        opacity: 0.18,
+        pointerEvents: "none",
+      }}
+      aria-hidden="true"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      {/* Horizon line — full width, slightly below center. */}
+      <line x1="40" y1="200" x2="560" y2="200" stroke="var(--accent-cream)" strokeWidth="1" strokeOpacity="0.5" />
+      {/* Distant disc — sun/moon. */}
+      <circle cx="350" cy="170" r="22" fill="var(--accent-cream)" fillOpacity="0.18" />
+      {/* Ship silhouette — hull + sail. */}
+      <g transform="translate(280 178)">
+        <path d="M 0 22 L 40 22 L 35 30 L 5 30 Z" fill="var(--accent-cream)" fillOpacity="0.78" />
+        <line x1="20" y1="0" x2="20" y2="22" stroke="var(--accent-cream)" strokeWidth="1" strokeOpacity="0.7" />
+        <path d="M 20 4 L 34 20 L 20 20 Z" fill="var(--accent-cream)" fillOpacity="0.72" />
+      </g>
+      {/* Faint reflective ripples below the ship. */}
+      <path d="M 270 250 Q 285 254 300 250 Q 315 254 330 250" stroke="var(--accent-cream)" strokeOpacity="0.18" strokeWidth="0.8" fill="none" />
+      <path d="M 250 268 Q 280 274 310 268 Q 340 274 350 268" stroke="var(--accent-cream)" strokeOpacity="0.10" strokeWidth="0.8" fill="none" />
+    </svg>
+  );
+}
 
 /** Day-12 bug fix. display:none inputs were silently rejected by
  * Chrome's user-activation tracker for programmatic .click() — the
