@@ -6,8 +6,10 @@ Kit + ThumbFriend AI suite (Ask + Nudge + Partner) + 6-crew
 personalities + Stripe billing + AI image generation +
 background remover. The editor at `thumbframe.com/editor` is
 launch-ready pending the items below. Cycle 6 (Days 51-60) is
-launch prep: onboarding flow, mobile editor, support surfaces,
-analytics wiring.
+launch prep: mobile editor, support surfaces, analytics wiring.
+(Onboarding flow + starter templates were attempted Days 51-52
+then ripped out — deferred to a dedicated phase. "Upload to set
+sail" remains the whole first-run surface.)
 
 ## Cycle 5 — what shipped (2026-04-29 → 2026-04-30)
 
@@ -212,8 +214,10 @@ here, plus the conversion-bottleneck items from soft-launch
 analytics (21 signups, 0 paid users — the editor itself is solid;
 the funnel is what's broken).
 
-- **Day 51-52** — onboarding flow (5 steps + tour). First-time
-  user: lands → signs up → makes first thumb → ships in <60s.
+- **Day 51-52** — *attempted, then reverted.* Built a 5-step
+  onboarding flow + 4 starter templates, decided the
+  conversion-funnel hypothesis wasn't load-bearing for soft
+  launch, and stripped it. Deferred to a dedicated phase.
 - **Day 53** — Brand Kit ↔ Partner integration (Brand Kit
   context lands in Partner planning prompts; pinned-channel
   references become reference-pattern injections per the Day 47
@@ -237,7 +241,8 @@ gaps, not the things we already know:
 - **Mobile is desktop-only redirect.** No mobile editor yet;
   Day 54 closes that.
 - **Onboarding is barebones.** "Upload to set sail" is the
-  whole tutorial. Day 51-52 builds a real first-run flow.
+  whole tutorial. Day 51-52 attempted a real first-run flow and
+  was reverted; a dedicated phase will revisit.
 - **No PostHog wiring yet.** Day 56. We're flying blind on
   drop-off until then.
 - **ThumbFriend voice still drifts on edge cases.** Day 48

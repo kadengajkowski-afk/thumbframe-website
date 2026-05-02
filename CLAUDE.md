@@ -9,9 +9,12 @@ Cycles 1-5 complete. Editor + Brand Kit + ThumbFriend AI suite
 AI image generation + browser/HD background remover all shipped
 to `/editor` on the production Vercel deploy. v1 still owns the
 marketing site root. Cycle 6 (Days 51-60) is launch prep —
-onboarding, mobile, support, analytics — see `SCOPE.md`. Soft-
-launch readiness: see `docs/soft-launch.md`. Manual voice testing
-of crew personalities: `docs/crew-voice-test-script.md`.
+mobile, support, analytics — see `SCOPE.md`. Onboarding flow +
+starter templates were attempted Days 51-52 then ripped out;
+deferred to a dedicated phase (the strip leaves "Upload to set
+sail" as the only first-run surface). Soft-launch readiness:
+see `docs/soft-launch.md`. Manual voice testing of crew
+personalities: `docs/crew-voice-test-script.md`.
 
 ## Stack (LOCKED — do not propose alternatives)
 - React 19 + TypeScript strict

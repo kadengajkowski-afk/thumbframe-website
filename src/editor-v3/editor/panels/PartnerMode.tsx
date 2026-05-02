@@ -53,20 +53,6 @@ export function PartnerMode() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, streaming]);
 
-  // Day 52 — onboarding handoff. When PartnerMode mounts with a
-  // pending initial message stashed by the "Yes let's build" CTA,
-  // fire it once + clear so future PartnerMode mounts don't replay.
-  // Guarded against StrictMode double-mount via a ref.
-  const consumedRef = useRef(false);
-  useEffect(() => {
-    if (consumedRef.current) return;
-    const pending = usePartnerStore.getState().pendingInitialMessage;
-    if (!pending) return;
-    consumedRef.current = true;
-    usePartnerStore.getState().setPendingInitialMessage(null);
-    void partner.send(pending);
-  }, [partner]);
-
   function submit(text: string) {
     if (!text.trim() || streaming) return;
     void partner.send(text.trim());

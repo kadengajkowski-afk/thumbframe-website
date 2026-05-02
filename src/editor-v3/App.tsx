@@ -46,13 +46,6 @@ import { supabase } from "@/lib/supabase";
 import { startAutoSave } from "@/lib/autoSave";
 import { resolveUserTier } from "@/lib/userTier";
 import { useNudgeWatcher } from "@/editor/hooks/useNudgeWatcher";
-import { useOnboardingStore } from "@/state/onboardingStore";
-
-// Day 51 — onboarding flow is lazy-loaded. Returning users (the
-// vast majority after the first wave) never pay for it on boot.
-const OnboardingFlow = lazy(() =>
-  import("@/editor/onboarding/OnboardingFlow").then((m) => ({ default: m.OnboardingFlow })),
-);
 
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
@@ -66,26 +59,6 @@ export function App() {
   // requests after 8s of layer idle. Costs only when signed-in users
   // are actively editing; cheap (~$0.001/call, 20/day free cap).
   useNudgeWatcher();
-
-  // Day 52 — Onboarding first-run detection + existing-user
-  // migration. On boot:
-  //   1. If localStorage already says completed → idle, never show
-  //      onboarding.
-  //   2. Else if the user is signed in AND has any v3_projects rows,
-  //      mark completed (they're not new) and stay idle.
-  //   3. Else fire startOnboarding().
-  // Step 2 runs asynchronously after auth resolves; until then,
-  // step 3 may have already fired — that's fine, the migration path
-  // calls completeOnboarding() which transitions back to idle and
-  // unmounts the overlay. The user might briefly see Step A before
-  // it dismisses; acceptable for the rare existing-user-on-new-
-  // device case.
-  useEffect(() => {
-    const ob = useOnboardingStore.getState();
-    if (!ob.completed && ob.step === "idle") {
-      ob.startOnboarding();
-    }
-  }, []);
 
   // Day 36 fix — auto-load-most-recent-project on boot was removed.
   // Refresh now ALWAYS lands on the empty state (Figma / Photoshop
@@ -117,10 +90,6 @@ export function App() {
         });
         // Day 38 — resolve Stripe-backed tier from profiles row.
         void resolveUserTier(u.email ?? null);
-        // Day 52 — existing-user onboarding migration. If this user
-        // has any saved projects, they're not new; mark onboarding
-        // completed so the overlay dismisses.
-        void migrateExistingUser(u.id);
       }
     });
 
@@ -132,7 +101,6 @@ export function App() {
         avatarUrl: (u.user_metadata as { avatar_url?: string } | null)?.avatar_url ?? null,
       } : null);
       if (u?.email) void resolveUserTier(u.email);
-      if (u?.id) void migrateExistingUser(u.id);
     });
     return () => {
       sub.subscription.unsubscribe();
@@ -157,7 +125,6 @@ export function App() {
         <BrandKitPanel />
         <ImageGenPanel />
         <UpgradePanel />
-        <OnboardingFlow />
       </Suspense>
       <ToastHost />
     </div>
@@ -194,25 +161,6 @@ type CursorShape = {
   isPanActive: boolean;
   hoveredLayerId: string | null;
 };
-
-/** Day 52 — existing-user migration helper. If a signed-in user has
- * any saved projects, they're not new — mark onboarding completed
- * silently so the overlay dismisses. Best-effort: a Supabase error
- * leaves the user in the onboarding flow, which is recoverable. */
-async function migrateExistingUser(userId: string): Promise<void> {
-  const ob = useOnboardingStore.getState();
-  if (ob.completed) return;
-  const [{ countProjectsForUser }] = await Promise.all([
-    import("@/lib/projects"),
-  ]);
-  const count = await countProjectsForUser(userId);
-  if (count > 0) {
-    // Returning user — quietly mark complete without firing the
-    // analytics "completed" or "skipped" events (they didn't go
-    // through the flow).
-    useOnboardingStore.getState().markCompletedSilent();
-  }
-}
 
 function deriveCursor(s: CursorShape): string {
   if (s.isHandMode || s.activeTool === "hand") {

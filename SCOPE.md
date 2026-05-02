@@ -1,8 +1,12 @@
 # SCOPE.md — Cycle 5 closed; Cycle 6 next
 
 Cycles 1, 2, 3 closed on 2026-04-28. Cycles 4 and 5 closed on
-2026-04-30 (Day 50). Cycle 6 (Days 51-60) opens with Day 51 —
-onboarding flow scaffold. See `docs/soft-launch.md` for what
+2026-04-30 (Day 50). Cycle 6 (Days 51-60) opened with Day 51-52
+onboarding scaffold + implementation; both were ripped out on
+2026-05-01 and deferred to a dedicated phase (decision: launch
+without an onboarding flow — "Upload to set sail" stays the
+whole first-run surface). Cycle 6 now skips ahead to Day 53
+(Brand Kit ↔ Partner). See `docs/soft-launch.md` for what
 ships in Cycle 6.
 
 ## Cycle 5 — closed (Days 31-50, 2026-04-29 → 2026-04-30)
