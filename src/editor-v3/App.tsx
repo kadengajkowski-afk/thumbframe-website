@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { CompositorHost } from "@/editor/CompositorHost";
 import { EditorBackdrop } from "@/editor/EditorBackdrop";
+import { HelmFraming } from "@/editor/HelmFraming";
 import { TextEditor } from "@/editor/TextEditor";
 import { BgRemoveOverlay } from "@/editor/BgRemoveOverlay";
 import { TopBar } from "@/editor/panels/TopBar";
@@ -171,10 +172,10 @@ export function App() {
       {/* Day 53 a11y — skip-to-editor link. Hidden until Tab focus,
           jumps focus past the toolbar to the canvas main element. */}
       <a href="#tf-canvas" className="tf-skip-link">Skip to editor</a>
-      {/* Day 58 — crisp stardust overlay between body bg (baked
-          painterly nebula) and the editor grid. Pointer-events:none,
-          z-index:0 (behind editor grid wrapper which is z-index:1).
-          Vanilla canvas2D — no Three.js, ~3 KB gzip extra. */}
+      {/* Day 58 — "Captain at the helm" backdrop layers, all sit at
+          z-index 0 (between body bg and editor grid which is z-index:1).
+          All pointer-events:none. None can touch the canvas mount. */}
+      <HelmFraming />
       <EditorBackdrop />
       <ShipComingAlive
         hasEntered={hasEntered}
