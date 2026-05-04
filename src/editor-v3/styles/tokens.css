@@ -73,52 +73,50 @@ body,
   overflow: hidden;
 }
 
-/* Day 57b — atmosphere on the BODY only. The editor grid keeps its
- * own opaque --bg-space-0 fill, so atmosphere only peeks through in
- * gaps around the grid edges (and during the initial mount before
- * the editor paints). NEVER paint atmosphere inside the editor grid
- * — that's what broke Day 57 first attempt.
+/* Day 58 — editor visual overhaul, part 1.
+ * Reuses the SAME watercolor cosmic asset that the landing hero
+ * scene renders via Three.js + painterly post-pass shaders. We
+ * snapshot one frame and serve it as a static JPEG (459 KB) so the
+ * editor route doesn't need to ship three/r3f. The ship + cosmic
+ * cloud composition is identical to thumbframe.com's hero — same
+ * brand, same vibe, zero runtime cost.
  *
- * Two-layer composition: tinted radial gradients on the body, then a
- * star field on body::before. Both are pointer-events:none and (for
- * the star field) z-index:-1 so they CAN'T receive clicks or sit
- * above any element in the editor mount tree.
+ * Architecture (from DEFERRED Day 57 redo plan, locked):
+ *   - Atmosphere lives on BODY ONLY. Cannot touch the editor grid,
+ *     CompositorHost, or Pixi canvas mount.
+ *   - body bg = the cosmic image at full opacity, cover, fixed.
+ *   - body::before = 5% black overlay so panels stay readable.
+ *   - The editor `shell` is transparent so the body shows through
+ *     in EmptyState + the gaps around the editor grid panels.
  */
 html {
   background-color: var(--bg-space-0);
 }
 body {
   background-color: var(--bg-space-0);
-  /* Day 57b retry — strengthened from the first pass. The earlier 8%
-   * + 5% intensities were lost behind the (now-removed) opaque Nebula
-   * overlay. With Nebula gone and canvasSurface semi-transparent, we
-   * need stronger gradients here so the atmosphere actually reads. */
-  background-image:
-    radial-gradient(ellipse 1100px 700px at 20% 15%, rgba(120, 80, 180, 0.22) 0%, transparent 65%),
-    radial-gradient(ellipse 900px 620px at 85% 80%, rgba(249, 115, 22, 0.14) 0%, transparent 60%),
-    radial-gradient(ellipse 600px 420px at 50% 50%, rgba(120, 90, 200, 0.08) 0%, transparent 80%);
+  /* The atmosphere image URL is set on body via inline style from
+   * main.tsx so Vite's asset pipeline can rewrite the path correctly
+   * in both dev (`/src/editor-v3/atmosphere/...`) and prod
+   * (`/editor/assets/landing-hero-cosmic-HASH.jpg` once Vite hashes
+   * + relocates it). Putting the URL in CSS literally would break
+   * one or the other since v3's vite base is `/editor/` in prod. */
+  background-size: cover;
+  background-position: center;
   background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 body::before {
+  /* Day 58 — soft black wash so the landing-hero asset doesn't blow
+   * out the cream UI text in panels that overlap it. The watercolor
+   * is gorgeous on its own; the wash just lifts the panel contrast
+   * by ~8%. pointer-events:none + z-index:-1 keeps it off the click
+   * tree, behind the editor grid. */
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  /* Stars pumped to ~60% peak alpha so they actually register. */
-  background-image:
-    radial-gradient(1px 1px at 12% 18%, rgba(249, 240, 225, 0.65), transparent 60%),
-    radial-gradient(1px 1px at 27% 62%, rgba(249, 240, 225, 0.40), transparent 60%),
-    radial-gradient(1px 1px at 42% 8%,  rgba(249, 240, 225, 0.55), transparent 60%),
-    radial-gradient(1px 1px at 58% 44%, rgba(249, 240, 225, 0.35), transparent 60%),
-    radial-gradient(1px 1px at 71% 26%, rgba(249, 240, 225, 0.60), transparent 60%),
-    radial-gradient(1px 1px at 83% 71%, rgba(249, 240, 225, 0.45), transparent 60%),
-    radial-gradient(1px 1px at 91% 14%, rgba(249, 240, 225, 0.50), transparent 60%),
-    radial-gradient(1px 1px at  7% 84%, rgba(249, 240, 225, 0.40), transparent 60%),
-    radial-gradient(1px 1px at 33% 91%, rgba(249, 240, 225, 0.35), transparent 60%),
-    radial-gradient(1px 1px at 49% 76%, rgba(249, 240, 225, 0.50), transparent 60%),
-    radial-gradient(1px 1px at 64% 89%, rgba(249, 240, 225, 0.45), transparent 60%),
-    radial-gradient(1px 1px at 78% 53%, rgba(249, 240, 225, 0.55), transparent 60%);
+  background: rgba(5, 5, 16, 0.08);
 }
 
 * {
