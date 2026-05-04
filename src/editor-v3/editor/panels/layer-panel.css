@@ -12,16 +12,12 @@
 }
 
 .layer-panel__header {
-  padding: 10px 16px 8px;
+  padding: 10px 16px 6px;
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-secondary);
   font-weight: 500;
-  /* Day 57 — thin cream divider line beneath the header (matches
-   * ContextPanel's panelHeader treatment). */
-  border-bottom: 1px solid rgba(249, 240, 225, 0.08);
-  margin-bottom: 4px;
 }
 
 .layer-panel__empty {
@@ -63,8 +59,7 @@
 }
 
 .layer-row:hover {
-  /* Day 57 — cream-tinted hover, not just darker grey. */
-  background: linear-gradient(90deg, rgba(249, 240, 225, 0.04), rgba(249, 240, 225, 0.07));
+  background: var(--bg-space-2);
 }
 
 .layer-row--selected {

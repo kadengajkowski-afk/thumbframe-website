@@ -5,8 +5,7 @@
 
 .tool-palette {
   width: 56px;
-  /* Day 57 — slight gradient: lighter at top, fading to base. */
-  background: linear-gradient(180deg, var(--bg-space-2) 0%, var(--bg-space-1) 100%);
+  background: var(--bg-space-1);
   border-right: 1px solid var(--border-ghost);
   position: relative;
   overflow: visible;
@@ -45,8 +44,6 @@
 .tool-button--active {
   background: var(--bg-space-2);
   color: var(--accent-cream);
-  /* Day 57 — soft cream glow on active tool. */
-  box-shadow: 0 0 12px rgba(249, 240, 225, 0.10), inset 0 0 0 1px rgba(249, 240, 225, 0.08);
 }
 
 .tool-button--active::before {

@@ -58,7 +58,6 @@ import { resolveUserTier } from "@/lib/userTier";
 import { useNudgeWatcher } from "@/editor/hooks/useNudgeWatcher";
 import { MobileGate, useIsMobileViewport } from "@/editor/MobileGate";
 import { PastDueBanner } from "@/editor/panels/PastDueBanner";
-import { CanvasAtmosphere } from "@/editor/CanvasAtmosphere";
 
 /** Cycle 1 shell: empty state until hasEntered, then the editor grid.
  * The ShipComingAlive wrapper owns the first-visit transition. */
@@ -186,9 +185,6 @@ function EditorShell() {
           style={{ ...canvasSurface, cursor }}
           data-alive="canvas"
         >
-          {/* Day 57 — atmospheric backdrop. Stars + nebula tint sit
-              behind the Pixi canvas, never receive pointer events. */}
-          <CanvasAtmosphere />
           <CompositorHost />
           <TextEditor />
           <BgRemoveOverlay />

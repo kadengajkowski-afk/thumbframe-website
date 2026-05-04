@@ -11,56 +11,6 @@ pass. See `docs/soft-launch.md` for the rest of Cycle 6.
 
 ## Cycle 6 — in progress (Days 51-60, 2026-05-01 → )
 
-- **Day 57 (2026-05-02) — Editor aesthetic pass (sailship/cosmic
-  theme).** Visual polish bringing the brand promise into the
-  editor itself; no behavior changes.
-
-  Canvas atmosphere (`editor/CanvasAtmosphere.tsx`) — deterministic
-  150-dot star field rendered as inline SVG circles via a seeded
-  LCG (same field every session, no jarring re-render shuffle).
-  4 brighter twinkle stars with 4s ease-in-out CSS keyframe
-  pulses, staggered delays so they fire out of phase. Faint
-  nebula radial-gradient overlay (purple at 8% + orange at 6%)
-  plus a top-to-bottom mask so the brightest dots cluster
-  toward sky. Pure CSS animation; no JS rAF loop. Honors
-  `prefers-reduced-motion`. Mounts as `position:absolute, inset:0,
-  zIndex:0, pointerEvents:none` behind the Pixi canvas.
-
-  TopBar — atmospheric gradient (darker top fading to base),
-  inset cream "horizon line" hint along the bottom edge, hover-
-  triggered 1px Y bob on the logo SVG (4s loop, reduced-motion
-  safe).
-
-  Panels — cream divider lines under panel headers (10% opacity)
-  on ContextPanel + LayerPanel. ContextPanel "Select something"
-  empty state gets the Playfair Display italic serif treatment
-  in cream at 65% opacity. ToolPalette gains a top-down gradient
-  (`bg-space-2 → bg-space-1`) and the active-tool button picks
-  up a soft cream glow (`box-shadow: 0 0 12px rgba(cream, 0.10)`).
-  LayerPanel rows: hover gets a cream-tinted gradient instead of
-  flat grey. ThumbFriendPanel active tab gets a soft orange
-  drop-shadow under the underline.
-
-  Loading + transition — SaveStatusBadge re-themed: anchor SVG
-  icon for the saved state (cream stroke, 11px), animated wave
-  SVG with `tf-wave-drift` 1.4s alternating translate for the
-  saving state. Replaces the flat italic text-only badge.
-
-  Empty state — `<ShipAtHorizon />` SVG painterly silhouette
-  (horizon line + small sailship + faint sun/moon disc + two
-  reflective ripples) overlays the upload ghost frame at 18%
-  opacity. The "Upload to set sail" headline switches from
-  Inter 22px to Playfair Display italic 28px in cream.
-
-  Crew avatars — wrapped in a span with a soft cream glow halo
-  by default, swapping to a 14px orange glow when active. Real
-  illustrated avatars stay v3.1 work; today's geometry feels
-  intentional thanks to the halo + border-radius treatment.
-
-  Bundle: 324 → **325.9 KB gzip** (+1.5 KB) — atmosphere SVGs
-  + new keyframes account for the bump. Tests: 625 frontend pass
-  unchanged (no behavior changes). Backend untouched (170 pass).
-
 - **Day 56 (2026-05-02) — Performance + legal pages + AI cost cap.**
 
   Bundle audit + ThumbFriendPanel lazy-split. Pre: main 340 KB
