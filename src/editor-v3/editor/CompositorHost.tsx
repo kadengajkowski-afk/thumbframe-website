@@ -89,11 +89,4 @@ export function CompositorHost() {
 const hostStyle: React.CSSProperties = {
   width: "100%",
   height: "100%",
-  // Day 57 fix: CanvasAtmosphere is `position: absolute, z-index: 0`
-  // and was painting on top of this static block (positioned children
-  // with z-index: 0 paint after non-positioned siblings). Make this
-  // div a positioned stacking participant so the Pixi canvas sits
-  // above the star field.
-  position: "relative",
-  zIndex: 1,
 };
