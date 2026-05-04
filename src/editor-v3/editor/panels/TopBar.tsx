@@ -260,8 +260,16 @@ function Logo() {
 
 const bar: CSSProperties = {
   display: "flex", alignItems: "center", gap: 12, padding: "0 16px",
-  height: 48, borderBottom: "1px solid var(--border-ghost)",
-  background: "var(--bg-space-1)", color: "var(--text-primary)",
+  height: 48,
+  // Day 57b — atmospheric gradient (--bg-space-2 top → --bg-space-1
+  // bottom) plus a cream-tinted hairline divider at the very bottom
+  // (sits over the existing border-ghost). TopBar is structurally
+  // separated from the canvas via the editor grid, so styling it can
+  // never interact with the Pixi mount.
+  background: "linear-gradient(to bottom, var(--bg-space-2), var(--bg-space-1))",
+  borderBottom: "1px solid var(--border-ghost)",
+  boxShadow: "inset 0 -1px 0 0 rgba(249, 240, 225, 0.06)",
+  color: "var(--text-primary)",
 };
 const leftGroup: CSSProperties = { display: "flex", alignItems: "center", gap: 10, minWidth: 200 };
 const centerGroup: CSSProperties = {

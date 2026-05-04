@@ -19,6 +19,9 @@ export const panelHeader: CSSProperties = {
   textTransform: "uppercase",
   color: "var(--text-tertiary)",
   fontWeight: 500,
+  // Day 57b — thin cream divider beneath the panel header.
+  paddingBottom: 8,
+  borderBottom: "1px solid rgba(249, 240, 225, 0.08)",
 };
 
 export const emptyHint: CSSProperties = {

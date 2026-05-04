@@ -12,12 +12,15 @@
 }
 
 .layer-panel__header {
-  padding: 10px 16px 6px;
+  padding: 10px 16px 8px;
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-secondary);
   font-weight: 500;
+  /* Day 57b — thin cream divider beneath the header. */
+  border-bottom: 1px solid rgba(249, 240, 225, 0.08);
+  margin-bottom: 4px;
 }
 
 .layer-panel__empty {
@@ -59,7 +62,8 @@
 }
 
 .layer-row:hover {
-  background: var(--bg-space-2);
+  /* Day 57b — cream-tinted hover gradient instead of flat darker grey. */
+  background: linear-gradient(90deg, rgba(249, 240, 225, 0.04), rgba(249, 240, 225, 0.07));
 }
 
 .layer-row--selected {
