@@ -84,7 +84,6 @@ export function App() {
   if (isMobile) {
     return (
       <div style={shell}>
-        <Nebula />
         <MobileGate />
       </div>
     );
@@ -108,6 +107,31 @@ export function App() {
 
     if (!supabase) return stop;
 
+    // Day 57b cleanup — drop a stale session BEFORE getSession() so
+    // we don't trigger a background refresh against an expired token.
+    // supabase-js will keep the cached row in localStorage even after
+    // an access_token expires; refresh-on-load fires a network call
+    // that may fail (CORS / Cloudflare / aborted), leaving the editor
+    // in a half-signed-in state. Reading expires_at directly is the
+    // cheapest way to detect this without a round-trip.
+    try {
+      const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? "";
+      const ref = url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+      if (ref) {
+        const key = `sb-${ref}-auth-token`;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { expires_at?: number };
+          const now = Math.floor(Date.now() / 1000);
+          // expires_at is seconds-epoch. Treat anything that already
+          // expired (or expires within 30s) as stale and wipe it.
+          if (typeof parsed.expires_at === "number" && parsed.expires_at < now + 30) {
+            localStorage.removeItem(key);
+          }
+        }
+      }
+    } catch { /* best-effort; don't block boot on parse errors */ }
+
     // Resolve initial auth session so the TopBar avatar + Pro flag
     // are populated. We do NOT load a project here.
     void supabase.auth.getSession().then(({ data }) => {
@@ -121,6 +145,9 @@ export function App() {
         // Day 38 — resolve Stripe-backed tier from profiles row.
         void resolveUserTier(u.email ?? null);
       }
+    }).catch((err) => {
+      // Don't let an auth failure block the editor from booting.
+      console.warn("[Auth] getSession() failed; treating as signed-out:", err);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -143,7 +170,10 @@ export function App() {
       {/* Day 53 a11y — skip-to-editor link. Hidden until Tab focus,
           jumps focus past the toolbar to the canvas main element. */}
       <a href="#tf-canvas" className="tf-skip-link">Skip to editor</a>
-      <Nebula />
+      {/* Day 57b — Nebula component removed. Body bg + body::before
+          star field own the atmosphere now (see tokens.css). Keeping
+          two parallel atmospheric layers stacked one redundantly
+          obscured the new body atmosphere entirely. */}
       <ShipComingAlive
         hasEntered={hasEntered}
         empty={<EmptyState />}
@@ -218,10 +248,6 @@ function deriveCursor(s: CursorShape): string {
   return "default";
 }
 
-function Nebula() {
-  return <div style={nebula} aria-hidden="true" />;
-}
-
 // ── styles ──────────────────────────────────────────────────────────────────
 
 const shell: React.CSSProperties = {
@@ -230,20 +256,11 @@ const shell: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "var(--bg-space-1)",
+  // Day 57b — transparent shell so body atmosphere shows through.
+  // The editor grid still has opaque panels; only the EmptyState +
+  // gaps around the editor reveal the bg.
+  background: "transparent",
   overflow: "hidden",
-};
-
-const nebula: React.CSSProperties = {
-  position: "absolute",
-  inset: 0,
-  background:
-    "radial-gradient(1100px 700px at 18% 22%, rgba(96, 56, 180, 0.28), transparent 70%), " +
-    "radial-gradient(900px 620px at 82% 78%, rgba(208, 112, 64, 0.18), transparent 70%), " +
-    "radial-gradient(600px 420px at 50% 50%, rgba(120, 90, 200, 0.10), transparent 80%), " +
-    "var(--bg-space-1)",
-  pointerEvents: "none",
-  zIndex: 0,
 };
 
 const editorGrid: React.CSSProperties = {
@@ -274,7 +291,14 @@ const canvasSurface: React.CSSProperties = {
   display: "flex",
   alignItems: "stretch",
   justifyContent: "stretch",
-  background: "var(--bg-space-0)",
+  // Day 57b — keep a soft solid base so the canvas surface still
+  // reads as "stage" but layer the body atmosphere on top via a
+  // semi-transparent radial gradient. Pixi paints its own dark
+  // canvasFill inside the working area; everything around the Pixi
+  // canvas now picks up a subtle atmospheric tint.
+  background:
+    "radial-gradient(ellipse at center, rgba(96, 56, 180, 0.10), transparent 70%), " +
+    "var(--bg-space-0)",
   overflow: "hidden",
   position: "relative",
 };
