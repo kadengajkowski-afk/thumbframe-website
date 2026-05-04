@@ -117,20 +117,50 @@ body,
  *     in EmptyState + the gaps around the editor grid panels.
  */
 html {
-  background-color: var(--bg-space-0);
+  background-color: #050818;
 }
 body {
-  background-color: var(--bg-space-0);
-  /* The atmosphere image URL is set on body via inline style from
-   * main.tsx so Vite's asset pipeline can rewrite the path correctly
-   * in both dev (`/src/editor-v3/atmosphere/...`) and prod
-   * (`/editor/assets/landing-hero-cosmic-HASH.jpg` once Vite hashes
-   * + relocates it). Putting the URL in CSS literally would break
-   * one or the other since v3's vite base is `/editor/` in prod. */
-  background-size: cover;
+  /* Day 58 retry — "Captain at the helm" cosmic deck.
+   *
+   * First-person POV: cosmic horizon ahead, deep space below the
+   * deck line. NOT the landing hero (that's the ship from outside).
+   * NEW editor-specific art via layered radial+linear gradients —
+   * no Three.js, no bake pipeline, no chance of breaking the canvas.
+   *
+   * Layer composition (bottom-up CSS layers, i.e. last paints on top):
+   *   - Linear horizon gradient: deep navy (top, deep space) →
+   *     mid-purple (~50%, mid-cosmos) → amber band (~68%, the
+   *     horizon glow) → navy-black (~75%+, the deck below the rail).
+   *   - Two radial nebula clouds (purple top-left, amber bottom-right
+   *     of the horizon band) for cosmic depth.
+   *
+   * Stardust + helm framing (ship's wheel + railings) live as
+   * separate layers above this — see EditorBackdrop + HelmFraming.
+   */
+  background-color: #050818;
+  background-image:
+    /* Cosmic clouds — purple top-left, amber lower-right. */
+    radial-gradient(ellipse 1400px 900px at 18% 22%, rgba(106, 56, 128, 0.55) 0%, transparent 65%),
+    radial-gradient(ellipse 1100px 700px at 82% 72%, rgba(249, 115, 22, 0.18) 0%, transparent 60%),
+    /* Horizon line — deep top, amber band where the eye lands, deck
+     * navy-black below. Stop positions tuned for 1080p; gradient
+     * scales by viewport so the proportions hold up at other sizes. */
+    linear-gradient(
+      180deg,
+      #050818 0%,
+      #0d0a28 22%,
+      #2a1a4a 50%,
+      #6a3880 65%,
+      #f97316 70%,
+      #2a1a3a 73%,
+      #050510 80%,
+      #050510 100%
+    );
+  background-size: cover, cover, cover;
   background-position: center;
   background-attachment: fixed;
   background-repeat: no-repeat;
+  min-height: 100vh;
 }
 body::before {
   /* Day 58 — soft black wash so the landing-hero asset doesn't blow

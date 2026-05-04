@@ -43,16 +43,17 @@ export function EmptyState() {
         aria-hidden="true"
         style={visuallyHidden}
       />
+      {/* Day 58 retry — "chart room" empty state. Small centered card
+          on the cosmic-deck atmosphere. NOT a full-screen ship hero. */}
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
         style={uploadTarget}
         aria-label="Upload to set sail — opens file picker"
       >
-        <span style={ghostFrame} aria-hidden="true">
-          <span style={ghostInner} />
-        </span>
+        <CompassRose />
         <span style={heading}>Upload to set sail</span>
+        <span style={subheading}>drop a thumbnail here</span>
       </button>
       <div style={secondaryRow}>
         <button
@@ -80,51 +81,86 @@ export function EmptyState() {
   );
 }
 
+/** Day 58 — placeholder painted compass rose. Geometric SVG until
+ *  Day 60's hand-painted icon set lands. Cream stroke + amber pip
+ *  at top to read as "north". */
+function CompassRose() {
+  return (
+    <svg
+      width="56"
+      height="56"
+      viewBox="0 0 56 56"
+      aria-hidden="true"
+      style={{ display: "block", marginBottom: 4 }}
+    >
+      {/* Outer ring */}
+      <circle cx="28" cy="28" r="24" fill="none" stroke="var(--cream-100)" strokeWidth="1.4" opacity="0.6" />
+      {/* Inner ring */}
+      <circle cx="28" cy="28" r="14" fill="none" stroke="var(--cream-100)" strokeWidth="1" opacity="0.4" />
+      {/* North pip — amber */}
+      <path d="M28 4 L31 26 L28 28 L25 26 Z" fill="var(--accent-amber)" opacity="0.95" />
+      {/* South */}
+      <path d="M28 52 L31 30 L28 28 L25 30 Z" fill="var(--cream-100)" opacity="0.55" />
+      {/* East */}
+      <path d="M52 28 L30 31 L28 28 L30 25 Z" fill="var(--cream-100)" opacity="0.45" />
+      {/* West */}
+      <path d="M4 28 L26 31 L28 28 L26 25 Z" fill="var(--cream-100)" opacity="0.45" />
+      {/* Hub */}
+      <circle cx="28" cy="28" r="2" fill="var(--accent-amber)" />
+    </svg>
+  );
+}
+
 const wrap: CSSProperties = {
   position: "relative",
   zIndex: 1,
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
-  gap: 28,
+  gap: 18,
 };
 
+/* Day 58 retry — frosted glass card, ~360px wide, centered. Replaces
+ * the giant 80vw dashed-frame ghost canvas that made the empty state
+ * fight with the cosmic atmosphere. */
 const uploadTarget: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
-  gap: 28,
-  background: "transparent",
-  border: "none",
-  padding: 0,
+  gap: 14,
+  background: "var(--panel-frost-bg)",
+  backdropFilter: "var(--panel-frost-blur)",
+  WebkitBackdropFilter: "var(--panel-frost-blur)" as CSSProperties["backdropFilter"],
+  border: "1px dashed rgba(255, 244, 224, 0.30)",
+  borderRadius: 12,
+  padding: "32px 48px 28px",
+  minWidth: 360,
+  maxWidth: 480,
   cursor: "pointer",
   color: "inherit",
-};
-
-const ghostFrame: CSSProperties = {
-  width: "min(1152px, 80vw)",
-  aspectRatio: "16 / 9",
-  border: "1px dashed var(--ghost-stroke)",
-  background: "var(--ghost-fill)",
-  borderRadius: 10,
-  position: "relative",
-  boxShadow: "0 0 80px rgba(249, 240, 225, 0.04) inset",
-  display: "block",
-};
-
-const ghostInner: CSSProperties = {
-  position: "absolute",
-  inset: 18,
-  border: "1px dashed rgba(249, 240, 225, 0.06)",
-  borderRadius: 6,
-  display: "block",
+  transition:
+    "border-color var(--motion-fast) var(--ease-standard), " +
+    "background var(--motion-fast) var(--ease-standard), " +
+    "transform var(--motion-fast) var(--ease-standard)",
 };
 
 const heading: CSSProperties = {
-  fontSize: 22,
+  fontFamily: "var(--font-serif)",
+  fontStyle: "italic",
+  fontSize: 28,
   fontWeight: 500,
-  letterSpacing: "0.01em",
-  color: "var(--accent-cream)",
+  letterSpacing: "0.005em",
+  color: "var(--cream-100)",
+  margin: 0,
+  lineHeight: 1.15,
+};
+
+const subheading: CSSProperties = {
+  fontFamily: "var(--font-ui)",
+  fontSize: 12,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "var(--cream-60)",
   margin: 0,
 };
 
