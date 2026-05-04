@@ -235,11 +235,29 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    // Robust logout: clear local state FIRST so the user is always
+    // logged out from the app's perspective, even if the network
+    // request to Supabase fails (expired session, offline, CORS,
+    // Cloudflare hiccup). Then fire signOut as a best-effort cleanup
+    // on the server. Without this, a logout click on an expired
+    // session would throw mid-promise and never clear the React
+    // state — the user stays "logged in" until manual refresh.
     localStorage.removeItem('thumbframe_token');
     localStorage.removeItem('thumbframe_user');
+    // Also wipe the Supabase auth-token cache so a stale-but-expired
+    // session doesn't ghost back on next load. The storage key format
+    // is sb-<project-ref>-auth-token.
+    try {
+      const ref = (process.env.REACT_APP_SUPABASE_URL || '').match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+      if (ref) localStorage.removeItem(`sb-${ref}-auth-token`);
+    } catch {}
     setToken(null);
     setUser(null);
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn('[Auth] supabase.signOut() failed (local state already cleared):', err);
+    }
   };
 
   if (loading) return <LoadingSpinner />;
