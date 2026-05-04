@@ -66,12 +66,53 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
-  background: var(--bg-space-0);
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-feature-settings: "cv11", "ss01", "ss03";
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+}
+
+/* Day 57b — atmosphere on the BODY only. The editor grid keeps its
+ * own opaque --bg-space-0 fill, so atmosphere only peeks through in
+ * gaps around the grid edges (and during the initial mount before
+ * the editor paints). NEVER paint atmosphere inside the editor grid
+ * — that's what broke Day 57 first attempt.
+ *
+ * Two-layer composition: tinted radial gradients on the body, then a
+ * star field on body::before. Both are pointer-events:none and (for
+ * the star field) z-index:-1 so they CAN'T receive clicks or sit
+ * above any element in the editor mount tree.
+ */
+html {
+  background-color: var(--bg-space-0);
+}
+body {
+  background-color: var(--bg-space-0);
+  background-image:
+    radial-gradient(ellipse at top, rgba(120, 80, 180, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse at bottom right, rgba(255, 140, 40, 0.05) 0%, transparent 50%);
+  background-attachment: fixed;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgba(249, 240, 225, 0.40), transparent 60%),
+    radial-gradient(1px 1px at 27% 62%, rgba(249, 240, 225, 0.20), transparent 60%),
+    radial-gradient(1px 1px at 42% 8%,  rgba(249, 240, 225, 0.30), transparent 60%),
+    radial-gradient(1px 1px at 58% 44%, rgba(249, 240, 225, 0.18), transparent 60%),
+    radial-gradient(1px 1px at 71% 26%, rgba(249, 240, 225, 0.32), transparent 60%),
+    radial-gradient(1px 1px at 83% 71%, rgba(249, 240, 225, 0.22), transparent 60%),
+    radial-gradient(1px 1px at 91% 14%, rgba(249, 240, 225, 0.28), transparent 60%),
+    radial-gradient(1px 1px at  7% 84%, rgba(249, 240, 225, 0.20), transparent 60%),
+    radial-gradient(1px 1px at 33% 91%, rgba(249, 240, 225, 0.18), transparent 60%),
+    radial-gradient(1px 1px at 49% 76%, rgba(249, 240, 225, 0.26), transparent 60%),
+    radial-gradient(1px 1px at 64% 89%, rgba(249, 240, 225, 0.22), transparent 60%),
+    radial-gradient(1px 1px at 78% 53%, rgba(249, 240, 225, 0.30), transparent 60%);
 }
 
 * {
