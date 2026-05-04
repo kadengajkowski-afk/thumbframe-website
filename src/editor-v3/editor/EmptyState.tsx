@@ -148,7 +148,7 @@ function ShipAtHorizon() {
         inset: 0,
         width: "100%",
         height: "100%",
-        opacity: 0.18,
+        opacity: 0.10,
         pointerEvents: "none",
       }}
       aria-hidden="true"
