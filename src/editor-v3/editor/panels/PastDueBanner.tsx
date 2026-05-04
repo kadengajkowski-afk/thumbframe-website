@@ -17,7 +17,11 @@ const DUNNING_STATES = new Set(["past_due", "unpaid"]);
 
 export function PastDueBanner() {
   const status = useUiStore((s) => s.subscriptionStatus);
-  if (!status || !DUNNING_STATES.has(status)) return null;
+  // Always emit a host element — App.tsx's editorGrid is a 4-row CSS
+  // grid (`auto 48px 1fr 200px`) and CSS grid auto-place skips null
+  // children, which would shift TopBar / editorRow / LayerPanel up by
+  // one track and squash the canvas into the 48px TopBar slot.
+  if (!status || !DUNNING_STATES.has(status)) return <div data-testid="past-due-placeholder" />;
   return (
     <div role="alert" style={banner} data-testid="past-due-banner">
       <span style={icon} aria-hidden="true">⚠</span>
