@@ -160,13 +160,28 @@ const AVATARS: Record<CrewId, (p: Props) => React.JSX.Element> = {
 
 /** Render a crew avatar at any size. Pass `active` to swap the badge
  * fill to --accent-orange (used in the picker dropdown for the
- * currently-selected crew member). */
+ * currently-selected crew member).
+ *
+ * Day 57b — wraps in a span with a soft-glow box-shadow when active
+ * so the picker selection reads stronger. The geometry stays the
+ * same; this is a halo, not a redraw. Lives entirely inside the
+ * picker dropdown — never adjacent to the canvas. */
 export function CrewAvatar({ id, size = 32, active = false }: { id: CrewId; size?: number; active?: boolean }) {
   const Comp = AVATARS[id] ?? Captain;
   return (
-    <>
+    <span
+      style={{
+        display: "inline-flex",
+        lineHeight: 0,
+        borderRadius: "50%",
+        boxShadow: active
+          ? "0 0 14px rgba(249, 115, 22, 0.45), 0 0 4px rgba(249, 115, 22, 0.55)"
+          : "0 0 6px rgba(249, 240, 225, 0.06)",
+        transition: "box-shadow var(--motion-fast, 150ms) ease",
+      }}
+    >
       <Comp size={size} active={active} />
       <style>{KEYFRAMES}</style>
-    </>
+    </span>
   );
 }
