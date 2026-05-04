@@ -5,10 +5,12 @@
 
 .tool-palette {
   width: 56px;
-  /* Day 57b — subtle vertical gradient (--bg-space-2 → --bg-space-1)
-   * gives the rail a warmer top edge that meets TopBar's gradient. */
-  background: linear-gradient(to bottom, var(--bg-space-2), var(--bg-space-1) 80px, var(--bg-space-1));
-  border-right: 1px solid var(--border-ghost);
+  /* Day 58 — frosted glass panel matching TopBar. */
+  background: var(--panel-frost-bg);
+  backdrop-filter: var(--panel-frost-blur);
+  -webkit-backdrop-filter: var(--panel-frost-blur);
+  border-right: 1px solid var(--panel-frost-border);
+  box-shadow: inset 1px 0 0 0 var(--panel-frost-inner-highlight);
   position: relative;
   overflow: visible;
   display: flex;

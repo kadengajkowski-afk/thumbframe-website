@@ -261,14 +261,15 @@ function Logo() {
 const bar: CSSProperties = {
   display: "flex", alignItems: "center", gap: 12, padding: "0 16px",
   height: 48,
-  // Day 57b — atmospheric gradient (--bg-space-2 top → --bg-space-1
-  // bottom) plus a cream-tinted hairline divider at the very bottom
-  // (sits over the existing border-ghost). TopBar is structurally
-  // separated from the canvas via the editor grid, so styling it can
-  // never interact with the Pixi mount.
-  background: "linear-gradient(to bottom, var(--bg-space-2), var(--bg-space-1))",
-  borderBottom: "1px solid var(--border-ghost)",
-  boxShadow: "inset 0 -1px 0 0 rgba(249, 240, 225, 0.06)",
+  // Day 58 — frosted-glass panel. Atmosphere shows through at 28%
+  // alpha while UI stays readable. backdrop-filter blurs the
+  // painterly nebula behind the bar so cream text is legible without
+  // the panel feeling opaque.
+  background: "var(--panel-frost-bg)",
+  backdropFilter: "var(--panel-frost-blur)",
+  WebkitBackdropFilter: "var(--panel-frost-blur)" as CSSProperties["backdropFilter"],
+  borderBottom: "1px solid var(--panel-frost-border)",
+  boxShadow: "inset 0 1px 0 0 var(--panel-frost-inner-highlight)",
   color: "var(--text-primary)",
 };
 const leftGroup: CSSProperties = { display: "flex", alignItems: "center", gap: 10, minWidth: 200 };
@@ -280,8 +281,14 @@ const rightGroup: CSSProperties = {
 };
 const logoGroup: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 8 };
 const wordmark: CSSProperties = {
-  fontSize: 13, letterSpacing: "0.06em", fontWeight: 500,
-  color: "var(--accent-cream)", textTransform: "lowercase",
+  // Day 58 — Fraunces serif for the wordmark, matching landing brand.
+  fontFamily: "var(--font-serif)",
+  fontSize: 16,
+  letterSpacing: "0.01em",
+  fontWeight: 500,
+  fontStyle: "italic",
+  color: "var(--cream-100)",
+  textTransform: "lowercase",
 };
 const projectNameInput: CSSProperties = {
   fontSize: 13, color: "var(--text-primary)",
@@ -298,11 +305,19 @@ const signInBtn: CSSProperties = {
   padding: "5px 12px", fontSize: 12, cursor: "pointer",
 };
 const shipItBtn: CSSProperties = {
-  background: "var(--accent-orange)", color: "var(--bg-space-0)",
-  border: "none", borderRadius: 6, padding: "6px 14px",
-  fontSize: 12, fontWeight: 600, letterSpacing: "0.04em",
+  // Day 58 — landing-style amber CTA. Sans-serif (Inter), warm
+  // shadow, slight scale on hover via :hover handler in the panel.
+  background: "var(--accent-amber)",
+  color: "var(--cream-100)",
+  border: "none",
+  borderRadius: 6,
+  padding: "6px 14px",
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: "0.04em",
   cursor: "pointer",
-  transition: "opacity var(--motion-fast) var(--ease-standard)",
+  boxShadow: "0 4px 14px -4px rgba(249, 115, 22, 0.45)",
+  transition: "background var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard)",
 };
 const pinnedBadge: CSSProperties = {
   display: "inline-flex", alignItems: "center", gap: 6,
