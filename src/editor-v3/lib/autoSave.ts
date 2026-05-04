@@ -18,7 +18,13 @@ import { getCurrentCompositor } from "@/editor/compositorRef";
  * Save status flows into uiStore.saveStatus so the TopBar indicator
  * reflects in-flight / saved / error. */
 
-const DEBOUNCE_MS = 2000;
+// Day 57b emergency — bumped 2s → 30s to drop v3_projects write
+// load by ~15×. Cmd+S still flushes immediately via saveNow(),
+// signed-out drafts still go to localStorage at every change.
+// The risk window: if a user closes the tab between debounces,
+// they lose up to 30s of work — same risk as before, just with a
+// longer window. Trade-off is acceptable given the IO crisis.
+const DEBOUNCE_MS = 30_000;
 
 let timer: number | null = null;
 let inFlight: Promise<void> | null = null;
