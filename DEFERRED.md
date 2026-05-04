@@ -3,6 +3,59 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 6 Day 57 — REVERTED (date: 2026-05-03)
+
+- **Day 57 aesthetic pass (sailship/cosmic theme) was reverted from
+  main on 2026-05-03.** The CanvasAtmosphere component (star field
+  SVG mounted as `position: absolute, inset: 0, z-index: 0` inside
+  the canvasSurface flex container) hid the Pixi canvas in editor
+  mode — after image upload the canvas was invisible, only a tiny
+  image fragment was visible at the top of the viewport. A first
+  fix attempt (give CompositorHost `position: relative; z-index: 1`
+  to lift the canvas above the atmosphere) did not resolve it,
+  suggesting the issue is deeper than CSS painting order — likely
+  a flex-sizing or ResizeObserver interaction with the now-multiple
+  positioned children inside canvasSurface, or the SVG mask /
+  nebula gradient consuming compositing layers in a way that
+  starved the canvas. Did not debug further: aesthetic is polish,
+  canvas rendering is the product.
+
+- **v3.1 redo plan: aesthetic WITHOUT touching canvas mount.** The
+  mistake was overlaying SVG behind the Pixi canvas at all. Better
+  approach for the redo:
+   1. Atmosphere on the BODY background (the outer shell behind
+      the editor grid), not inside `canvasSurface`. The canvas
+      surface keeps its solid `--bg-space-0` fill — undisturbed.
+      Stars + nebula visible in the gaps around the editor frame.
+   2. OR: a separate fixed-position overlay that's a sibling of
+      the entire EditorShell, never touches the canvas mount tree.
+   3. OR: paint atmosphere INSIDE the Pixi canvas itself (a
+      background sprite drawn at the bottom of canvasGroup, behind
+      all layer nodes) — this is the cleanest because it composites
+      through the same GPU pipeline as everything else.
+   4. KEEP the Day 57 changes that didn't touch the canvas mount:
+      TopBar atmospheric gradient + horizon line + logo bob,
+      ContextPanel Playfair italic empty state, ToolPalette
+      gradient + active glow, LayerPanel hover gradient,
+      ThumbFriendPanel active tab drop-shadow, save indicator
+      anchor/wave SVGs, EmptyState ShipAtHorizon, crew avatar
+      halos. None of those broke anything — they're purely
+      panel-chrome / TopBar-chrome / EmptyState-chrome work.
+   5. The atmosphere is the ONLY part of Day 57 that needs a
+      different architecture. Land all the rest in a single
+      "Day 57b" pass once the architecture decision is made.
+
+- **Diagnostic to run before redo.** Reproduce on a branch: mount
+  CanvasAtmosphere, upload image, capture: (a) computed dimensions
+  of `host` div (CompositorHost's ref), (b) computed dimensions of
+  `app.canvas`, (c) DevTools "Layers" panel screenshot showing
+  compositing layer count + Pixi canvas layer position. If host
+  has 0 dimensions, it's a flex-sizing regression. If host is full
+  size but canvas isn't, it's a Pixi `resizeTo` interaction. If
+  both are full size and the canvas just paints under the SVG, it's
+  the same z-index issue from the first-attempt fix and option 3
+  above (paint inside the canvas) is the right call.
+
 ## Cycle 6 Day 56 — held back (date: 2026-05-02)
 
 - **Bundle still warns at 1119 KB raw (over 500 KB threshold).**

@@ -11,6 +11,23 @@ pass. See `docs/soft-launch.md` for the rest of Cycle 6.
 
 ## Cycle 6 — in progress (Days 51-60, 2026-05-01 → )
 
+- **Day 57 — REVERTED 2026-05-03.** The aesthetic pass
+  (sailship/cosmic theme — CanvasAtmosphere star field, TopBar
+  gradient, panel polish, ShipAtHorizon empty state, crew avatar
+  halos) was reverted from main on 2026-05-03 because the
+  CanvasAtmosphere component hid the Pixi canvas in editor mode.
+  After image upload the canvas surface was invisible — only a
+  tiny image fragment was visible at the top of the viewport.
+  A first-attempt z-index fix (`position: relative; z-index: 1`
+  on CompositorHost) didn't resolve it, suggesting the issue is
+  deeper than CSS painting order. Aesthetic is polish, canvas
+  rendering is the product. Re-attempt with a different
+  architecture in v3.1 — atmosphere on body background or paint
+  inside the Pixi canvas itself, never overlay SVG inside the
+  canvasSurface flex container. See DEFERRED.md "Cycle 6 Day 57
+  — REVERTED" for the redo plan + diagnostic to run before
+  re-attempting.
+
 - **Day 56 (2026-05-02) — Performance + legal pages + AI cost cap.**
 
   Bundle audit + ThumbFriendPanel lazy-split. Pre: main 340 KB
