@@ -12,7 +12,27 @@
   /* ── Accents ─────────────────────────────────────────────────────── */
   --accent-cream: #f9f0e1; /* primary text, selection outline */
   --accent-orange: #f97316; /* brand accent, CTAs, selected-row marker */
+  --accent-amber: #f97316;  /* alias matching landing's "amber CTA" */
+  --accent-amber-hover: #ff8a3d; /* +10% brightness for CTA hover */
   --accent-navy: #1b2430; /* light-mode primary, unused today */
+
+  /* ── Cream opacity ladder (Day 58 — landing brand parity) ────────── */
+  --cream-100: #fff4e0;             /* primary brand cream */
+  --cream-80:  rgba(255, 244, 224, 0.80);
+  --cream-60:  rgba(255, 244, 224, 0.60);
+  --cream-40:  rgba(255, 244, 224, 0.40);
+  --cream-20:  rgba(255, 244, 224, 0.20);
+  --cream-08:  rgba(255, 244, 224, 0.08);
+
+  /* ── Frosted-glass panel surface (Day 58 — hybrid backdrop) ──────── */
+  /* Used for TopBar / ToolPalette / ContextPanel / LayerPanel /
+   * ThumbFriendPanel chrome so the painterly backdrop shows through
+   * while UI stays readable. NEVER apply to the canvas surface — Pixi
+   * needs an opaque substrate. */
+  --panel-frost-bg: rgba(10, 7, 20, 0.72);
+  --panel-frost-blur: blur(12px);
+  --panel-frost-border: rgba(255, 244, 224, 0.08);
+  --panel-frost-inner-highlight: rgba(255, 244, 224, 0.04);
 
   /* ── Borders ─────────────────────────────────────────────────────── */
   --border-ghost: rgba(249, 240, 225, 0.08);
@@ -58,6 +78,13 @@
   --font-mono:
     "Geist Mono", ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo,
     Consolas, monospace;
+  /* Day 58 — Fraunces serif for the wordmark and decorative headers
+   * only. NEVER use Fraunces in interactive UI (buttons, labels,
+   * inputs); landing-Claude's rule. Falls back to system serif if
+   * the woff2 isn't loaded yet. */
+  --font-serif:
+    "Fraunces", "Playfair Display", "Iowan Old Style", "Source Serif Pro",
+    "Apple Garamond", Georgia, "Times New Roman", serif;
 }
 
 html,

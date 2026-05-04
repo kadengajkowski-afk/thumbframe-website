@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { CompositorHost } from "@/editor/CompositorHost";
+import { EditorBackdrop } from "@/editor/EditorBackdrop";
 import { TextEditor } from "@/editor/TextEditor";
 import { BgRemoveOverlay } from "@/editor/BgRemoveOverlay";
 import { TopBar } from "@/editor/panels/TopBar";
@@ -170,10 +171,11 @@ export function App() {
       {/* Day 53 a11y — skip-to-editor link. Hidden until Tab focus,
           jumps focus past the toolbar to the canvas main element. */}
       <a href="#tf-canvas" className="tf-skip-link">Skip to editor</a>
-      {/* Day 57b — Nebula component removed. Body bg + body::before
-          star field own the atmosphere now (see tokens.css). Keeping
-          two parallel atmospheric layers stacked one redundantly
-          obscured the new body atmosphere entirely. */}
+      {/* Day 58 — crisp stardust overlay between body bg (baked
+          painterly nebula) and the editor grid. Pointer-events:none,
+          z-index:0 (behind editor grid wrapper which is z-index:1).
+          Vanilla canvas2D — no Three.js, ~3 KB gzip extra. */}
+      <EditorBackdrop />
       <ShipComingAlive
         hasEntered={hasEntered}
         empty={<EmptyState />}
@@ -221,7 +223,7 @@ function EditorShell() {
           <ZoomIndicator />
         </main>
         {thumbfriendOpen ? (
-          <Suspense fallback={<aside style={{ width: 320, background: "var(--bg-space-1)", borderLeft: "1px solid var(--border-ghost)" }} />}>
+          <Suspense fallback={<aside style={{ width: 320, background: "var(--panel-frost-bg)", backdropFilter: "var(--panel-frost-blur)", borderLeft: "1px solid var(--panel-frost-border)" }} />}>
             <ThumbFriendPanel />
           </Suspense>
         ) : previewOpen ? <PreviewRack /> : <ContextPanel />}

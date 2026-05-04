@@ -3,8 +3,12 @@ import { type CSSProperties } from "react";
 export const panel: CSSProperties = {
   width: 280,
   flexShrink: 0,
-  borderLeft: "1px solid var(--border-ghost)",
-  background: "var(--bg-space-1)",
+  // Day 58 — frosted glass.
+  background: "var(--panel-frost-bg)",
+  backdropFilter: "var(--panel-frost-blur)",
+  WebkitBackdropFilter: "var(--panel-frost-blur)" as CSSProperties["backdropFilter"],
+  borderLeft: "1px solid var(--panel-frost-border)",
+  boxShadow: "inset 1px 0 0 0 var(--panel-frost-inner-highlight)",
   padding: "14px 16px",
   display: "flex",
   flexDirection: "column",
