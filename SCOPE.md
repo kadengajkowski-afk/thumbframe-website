@@ -11,6 +11,45 @@ pass. See `docs/soft-launch.md` for the rest of Cycle 6.
 
 ## Cycle 6 — in progress (Days 51-60, 2026-05-01 → )
 
+- **Day 57b — REDO of the editor aesthetic pass (2026-05-04).** Day 57
+  shipped Day 57b as a re-attempt with a different architecture: NO
+  overlay inside the canvasSurface flex container. Atmosphere lives
+  exclusively on the BODY (Option 2 from the redo plan). The editor
+  grid never sees the atmosphere — only the gaps around it.
+
+  Five parts landed:
+   1. **Body atmosphere** — tinted radial gradients (purple top,
+      orange bottom-right) on `body` + `background-attachment: fixed`.
+      Star field on `body::before` (12 fixed-position 1px dots,
+      `z-index: -1`, `pointer-events: none`). Architecturally
+      incapable of touching the editor mount tree.
+   2. **TopBar gradient + cream divider** — `linear-gradient` from
+      `--bg-space-2` (top) to `--bg-space-1` (bottom) + an inset
+      box-shadow hairline at the bottom (cream 6%) over the existing
+      border-ghost.
+   3. **ToolPalette polish** — vertical gradient on the rail itself;
+      active tool button gets a soft cream box-shadow glow that stays
+      inside the 40×40 button bounds.
+   4. **LayerPanel + ContextPanel headers** — thin cream divider
+      (8% opacity) under each panel header. LayerPanel rows hover
+      from a cream-tinted gradient instead of flat grey.
+   5. **Crew avatar halo** — span-wrapped active state shows a soft
+      orange box-shadow (idle gets a faint cream halo). Picker
+      selection reads stronger; lives entirely inside the picker
+      dropdown.
+
+  **Deferred from spec:** Lighthouse / compass / anchor loading SVGs
+  (Part 5) were never built in the first attempt — adding three new
+  SVG animation components is substantial new work. Deferred to v3.1
+  alongside real illustrated crew avatars. ShipAtHorizon empty-state
+  silhouette also stays out of the editor (Part 6 — confirmed
+  EmptyState is already silhouette-free post-revert).
+
+  Bundle: main 324.49 KB gzip (Day 56 baseline 324 KB → effectively
+  unchanged; CSS rules added ~0 KB). Tests: 625 frontend pass.
+  Verified in browser at every commit: canvas main = 691px, layer
+  panel = 200px, ThumbFriend opens cleanly, no console errors.
+
 - **Day 57 — REVERTED 2026-05-03.** The aesthetic pass
   (sailship/cosmic theme — CanvasAtmosphere star field, TopBar
   gradient, panel polish, ShipAtHorizon empty state, crew avatar

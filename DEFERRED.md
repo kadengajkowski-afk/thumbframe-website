@@ -3,6 +3,69 @@
 Ideas out of current cycle scope or held back from a specific day's task.
 Promote to SCOPE.md only after 48 hours of consideration.
 
+## Cycle 6 Day 57b — held back (date: 2026-05-04)
+
+- **Lighthouse / compass / anchor loading SVGs not built.** Spec
+  Part 5 said "verify they weren't reverted, if reverted re-add" —
+  but the first Day 57 attempt never built them. The revert diff
+  for `src/editor-v3/editor/CanvasAtmosphere.tsx` only contained
+  the star field + nebula gradient, no loading animations.
+  Building three new SVG animation components from scratch is
+  substantial new work that doesn't fit the "redo what was
+  reverted" framing of Day 57b. Deferred to v3.1, paired with real
+  illustrated crew avatars (same revisit window).
+
+- **Sub-pixel star drift / parallax** not added. Day 57 first
+  attempt had a static seeded LCG star field; Day 57b uses a
+  static CSS `body::before` star field with no animation. Adding
+  parallax would need either (a) `background-attachment: fixed`
+  on a separate translucent layer + JS scroll handler — but the
+  editor doesn't scroll; or (b) a continuous rAF loop animating
+  background-position. Both are over-engineering for an editor
+  where the user mostly stares at a 1280×720 canvas and rarely
+  resizes. Hold for landing-page polish where parallax actually
+  pays.
+
+- **No light-mode (ocean) treatment.** Spec called out
+  "DARK MODE only for now. Light mode (ocean) deferred — no light
+  mode yet shipped." Day 57b honors that. When light mode lands,
+  the body atmosphere swaps to ocean radial gradients (navy /
+  cream) via a `prefers-color-scheme: light` media query in the
+  same tokens.css block.
+
+- **No empty-state ShipAtHorizon silhouette.** Spec Part 6 said
+  defer this to v3.1; EmptyState is currently a clean
+  ghost-frame + headline only. Day 57 first attempt had a
+  semi-transparent ship silhouette that competed with the upload
+  affordance — verified the post-revert EmptyState doesn't have
+  it, and Day 57b leaves it out.
+
+- **TopBar logo bob animation not added.** Spec Part 3 mentioned
+  "Logo gentle bobbing on hover (existing CSS animation pattern)"
+  — but the existing logo is a static SVG with no hover
+  transformation today. Adding a subtle hover bob is one keyframe
+  + a single `transition: transform` line on the Logo component;
+  held because it touches `TopBar.tsx` Logo internals (more files
+  than necessary for the same visual lift) and the current
+  TopBar gradient already gives the chrome plenty of personality.
+  Reconsider in a v3.1 micro-animation pass.
+
+- **No cream stroke gradient on the ThumbFriend panel.** Spec
+  Part 4 mentioned "ThumbFriend panel: border subtle cream
+  gradient stroke, crew avatar slot styling, active mode tab
+  orange glow" — these are visible-only-when-open polish items,
+  and the panel is already lazy-loaded behind a Suspense
+  fallback. Held to keep Day 57b focused on always-on chrome
+  (TopBar, ToolPalette, LayerPanel, ContextPanel headers); the
+  ThumbFriend interior gets its own pass when the panel itself
+  changes (likely paired with the v3.1 crew avatar redesign).
+
+- **AdjustmentFilter / blend-mode chrome not touched.** No
+  changes to ContextPanel field rows, blend-mode dropdown,
+  color-picker, etc. All chrome inside the panels stays as Day 53
+  shipped it. Cosmetic refresh of those interiors is a separate
+  cycle's work.
+
 ## Cycle 6 Day 57 — REVERTED (date: 2026-05-03)
 
 - **Day 57 aesthetic pass (sailship/cosmic theme) was reverted from
