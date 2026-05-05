@@ -3,6 +3,7 @@ import { useUiStore } from "@/state/uiStore";
 import { CompositorHost } from "@/editor/CompositorHost";
 import { EditorBackdrop } from "@/editor/EditorBackdrop";
 import { HelmFraming } from "@/editor/HelmFraming";
+import { CosmicSky } from "@/editor/CosmicSky";
 import { TextEditor } from "@/editor/TextEditor";
 import { BgRemoveOverlay } from "@/editor/BgRemoveOverlay";
 import { TopBar } from "@/editor/panels/TopBar";
@@ -172,10 +173,15 @@ export function App() {
       {/* Day 53 a11y — skip-to-editor link. Hidden until Tab focus,
           jumps focus past the toolbar to the canvas main element. */}
       <a href="#tf-canvas" className="tf-skip-link">Skip to editor</a>
-      {/* Day 58 — "Captain at the helm" backdrop layers, all sit at
-          z-index 0 (between body bg and editor grid which is z-index:1).
-          All pointer-events:none. None can touch the canvas mount. */}
+      {/* Day 60 — animated cosmic sky scene (constellations + aurora
+          + drifting stars + horizon breathing + shooting stars).
+          Sits behind HelmFraming + EditorBackdrop in z-stack. */}
+      <CosmicSky />
+      {/* Day 58/60 — painted helm framing (deck + railings + wheel).
+          z-index:0 alongside CosmicSky; both pointer-events:none. */}
       <HelmFraming />
+      {/* Day 58 — crisp drifting stardust canvas (kept as a small
+          additional motion layer over the SVG sky). */}
       <EditorBackdrop />
       <ShipComingAlive
         hasEntered={hasEntered}
