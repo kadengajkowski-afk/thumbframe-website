@@ -48,6 +48,22 @@ export const section: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 8,
+  // Day 65b — parchment-card treatment. Each property section
+  // (Position / Size / Color / Font / Effects / etc) renders on a
+  // small parchment paper card with a brass-shadow border + cream
+  // text color override. Atmosphere wood wall behind ContextPanel
+  // shows around the cards.
+  backgroundImage: "url(\"/quarters/parchment-scroll.png\")",
+  backgroundColor: "var(--parchment, #E8DCC0)",
+  backgroundSize: "200px 200px",
+  backgroundRepeat: "repeat",
+  border: "1px solid rgba(58, 40, 24, 0.35)",
+  borderRadius: 4,
+  padding: "10px 12px",
+  color: "var(--brass-shadow, #3a2818)",
+  boxShadow:
+    "inset 0 1px 0 0 rgba(255, 255, 255, 0.20), " +
+    "0 2px 6px -2px rgba(0, 0, 0, 0.45)",
 };
 
 export const layerNameRow: CSSProperties = {

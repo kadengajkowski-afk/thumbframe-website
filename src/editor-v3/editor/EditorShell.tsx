@@ -11,6 +11,7 @@ import { ToolPalette } from "@/editor/panels/ToolPalette";
 import { PreviewRack } from "@/editor/panels/PreviewRack";
 import { PastDueBanner } from "@/editor/panels/PastDueBanner";
 import { BottomBar } from "@/editor/panels/BottomBar";
+import { ThumbFriendBubble } from "@/editor/panels/ThumbFriendBubble";
 import { WoodWall } from "@/editor/walls/WoodWall";
 
 const ThumbFriendPanel = lazy(() =>
@@ -111,6 +112,10 @@ export function EditorShell() {
 
       {/* Layers scroll-tab — fixed-position sibling of grid */}
       <LayersScrollTab />
+
+      {/* Day 65b — floating ThumbFriend bubble bottom-right.
+          Hidden when the ThumbFriend panel is open. */}
+      <ThumbFriendBubble />
     </div>
   );
 }
