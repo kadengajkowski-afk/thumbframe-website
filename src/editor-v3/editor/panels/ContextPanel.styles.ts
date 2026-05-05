@@ -3,13 +3,13 @@ import { type CSSProperties } from "react";
 export const panel: CSSProperties = {
   width: 280,
   flexShrink: 0,
-  // Day 61 — Captain's desk surface. Wood gradient with subtle
-  // grain repeating-linear-gradient + brass border on the left.
+  // Day 61-fix — Captain's desk surface. Real wood-grain SVG noise
+  // texture overlaid on the wood gradient. Reads as worn wood.
   background:
-    "repeating-linear-gradient(" +
-    "180deg, transparent 0px, transparent 14px, " +
-    "rgba(245, 230, 200, 0.025) 14px, rgba(245, 230, 200, 0.025) 15px), " +
+    "var(--wood-grain-tex), " +
     "linear-gradient(to left, var(--wood-mid), var(--wood-light))",
+  backgroundSize: "200px 200px, auto",
+  backgroundBlendMode: "overlay, normal",
   borderLeft: "2px solid var(--brass-mid)",
   boxShadow:
     "inset 1px 0 0 0 rgba(255, 255, 255, 0.04), " +

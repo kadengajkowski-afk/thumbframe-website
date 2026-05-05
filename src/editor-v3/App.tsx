@@ -7,7 +7,7 @@ import { CosmicSky } from "@/editor/CosmicSky";
 import { TextEditor } from "@/editor/TextEditor";
 import { BgRemoveOverlay } from "@/editor/BgRemoveOverlay";
 import { TopBar } from "@/editor/panels/TopBar";
-import { LayerPanel } from "@/editor/panels/LayerPanel";
+import { LayersScrollTab } from "@/editor/panels/LayersScrollTab";
 import { ContextPanel } from "@/editor/panels/ContextPanel";
 // Day 56 — ThumbFriendPanel lazy-loaded. Pulls in NudgeMode + PartnerMode +
 // the crew picker + the AI client off the main bundle.
@@ -238,7 +238,12 @@ function EditorShell() {
           </Suspense>
         ) : previewOpen ? <PreviewRack /> : <ContextPanel />}
       </div>
-      <LayerPanel />
+      {/* Day 61-fix — Layers moved out of the bottom grid track into
+          a slide-in scroll-tab on the right edge. The brass plaque
+          + parchment scroll mount as fixed-position siblings (see
+          LayersScrollTab). LayerPanel itself is reused inside the
+          scroll, keeping all layer-row + dnd + selection logic. */}
+      <LayersScrollTab />
     </div>
   );
 }
@@ -281,10 +286,11 @@ const editorGrid: React.CSSProperties = {
   width: "100%",
   height: "100%",
   display: "grid",
-  // Day 54: extra `auto` row at the top for the past-due banner.
-  // Row collapses to 0 when PastDueBanner returns null so healthy
-  // subscriptions get the prior 3-row layout unchanged.
-  gridTemplateRows: "auto 48px 1fr 200px",
+  // Day 61-fix: layer panel moved to right-edge scroll-tab. Bottom
+  // 200px track removed; canvas now extends to the bottom edge of
+  // the viewport. PastDueBanner row stays as `auto` (collapses to 0
+  // when banner is hidden via the past-due-placeholder div).
+  gridTemplateRows: "auto 48px 1fr",
 };
 
 const editorRow: React.CSSProperties = {
@@ -303,18 +309,22 @@ const canvasSurface: React.CSSProperties = {
   display: "flex",
   alignItems: "stretch",
   justifyContent: "stretch",
-  // Day 61 — chart-on-the-desk framing. Brass interior border + outer
-  // drop shadow gives the canvas a "resting on something" feel.
-  // Transparent base so the brief boot/transition window shows the
-  // body atmosphere instead of a flat dark slab. Pixi opaque canvas
-  // covers this at runtime.
-  background: "transparent",
-  // Inset cream highlight (top-edge light source) + brass shadow ring
-  // around the working area. The Pixi canvas shadow itself paints
-  // over the inset, so this only reads at the surrounding edges.
+  // Day 61-fix — parchment surround. Radial cream gradient at the
+  // edges fades into transparent center so the cosmic atmosphere
+  // (body bg) shows in the very middle/corners, with painted-paper
+  // texture extending ~80px around the working area. Pixi mounts an
+  // opaque canvas centered in this surface; the parchment reads
+  // ONLY at the edges where the canvas doesn't cover.
+  background:
+    "radial-gradient(ellipse 70% 70% at 50% 50%, " +
+    "transparent 70%, " +
+    "rgba(240, 224, 192, 0.10) 82%, " +
+    "rgba(240, 224, 192, 0.18) 90%, " +
+    "rgba(240, 224, 192, 0.08) 100%)",
+  // Brass shadow ring + outer drop shadow.
   boxShadow:
-    "inset 0 0 0 1px rgba(255, 244, 224, 0.05), " +
-    "inset 0 4px 12px -6px rgba(245, 230, 200, 0.08), " +
+    "inset 0 0 0 1px rgba(245, 230, 200, 0.10), " +
+    "inset 0 4px 12px -6px rgba(245, 230, 200, 0.10), " +
     "0 8px 24px -4px rgba(0, 0, 0, 0.55)",
   overflow: "hidden",
   position: "relative",

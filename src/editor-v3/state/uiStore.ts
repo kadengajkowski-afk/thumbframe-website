@@ -186,6 +186,11 @@ type UiState = {
   thumbfriendPanelOpen: boolean;
   setThumbfriendPanelOpen: (v: boolean) => void;
 
+  /** Day 61-fix: Layers parchment scroll-tab. Opens a slide-in panel
+   * from the right edge with the LayerPanel inside. Cmd+L toggles. */
+  layersScrollOpen: boolean;
+  setLayersScrollOpen: (v: boolean) => void;
+
   /** Day 40: preview-before-apply mode. When true, AI tool calls
    * queue on the assistant bubble and only run when the user clicks
    * Accept. Off by default — most edits should land instantly. */
@@ -425,6 +430,9 @@ export const useUiStore = create<UiState>()((set) => ({
 
   thumbfriendPanelOpen: false,
   setThumbfriendPanelOpen: (thumbfriendPanelOpen) => set({ thumbfriendPanelOpen }),
+
+  layersScrollOpen: false,
+  setLayersScrollOpen: (layersScrollOpen) => set({ layersScrollOpen }),
 
   thumbfriendPreviewMode: false,
   setThumbfriendPreviewMode: (thumbfriendPreviewMode) => set({ thumbfriendPreviewMode }),
