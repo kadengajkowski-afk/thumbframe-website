@@ -3,29 +3,36 @@ import { type CSSProperties } from "react";
 export const panel: CSSProperties = {
   width: 280,
   flexShrink: 0,
-  // Day 58 — frosted glass.
-  background: "var(--panel-frost-bg)",
-  backdropFilter: "var(--panel-frost-blur)",
-  WebkitBackdropFilter: "var(--panel-frost-blur)" as CSSProperties["backdropFilter"],
-  borderLeft: "1px solid var(--panel-frost-border)",
-  boxShadow: "inset 1px 0 0 0 var(--panel-frost-inner-highlight)",
+  // Day 61 — Captain's desk surface. Wood gradient with subtle
+  // grain repeating-linear-gradient + brass border on the left.
+  background:
+    "repeating-linear-gradient(" +
+    "180deg, transparent 0px, transparent 14px, " +
+    "rgba(245, 230, 200, 0.025) 14px, rgba(245, 230, 200, 0.025) 15px), " +
+    "linear-gradient(to left, var(--wood-mid), var(--wood-light))",
+  borderLeft: "2px solid var(--brass-mid)",
+  boxShadow:
+    "inset 1px 0 0 0 rgba(255, 255, 255, 0.04), " +
+    "inset 3px 0 0 0 var(--brass-bright)",
   padding: "14px 16px",
   display: "flex",
   flexDirection: "column",
   gap: 16,
-  color: "var(--text-primary)",
+  color: "var(--brass-cream)",
   overflowY: "auto",
 };
 
 export const panelHeader: CSSProperties = {
-  fontSize: 11,
-  letterSpacing: "0.12em",
+  // Day 61 — Fraunces serif small caps for parchment-card feel.
+  fontFamily: "var(--font-serif)",
+  fontStyle: "italic",
+  fontSize: 13,
+  letterSpacing: "0.10em",
   textTransform: "uppercase",
-  color: "var(--text-tertiary)",
+  color: "var(--brass-cream)",
   fontWeight: 500,
-  // Day 57b — thin cream divider beneath the panel header.
   paddingBottom: 8,
-  borderBottom: "1px solid rgba(249, 240, 225, 0.08)",
+  borderBottom: "1px solid rgba(200, 132, 62, 0.30)",
 };
 
 export const emptyHint: CSSProperties = {
@@ -33,9 +40,10 @@ export const emptyHint: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 13,
-  color: "var(--text-tertiary)",
+  fontFamily: "var(--font-serif)",
   fontStyle: "italic",
+  fontSize: 15,
+  color: "var(--parchment-shadow)",
 };
 
 export const section: CSSProperties = {

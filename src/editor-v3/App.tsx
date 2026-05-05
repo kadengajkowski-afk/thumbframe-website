@@ -173,13 +173,16 @@ export function App() {
       {/* Day 53 a11y — skip-to-editor link. Hidden until Tab focus,
           jumps focus past the toolbar to the canvas main element. */}
       <a href="#tf-canvas" className="tf-skip-link">Skip to editor</a>
-      {/* Day 60 — animated cosmic sky scene (constellations + aurora
-          + drifting stars + horizon breathing + shooting stars).
-          Sits behind HelmFraming + EditorBackdrop in z-stack. */}
-      <CosmicSky />
+      {/* Day 60/61 — animated cosmic sky scene. Switches between
+          empty-state full cinema (constellations + aurora + shooting
+          stars) and editor calm mode (drift + faint horizon only)
+          based on hasEntered. The user is WORKING in editor mode;
+          atmosphere stays a quiet backdrop. */}
+      <CosmicSky mode={hasEntered ? "editor" : "empty"} />
       {/* Day 58/60 — painted helm framing (deck + railings + wheel).
-          z-index:0 alongside CosmicSky; both pointer-events:none. */}
-      <HelmFraming />
+          Empty state only — once the editor mounts, the wheel
+          competes with the canvas for visual weight. */}
+      {!hasEntered && <HelmFraming />}
       {/* Day 58 — crisp drifting stardust canvas (kept as a small
           additional motion layer over the SVG sky). */}
       <EditorBackdrop />
@@ -300,12 +303,19 @@ const canvasSurface: React.CSSProperties = {
   display: "flex",
   alignItems: "stretch",
   justifyContent: "stretch",
-  // Day 59 — transparent surface. Pixi mounts an opaque canvas
-  // covering the whole surface so this transparency is invisible at
-  // runtime, but during the brief moment between EmptyState exit
-  // and Pixi init the body atmosphere shows through cleanly. No
-  // longer needs the dark fallback now that Pixi mounts reliably.
+  // Day 61 — chart-on-the-desk framing. Brass interior border + outer
+  // drop shadow gives the canvas a "resting on something" feel.
+  // Transparent base so the brief boot/transition window shows the
+  // body atmosphere instead of a flat dark slab. Pixi opaque canvas
+  // covers this at runtime.
   background: "transparent",
+  // Inset cream highlight (top-edge light source) + brass shadow ring
+  // around the working area. The Pixi canvas shadow itself paints
+  // over the inset, so this only reads at the surrounding edges.
+  boxShadow:
+    "inset 0 0 0 1px rgba(255, 244, 224, 0.05), " +
+    "inset 0 4px 12px -6px rgba(245, 230, 200, 0.08), " +
+    "0 8px 24px -4px rgba(0, 0, 0, 0.55)",
   overflow: "hidden",
   position: "relative",
 };
