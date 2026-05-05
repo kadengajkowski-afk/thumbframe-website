@@ -5,15 +5,9 @@
 
 .tool-palette {
   width: 56px;
-  /* Day 63 fix — baked wood SVG as background-image. Opaque
-   * wood-mid base prevents cosmic body bg bleed-through. The
-   * wood texture tiles vertically with planks reading top-to-bottom. */
-  background-color: var(--wood-mid);
-  background-image:
-    linear-gradient(to right, rgba(245, 230, 200, 0.04), rgba(20, 14, 8, 0.20)),
-    url("/quarters/wood-wall-1.png");
-  background-size: 100% 100%, 400px 400px;
-  background-repeat: no-repeat, repeat;
+  /* Day 64b — wood owned by parent WoodWall. ToolPalette is a
+   * transparent layout column on top of the wall. */
+  background: transparent;
   border-right: 2px solid var(--brass-mid);
   box-shadow:
     inset 1px 0 0 0 rgba(255, 255, 255, 0.04),

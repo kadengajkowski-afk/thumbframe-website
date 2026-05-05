@@ -5,14 +5,9 @@ export const panel: CSSProperties = {
   flexShrink: 0,
   position: "relative",
   zIndex: 1,
-  // Day 63 fix — baked wood SVG as background-image. Opaque
-  // wood-mid base prevents cosmic body bg bleed-through.
-  backgroundColor: "var(--wood-mid)",
-  backgroundImage:
-    "linear-gradient(to left, rgba(245, 230, 200, 0.04), rgba(20, 14, 8, 0.20)), " +
-    "url(\"/quarters/wood-wall-3.png\")",
-  backgroundSize: "100% 100%, 400px 400px",
-  backgroundRepeat: "no-repeat, repeat",
+  // Day 64b — wood owned by parent WoodWall (right). Properties is
+  // a transparent column on top of the wall.
+  background: "transparent",
   borderLeft: "2px solid var(--brass-mid)",
   boxShadow:
     "inset 1px 0 0 0 rgba(255, 255, 255, 0.04), " +
