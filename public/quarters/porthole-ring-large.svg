@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
+  <defs>
+    <linearGradient id="brass-320" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#D4A55C" />
+      <stop offset="50%" stop-color="#B8864B" />
+      <stop offset="100%" stop-color="#7a5430" />
+    </linearGradient>
+    <radialGradient id="brass-bevel-320" cx="50%" cy="50%" r="50%">
+      <stop offset="85.4%" stop-color="rgba(0,0,0,0.0)" />
+      <stop offset="91.3%" stop-color="rgba(0,0,0,0.45)" />
+      <stop offset="92.7%" stop-color="rgba(0,0,0,0)" />
+    </radialGradient>
+    <filter id="outer-glow-320" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.8" />
+    </filter>
+  </defs>
+
+  <!-- Outer glow -->
+  <circle cx="160" cy="160" r="156.79999999999998" fill="rgba(184, 134, 75, 0.22)" filter="url(#outer-glow-320)" />
+
+  <!-- Brass ring (annulus via two circles + even-odd fill workaround) -->
+  <path d="M 160 6.400000000000006
+           a 153.6 153.6 0 1 0 0.001 0 Z
+           M 160 28.80000000000001
+           a 131.2 131.2 0 1 1 -0.001 0 Z"
+        fill="url(#brass-320)"
+        fill-rule="evenodd" />
+
+  <!-- Inner-edge bevel shadow -->
+  <circle cx="160" cy="160" r="153.6" fill="url(#brass-bevel-320)" />
+
+  <!-- Top highlight (suggests overhead light) -->
+  <ellipse cx="160" cy="67.84"
+           rx="69.12" ry="8.96"
+           fill="rgba(255, 240, 200, 0.45)" />
+
+  <!-- Rivets -->
+  <g>
+    <circle cx="160.00" cy="17.60" r="5.76" fill="#3a2818" opacity="0.75" />
+    <circle cx="160.00" cy="17.60" r="3.17" fill="#D4A55C" opacity="0.95" />
+    <circle cx="283.32" cy="88.80" r="5.76" fill="#3a2818" opacity="0.75" />
+    <circle cx="283.32" cy="88.80" r="3.17" fill="#D4A55C" opacity="0.95" />
+    <circle cx="283.32" cy="231.20" r="5.76" fill="#3a2818" opacity="0.75" />
+    <circle cx="283.32" cy="231.20" r="3.17" fill="#D4A55C" opacity="0.95" />
+    <circle cx="160.00" cy="302.40" r="5.76" fill="#3a2818" opacity="0.75" />
+    <circle cx="160.00" cy="302.40" r="3.17" fill="#D4A55C" opacity="0.95" />
+    <circle cx="36.68" cy="231.20" r="5.76" fill="#3a2818" opacity="0.75" />
+    <circle cx="36.68" cy="231.20" r="3.17" fill="#D4A55C" opacity="0.95" />
+    <circle cx="36.68" cy="88.80" r="5.76" fill="#3a2818" opacity="0.75" />
+    <circle cx="36.68" cy="88.80" r="3.17" fill="#D4A55C" opacity="0.95" />
+  </g>
+</svg>

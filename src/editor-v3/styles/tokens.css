@@ -35,6 +35,45 @@
   --parchment:        #f0e0c0;
   --parchment-shadow: #d4c094;
 
+  /* ── Day 63 locked palette (research plan) ──────────────────────── */
+  /* Charcoal base — warm dark, NEVER #000000 */
+  --charcoal:      #1A1F2E;
+  --charcoal-deep: #0F1219;
+  --ink:           #2A2620;  /* PixiJS canvas mount fill */
+
+  /* Cream + parchment (research plan canonical) */
+  --cream:         #F4EAD5;
+  --parchment-canonical: #E8DCC0;
+  --parchment-shadow-canonical: #D4C094;
+
+  /* Metallics */
+  --brass:         #B8864B;
+  /* --brass-bright already defined above */
+  --copper:        #A85A3A;
+
+  /* States */
+  --brass-glow:    rgba(184, 134, 75, 0.4);
+  --cream-soft:    rgba(244, 234, 213, 0.06);
+
+  /* ── Z-index contract (Day 63) ─────────────────────────────────── */
+  --z-atmosphere:      -1;   /* fixed body cosmic / ocean canvas */
+  --z-shell:            0;   /* transparent editor grid container */
+  --z-walls:            1;   /* wood-textured side / top panels */
+  --z-porthole-glass:   2;   /* SVG mask cutouts + radial inner shadow */
+  --z-brass-ring:       3;   /* brass ring SVGs over the holes */
+  --z-canvas-mount:     5;   /* PixiJS container — opaque, untouched */
+  --z-floating-panels: 20;   /* parchment scroll, dropdowns */
+  --z-overlay:         30;   /* ThumbFriend bubble, toasts */
+  --z-modal:          100;
+}
+
+/* Day 63 light-mode override — coral copper + brighter brass.
+ * Light mode (ocean sunset deck) lands Day 64-65 per plan. */
+[data-mode="light"] {
+  --charcoal: #2A2620;
+  --brass:    #D4A55C;
+  --copper:   #D9886B;
+
   /* Day 61-fix — real wood-grain texture as a data-URL SVG noise
    * pattern. Used as a layered background-image on every wood
    * surface so the toolbar walls actually look worn instead of
