@@ -10,6 +10,7 @@ import { ZoomIndicator } from "@/editor/ZoomIndicator";
 import { ToolPalette } from "@/editor/panels/ToolPalette";
 import { PreviewRack } from "@/editor/panels/PreviewRack";
 import { PastDueBanner } from "@/editor/panels/PastDueBanner";
+import { BottomBar } from "@/editor/panels/BottomBar";
 import { WoodWall } from "@/editor/walls/WoodWall";
 
 const ThumbFriendPanel = lazy(() =>
@@ -101,11 +102,10 @@ export function EditorShell() {
         </WoodWall>
       </div>
 
-      {/* BOTTOM WALL — 38px high, small porthole top-center for 64c
-          status + zoom controls to land later. */}
+      {/* BOTTOM WALL — 38px high. Status (left) + zoom (right). */}
       <div style={{ gridArea: "bottomwall", position: "relative", zIndex: 1, height: 38 }}>
         <WoodWall side="bottom">
-          {/* 64c content lands here */}
+          <BottomBar />
         </WoodWall>
       </div>
 
