@@ -5,18 +5,23 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  /* Day 61-fix — wood-grain texture matching ToolPalette + Properties. */
-  background:
-    var(--wood-grain-tex),
-    linear-gradient(to bottom, var(--wood-mid), var(--wood-dark));
-  background-size: 200px 200px, auto;
-  background-blend-mode: overlay, normal;
+  /* Day 63 fix — wood SVG bake on the layer panel surface (mounted
+   * inside the parchment scroll-tab from Day 61-fix). Opaque wood
+   * fallback prevents cosmic atmosphere bleed. */
+  background-color: var(--wood-mid);
+  background-image:
+    linear-gradient(to bottom, rgba(245, 230, 200, 0.04), rgba(20, 14, 8, 0.20)),
+    url("/quarters/wood-wall-2.svg");
+  background-size: 100% 100%, 400px 400px;
+  background-repeat: no-repeat, repeat;
   border-top: 2px solid var(--brass-mid);
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
     inset 0 3px 0 0 var(--brass-bright);
   color: var(--brass-cream);
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 .layer-panel__header {

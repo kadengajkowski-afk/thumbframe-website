@@ -261,17 +261,23 @@ function Logo() {
 const bar: CSSProperties = {
   display: "flex", alignItems: "center", gap: 12, padding: "0 16px",
   height: 48,
-  // Day 61 — Captain's Quarters TopBar. Wood walls (gradient
-  // wood-dark → wood-mid) with a brass top/bottom edge. Atmosphere
-  // doesn't show through here — the bridge of the ship is solid wood,
-  // not a window.
-  background: "linear-gradient(to bottom, var(--wood-dark), var(--wood-mid))",
-  borderBottom: "1px solid rgba(160, 101, 30, 0.45)",
-  // Top brass edge + inner cream highlight stacked.
+  // Day 63 fix — actual baked wood SVG as background-image. Opaque
+  // wood-mid base color fallback guarantees the cosmic body bg can
+  // NEVER bleed through. Tile the wood horizontally; planks read
+  // top-to-bottom inside the 48px bar.
+  backgroundColor: "var(--wood-mid)",
+  backgroundImage:
+    "linear-gradient(to bottom, rgba(245, 230, 200, 0.04), rgba(20, 14, 8, 0.18)), " +
+    "url(\"/quarters/wood-wall-2.svg\")",
+  backgroundSize: "100% 100%, 400px 400px",
+  backgroundRepeat: "no-repeat, repeat",
+  borderBottom: "1px solid rgba(160, 101, 30, 0.55)",
   boxShadow:
     "inset 0 1px 0 0 var(--brass-bright), " +
-    "inset 0 2px 0 0 rgba(245, 230, 200, 0.10)",
+    "inset 0 2px 0 0 rgba(245, 230, 200, 0.12)",
   color: "var(--brass-cream)",
+  position: "relative",
+  zIndex: 1,
 };
 const leftGroup: CSSProperties = { display: "flex", alignItems: "center", gap: 10, minWidth: 200 };
 const centerGroup: CSSProperties = {
