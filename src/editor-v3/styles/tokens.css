@@ -35,6 +35,14 @@
   --parchment:        #f0e0c0;
   --parchment-shadow: #d4c094;
 
+  /* Day 61-fix — real wood-grain texture as a data-URL SVG noise
+   * pattern. Used as a layered background-image on every wood
+   * surface so the toolbar walls actually look worn instead of
+   * being a flat dark gradient. Warm-brown turbulence at 12%
+   * opacity reads as wood fiber, not static noise. */
+  --wood-grain-tex:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.012 0.6' numOctaves='3' seed='5'/><feColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.22 0 0 0 0 0.12 0 0 0 0.32 0'/></filter><rect width='400' height='400' filter='url(%23g)'/></svg>");
+
   /* ── Frosted-glass panel surface (Day 58 — hybrid backdrop) ──────── */
   /* Used for TopBar / ToolPalette / ContextPanel / LayerPanel /
    * ThumbFriendPanel chrome so the painterly backdrop shows through

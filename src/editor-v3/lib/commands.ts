@@ -368,6 +368,17 @@ const COMMANDS: Command[] = [
       ui.setThumbfriendPanelOpen(!ui.thumbfriendPanelOpen);
     },
   },
+  {
+    id: "view.layers",
+    label: "Toggle layers scroll",
+    section: "View",
+    hotkey: "Cmd+L",
+    aliases: ["layers", "scroll", "manifest"],
+    run: () => {
+      const ui = useUiStore.getState();
+      ui.setLayersScrollOpen(!ui.layersScrollOpen);
+    },
+  },
 
   // Day 53 — Crew switcher entries. One palette command per crew so
   // the user can switch personalities without opening the panel +
