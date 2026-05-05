@@ -1,9 +1,11 @@
 import { lazy, Suspense, useEffect } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { CompositorHost } from "@/editor/CompositorHost";
-import { EditorBackdrop } from "@/editor/EditorBackdrop";
-import { HelmFraming } from "@/editor/HelmFraming";
-import { CosmicSky } from "@/editor/CosmicSky";
+// Day 63 — removed CosmicSky / HelmFraming / EditorBackdrop. The
+// painterly cosmic scene is now a single baked PNG on body bg
+// (see main.tsx + tokens.css). The SVG-based scene was mediocre at
+// reproducing the Kuwahara + paper grain feel; the bake captures
+// the EXACT landing aesthetic instead.
 import { TextEditor } from "@/editor/TextEditor";
 import { BgRemoveOverlay } from "@/editor/BgRemoveOverlay";
 import { TopBar } from "@/editor/panels/TopBar";
@@ -173,19 +175,9 @@ export function App() {
       {/* Day 53 a11y — skip-to-editor link. Hidden until Tab focus,
           jumps focus past the toolbar to the canvas main element. */}
       <a href="#tf-canvas" className="tf-skip-link">Skip to editor</a>
-      {/* Day 60/61 — animated cosmic sky scene. Switches between
-          empty-state full cinema (constellations + aurora + shooting
-          stars) and editor calm mode (drift + faint horizon only)
-          based on hasEntered. The user is WORKING in editor mode;
-          atmosphere stays a quiet backdrop. */}
-      <CosmicSky mode={hasEntered ? "editor" : "empty"} />
-      {/* Day 58/60 — painted helm framing (deck + railings + wheel).
-          Empty state only — once the editor mounts, the wheel
-          competes with the canvas for visual weight. */}
-      {!hasEntered && <HelmFraming />}
-      {/* Day 58 — crisp drifting stardust canvas (kept as a small
-          additional motion layer over the SVG sky). */}
-      <EditorBackdrop />
+      {/* Day 63 — painterly cosmic backdrop is the body bg only.
+          No SVG scene layers, no canvas2D stardust, no HelmFraming.
+          The bake on body carries everything the spec asked for. */}
       <ShipComingAlive
         hasEntered={hasEntered}
         empty={<EmptyState />}
