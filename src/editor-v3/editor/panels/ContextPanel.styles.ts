@@ -3,13 +3,16 @@ import { type CSSProperties } from "react";
 export const panel: CSSProperties = {
   width: 280,
   flexShrink: 0,
-  // Day 61-fix — Captain's desk surface. Real wood-grain SVG noise
-  // texture overlaid on the wood gradient. Reads as worn wood.
-  background:
-    "var(--wood-grain-tex), " +
-    "linear-gradient(to left, var(--wood-mid), var(--wood-light))",
-  backgroundSize: "200px 200px, auto",
-  backgroundBlendMode: "overlay, normal",
+  position: "relative",
+  zIndex: 1,
+  // Day 63 fix — baked wood SVG as background-image. Opaque
+  // wood-mid base prevents cosmic body bg bleed-through.
+  backgroundColor: "var(--wood-mid)",
+  backgroundImage:
+    "linear-gradient(to left, rgba(245, 230, 200, 0.04), rgba(20, 14, 8, 0.20)), " +
+    "url(\"/quarters/wood-wall-3.svg\")",
+  backgroundSize: "100% 100%, 400px 400px",
+  backgroundRepeat: "no-repeat, repeat",
   borderLeft: "2px solid var(--brass-mid)",
   boxShadow:
     "inset 1px 0 0 0 rgba(255, 255, 255, 0.04), " +

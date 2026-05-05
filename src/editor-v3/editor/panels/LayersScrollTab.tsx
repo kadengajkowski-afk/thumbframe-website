@@ -157,8 +157,13 @@ export function LayersScrollTab() {
             flex: 1,
             minHeight: 0,
             overflow: "auto",
-            // Inversion overrides — see CSS below for layer-row tweaks.
-            background: "var(--parchment)",
+            // Day 63 fix — actual baked parchment SVG with cream
+            // fallback color so the slide-in panel reads as paper,
+            // not flat color block.
+            backgroundColor: "var(--parchment)",
+            backgroundImage: "url(\"/quarters/parchment-scroll.svg\")",
+            backgroundSize: "400px 400px",
+            backgroundRepeat: "repeat",
             color: "var(--brass-shadow)",
           }}
         >
