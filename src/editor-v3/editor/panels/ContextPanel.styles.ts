@@ -10,7 +10,7 @@ export const panel: CSSProperties = {
   backgroundColor: "var(--wood-mid)",
   backgroundImage:
     "linear-gradient(to left, rgba(245, 230, 200, 0.04), rgba(20, 14, 8, 0.20)), " +
-    "url(\"/quarters/wood-wall-3.svg\")",
+    "url(\"/quarters/wood-wall-3.png\")",
   backgroundSize: "100% 100%, 400px 400px",
   backgroundRepeat: "no-repeat, repeat",
   borderLeft: "2px solid var(--brass-mid)",

@@ -161,7 +161,7 @@ export function LayersScrollTab() {
             // fallback color so the slide-in panel reads as paper,
             // not flat color block.
             backgroundColor: "var(--parchment)",
-            backgroundImage: "url(\"/quarters/parchment-scroll.svg\")",
+            backgroundImage: "url(\"/quarters/parchment-scroll.png\")",
             backgroundSize: "400px 400px",
             backgroundRepeat: "repeat",
             color: "var(--brass-shadow)",

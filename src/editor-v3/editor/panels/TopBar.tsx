@@ -268,7 +268,7 @@ const bar: CSSProperties = {
   backgroundColor: "var(--wood-mid)",
   backgroundImage:
     "linear-gradient(to bottom, rgba(245, 230, 200, 0.04), rgba(20, 14, 8, 0.18)), " +
-    "url(\"/quarters/wood-wall-2.svg\")",
+    "url(\"/quarters/wood-wall-2.png\")",
   backgroundSize: "100% 100%, 400px 400px",
   backgroundRepeat: "no-repeat, repeat",
   borderBottom: "1px solid rgba(160, 101, 30, 0.55)",
