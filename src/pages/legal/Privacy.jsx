@@ -163,13 +163,13 @@ export default function Privacy({ setPage }) {
       <h2>11. Contact</h2>
       <p>
         For any privacy question, request, or concern, email{' '}
-        <a href="mailto:privacy@thumbframe.com">privacy@thumbframe.com</a>{' '}
+        <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>{' '}
         or <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>.
       </p>
       <p>
         For data export or deletion requests (GDPR / CCPA), use the
         Settings → Account page or email{' '}
-        <a href="mailto:privacy@thumbframe.com">privacy@thumbframe.com</a>.
+        <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>.
         We respond within 30 days.
       </p>
     </LegalPageTemplate>

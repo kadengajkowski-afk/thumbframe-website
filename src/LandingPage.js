@@ -584,7 +584,7 @@ function FooterSection({ setPage }) {
               <span style={{ fontFamily: FH, fontWeight: 700, fontSize: 17, color: C.text }}>Thumb<span style={{ color: C.acc }}>Frame</span></span>
             </div>
             <p style={{ fontFamily: FB, fontSize: 13, color: C.muted, lineHeight: 1.65, maxWidth: 230, margin: '0 0 16px' }}>The professional thumbnail editor for creators who take their channel seriously.</p>
-            <div style={{ fontFamily: FB, fontSize: 12, color: C.muted, marginBottom: 14 }}>support@thumbframe.com</div>
+            <div style={{ fontFamily: FB, fontSize: 12, color: C.muted, marginBottom: 14 }}>hello@thumbframe.com</div>
             <div style={{ display: 'flex', gap: 10 }}>
               {['𝕏','▶','in'].map(icon => (
                 <div key={icon} style={{ width: 32, height: 32, borderRadius: 7, background: C.card, border: `1px solid ${C.bdr}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: C.muted, cursor: 'pointer', fontFamily: 'serif' }}>{icon}</div>

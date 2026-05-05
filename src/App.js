@@ -113,7 +113,7 @@ function Sidebar({ open, onClose, setPage }) {
       title: 'Help & info',
       items: [
         { icon: '?', label: 'How it works',   action: () => { setPage('home'); onClose(); } },
-        { icon: '✉', label: 'Contact support', action: () => { window.location.href = 'mailto:support@thumbframe.app'; onClose(); } },
+        { icon: '✉', label: 'Contact support', action: () => { window.location.href = 'mailto:hello@thumbframe.com'; onClose(); } },
         { icon: '★', label: 'Examples',        action: () => { setPage('examples'); onClose(); } },
         { icon: '$', label: 'Pricing',          action: () => { setPage('pricing'); onClose(); } },
       ],
