@@ -43,14 +43,18 @@ export function EmptyState() {
         aria-hidden="true"
         style={visuallyHidden}
       />
-      {/* Day 58 retry — "chart room" empty state. Small centered card
-          on the cosmic-deck atmosphere. NOT a full-screen ship hero. */}
+      {/* Day 60 — refined chart-room card with painted brass corner
+          ornaments + celestial compass marker. */}
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
         style={uploadTarget}
         aria-label="Upload to set sail — opens file picker"
       >
+        <BrassCorner position="tl" />
+        <BrassCorner position="tr" />
+        <BrassCorner position="bl" />
+        <BrassCorner position="br" />
         <CompassRose />
         <span style={heading}>Upload to set sail</span>
         <span style={subheading}>drop a thumbnail here</span>
@@ -81,32 +85,109 @@ export function EmptyState() {
   );
 }
 
-/** Day 58 — placeholder painted compass rose. Geometric SVG until
- *  Day 60's hand-painted icon set lands. Cream stroke + amber pip
- *  at top to read as "north". */
+/** Day 60 — celestial chart marker. Painted compass with amber needle
+ *  pip, imperfect cream rings (slight wobble suggesting hand-drawn),
+ *  surrounded by 4 small star pips at the cardinal halfway points. */
 function CompassRose() {
   return (
     <svg
-      width="56"
-      height="56"
-      viewBox="0 0 56 56"
+      width="64"
+      height="64"
+      viewBox="0 0 64 64"
       aria-hidden="true"
-      style={{ display: "block", marginBottom: 4 }}
+      style={{ display: "block", marginBottom: 6 }}
     >
-      {/* Outer ring */}
-      <circle cx="28" cy="28" r="24" fill="none" stroke="var(--cream-100)" strokeWidth="1.4" opacity="0.6" />
-      {/* Inner ring */}
-      <circle cx="28" cy="28" r="14" fill="none" stroke="var(--cream-100)" strokeWidth="1" opacity="0.4" />
-      {/* North pip — amber */}
-      <path d="M28 4 L31 26 L28 28 L25 26 Z" fill="var(--accent-amber)" opacity="0.95" />
-      {/* South */}
-      <path d="M28 52 L31 30 L28 28 L25 30 Z" fill="var(--cream-100)" opacity="0.55" />
-      {/* East */}
-      <path d="M52 28 L30 31 L28 28 L30 25 Z" fill="var(--cream-100)" opacity="0.45" />
-      {/* West */}
-      <path d="M4 28 L26 31 L28 28 L26 25 Z" fill="var(--cream-100)" opacity="0.45" />
+      {/* Star pips at compass halves — N-NE / S-SE / S-SW / N-NW */}
+      {[
+        [50, 14], [50, 50], [14, 50], [14, 14],
+      ].map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r="1.2" fill="var(--cream-100)" opacity="0.55" />
+      ))}
+      {/* Outer ring — slight quadratic wobble suggests hand-painted */}
+      <path
+        d="M32 4 Q56 8 60 32 Q56 56 32 60 Q8 56 4 32 Q8 8 32 4 Z"
+        fill="none"
+        stroke="var(--cream-100)"
+        strokeWidth="1.4"
+        opacity="0.65"
+      />
+      {/* Inner ring — also slightly imperfect */}
+      <path
+        d="M32 18 Q44 20 46 32 Q44 44 32 46 Q20 44 18 32 Q20 20 32 18 Z"
+        fill="none"
+        stroke="var(--cream-100)"
+        strokeWidth="1"
+        opacity="0.42"
+      />
+      {/* North needle — amber, prominent */}
+      <path d="M32 6 L35 30 L32 32 L29 30 Z" fill="var(--accent-amber)" opacity="0.98" />
+      {/* South needle — cream */}
+      <path d="M32 58 L35 34 L32 32 L29 34 Z" fill="var(--cream-100)" opacity="0.55" />
+      {/* East + West — fainter */}
+      <path d="M58 32 L34 35 L32 32 L34 29 Z" fill="var(--cream-100)" opacity="0.42" />
+      <path d="M6 32 L30 35 L32 32 L30 29 Z" fill="var(--cream-100)" opacity="0.42" />
       {/* Hub */}
-      <circle cx="28" cy="28" r="2" fill="var(--accent-amber)" />
+      <circle cx="32" cy="32" r="2.2" fill="var(--accent-amber)" />
+      <circle cx="32" cy="32" r="0.8" fill="var(--cream-100)" />
+    </svg>
+  );
+}
+
+/** Day 60 — painted brass corner ornaments. Two crossing brushstrokes
+ *  per corner suggest hand-painted edge decoration without reading as
+ *  literal corner brackets. position:absolute relative to the card. */
+function BrassCorner({ position }: { position: "tl" | "tr" | "bl" | "br" }) {
+  const top = position.startsWith("t");
+  const left = position.endsWith("l");
+  const wrap: CSSProperties = {
+    position: "absolute",
+    top: top ? 8 : "auto",
+    bottom: top ? "auto" : 8,
+    left: left ? 8 : "auto",
+    right: left ? "auto" : 8,
+    width: 28,
+    height: 28,
+    pointerEvents: "none",
+  };
+  // Mirror SVG paths so corner accent angles outward toward each corner.
+  const flipX = !left ? "scale(-1 1) translate(-28 0)" : "";
+  const flipY = !top ? "scale(1 -1) translate(0 -28)" : "";
+  const transform = [flipX, flipY].filter(Boolean).join(" ");
+  return (
+    <svg
+      style={wrap}
+      viewBox="0 0 28 28"
+      aria-hidden="true"
+    >
+      <g transform={transform}>
+        {/* Long stroke along the top edge */}
+        <path
+          d="M2 4 Q8 3 14 5"
+          fill="none"
+          stroke="var(--accent-amber)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          opacity="0.75"
+        />
+        {/* Short cross stroke down */}
+        <path
+          d="M4 2 Q5 8 6 14"
+          fill="none"
+          stroke="var(--accent-amber)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          opacity="0.75"
+        />
+        {/* Cream highlight wisp */}
+        <path
+          d="M5 5 Q9 5.5 13 6"
+          fill="none"
+          stroke="var(--cream-100)"
+          strokeWidth="0.8"
+          strokeLinecap="round"
+          opacity="0.5"
+        />
+      </g>
     </svg>
   );
 }
@@ -120,22 +201,28 @@ const wrap: CSSProperties = {
   gap: 18,
 };
 
-/* Day 58 retry — frosted glass card, ~360px wide, centered. Replaces
- * the giant 80vw dashed-frame ghost canvas that made the empty state
- * fight with the cosmic atmosphere. */
+/* Day 60 — refined chart-room card. Frosted glass at 65% alpha +
+ * heavier 20px blur, solid brass-amber border (35% opacity) replaces
+ * the dashed cream border, painted brass corner ornaments at each
+ * corner. Position:relative so the absolutely-positioned corners
+ * land inside the card bounds. */
 const uploadTarget: CSSProperties = {
+  position: "relative",
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
   gap: 14,
-  background: "var(--panel-frost-bg)",
-  backdropFilter: "var(--panel-frost-blur)",
-  WebkitBackdropFilter: "var(--panel-frost-blur)" as CSSProperties["backdropFilter"],
-  border: "1px dashed rgba(255, 244, 224, 0.30)",
-  borderRadius: 12,
-  padding: "32px 48px 28px",
-  minWidth: 360,
-  maxWidth: 480,
+  background: "rgba(10, 7, 20, 0.65)",
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)" as CSSProperties["backdropFilter"],
+  border: "1px solid rgba(249, 115, 22, 0.35)",
+  boxShadow:
+    "inset 0 1px 0 0 rgba(255, 244, 224, 0.06), " +
+    "0 8px 40px -8px rgba(249, 115, 22, 0.18)",
+  borderRadius: 14,
+  padding: "36px 56px 32px",
+  minWidth: 380,
+  maxWidth: 520,
   cursor: "pointer",
   color: "inherit",
   transition:
