@@ -1,0 +1,378 @@
+import { Canvas, useFrame } from "@react-three/fiber";
+import { useMemo, useRef } from "react";
+import * as THREE from "three";
+
+/** Day 67 (Part 18) — empty-state cosmic scene.
+ *
+ *  Lives INSIDE the canvas grid cell (not the body bg). Renders
+ *  when the editor has no canvas content yet — replaces the prior
+ *  static cosmic empty state with a live painterly Three.js scene.
+ *
+ *  Composition:
+ *    - Background plane: deep cosmic gradient, charcoal-deep top,
+ *      charcoal middle, slightly purple-blue bottom, with a faint
+ *      brass-amber bloom band lower-third.
+ *    - Stardust: 250 oversized Point particles (so Kuwahara post
+ *      doesn't eat them). Sizes 60% small / 30% medium / 10%
+ *      larger. Cream color with varied opacity 30-90%.
+ *    - 5 themed constellation paint dabs (compass, anchor, sail,
+ *      quill, ship's wheel). NOT lines — pattern recognition only.
+ *      Each dab pulses opacity 60-100% on staggered 12-18s loops.
+ *    - Shooting star paint streaks: random every 8-15s, varied
+ *      angles (20°, 35°, 60°, 145°, 160°), 6-10 trail particles.
+ *
+ *  Runs r3f at dpr 0.6. The 250 + ~38 + transient streak particles
+ *  total ~290. Single Canvas, separate from BodyAtmosphere context. */
+
+const STAR_COUNT = 250;
+const CREAM = "#F4EAD5";
+
+// ── Helpers ──────────────────────────────────────────────────
+
+function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+}
+
+// ── Background gradient plane ────────────────────────────────
+
+function BackgroundGradient() {
+  const ref = useRef<THREE.Mesh>(null);
+  return (
+    <mesh ref={ref} position={[0, 0, -10]}>
+      <planeGeometry args={[40, 26]} />
+      <shaderMaterial
+        uniforms={{}}
+        vertexShader={`
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+          varying vec2 vUv;
+          void main() {
+            // vUv.y: 0 bottom → 1 top. Invert mental model.
+            float y = vUv.y;
+            vec3 charcoalDeep = vec3(0.058, 0.071, 0.098);
+            vec3 charcoal     = vec3(0.102, 0.122, 0.180);
+            vec3 mid          = vec3(0.165, 0.165, 0.243);
+            // Top-to-mid-to-bottom blend.
+            vec3 col = mix(charcoalDeep, charcoal, smoothstep(0.55, 0.85, y));
+            col = mix(mid, col, smoothstep(0.20, 0.55, y));
+            // Brass-amber bloom band lower-third (y around 0.20-0.35).
+            float bloom = smoothstep(0.10, 0.22, y) * (1.0 - smoothstep(0.22, 0.42, y));
+            col += vec3(0.722, 0.525, 0.294) * bloom * 0.10;
+            gl_FragColor = vec4(col, 1.0);
+          }
+        `}
+      />
+    </mesh>
+  );
+}
+
+// ── Ambient stars ────────────────────────────────────────────
+
+function StarField() {
+  const ref = useRef<THREE.Points>(null);
+
+  const { positions, sizes, alphas } = useMemo(() => {
+    const rand = rng(0xCAFEBABE);
+    const pos = new Float32Array(STAR_COUNT * 3);
+    const sz = new Float32Array(STAR_COUNT);
+    const al = new Float32Array(STAR_COUNT);
+    for (let i = 0; i < STAR_COUNT; i++) {
+      // Spread across the visible plane area.
+      pos[i * 3 + 0] = (rand() - 0.5) * 38;
+      pos[i * 3 + 1] = (rand() - 0.5) * 24;
+      pos[i * 3 + 2] = -8 - rand() * 6;
+      const r = rand();
+      sz[i] = r < 0.6 ? 0.02 : r < 0.9 ? 0.05 : 0.08;
+      al[i] = r < 0.5 ? 0.30 + rand() * 0.20 : 0.55 + rand() * 0.35;
+    }
+    return { positions: pos, sizes: sz, alphas: al };
+  }, []);
+
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    // Very slow drift for parallax. Wraps via simple modulo.
+    const t = clock.getElapsedTime();
+    ref.current.position.x = ((t * 0.2) % 38) - 19;
+  });
+
+  return (
+    <points ref={ref}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} count={STAR_COUNT} />
+        <bufferAttribute attach="attributes-size" args={[sizes, 1]} count={STAR_COUNT} />
+        <bufferAttribute attach="attributes-alpha" args={[alphas, 1]} count={STAR_COUNT} />
+      </bufferGeometry>
+      <pointsMaterial
+        color={CREAM}
+        size={0.06}
+        sizeAttenuation
+        transparent
+        opacity={0.7}
+        depthWrite={false}
+      />
+    </points>
+  );
+}
+
+// ── Themed constellations as paint dabs (oversize particles) ─
+
+type Constellation = {
+  name: string;
+  cx: number;
+  cy: number;
+  dabs: { x: number; y: number; r: number }[];
+  delay: number;
+};
+
+const CONSTELLATIONS: Constellation[] = [
+  {
+    // Compass — top-center
+    name: "compass",
+    cx: 0, cy: 7,
+    dabs: [
+      { x: 0, y: 1.6, r: 0.22 },   // N
+      { x: 0, y: 0,   r: 0.16 },   // hub
+      { x: 1.6, y: 0, r: 0.18 },   // E
+      { x: 0, y: -1.6, r: 0.16 },  // S
+      { x: -1.6, y: 0, r: 0.18 },  // W
+    ],
+    delay: 0,
+  },
+  {
+    // Anchor — upper-right
+    name: "anchor",
+    cx: 11, cy: 5,
+    dabs: [
+      { x: 0, y: 1.6, r: 0.18 },   // ring top
+      { x: 0, y: 0.8, r: 0.14 },   // crossbar middle
+      { x: -1.0, y: 0.4, r: 0.16 },// crossbar L
+      { x: 1.0, y: 0.4, r: 0.16 }, // crossbar R
+      { x: 0, y: -1.5, r: 0.20 },  // shaft bottom
+      { x: -1.4, y: -1.0, r: 0.14 },// hook L
+    ],
+    delay: 3,
+  },
+  {
+    // Sail — mid-right
+    name: "sail",
+    cx: 13, cy: -1,
+    dabs: [
+      { x: 0, y: 1.6, r: 0.22 },
+      { x: 1.4, y: -1.2, r: 0.18 },
+      { x: -1.2, y: -1.2, r: 0.18 },
+      { x: 0, y: -1.2, r: 0.14 },
+    ],
+    delay: 6,
+  },
+  {
+    // Quill — upper-left
+    name: "quill",
+    cx: -10, cy: 5,
+    dabs: [
+      { x: -1.5, y: 1.4, r: 0.18 },
+      { x: -0.8, y: 0.8, r: 0.16 },
+      { x: -0.2, y: 0.2, r: 0.20 },
+      { x: 0.4, y: -0.4, r: 0.22 },
+      { x: 1.0, y: -0.9, r: 0.16 },
+      { x: 1.4, y: -1.4, r: 0.14 },
+      { x: 1.7, y: -1.7, r: 0.20 },
+    ],
+    delay: 9,
+  },
+  {
+    // Ship's wheel — mid-left
+    name: "wheel",
+    cx: -11, cy: -1,
+    dabs: (() => {
+      const arr = [{ x: 0, y: 0, r: 0.18 }];
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        arr.push({ x: Math.cos(a) * 1.4, y: Math.sin(a) * 1.4, r: 0.16 });
+      }
+      return arr;
+    })(),
+    delay: 12,
+  },
+];
+
+function ConstellationDab({
+  x, y, z, r, baseAlpha, delay,
+}: {
+  x: number; y: number; z: number; r: number; baseAlpha: number; delay: number;
+}) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    const t = clock.getElapsedTime() + delay;
+    // Pulse opacity 60% to 100% over a slow ~14s loop.
+    const a = baseAlpha * (0.60 + 0.40 * (0.5 + 0.5 * Math.sin(t * 0.45)));
+    const m = ref.current.material as THREE.MeshBasicMaterial;
+    m.opacity = a;
+  });
+  return (
+    <mesh ref={ref} position={[x, y, z]}>
+      <circleGeometry args={[r, 16]} />
+      <meshBasicMaterial color={CREAM} transparent opacity={baseAlpha} depthWrite={false} />
+    </mesh>
+  );
+}
+
+function Constellations() {
+  return (
+    <>
+      {CONSTELLATIONS.map((c) => (
+        <group key={c.name} position={[c.cx, c.cy, -7]}>
+          {c.dabs.map((d, i) => (
+            <ConstellationDab
+              key={i}
+              x={d.x}
+              y={d.y}
+              z={0}
+              r={d.r}
+              baseAlpha={0.85}
+              delay={c.delay + i * 0.4}
+            />
+          ))}
+        </group>
+      ))}
+    </>
+  );
+}
+
+// ── Shooting star streaks ─────────────────────────────────────
+
+function ShootingStars() {
+  // Spawn a single shooting star at a time on a randomized
+  // 8-15s cadence. Each streak is 6 trail dots fading from head.
+  const [spawn, setSpawn] = useTickSpawn();
+
+  return (
+    <>
+      {spawn && <ShootingStreak key={spawn.id} {...spawn} onDone={() => setSpawn(null)} />}
+    </>
+  );
+}
+
+type SpawnConfig = {
+  id: number;
+  startX: number; startY: number;
+  endX: number; endY: number;
+};
+
+function useTickSpawn(): [SpawnConfig | null, (s: SpawnConfig | null) => void] {
+  const [s, setS] = useStateLocal<SpawnConfig | null>(null);
+  const idRef = useRef(0);
+  const nextRef = useRef(8 + Math.random() * 7);
+  const acc = useRef(0);
+  useFrame((_, dt) => {
+    if (s) return;
+    acc.current += dt;
+    if (acc.current >= nextRef.current) {
+      acc.current = 0;
+      nextRef.current = 8 + Math.random() * 7;
+      idRef.current += 1;
+      // Pick angle from the spec set.
+      const angles = [20, 35, 60, 145, 160];
+      const angDeg = angles[Math.floor(Math.random() * angles.length)] ?? 35;
+      const ang = (angDeg * Math.PI) / 180;
+      const dist = 12 + Math.random() * 10;
+      const startX = (Math.random() - 0.5) * 30;
+      const startY = (Math.random() - 0.5) * 18;
+      const endX = startX + Math.cos(ang) * dist;
+      const endY = startY + Math.sin(ang) * dist;
+      setS({ id: idRef.current, startX, startY, endX, endY });
+    }
+  });
+  return [s, setS];
+}
+
+// Tiny local useState that doesn't flush on every parent rerender
+// when we don't need to. We use the real hook here; this wrapper
+// just centralizes the type.
+import { useState as useStateLocal } from "react";
+
+function ShootingStreak({
+  startX, startY, endX, endY, onDone,
+}: {
+  id: number;
+  startX: number; startY: number;
+  endX: number; endY: number;
+  onDone: () => void;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const elapsed = useRef(0);
+  const TRAVEL_SEC = 2.5;
+  const FADE_SEC = 1.5;
+  useFrame((_, dt) => {
+    elapsed.current += dt;
+    const tTravel = Math.min(elapsed.current / TRAVEL_SEC, 1);
+    if (groupRef.current) {
+      const x = startX + (endX - startX) * tTravel;
+      const y = startY + (endY - startY) * tTravel;
+      groupRef.current.position.x = x - startX;
+      groupRef.current.position.y = y - startY;
+    }
+    if (elapsed.current > TRAVEL_SEC + FADE_SEC) {
+      onDone();
+    }
+  });
+  // 6 trail dots, head full opacity, tail fading.
+  const trailCount = 6;
+  const dx = (startX - endX) / (trailCount * 4);
+  const dy = (startY - endY) / (trailCount * 4);
+  return (
+    <group ref={groupRef} position={[startX, startY, -6]}>
+      {Array.from({ length: trailCount }).map((_, i) => {
+        const t = i / (trailCount - 1);
+        const r = 0.10 - t * 0.05;
+        const alpha = 1.0 - t * 0.85;
+        return (
+          <mesh key={i} position={[dx * i * 4, dy * i * 4, 0]}>
+            <circleGeometry args={[r, 12]} />
+            <meshBasicMaterial color={CREAM} transparent opacity={alpha} depthWrite={false} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+// ── Composed scene ────────────────────────────────────────────
+
+export function EmptyStateScene() {
+  return (
+    <div
+      aria-hidden="true"
+      data-alive="empty-state-scene"
+      style={{
+        // Fill the viewport behind the upload card. The card has
+        // its own wrap with z-index:1; this scene is z-index:0 and
+        // covers the editor's empty state space entirely.
+        position: "fixed",
+        inset: 0,
+        zIndex: 0,
+        pointerEvents: "none",
+      }}
+    >
+      <Canvas
+        gl={{ antialias: false, alpha: false, powerPreference: "low-power" }}
+        dpr={0.6}
+        camera={{ position: [0, 0, 12], fov: 50, near: 0.1, far: 100 }}
+      >
+        <BackgroundGradient />
+        <StarField />
+        <Constellations />
+        <ShootingStars />
+      </Canvas>
+    </div>
+  );
+}

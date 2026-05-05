@@ -1,6 +1,13 @@
-import { useRef, type ChangeEvent, type CSSProperties } from "react";
+import { lazy, Suspense, useRef, type ChangeEvent, type CSSProperties } from "react";
 import { useUiStore } from "@/state/uiStore";
 import { handleUploadedFile } from "@/lib/uploadFlow";
+
+// Day 67 — empty-state cosmic scene lazy-loaded so the three.js
+// stack only resolves when the user actually sees the empty state.
+// Static cosmic body bg keeps the screen full while the chunk loads.
+const EmptyStateScene = lazy(() =>
+  import("@/editor/scenes/EmptyStateScene").then((m) => ({ default: m.EmptyStateScene })),
+);
 
 /**
  * Pre-editor state. A single big call-to-action opens the file picker;
@@ -43,6 +50,13 @@ export function EmptyState() {
         aria-hidden="true"
         style={visuallyHidden}
       />
+      {/* Day 67 — live cosmic scene fills the empty state behind
+          the upload card. Constellation paint dabs + drifting stars
+          + occasional shooting streaks. Renders behind the card via
+          the wrap container's relative positioning. */}
+      <Suspense fallback={null}>
+        <EmptyStateScene />
+      </Suspense>
       {/* Day 60 — refined chart-room card with painted brass corner
           ornaments + celestial compass marker. */}
       <button
