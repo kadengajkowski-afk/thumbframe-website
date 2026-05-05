@@ -261,16 +261,10 @@ function Logo() {
 const bar: CSSProperties = {
   display: "flex", alignItems: "center", gap: 12, padding: "0 16px",
   height: 48,
-  // Day 63 fix — actual baked wood SVG as background-image. Opaque
-  // wood-mid base color fallback guarantees the cosmic body bg can
-  // NEVER bleed through. Tile the wood horizontally; planks read
-  // top-to-bottom inside the 48px bar.
-  backgroundColor: "var(--wood-mid)",
-  backgroundImage:
-    "linear-gradient(to bottom, rgba(245, 230, 200, 0.04), rgba(20, 14, 8, 0.18)), " +
-    "url(\"/quarters/wood-wall-2.png\")",
-  backgroundSize: "100% 100%, 400px 400px",
-  backgroundRepeat: "no-repeat, repeat",
+  // Day 64b — wood now owned by parent WoodWall. TopBar is just a
+  // transparent layout row sitting on the wood. The wall paints
+  // the texture; this just decorates it.
+  background: "transparent",
   borderBottom: "1px solid rgba(160, 101, 30, 0.55)",
   boxShadow:
     "inset 0 1px 0 0 var(--brass-bright), " +

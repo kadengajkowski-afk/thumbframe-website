@@ -47,18 +47,16 @@ export function EditorShell() {
     <div style={editorGrid}>
       <PastDueBanner />
 
-      {/* TOP WALL — wraps TopBar */}
-      <div style={{ gridArea: "topwall", position: "relative", zIndex: 1 }}>
+      {/* TOP WALL — small porthole top-center */}
+      <div style={{ gridArea: "topwall", position: "relative", zIndex: 1, height: 48 }}>
         <WoodWall side="top">
           <TopBar />
         </WoodWall>
       </div>
 
-      {/* LEFT WALL — wraps the toolbar. Currently the ToolPalette
-          carries its own wood; 64c moves toolbar contents inside
-          this wall and the wall takes over the wood texture. */}
+      {/* LEFT WALL — porthole lower third (below toolbar) */}
       <div style={{ gridArea: "leftwall", position: "relative", zIndex: 1 }}>
-        <WoodWall side="left">
+        <WoodWall side="left" porthole={{ diameter: 140, position: "lower" }}>
           <ToolPalette />
         </WoodWall>
       </div>
@@ -77,9 +75,9 @@ export function EditorShell() {
         <ZoomIndicator />
       </main>
 
-      {/* RIGHT WALL — wraps ContextPanel / PreviewRack / ThumbFriend */}
+      {/* RIGHT WALL — porthole center */}
       <div style={{ gridArea: "rightwall", position: "relative", zIndex: 1 }}>
-        <WoodWall side="right">
+        <WoodWall side="right" porthole={{ diameter: 140, position: "center" }}>
           {thumbfriendOpen ? (
             <Suspense
               fallback={
@@ -103,10 +101,12 @@ export function EditorShell() {
         </WoodWall>
       </div>
 
-      {/* BOTTOM WALL — empty stub for 64a; 64c lands status + zoom
-          controls. `auto` row collapses to 0 when empty. */}
-      <div style={{ gridArea: "bottomwall", position: "relative", zIndex: 1 }}>
-        <WoodWall side="bottom" />
+      {/* BOTTOM WALL — 38px high, small porthole top-center for 64c
+          status + zoom controls to land later. */}
+      <div style={{ gridArea: "bottomwall", position: "relative", zIndex: 1, height: 38 }}>
+        <WoodWall side="bottom">
+          {/* 64c content lands here */}
+        </WoodWall>
       </div>
 
       {/* Layers scroll-tab — fixed-position sibling of grid */}
