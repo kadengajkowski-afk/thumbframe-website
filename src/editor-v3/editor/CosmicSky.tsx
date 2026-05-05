@@ -208,8 +208,13 @@ const CSS_KEYFRAMES = `
 }
 `;
 
-export function CosmicSky() {
+/** mode="empty" — full animated cosmic deck (Day 60 default).
+ *  mode="editor" — calmer: half the stars, NO aurora, NO constellations,
+ *  no shooting stars. Just slow drift + faint horizon. The user is
+ *  WORKING; atmosphere stays a quiet backdrop. */
+export function CosmicSky({ mode = "empty" }: { mode?: "empty" | "editor" }) {
   const stars = ambientStars();
+  const isEditor = mode === "editor";
 
   return (
     <svg
@@ -263,7 +268,8 @@ export function CosmicSky() {
 
       <style>{CSS_KEYFRAMES}</style>
 
-      {/* ── Aurora ribbons (mid-sky 40-65%) ──────────────────────── */}
+      {/* ── Aurora ribbons (mid-sky 40-65%) — empty state only ──── */}
+      {!isEditor && (
       <g style={{ filter: "url(#cs-soft)", mixBlendMode: "screen" }}>
         <g
           className="cs-aurora"
@@ -299,16 +305,24 @@ export function CosmicSky() {
           />
         </g>
       </g>
+      )}
 
       {/* ── Drifting ambient star field ──────────────────────────── */}
-      {/* Two copies side-by-side for seamless wrap on translateX. */}
+      {/* Two copies side-by-side for seamless wrap on translateX.
+       *  Editor mode: half the stars + slower drift (180s vs 90s) +
+       *  half opacity so the field reads as quiet backdrop, not show. */}
       <g
         className="cs-drift"
-        style={{ animation: "cs-drift-slow 90s linear infinite" }}
+        style={{
+          animation: isEditor
+            ? "cs-drift-slow 180s linear infinite"
+            : "cs-drift-slow 90s linear infinite",
+          opacity: isEditor ? 0.55 : 1,
+        }}
       >
         {[0, VIEWBOX_W].map((offsetX) => (
           <g key={offsetX} transform={`translate(${offsetX} 0)`}>
-            {stars.map((s, i) => (
+            {(isEditor ? stars.filter((_, i) => i % 2 === 0) : stars).map((s, i) => (
               <circle
                 key={i}
                 cx={s.x}
@@ -322,10 +336,12 @@ export function CosmicSky() {
         ))}
       </g>
 
-      {/* ── Themed constellations ───────────────────────────────── */}
+      {/* ── Themed constellations — empty state only ────────────── */}
       {/* Wrapped in a slow-drift group with a slightly slower speed
           than ambient stars (parallax depth: constellations are
-          "further" so they appear to move slower). */}
+          "further" so they appear to move slower). Editor mode keeps
+          the sky quiet — no constellation lines. */}
+      {!isEditor && (
       <g
         className="cs-drift"
         style={{ animation: "cs-drift-fast 140s linear infinite" }}
@@ -371,12 +387,17 @@ export function CosmicSky() {
           </g>
         ))}
       </g>
+      )}
 
-      {/* ── Horizon breathing glow — wide amber ellipse low ────── */}
+      {/* ── Horizon breathing glow — wide amber ellipse low ──────
+       *  Editor mode: dimmer + no breathing animation (steady glow). */}
       <g
         className="cs-horizon"
         style={{
-          animation: "cs-horizon-breathe 9s ease-in-out infinite",
+          animation: isEditor
+            ? undefined
+            : "cs-horizon-breathe 9s ease-in-out infinite",
+          opacity: isEditor ? 0.30 : 1,
           mixBlendMode: "screen",
         }}
       >
@@ -389,7 +410,8 @@ export function CosmicSky() {
         />
       </g>
 
-      {/* ── Shooting stars — two staggered streaks ──────────────── */}
+      {/* ── Shooting stars — empty state only ─────────────────── */}
+      {!isEditor && (
       <g style={{ mixBlendMode: "screen" }}>
         <g
           className="cs-shoot"
@@ -428,6 +450,7 @@ export function CosmicSky() {
           />
         </g>
       </g>
+      )}
     </svg>
   );
 }

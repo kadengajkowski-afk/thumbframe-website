@@ -24,6 +24,17 @@
   --cream-20:  rgba(255, 244, 224, 0.20);
   --cream-08:  rgba(255, 244, 224, 0.08);
 
+  /* ── Captain's Quarters palette (Day 61, pulled from logo) ──────── */
+  --brass-cream:  #f5e6c8;  /* sail glow */
+  --brass-mid:    #a0651e;  /* hull */
+  --brass-bright: #c8843e;  /* lantern */
+  --brass-shadow: #3a2818;  /* deep brass shadow */
+  --wood-dark:    #1f1611;  /* darkest wood */
+  --wood-mid:     #2e1f15;  /* mid wood (toolbar / panel surface) */
+  --wood-light:   #3d2a1c;  /* highlighted wood */
+  --parchment:        #f0e0c0;
+  --parchment-shadow: #d4c094;
+
   /* ── Frosted-glass panel surface (Day 58 — hybrid backdrop) ──────── */
   /* Used for TopBar / ToolPalette / ContextPanel / LayerPanel /
    * ThumbFriendPanel chrome so the painterly backdrop shows through

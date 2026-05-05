@@ -261,16 +261,17 @@ function Logo() {
 const bar: CSSProperties = {
   display: "flex", alignItems: "center", gap: 12, padding: "0 16px",
   height: 48,
-  // Day 58 — frosted-glass panel. Atmosphere shows through at 28%
-  // alpha while UI stays readable. backdrop-filter blurs the
-  // painterly nebula behind the bar so cream text is legible without
-  // the panel feeling opaque.
-  background: "var(--panel-frost-bg)",
-  backdropFilter: "var(--panel-frost-blur)",
-  WebkitBackdropFilter: "var(--panel-frost-blur)" as CSSProperties["backdropFilter"],
-  borderBottom: "1px solid var(--panel-frost-border)",
-  boxShadow: "inset 0 1px 0 0 var(--panel-frost-inner-highlight)",
-  color: "var(--text-primary)",
+  // Day 61 — Captain's Quarters TopBar. Wood walls (gradient
+  // wood-dark → wood-mid) with a brass top/bottom edge. Atmosphere
+  // doesn't show through here — the bridge of the ship is solid wood,
+  // not a window.
+  background: "linear-gradient(to bottom, var(--wood-dark), var(--wood-mid))",
+  borderBottom: "1px solid rgba(160, 101, 30, 0.45)",
+  // Top brass edge + inner cream highlight stacked.
+  boxShadow:
+    "inset 0 1px 0 0 var(--brass-bright), " +
+    "inset 0 2px 0 0 rgba(245, 230, 200, 0.10)",
+  color: "var(--brass-cream)",
 };
 const leftGroup: CSSProperties = { display: "flex", alignItems: "center", gap: 10, minWidth: 200 };
 const centerGroup: CSSProperties = {
@@ -305,19 +306,26 @@ const signInBtn: CSSProperties = {
   padding: "5px 12px", fontSize: 12, cursor: "pointer",
 };
 const shipItBtn: CSSProperties = {
-  // Day 58 — landing-style amber CTA. Sans-serif (Inter), warm
-  // shadow, slight scale on hover via :hover handler in the panel.
-  background: "var(--accent-amber)",
-  color: "var(--cream-100)",
-  border: "none",
-  borderRadius: 6,
-  padding: "6px 14px",
-  fontSize: 12,
-  fontWeight: 600,
-  letterSpacing: "0.04em",
+  // Day 61 — Captain's Quarters Ship It pill. Brass-cream interior
+  // with brass-mid border. Replaces the Day 58 orange CTA. Hover
+  // brightens the border to brass-bright (handled inline via :hover
+  // CSS in the rendered component, otherwise falls back to opacity).
+  background: "var(--brass-cream)",
+  color: "var(--brass-shadow)",
+  border: "1.5px solid var(--brass-mid)",
+  borderRadius: 999,
+  padding: "8px 18px",
+  fontSize: 14,
+  fontWeight: 700,
+  letterSpacing: "0.02em",
   cursor: "pointer",
-  boxShadow: "0 4px 14px -4px rgba(249, 115, 22, 0.45)",
-  transition: "background var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard)",
+  boxShadow:
+    "inset 0 1px 0 0 rgba(255, 255, 255, 0.45), " +
+    "0 2px 8px -2px rgba(58, 40, 24, 0.35)",
+  transition:
+    "border-color var(--motion-fast) var(--ease-standard), " +
+    "transform var(--motion-fast) var(--ease-standard), " +
+    "box-shadow var(--motion-fast) var(--ease-standard)",
 };
 const pinnedBadge: CSSProperties = {
   display: "inline-flex", alignItems: "center", gap: 6,
