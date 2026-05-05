@@ -248,11 +248,15 @@ function PinnedKitBadge() {
 function Logo() {
   return (
     <div style={logoGroup} aria-label="thumbframe">
-      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
-        <line x1="10" y1="2.5" x2="10" y2="17" stroke="var(--accent-cream)" strokeWidth="1" strokeLinecap="round" />
-        <path d="M 10.5 4 L 17 14.5 L 10.5 14.5 Z" fill="var(--accent-cream)" fillOpacity="0.9" />
-        <path d="M 3 15 L 17 15 L 14.5 17.5 L 5.5 17.5 Z" fill="var(--accent-cream)" fillOpacity="0.72" />
-      </svg>
+      {/* Day 64c — actual painterly ship logo PNG. */}
+      <img
+        src="/brand/ship-logo-final.png"
+        alt=""
+        aria-hidden="true"
+        width={24}
+        height={24}
+        style={{ objectFit: "contain", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }}
+      />
       <span style={wordmark}>thumbframe</span>
     </div>
   );
