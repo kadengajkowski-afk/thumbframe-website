@@ -41,7 +41,7 @@ export default function Dmca({ setPage }) {
       <h2>Submitting a notice</h2>
       <p>
         Send takedown notices to{' '}
-        <a href="mailto:dmca@thumbframe.com">dmca@thumbframe.com</a>.
+        <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>.
         We aim to respond within 24-48 hours of receipt.
       </p>
 
@@ -77,7 +77,7 @@ export default function Dmca({ setPage }) {
       <p>
         If you believe content of yours was removed in error, you may
         submit a counter-notice to{' '}
-        <a href="mailto:dmca@thumbframe.com">dmca@thumbframe.com</a>{' '}
+        <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>{' '}
         with the elements required by 17 U.S.C. §512(g).
       </p>
 
@@ -90,7 +90,7 @@ export default function Dmca({ setPage }) {
       <h2>Designated Agent</h2>
       <p>
         Designated Agent contact:{' '}
-        <a href="mailto:dmca@thumbframe.com">dmca@thumbframe.com</a>.
+        <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>.
       </p>
     </LegalPageTemplate>
   );

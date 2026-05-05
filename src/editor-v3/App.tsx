@@ -294,14 +294,12 @@ const canvasSurface: React.CSSProperties = {
   display: "flex",
   alignItems: "stretch",
   justifyContent: "stretch",
-  // Day 57b — keep a soft solid base so the canvas surface still
-  // reads as "stage" but layer the body atmosphere on top via a
-  // semi-transparent radial gradient. Pixi paints its own dark
-  // canvasFill inside the working area; everything around the Pixi
-  // canvas now picks up a subtle atmospheric tint.
-  background:
-    "radial-gradient(ellipse at center, rgba(96, 56, 180, 0.10), transparent 70%), " +
-    "var(--bg-space-0)",
+  // Day 59 — transparent surface. Pixi mounts an opaque canvas
+  // covering the whole surface so this transparency is invisible at
+  // runtime, but during the brief moment between EmptyState exit
+  // and Pixi init the body atmosphere shows through cleanly. No
+  // longer needs the dark fallback now that Pixi mounts reliably.
+  background: "transparent",
   overflow: "hidden",
   position: "relative",
 };

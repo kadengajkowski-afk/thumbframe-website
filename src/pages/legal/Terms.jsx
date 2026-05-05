@@ -94,7 +94,7 @@ export default function Terms({ setPage }) {
         <li><strong>Copyright infringement:</strong> only use images,
           fonts, and assets you have the right to use. Submit DMCA
           takedown notices to{' '}
-          <a href="mailto:dmca@thumbframe.com">dmca@thumbframe.com</a>{' '}
+          <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>{' '}
           (see our <a href="/dmca" onClick={(e) => { e.preventDefault(); setPage('dmca'); }}>DMCA page</a>).</li>
         <li><strong>NSFW content:</strong> we use moderation APIs
           (Sightengine / Hive) to automatically block nudity, gore,
@@ -108,7 +108,7 @@ export default function Terms({ setPage }) {
         or referral to law enforcement where applicable. We reserve
         the right to remove content and terminate accounts at our
         sole discretion. Report abuse to{' '}
-        <a href="mailto:trust@thumbframe.com">trust@thumbframe.com</a>.
+        <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>.
       </p>
 
       <h2>6. Your content</h2>
@@ -223,7 +223,7 @@ export default function Terms({ setPage }) {
       <p>
         You may opt out of this arbitration clause within 30 days of
         first accepting these terms by emailing{' '}
-        <a href="mailto:legal@thumbframe.com">legal@thumbframe.com</a>{' '}
+        <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>{' '}
         with "ARBITRATION OPT-OUT" in the subject.
       </p>
 
@@ -237,7 +237,7 @@ export default function Terms({ setPage }) {
         Questions? Email{' '}
         <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>.
         For abuse / safety reports:{' '}
-        <a href="mailto:trust@thumbframe.com">trust@thumbframe.com</a>.
+        <a href="mailto:hello@thumbframe.com">hello@thumbframe.com</a>.
       </p>
     </LegalPageTemplate>
   );

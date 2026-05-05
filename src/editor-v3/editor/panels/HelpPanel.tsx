@@ -20,8 +20,11 @@ import { useUiStore } from "@/state/uiStore";
  * still opens the user's mail client.
  */
 
-const SUPPORT_EMAIL = "support@thumbframe.com";
-const TRUST_EMAIL = "trust@thumbframe.com";
+// Day 59 — single primary email for all support/trust/legal/dmca/privacy
+// alias addresses. Cloudflare email-routing forwards everything to
+// hello@thumbframe.com.
+const SUPPORT_EMAIL = "hello@thumbframe.com";
+const TRUST_EMAIL = "hello@thumbframe.com";
 const DISCORD_URL = "https://discord.gg/thumbframe";
 const FEEDBACK_ENDPOINT = (import.meta.env.VITE_API_URL || "https://thumbframe-api-production.up.railway.app").replace(/\/$/, "") + "/api/feedback";
 
