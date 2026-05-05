@@ -232,6 +232,62 @@ export function CosmicSky({ mode = "empty" }: { mode?: "empty" | "editor" }) {
       }}
     >
       <defs>
+        {/* Day 62 — paper-grain filter mimicking the landing's
+         *  PainterlyPost (Kuwahara + outline + grain) without
+         *  shipping Three.js shaders. SVG-only chain:
+         *    - feTurbulence: fractal noise pattern, fine octaves
+         *      give us paper texture.
+         *    - feColorMatrix: shift the noise to warm cream/amber
+         *      so it doesn't read as monochrome static.
+         *    - feComposite in: composites grain ONTO the source so
+         *      transparent areas stay transparent (no full-screen
+         *      noise outside the painted shapes).
+         *    - feBlend with the original for a "painted on
+         *      paper" feel.
+         * Applied to the aurora ribbons, where the smooth gradient
+         * was the most obviously digital element. */}
+        <filter id="cs-paper-grain" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.85"
+            numOctaves="2"
+            seed="7"
+            result="grain"
+          />
+          <feColorMatrix
+            in="grain"
+            type="matrix"
+            values="0 0 0 0 1
+                    0 0 0 0 0.92
+                    0 0 0 0 0.78
+                    0 0 0 0.45 0"
+            result="warmGrain"
+          />
+          <feComposite in="warmGrain" in2="SourceAlpha" operator="in" result="maskedGrain" />
+          <feBlend in="SourceGraphic" in2="maskedGrain" mode="multiply" />
+        </filter>
+        {/* Body paper grain — covers the whole sky as a final overlay
+         *  rect with multiply blend so the painterly texture sits on
+         *  top of stars + horizon. Lower-frequency noise reads as
+         *  paper fiber rather than fine static. */}
+        <filter id="cs-sky-grain" x="0%" y="0%" width="100%" height="100%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.012 0.018"
+            numOctaves="3"
+            seed="13"
+            result="paper"
+          />
+          <feColorMatrix
+            in="paper"
+            type="matrix"
+            values="0 0 0 0 0.98
+                    0 0 0 0 0.95
+                    0 0 0 0 0.85
+                    0 0 0 0.18 0"
+          />
+        </filter>
+
         {/* Aurora gradients — cream → amber → emerald → cream */}
         <linearGradient id="cs-aurora-g1" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%"  stopColor="#fff4e0" stopOpacity="0" />
@@ -268,9 +324,12 @@ export function CosmicSky({ mode = "empty" }: { mode?: "empty" | "editor" }) {
 
       <style>{CSS_KEYFRAMES}</style>
 
-      {/* ── Aurora ribbons (mid-sky 40-65%) — empty state only ──── */}
+      {/* ── Aurora ribbons (mid-sky 40-65%) — empty state only ────
+       *  Day 62: chained the paper-grain filter on top of the
+       *  soft-blur so the ribbons get a painted-on-watercolor-paper
+       *  texture instead of a clean digital gradient. */}
       {!isEditor && (
-      <g style={{ filter: "url(#cs-soft)", mixBlendMode: "screen" }}>
+      <g style={{ filter: "url(#cs-soft) url(#cs-paper-grain)", mixBlendMode: "screen" }}>
         <g
           className="cs-aurora"
           style={{
@@ -450,6 +509,26 @@ export function CosmicSky({ mode = "empty" }: { mode?: "empty" | "editor" }) {
           />
         </g>
       </g>
+      )}
+
+      {/* ── Final paper-grain overlay (Day 62) ─────────────────────
+       *  A full-viewport rect filled with low-frequency warm noise,
+       *  multiply-blended over the sky so every painted element
+       *  picks up the paper-fiber texture. Empty state only —
+       *  editor mode keeps the sky clean for working concentration.
+       *  Heavy SVG filter on a fullscreen rect can be a perf hit on
+       *  weaker GPUs; opacity stays low so it's a paper-feel hint,
+       *  not a full Kuwahara replacement. */}
+      {!isEditor && (
+        <rect
+          x="0"
+          y="0"
+          width={VIEWBOX_W}
+          height={VIEWBOX_H}
+          fill="#fff4e0"
+          opacity="0.18"
+          style={{ filter: "url(#cs-sky-grain)", mixBlendMode: "multiply" }}
+        />
       )}
     </svg>
   );
