@@ -56,7 +56,6 @@
     "react-scripts": "5.0.1",
     "replicate": "^0.25.2",
     "resend": "^3.2.0",
-    "sharp": "^0.33.2",
     "stripe": "^14.21.0",
     "tailwindcss": "^4.2.2",
     "three": "^0.184.0",
@@ -102,6 +101,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
     "jest-canvas-mock": "^2.5.2",
-    "playwright-core": "^1.59.0"
+    "playwright-core": "^1.59.0",
+    "sharp": "^0.34.5"
   }
 }
