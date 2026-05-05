@@ -139,72 +139,31 @@ html {
   background-color: #050818;
 }
 body {
-  /* Day 59 — "Captain at the helm" cosmic deck, refined.
-   *
-   * Day 58's amber horizon sat at 70% screen height — inside the
-   * canvas zone, hidden behind opaque Pixi. Day 59 redistributes
-   * color so each frosted panel zone shows different cosmic light:
-   *   - TopBar (top 48px / ~5%): violet nebula tint visible above.
-   *   - ToolPalette (left 56px): purple cloud tint.
-   *   - ContextPanel (right 280px): orange cloud tint.
-   *   - LayerPanel (bottom 200px / ~78-100%): amber horizon glow
-   *     sits at ~88% so it lands BEHIND the layer panel, where
-   *     backdrop-filter:blur(12px) can actually reveal it.
-   *
-   * Eight overlapping radials produce a more painterly distribution
-   * than the prior linear gradient. Color depth: deep navy ground +
-   * mid purple/orange clouds + amber horizon band low in frame.
+  /* Day 63 — Painterly cosmic backdrop baked from the live landing
+   * scene. background-image URL set from main.tsx via Vite asset
+   * import so base-path rewrites correctly between dev + prod. The
+   * bake itself carries the full painterly atmosphere (Three.js
+   * nebula + stardust + Kuwahara + outline + paper grain). All
+   * prior SVG cosmic scene layers (CosmicSky, HelmFraming,
+   * EditorBackdrop) are removed — the bake replaces them entirely.
    */
   background-color: #050818;
-  background-image:
-    /* Nebula cloud — top-left, deep violet. */
-    radial-gradient(ellipse 900px 620px at 8% 12%, rgba(120, 70, 160, 0.52) 0%, transparent 65%),
-    /* Nebula cloud — top-right, magenta-pink. */
-    radial-gradient(ellipse 800px 580px at 92% 8%, rgba(180, 80, 130, 0.30) 0%, transparent 60%),
-    /* Cloud — left mid, deeper purple sits behind ToolPalette. */
-    radial-gradient(ellipse 700px 800px at -2% 50%, rgba(80, 50, 130, 0.45) 0%, transparent 55%),
-    /* Cloud — right mid, warm amber-orange behind ContextPanel. */
-    radial-gradient(ellipse 700px 800px at 102% 55%, rgba(220, 110, 50, 0.30) 0%, transparent 55%),
-    /* Cloud — center-low, soft purple-amber for canvas surround. */
-    radial-gradient(ellipse 1100px 600px at 50% 78%, rgba(150, 80, 150, 0.28) 0%, transparent 65%),
-    /* Cloud — bottom-left, faded amber. */
-    radial-gradient(ellipse 600px 380px at 18% 95%, rgba(249, 115, 22, 0.22) 0%, transparent 60%),
-    /* Cloud — bottom-right, brass amber. */
-    radial-gradient(ellipse 700px 420px at 82% 96%, rgba(255, 160, 60, 0.28) 0%, transparent 60%),
-    /* Horizon glow — wide band at 88% screen. Sits BEHIND LayerPanel
-     * which is at ~78-100% on a 900px viewport. backdrop-filter
-     * blurs this band into the panel for the real "deck horizon"
-     * feel during editor mode. */
-    linear-gradient(
-      180deg,
-      #050818 0%,
-      #0a0a22 35%,
-      #1a1230 60%,
-      #2a1a3a 80%,
-      #4a2860 86%,
-      rgba(249, 115, 22, 0.50) 88%,
-      #2a1a3a 91%,
-      #050510 96%,
-      #050510 100%
-    );
-  background-size: cover, cover, cover, cover, cover, cover, cover, cover;
+  background-size: cover;
   background-position: center;
   background-attachment: fixed;
   background-repeat: no-repeat;
   min-height: 100vh;
 }
 body::before {
-  /* Day 58 — soft black wash so the landing-hero asset doesn't blow
-   * out the cream UI text in panels that overlap it. The watercolor
-   * is gorgeous on its own; the wash just lifts the panel contrast
-   * by ~8%. pointer-events:none + z-index:-1 keeps it off the click
-   * tree, behind the editor grid. */
+  /* Day 63 — soft dark wash over the painterly bake so cream UI
+   * text in panels stays legible. The bake is gorgeous on its own;
+   * the wash just lifts the panel contrast by ~10%. */
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: rgba(5, 5, 16, 0.08);
+  background: rgba(5, 5, 16, 0.10);
 }
 
 * {
