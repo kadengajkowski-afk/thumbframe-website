@@ -1,29 +1,15 @@
 import { lazy, Suspense, useEffect } from "react";
 import { useUiStore } from "@/state/uiStore";
-import { CompositorHost } from "@/editor/CompositorHost";
-// Day 63 — removed CosmicSky / HelmFraming / EditorBackdrop. The
-// painterly cosmic scene is now a single baked PNG on body bg
-// (see main.tsx + tokens.css). The SVG-based scene was mediocre at
-// reproducing the Kuwahara + paper grain feel; the bake captures
-// the EXACT landing aesthetic instead.
-import { TextEditor } from "@/editor/TextEditor";
-import { BgRemoveOverlay } from "@/editor/BgRemoveOverlay";
-import { TopBar } from "@/editor/panels/TopBar";
-import { LayersScrollTab } from "@/editor/panels/LayersScrollTab";
-import { ContextPanel } from "@/editor/panels/ContextPanel";
-// Day 56 — ThumbFriendPanel lazy-loaded. Pulls in NudgeMode + PartnerMode +
-// the crew picker + the AI client off the main bundle.
-const ThumbFriendPanel = lazy(() =>
-  import("@/editor/panels/ThumbFriendPanel").then((m) => ({ default: m.ThumbFriendPanel })),
-);
 import { ShipComingAlive } from "@/editor/transitions/ShipComingAlive";
 import { EmptyState } from "@/editor/EmptyState";
 import { DropZone } from "@/editor/DropZone";
 import { useDropTarget } from "@/editor/useDropTarget";
-import { ZoomIndicator } from "@/editor/ZoomIndicator";
-import { ToolPalette } from "@/editor/panels/ToolPalette";
 import { CommandPalette } from "@/editor/CommandPalette";
-import { PreviewRack } from "@/editor/panels/PreviewRack";
+// Day 64a — editor grid + walls extracted to EditorShell.tsx.
+// 5-cell template (topwall / leftwall + canvas + rightwall / bottomwall)
+// scaffolds the captain's quarters layout; walls are transparent
+// today, populated 64b-64c.
+import { EditorShell } from "@/editor/EditorShell";
 
 /** Day 33 — modal-style panels lazy-load on first open. Each is gated
  * behind a user action (hotkey or button) so the boot path doesn't
@@ -200,64 +186,10 @@ export function App() {
   );
 }
 
-function EditorShell() {
-  const cursor = useUiStore(deriveCursor);
-  // Day 21 / 39: right slot is mutually exclusive — ThumbFriend ▸
-  // PreviewRack ▸ ContextPanel (default). Cmd+/ wins over Cmd+Shift+P.
-  const previewOpen = useUiStore((s) => s.previewRackOpen);
-  const thumbfriendOpen = useUiStore((s) => s.thumbfriendPanelOpen);
-  return (
-    <div style={editorGrid}>
-      <PastDueBanner />
-      <TopBar />
-      <div style={editorRow}>
-        <ToolPalette />
-        <main
-          id="tf-canvas"
-          tabIndex={-1}
-          aria-label="Editor canvas"
-          style={{ ...canvasSurface, cursor }}
-          data-alive="canvas"
-        >
-          <CompositorHost />
-          <TextEditor />
-          <BgRemoveOverlay />
-          <ZoomIndicator />
-        </main>
-        {thumbfriendOpen ? (
-          <Suspense fallback={<aside style={{ width: 320, background: "var(--panel-frost-bg)", backdropFilter: "var(--panel-frost-blur)", borderLeft: "1px solid var(--panel-frost-border)" }} />}>
-            <ThumbFriendPanel />
-          </Suspense>
-        ) : previewOpen ? <PreviewRack /> : <ContextPanel />}
-      </div>
-      {/* Day 61-fix — Layers moved out of the bottom grid track into
-          a slide-in scroll-tab on the right edge. The brass plaque
-          + parchment scroll mount as fixed-position siblings (see
-          LayersScrollTab). LayerPanel itself is reused inside the
-          scroll, keeping all layer-row + dnd + selection logic. */}
-      <LayersScrollTab />
-    </div>
-  );
-}
-
-type CursorShape = {
-  activeTool: "select" | "hand" | "rect" | "ellipse" | "text";
-  isHandMode: boolean;
-  isPanActive: boolean;
-  hoveredLayerId: string | null;
-};
-
-function deriveCursor(s: CursorShape): string {
-  if (s.isHandMode || s.activeTool === "hand") {
-    return s.isPanActive ? "grabbing" : "grab";
-  }
-  if (s.activeTool === "rect" || s.activeTool === "ellipse") return "crosshair";
-  if (s.activeTool === "text") return "text";
-  if (s.activeTool === "select" && s.hoveredLayerId) return "move";
-  return "default";
-}
-
-// ── styles ──────────────────────────────────────────────────────────────────
+// Day 64a — EditorShell + cursor logic + grid/canvas styles all
+// extracted to src/editor-v3/editor/EditorShell.tsx for the wall
+// scaffolding work. Shell wrapper style stays in App.tsx because
+// it's used by both EmptyState and EditorShell branches.
 
 const shell: React.CSSProperties = {
   position: "fixed",
@@ -265,59 +197,6 @@ const shell: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  // Day 57b — transparent shell so body atmosphere shows through.
-  // The editor grid still has opaque panels; only the EmptyState +
-  // gaps around the editor reveal the bg.
   background: "transparent",
   overflow: "hidden",
-};
-
-const editorGrid: React.CSSProperties = {
-  position: "relative",
-  zIndex: 1,
-  width: "100%",
-  height: "100%",
-  display: "grid",
-  // Day 61-fix: layer panel moved to right-edge scroll-tab. Bottom
-  // 200px track removed; canvas now extends to the bottom edge of
-  // the viewport. PastDueBanner row stays as `auto` (collapses to 0
-  // when banner is hidden via the past-due-placeholder div).
-  gridTemplateRows: "auto 48px 1fr",
-};
-
-const editorRow: React.CSSProperties = {
-  display: "flex",
-  minHeight: 0,
-  // Constrain the row to the viewport so flex children with
-  // explicit widths can't overflow past the right edge.
-  width: "100%",
-  minWidth: 0,
-  overflow: "hidden",
-};
-
-const canvasSurface: React.CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  display: "flex",
-  alignItems: "stretch",
-  justifyContent: "stretch",
-  // Day 61-fix — parchment surround. Radial cream gradient at the
-  // edges fades into transparent center so the cosmic atmosphere
-  // (body bg) shows in the very middle/corners, with painted-paper
-  // texture extending ~80px around the working area. Pixi mounts an
-  // opaque canvas centered in this surface; the parchment reads
-  // ONLY at the edges where the canvas doesn't cover.
-  background:
-    "radial-gradient(ellipse 70% 70% at 50% 50%, " +
-    "transparent 70%, " +
-    "rgba(240, 224, 192, 0.10) 82%, " +
-    "rgba(240, 224, 192, 0.18) 90%, " +
-    "rgba(240, 224, 192, 0.08) 100%)",
-  // Brass shadow ring + outer drop shadow.
-  boxShadow:
-    "inset 0 0 0 1px rgba(245, 230, 200, 0.10), " +
-    "inset 0 4px 12px -6px rgba(245, 230, 200, 0.10), " +
-    "0 8px 24px -4px rgba(0, 0, 0, 0.55)",
-  overflow: "hidden",
-  position: "relative",
 };
