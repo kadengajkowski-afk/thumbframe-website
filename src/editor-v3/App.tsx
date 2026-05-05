@@ -10,6 +10,13 @@ import { CommandPalette } from "@/editor/CommandPalette";
 // scaffolds the captain's quarters layout; walls are transparent
 // today, populated 64b-64c.
 import { EditorShell } from "@/editor/EditorShell";
+// Day 66 — BodyAtmosphere lazy-loaded so three.js + r3f (~245 KB
+// gzipped) doesn't block first paint. The static cosmic-scene-v2.jpg
+// body bg is the floor; live atmosphere drops in after the chunk
+// resolves.
+const BodyAtmosphere = lazy(() =>
+  import("@/editor/BodyAtmosphere").then((m) => ({ default: m.BodyAtmosphere })),
+);
 
 /** Day 33 — modal-style panels lazy-load on first open. Each is gated
  * behind a user action (hotkey or button) so the boot path doesn't
@@ -161,9 +168,13 @@ export function App() {
       {/* Day 53 a11y — skip-to-editor link. Hidden until Tab focus,
           jumps focus past the toolbar to the canvas main element. */}
       <a href="#tf-canvas" className="tf-skip-link">Skip to editor</a>
-      {/* Day 63 — painterly cosmic backdrop is the body bg only.
-          No SVG scene layers, no canvas2D stardust, no HelmFraming.
-          The bake on body carries everything the spec asked for. */}
+      {/* Day 66 — live cosmic atmosphere via three.js, lazy-loaded.
+          Layers a moving star field + nebula fog over the static
+          cosmic-scene-v2.jpg body bake. Static bake is the floor —
+          if r3f fails to load, atmosphere never disappears. */}
+      <Suspense fallback={null}>
+        <BodyAtmosphere />
+      </Suspense>
       <ShipComingAlive
         hasEntered={hasEntered}
         empty={<EmptyState />}

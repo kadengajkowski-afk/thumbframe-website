@@ -18,6 +18,9 @@
     "@fontsource-variable/fraunces": "^5.2.9",
     "@jsquash/jpeg": "^1.6.0",
     "@jsquash/png": "^3.1.1",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "@react-three/postprocessing": "^3.0.4",
     "@supabase/supabase-js": "^2.105.0",
     "cmdk": "^1.1.1",
     "immer": "^10.1.1",
@@ -28,6 +31,7 @@
     "react": "^19.2.4",
     "react-colorful": "^5.6.1",
     "react-dom": "^19.2.4",
+    "three": "^0.184.0",
     "tinykeys": "^3.0.0",
     "zustand": "^5.0.12"
   },
