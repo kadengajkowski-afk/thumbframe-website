@@ -55,9 +55,9 @@
   --brass-glow:    rgba(184, 134, 75, 0.4);
   --cream-soft:    rgba(244, 234, 213, 0.06);
 
-  /* ── Z-index contract (Day 63) ─────────────────────────────────── */
-  --z-atmosphere:      -1;   /* fixed body cosmic / ocean canvas */
-  --z-shell:            0;   /* transparent editor grid container */
+  /* ── Z-index contract (Day 63, atmosphere lifted Day 64a-fix-2) ─── */
+  --z-atmosphere:       0;   /* fixed body cosmic / ocean canvas */
+  --z-shell:            1;   /* transparent editor grid container */
   --z-walls:            1;   /* wood-textured side / top panels */
   --z-porthole-glass:   2;   /* SVG mask cutouts + radial inner shadow */
   --z-brass-ring:       3;   /* brass ring SVGs over the holes */
@@ -158,15 +158,19 @@ body,
   overflow: hidden;
 }
 
-/* Day 67 Part 18 redo — body backdrop is FLAT var(--bg-space-0).
- * The live BodyAtmosphere (Three.js + r3f, lazy-loaded) does the
- * cosmic work on top; the EmptyStateScene runs its own painterly
- * pipeline. No static landing-recycle JPEG, no body::before wash.
+/* Day 67 Part 18 redo — backdrop floor on `html` only; body is
+ * transparent so the live BodyAtmosphere (Three.js + r3f, mounted
+ * fixed inset:0 at z-index 0) paints between the floor color and
+ * the editor shell. EmptyStateScene runs its own painterly
+ * pipeline on top.
  * Architecture: atmosphere lives on body only — never touches the
  * editor grid, CompositorHost, or Pixi canvas mount. */
-html,
-body {
+html {
   background-color: var(--bg-space-0);
+  min-height: 100vh;
+}
+body {
+  background: transparent;
   min-height: 100vh;
 }
 

@@ -38,32 +38,33 @@ function pickRing(diameter: number): string {
   return "/quarters/porthole-ring-large.svg";
 }
 
-/** Build a CSS mask data-URL: white rect minus a black circle at
- *  the porthole's anchor. The black part hides; the white part
- *  shows. Result: a hole in the wood revealing whatever lies
- *  behind (the body cosmic atmosphere at z-index --z-atmosphere). */
+/** Build a CSS mask: opaque everywhere (wood shows) MINUS a circular
+ *  hole at the porthole's anchor (cosmic shows through). Day 64a-fix-2
+ *  switched from a fixed-pixel SVG (which only painted the area within
+ *  diameter*2 around the porthole — the rest of the wall was outside
+ *  the mask = hidden, leaving dark voids above/below the porthole on
+ *  the left + right walls) to a radial-gradient mask that always
+ *  spans the entire wall. Black = visible (wood); transparent = hidden
+ *  (porthole hole). */
 function maskFor(porthole: Porthole, side: Side): string | undefined {
   if (!porthole) return undefined;
   // Anchor (cx,cy) as a percentage of the wall's bounding box.
-  // The wall's actual pixel dimensions vary; using percentages
-  // means the mask scales with the wall.
   const cy =
     porthole.position === "upper" ? 25 :
     porthole.position === "lower" ? 75 :
                                     50;
-  const cx = side === "left" || side === "right" ? 50 : 50;
-  // The diameter prop is in CSS pixels; mask is in viewBox units.
-  // Use a 100x100 viewBox + radius proportional to the smaller
-  // dimension. We can't know the wall's aspect ratio here, so we
-  // use absolute px and convert via the SVG's preserveAspectRatio.
+  const cx = 50;
+  void side;
   const r = porthole.diameter / 2;
-  // The mask is a fixed-pixel SVG — we set width/height to wall
-  // dimensions via CSS mask-size: 100% 100% but the inner shapes
-  // use absolute coords. To keep the porthole circular regardless
-  // of wall aspect ratio, we anchor the SVG to the wall's actual
-  // pixel size with mask-size:auto and mask-position centered.
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${porthole.diameter * 2}' height='${porthole.diameter * 2}'><rect width='100%' height='100%' fill='white'/><circle cx='${porthole.diameter}' cy='${porthole.diameter}' r='${r}' fill='black'/></svg>`;
-  return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+  // Hard transition: transparent (= hides wood) inside r, black (=
+  // shows wood) outside. The 0.5px feather between r-0.5 and r is
+  // anti-aliasing for the rim — without it the circle edge looks
+  // jagged.
+  return (
+    `radial-gradient(circle ${r}px at ${cx}% ${cy}%, ` +
+    `transparent 0, transparent ${r - 0.5}px, ` +
+    `black ${r}px, black 100%)`
+  );
 }
 
 export function WoodWall({
@@ -99,21 +100,13 @@ export function WoodWall({
     zIndex: 1,
     ...(mask
       ? {
-          // Both standard and webkit prefix for Safari coverage.
+          // Day 64a-fix-2: radial-gradient mask spans the whole wall
+          // by definition — no maskSize / maskPosition / maskRepeat
+          // needed. Black covers the entire wall; the porthole circle
+          // at anchor (cx,cy) is the only transparent (= cut out)
+          // region. Both standard and webkit prefix for Safari.
           maskImage: mask,
           WebkitMaskImage: mask,
-          maskSize: `${porthole!.diameter * 2}px ${porthole!.diameter * 2}px`,
-          WebkitMaskSize: `${porthole!.diameter * 2}px ${porthole!.diameter * 2}px`,
-          maskPosition: `${anchorLeft} ${anchorTop}`,
-          WebkitMaskPosition: `${anchorLeft} ${anchorTop}`,
-          maskRepeat: "no-repeat",
-          WebkitMaskRepeat: "no-repeat",
-          // The mask SVG's white area extends beyond the circle but
-          // is finite. Outside the SVG bounds the mask is implicitly
-          // transparent (= invisible). Use a wrapping `mask-mode: alpha`
-          // + a second white-rect overlay would be more robust, but
-          // for a single porthole the mask SVG is sized 2× the
-          // diameter which is enough for typical wall sizes.
         }
       : {}),
   };
