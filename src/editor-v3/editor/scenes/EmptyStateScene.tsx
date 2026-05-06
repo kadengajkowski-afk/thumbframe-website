@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { KuwaharaEffect } from "@/atmosphere/painterly/KuwaharaEffect";
 import { PaperGrainEffect } from "@/atmosphere/painterly/PaperGrainEffect";
 import { ColorGradeEffect } from "@/atmosphere/painterly/ColorGradeEffect";
+import Nebula from "@/atmosphere/Nebula";
 
 /** Day 67 (Part 18) — empty-state cosmic scene.
  *
@@ -41,43 +42,25 @@ function rng(seed: number) {
   };
 }
 
-// ── Background gradient plane ────────────────────────────────
-
-function BackgroundGradient() {
-  const ref = useRef<THREE.Mesh>(null);
-  return (
-    <mesh ref={ref} position={[0, 0, -10]}>
-      <planeGeometry args={[40, 26]} />
-      <shaderMaterial
-        uniforms={{}}
-        vertexShader={`
-          varying vec2 vUv;
-          void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `}
-        fragmentShader={`
-          varying vec2 vUv;
-          void main() {
-            // vUv.y: 0 bottom → 1 top. Invert mental model.
-            float y = vUv.y;
-            vec3 charcoalDeep = vec3(0.058, 0.071, 0.098);
-            vec3 charcoal     = vec3(0.102, 0.122, 0.180);
-            vec3 mid          = vec3(0.165, 0.165, 0.243);
-            // Top-to-mid-to-bottom blend.
-            vec3 col = mix(charcoalDeep, charcoal, smoothstep(0.55, 0.85, y));
-            col = mix(mid, col, smoothstep(0.20, 0.55, y));
-            // Brass-amber bloom band lower-third (y around 0.20-0.35).
-            float bloom = smoothstep(0.10, 0.22, y) * (1.0 - smoothstep(0.22, 0.42, y));
-            col += vec3(0.722, 0.525, 0.294) * bloom * 0.10;
-            gl_FragColor = vec4(col, 1.0);
-          }
-        `}
-      />
-    </mesh>
-  );
-}
+// ── Painterly cosmic nebula backdrop ────────────────────────
+//
+// Day 64a-empty-fix — replaces the prior solid-gradient plane with
+// the same Nebula component the landing uses (domain-warped fBm,
+// ink-rim edge darkening, breathing pulse). Editor-empty-state
+// palette is calmer than landing: charcoal-navy with a single
+// brass-amber bloom — NO purple / orange / rose. driftSpeed 0.08
+// is much slower than landing's 1.0 so the empty state feels
+// contemplative rather than animated. Nebula renders as an
+// inverted sphere around the camera; constellation dabs +
+// shooting stars sit IN FRONT of it and all go through the
+// PainterlyPost composer below.
+const EMPTY_STATE_PALETTE = {
+  core:      "#0F1219",
+  mid:       "#1A1F2E",
+  highlight: "#2A2A3E",
+  accent:    "#B8864B",
+};
+const EMPTY_STATE_DRIFT = 0.08;
 
 // ── Ambient stars ────────────────────────────────────────────
 
@@ -313,36 +296,63 @@ function ShootingStreak({
   onDone: () => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  const matsRef = useRef<THREE.MeshBasicMaterial[]>([]);
   const elapsed = useRef(0);
   const TRAVEL_SEC = 2.5;
   const FADE_SEC = 1.5;
+
+  // Day 64a-empty-fix — 8 trail particles spaced 0.18 world units
+  // apart (~6 screen-px at z=-6 with our camera). Head r=0.16
+  // (~6px diameter), tail r=0.10 (~4px) per spec. Backward unit
+  // vector along travel direction so the trail trails the head.
+  const trailCount = 8;
+  const dxNorm = endX - startX;
+  const dyNorm = endY - startY;
+  const len = Math.hypot(dxNorm, dyNorm) || 1;
+  const ux = -dxNorm / len;
+  const uy = -dyNorm / len;
+  const STEP = 0.18;
+
   useFrame((_, dt) => {
     elapsed.current += dt;
     const tTravel = Math.min(elapsed.current / TRAVEL_SEC, 1);
     if (groupRef.current) {
-      const x = startX + (endX - startX) * tTravel;
-      const y = startY + (endY - startY) * tTravel;
-      groupRef.current.position.x = x - startX;
-      groupRef.current.position.y = y - startY;
+      groupRef.current.position.x = (endX - startX) * tTravel;
+      groupRef.current.position.y = (endY - startY) * tTravel;
     }
-    if (elapsed.current > TRAVEL_SEC + FADE_SEC) {
-      onDone();
-    }
+    // Day 64a-empty-fix — explicit fade across the FADE_SEC tail.
+    // Without this the trail froze in place + popped out.
+    const fadeT = Math.max(
+      0,
+      Math.min(1, (elapsed.current - TRAVEL_SEC) / FADE_SEC),
+    );
+    const fadeMul = 1 - fadeT;
+    matsRef.current.forEach((m, i) => {
+      const t = i / (trailCount - 1);
+      const baseAlpha = 1.0 - t * 0.85;
+      m.opacity = baseAlpha * fadeMul;
+    });
+    if (elapsed.current > TRAVEL_SEC + FADE_SEC) onDone();
   });
-  // 6 trail dots, head full opacity, tail fading.
-  const trailCount = 6;
-  const dx = (startX - endX) / (trailCount * 4);
-  const dy = (startY - endY) / (trailCount * 4);
+
   return (
     <group ref={groupRef} position={[startX, startY, -6]}>
       {Array.from({ length: trailCount }).map((_, i) => {
         const t = i / (trailCount - 1);
-        const r = 0.10 - t * 0.05;
+        const r = 0.16 - t * 0.06;
         const alpha = 1.0 - t * 0.85;
         return (
-          <mesh key={i} position={[dx * i * 4, dy * i * 4, 0]}>
-            <circleGeometry args={[r, 12]} />
-            <meshBasicMaterial color={CREAM} transparent opacity={alpha} depthWrite={false} />
+          <mesh key={i} position={[ux * STEP * i, uy * STEP * i, 0]}>
+            <circleGeometry args={[r, 14]} />
+            <meshBasicMaterial
+              ref={(m) => {
+                if (m) matsRef.current[i] = m;
+              }}
+              color={CREAM}
+              transparent
+              opacity={alpha}
+              depthWrite={false}
+            />
           </mesh>
         );
       })}
@@ -418,7 +428,10 @@ export function EmptyStateScene() {
         dpr={0.6}
         camera={{ position: [0, 0, 12], fov: 50, near: 0.1, far: 100 }}
       >
-        <BackgroundGradient />
+        <Nebula
+          palette={EMPTY_STATE_PALETTE}
+          driftSpeed={EMPTY_STATE_DRIFT}
+        />
         <StarField />
         <Constellations />
         <ShootingStars />
