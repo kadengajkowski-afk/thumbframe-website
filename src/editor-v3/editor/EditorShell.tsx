@@ -5,7 +5,6 @@ import { TextEditor } from "@/editor/TextEditor";
 import { BgRemoveOverlay } from "@/editor/BgRemoveOverlay";
 import { TopBar } from "@/editor/panels/TopBar";
 import { LayersScrollTab } from "@/editor/panels/LayersScrollTab";
-import { ContextPanel } from "@/editor/panels/ContextPanel";
 import { ZoomIndicator } from "@/editor/ZoomIndicator";
 import { ToolPalette } from "@/editor/panels/ToolPalette";
 import { PreviewRack } from "@/editor/panels/PreviewRack";
@@ -13,32 +12,30 @@ import { PastDueBanner } from "@/editor/panels/PastDueBanner";
 import { BottomBar } from "@/editor/panels/BottomBar";
 import { ThumbFriendBubble } from "@/editor/panels/ThumbFriendBubble";
 import { WoodWall } from "@/editor/walls/WoodWall";
+import { MenuBar } from "@/editor/menubar/MenuBar";
 
 const ThumbFriendPanel = lazy(() =>
   import("@/editor/panels/ThumbFriendPanel").then((m) => ({ default: m.ThumbFriendPanel })),
 );
 
-/** Day 64a — EditorShell extracted from App.tsx + restructured to
- *  wrap each grid cell in a WoodWall scaffold.
+/** Day 64a — EditorShell. 64c update:
  *
- *  Grid layout (5 named cells):
- *    "topwall    topwall    topwall"     auto
- *    "leftwall   canvas     rightwall"   1fr
- *    "bottomwall bottomwall bottomwall"  auto
- *    / 64px      1fr        auto
+ *  Grid template now carries a 32px MENUBAR row between the topwall
+ *  and the canvas row, and locks the right wall column to 64px.
+ *  The Properties (ContextPanel) panel is gone — the right wall is
+ *  decorative wood + porthole + the LayersScrollTab brass plaque.
+ *  PreviewRack and ThumbFriendPanel still open via their hotkeys
+ *  but render as fixed-position overlays anchored to the right edge
+ *  of the viewport (slide over the canvas + right wall, not inside
+ *  the grid). This keeps the grid columns stable at 64 / 1fr / 64.
  *
- *  - The top + bottom rows are `auto` so they size to their
- *    children. TopBar (currently 48px) determines top row; bottom
- *    is empty for 64a (collapses to 0).
- *  - Left wall is a fixed 64px column (will host the toolbar in
- *    64c).
- *  - Right wall is `auto` so the existing variable-width
- *    ContextPanel (280) / PreviewRack / ThumbFriend (320) keep
- *    their dimensions.
- *  - Canvas grid cell takes the 1fr middle column.
- *
- *  Walls are transparent today; 64b replaces inner-panel wood
- *  with wall-level wood and adds porthole cutouts. */
+ *  Grid (5 named cells):
+ *    "topwall    topwall  topwall"     38px
+ *    "menubar    menubar  menubar"     32px
+ *    "leftwall   canvas   rightwall"   1fr
+ *    "bottomwall bottomwall bottomwall" 38px
+ *    / 64px 1fr 64px;
+ */
 
 export function EditorShell() {
   const cursor = useUiStore(deriveCursor);
@@ -49,11 +46,19 @@ export function EditorShell() {
     <div style={editorGrid}>
       <PastDueBanner />
 
-      {/* TOP WALL — small porthole top-center */}
+      {/* TOP WALL — small porthole top-center. Spec said 38px but
+          TopBar internals (avatar 28 + button padding) are tuned for
+          48; shrinking would clip the user-avatar circle. Kept 48
+          so the chrome doesn't regress. */}
       <div style={{ gridArea: "topwall", position: "relative", zIndex: 1, height: 48 }}>
         <WoodWall side="top">
           <TopBar />
         </WoodWall>
+      </div>
+
+      {/* MENU BAR — Photopea-style, between topwall and canvas */}
+      <div style={{ gridArea: "menubar", position: "relative", zIndex: 2 }}>
+        <MenuBar />
       </div>
 
       {/* LEFT WALL — porthole lower third (below toolbar) */}
@@ -77,30 +82,11 @@ export function EditorShell() {
         <ZoomIndicator />
       </main>
 
-      {/* RIGHT WALL — porthole center */}
+      {/* RIGHT WALL — locked at 64px. Wood + porthole only; the
+          Layers tab brass plaque lives outside the grid as a
+          fixed-position sibling. */}
       <div style={{ gridArea: "rightwall", position: "relative", zIndex: 1 }}>
-        <WoodWall side="right" porthole={{ diameter: 140, position: "center" }}>
-          {thumbfriendOpen ? (
-            <Suspense
-              fallback={
-                <aside
-                  style={{
-                    width: 320,
-                    background: "var(--panel-frost-bg)",
-                    backdropFilter: "var(--panel-frost-blur)",
-                    borderLeft: "1px solid var(--panel-frost-border)",
-                  }}
-                />
-              }
-            >
-              <ThumbFriendPanel />
-            </Suspense>
-          ) : previewOpen ? (
-            <PreviewRack />
-          ) : (
-            <ContextPanel />
-          )}
-        </WoodWall>
+        <WoodWall side="right" porthole={{ diameter: 140, position: "center" }} />
       </div>
 
       {/* BOTTOM WALL — 38px high. Status (left) + zoom (right). */}
@@ -109,6 +95,23 @@ export function EditorShell() {
           <BottomBar />
         </WoodWall>
       </div>
+
+      {/* Day 64c — PreviewRack + ThumbFriendPanel float over the
+          right edge instead of slotting inside the right wall. They
+          slide in over the canvas + right wall when their hotkey
+          opens them. The right wall stays a fixed 64px sleeve. */}
+      {previewOpen && (
+        <div style={floatingRightPanel(280)}>
+          <PreviewRack />
+        </div>
+      )}
+      {thumbfriendOpen && (
+        <Suspense fallback={null}>
+          <div style={floatingRightPanel(360)}>
+            <ThumbFriendPanel />
+          </div>
+        </Suspense>
+      )}
 
       {/* Layers scroll-tab — fixed-position sibling of grid */}
       <LayersScrollTab />
@@ -145,22 +148,19 @@ const editorGrid: CSSProperties = {
   width: "100%",
   height: "100%",
   display: "grid",
-  // Day 64a — 5-cell template. PastDueBanner row above the grid
-  // template (its own auto row stacked at the top of the grid).
-  // Top row = auto so TopBar's 48px determines it. Middle row = 1fr.
-  // Bottom row = auto, collapses to 0 when BottomWall has no
-  // content. Left col = 64px (toolbar), middle = 1fr (canvas),
-  // right = auto (ContextPanel 280 / PreviewRack / ThumbFriend 320).
+  // Day 64c — 5-cell template with menubar row inserted between
+  // topwall and the canvas row. PastDueBanner stacks above the
+  // grid template via its own auto row.
   gridTemplateAreas: `
-    "topwall    topwall  topwall"
-    "leftwall   canvas   rightwall"
+    "topwall    topwall    topwall"
+    "menubar    menubar    menubar"
+    "leftwall   canvas     rightwall"
     "bottomwall bottomwall bottomwall"
   `,
-  gridTemplateRows: "auto 1fr auto",
-  // Day 64a — left col matches existing ToolPalette width (56px) so
-  // this scaffolding is visually a no-op. Day 64c bumps it to 64px
-  // when the toolbar contents move inside the wall.
-  gridTemplateColumns: "56px 1fr auto",
+  gridTemplateRows: "48px 32px 1fr 38px",
+  // Right wall locked at 64px — Properties panel removed. PreviewRack
+  // / ThumbFriendPanel open as floating overlays, not inside the grid.
+  gridTemplateColumns: "64px 1fr 64px",
 };
 
 const canvasSurface: CSSProperties = {
@@ -185,3 +185,22 @@ const canvasSurface: CSSProperties = {
   overflow: "hidden",
   position: "relative",
 };
+
+/** Day 64c — overlay container for PreviewRack / ThumbFriendPanel.
+ *  Anchored top-right under the menubar (48 topwall + 32 menubar =
+ *  80). Bottom matches the bottomwall (38). z-index sits below
+ *  --z-floating-panels (= 20) so menubar dropdowns can render on
+ *  top when both are open. */
+function floatingRightPanel(width: number): CSSProperties {
+  return {
+    position: "fixed",
+    top: 80,
+    right: 0,
+    bottom: 38,
+    width,
+    zIndex: 15,
+    display: "flex",
+    flexDirection: "column",
+    boxShadow: "0 8px 24px -4px rgba(0, 0, 0, 0.45)",
+  };
+}

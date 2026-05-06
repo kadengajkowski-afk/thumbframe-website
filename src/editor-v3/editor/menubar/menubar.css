@@ -1,0 +1,146 @@
+/* Day 64c — Photopea-style top menu bar.
+ *
+ * Wood-textured strip 32px tall, sits between TopBar (38px) and
+ * the canvas row. Per spec — wood reuses the same wood-wall PNG as
+ * the rest of the quarters with a brightness(0.9) shadow, plus a
+ * thin dark border top + bottom.
+ *
+ * Triggers are Fraunces small-caps caps. Dropdowns render through
+ * a Portal with the parchment-scroll PNG background. */
+
+.tf-menubar {
+  position: relative;
+  z-index: 2;
+  height: 32px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background-color: #2A1F18;
+  background-image: url("/quarters/wood-wall-2.png");
+  background-size: 512px 512px;
+  background-repeat: repeat;
+  /* Subtle dim so it reads as the menubar tier, not the same value
+     as the topwall above it. */
+  filter: brightness(0.9);
+  border-top: 1px solid rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.4);
+  user-select: none;
+}
+
+/* ── Trigger buttons ───────────────────────────────────────── */
+
+.tf-menubar-trigger {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 0 12px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  font-family: var(--font-serif);
+  font-variant: small-caps;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: rgba(244, 234, 213, 0.85);
+  cursor: pointer;
+  border-radius: 0;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.tf-menubar-trigger:hover {
+  background-color: rgba(244, 234, 213, 0.06);
+  color: var(--cream);
+}
+
+.tf-menubar-trigger.is-open {
+  background-color: rgba(244, 234, 213, 0.10);
+  color: var(--brass-bright);
+}
+
+.tf-menubar-trigger:focus-visible {
+  outline: none;
+  background-color: rgba(244, 234, 213, 0.10);
+}
+
+/* ── Dropdown panel ────────────────────────────────────────── */
+
+.tf-menubar-dropdown {
+  /* Fixed-position via inline style; size is content-driven. */
+  min-width: 220px;
+  padding: 6px 0;
+  border: 1px solid rgba(184, 134, 75, 0.4);
+  border-radius: 2px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  background-color: var(--parchment);
+  background-image: url("/quarters/parchment-scroll.png");
+  background-size: 400px 400px;
+  background-repeat: repeat;
+  color: var(--ink);
+  z-index: var(--z-floating-panels);
+  animation: tf-menubar-dropdown-in 160ms var(--ease-standard);
+}
+
+@keyframes tf-menubar-dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Items + dividers ──────────────────────────────────────── */
+
+.tf-menubar-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  margin: 0;
+  width: 100%;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tf-menubar-item.is-focused,
+.tf-menubar-item:hover {
+  background-color: rgba(184, 134, 75, 0.12);
+}
+
+.tf-menubar-item.is-disabled,
+.tf-menubar-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tf-menubar-item.is-disabled:hover,
+.tf-menubar-item:disabled:hover {
+  background-color: transparent;
+}
+
+.tf-menubar-item-label {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+.tf-menubar-item-hotkey {
+  flex: 0 0 auto;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: rgba(42, 38, 32, 0.5);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.tf-menubar-divider {
+  height: 1px;
+  margin: 4px 0;
+  background-color: rgba(120, 90, 40, 0.2);
+}
