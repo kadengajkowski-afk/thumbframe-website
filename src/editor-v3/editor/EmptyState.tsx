@@ -288,10 +288,13 @@ const secondaryRow: CSSProperties = {
   gap: 6,
 };
 
+/* Day 67 Part 18 spec — Inter italic 13px, cream at 50% alpha. */
 const secondaryLink: CSSProperties = {
   background: "transparent",
   border: "none",
-  color: "var(--text-secondary)",
+  color: "rgba(244, 234, 213, 0.5)",
+  fontFamily: "var(--font-ui)",
+  fontStyle: "italic",
   fontSize: 13,
   letterSpacing: "0.02em",
   cursor: "pointer",
@@ -300,7 +303,6 @@ const secondaryLink: CSSProperties = {
 };
 
 const separator: CSSProperties = {
-  color: "var(--text-secondary)",
-  opacity: 0.5,
+  color: "rgba(244, 234, 213, 0.5)",
   fontSize: 13,
 };

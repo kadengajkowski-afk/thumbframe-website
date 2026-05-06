@@ -158,51 +158,16 @@ body,
   overflow: hidden;
 }
 
-/* Day 58 — editor visual overhaul, part 1.
- * Reuses the SAME watercolor cosmic asset that the landing hero
- * scene renders via Three.js + painterly post-pass shaders. We
- * snapshot one frame and serve it as a static JPEG (459 KB) so the
- * editor route doesn't need to ship three/r3f. The ship + cosmic
- * cloud composition is identical to thumbframe.com's hero — same
- * brand, same vibe, zero runtime cost.
- *
- * Architecture (from DEFERRED Day 57 redo plan, locked):
- *   - Atmosphere lives on BODY ONLY. Cannot touch the editor grid,
- *     CompositorHost, or Pixi canvas mount.
- *   - body bg = the cosmic image at full opacity, cover, fixed.
- *   - body::before = 5% black overlay so panels stay readable.
- *   - The editor `shell` is transparent so the body shows through
- *     in EmptyState + the gaps around the editor grid panels.
- */
-html {
-  background-color: #050818;
-}
+/* Day 67 Part 18 redo — body backdrop is FLAT var(--bg-space-0).
+ * The live BodyAtmosphere (Three.js + r3f, lazy-loaded) does the
+ * cosmic work on top; the EmptyStateScene runs its own painterly
+ * pipeline. No static landing-recycle JPEG, no body::before wash.
+ * Architecture: atmosphere lives on body only — never touches the
+ * editor grid, CompositorHost, or Pixi canvas mount. */
+html,
 body {
-  /* Day 63 — Painterly cosmic backdrop baked from the live landing
-   * scene. background-image URL set from main.tsx via Vite asset
-   * import so base-path rewrites correctly between dev + prod. The
-   * bake itself carries the full painterly atmosphere (Three.js
-   * nebula + stardust + Kuwahara + outline + paper grain). All
-   * prior SVG cosmic scene layers (CosmicSky, HelmFraming,
-   * EditorBackdrop) are removed — the bake replaces them entirely.
-   */
-  background-color: #050818;
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-  background-repeat: no-repeat;
+  background-color: var(--bg-space-0);
   min-height: 100vh;
-}
-body::before {
-  /* Day 63 — soft dark wash over the painterly bake so cream UI
-   * text in panels stays legible. The bake is gorgeous on its own;
-   * the wash just lifts the panel contrast by ~10%. */
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: rgba(5, 5, 16, 0.10);
 }
 
 * {

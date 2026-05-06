@@ -4,26 +4,21 @@ import * as THREE from "three";
 
 /** Day 66 — live cosmic atmosphere via three.js + r3f.
  *
- *  Architecture (locked):
+ *  Architecture (locked, Day 67 Part 18 redo):
  *    - position: fixed, inset:0, z-index var(--z-atmosphere) (-1).
  *    - pointer-events: none.
  *    - Mounts beneath the editor shell, behind everything.
- *    - The Day 63 static cosmic-scene-v2.jpg STAYS as the body
- *      bg image (set in main.tsx). This canvas adds a live
- *      moving star field + faint nebula fog ON TOP of the static
- *      bake. If three.js fails to initialize, the static bake is
- *      the floor — atmosphere never disappears.
+ *    - Body bg is flat var(--bg-space-0). This canvas adds the
+ *      live moving star field + faint nebula fog on top. If
+ *      three.js fails to initialize, the editor stays on the flat
+ *      backdrop — atmosphere just doesn't appear.
  *
  *  Performance:
  *    - pixelRatio 0.5 (renderer tells r3f via gl prop)
  *    - 30fps throttle when document.hidden via cancelling
  *      requestAnimationFrame in useFrame
  *    - 800 stars total, simple Points geometry
- *    - No shader compile beyond r3f's defaults
- *
- *  If canvas mount breaks: REVERT this entire branch. The static
- *  cosmic-scene-v2.jpg keeps the editor visible with no three.js
- *  in the bundle. */
+ *    - No shader compile beyond r3f's defaults */
 
 function StarField() {
   const ref = useRef<THREE.Points>(null);
@@ -99,8 +94,8 @@ function NebulaFog() {
 }
 
 export function BodyAtmosphere() {
-  // Mount only after first paint so the static cosmic-scene-v2.jpg
-  // shows immediately; live atmosphere layers on once r3f boots.
+  // Mount only after first paint so the flat body bg shows
+  // immediately; live atmosphere layers on once r3f boots.
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     const t = window.requestAnimationFrame(() => setMounted(true));
