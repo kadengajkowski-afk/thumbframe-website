@@ -97,6 +97,11 @@ export function WoodWall({
     backgroundImage: `url("${woodUrl}")`,
     backgroundSize: "512px 512px",
     backgroundRepeat: "repeat",
+    // Day 64a-tone — dim + desaturate + slight cool shift so wood
+    // reads as weathered grey-brown driftwood in shadow, not
+    // saturated caramel-cartoon. Filter applies BEFORE the porthole
+    // mask, so the cut-out circle is unaffected.
+    filter: "brightness(0.75) saturate(0.55) hue-rotate(-8deg)",
     zIndex: 1,
     ...(mask
       ? {
@@ -144,10 +149,22 @@ export function WoodWall({
               height: porthole.diameter + 24,
               zIndex: 3,
               pointerEvents: "none",
+              // Day 64a-tone — brass ring was pulling focus from the
+              // canvas. Dim + desaturate so it reads as background
+              // detail, not focal element.
+              opacity: 0.65,
+              filter: "saturate(0.7) brightness(0.85)",
             }}
           />
-          {/* Inner radial shadow simulating curved-glass darkening
-              at the rim of the hole. */}
+          {/* Day 64a-tone — porthole interior overlay. Two layers:
+              1) subtle radial-gradient tint (charcoal center → amber
+                 edge at 15% opacity) so the hole reads as glass over
+                 cosmic, not solid black, even when the body
+                 atmosphere is sparse;
+              2) softer rim darkening (was rgba(0,0,0,0.45) — too
+                 bruise-y; now rgba(0,0,0,0.30) for a calmer vignette).
+              Both inside the same circle, sitting over whatever
+              shows through the wood mask cutout. */}
           <div
             aria-hidden="true"
             style={{
@@ -158,7 +175,11 @@ export function WoodWall({
               width: porthole.diameter,
               height: porthole.diameter,
               borderRadius: "50%",
-              boxShadow: "inset 0 0 18px 4px rgba(0, 0, 0, 0.45)",
+              background:
+                "radial-gradient(circle, " +
+                "rgba(8, 12, 24, 0.15) 0%, " +
+                "rgba(184, 134, 75, 0.15) 100%)",
+              boxShadow: "inset 0 0 18px 4px rgba(0, 0, 0, 0.30)",
               zIndex: 2,
               pointerEvents: "none",
             }}
