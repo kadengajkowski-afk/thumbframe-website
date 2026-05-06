@@ -4,14 +4,15 @@ import * as THREE from "three";
 
 /** Day 66 — live cosmic atmosphere via three.js + r3f.
  *
- *  Architecture (locked, Day 67 Part 18 redo):
- *    - position: fixed, inset:0, z-index var(--z-atmosphere) (-1).
+ *  Architecture (locked, Day 64a-fix-2 lifted z-index):
+ *    - position: fixed, inset:0, z-index var(--z-atmosphere) (0).
+ *      Body is transparent; html carries the floor color so this
+ *      paints between the floor and the editor shell (z-index 1+).
  *    - pointer-events: none.
- *    - Mounts beneath the editor shell, behind everything.
- *    - Body bg is flat var(--bg-space-0). This canvas adds the
- *      live moving star field + faint nebula fog on top. If
- *      three.js fails to initialize, the editor stays on the flat
- *      backdrop — atmosphere just doesn't appear.
+ *    - Mounts beneath the editor shell, visible through porthole
+ *      mask cutouts and around the canvas grid cell.
+ *    - If three.js fails to initialize, the editor stays on the
+ *      flat html backdrop — atmosphere just doesn't appear.
  *
  *  Performance:
  *    - pixelRatio 0.5 (renderer tells r3f via gl prop)
@@ -110,11 +111,11 @@ export function BodyAtmosphere() {
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: -1,
+        zIndex: 0,
         pointerEvents: "none",
-        // mix-blend-mode: screen so the live stars add LIGHT to the
-        // static bake without darkening it. Bake stays the floor;
-        // live just adds motion.
+        // mix-blend-mode: screen so the live stars add LIGHT over
+        // the html flat bg (#050510). Stars never darken the floor;
+        // they only lighten where they paint.
         mixBlendMode: "screen",
       }}
     >
