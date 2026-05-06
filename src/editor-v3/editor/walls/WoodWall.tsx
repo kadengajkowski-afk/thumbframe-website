@@ -16,6 +16,12 @@ type Side = "top" | "left" | "right" | "bottom";
 type Porthole = {
   diameter: number;
   position: "center" | "lower" | "upper";
+  /** Day 64d — extra brass-ring overhead beyond the porthole hole.
+   *  Defaults to 24 (matches the original Day 64a-fix rings). For
+   *  narrow walls (e.g. 64px left/right rails) drop to 8 so the
+   *  ring doesn't extend past the wall edge and get clipped by
+   *  `overflow: hidden`. */
+  ringPadding?: number;
 } | null;
 
 const WOOD_BY_SIDE: Record<Side, string> = {
@@ -145,8 +151,8 @@ export function WoodWall({
               top: anchorTop,
               left: anchorLeft,
               transform: "translate(-50%, -50%)",
-              width: porthole.diameter + 24,
-              height: porthole.diameter + 24,
+              width: porthole.diameter + (porthole.ringPadding ?? 24),
+              height: porthole.diameter + (porthole.ringPadding ?? 24),
               zIndex: 3,
               pointerEvents: "none",
               // Day 64a-tone — brass ring was pulling focus from the
