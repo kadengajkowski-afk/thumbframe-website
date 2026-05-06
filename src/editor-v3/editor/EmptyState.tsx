@@ -288,21 +288,25 @@ const secondaryRow: CSSProperties = {
   gap: 6,
 };
 
-/* Day 67 Part 18 spec — Inter italic 13px, cream at 50% alpha. */
+/* Day 64b — bumped from 0.5 → 0.7 alpha + text-shadow so the link
+ * reads against the painterly nebula backdrop (light cloud regions
+ * were swallowing the cream type at 50%). */
 const secondaryLink: CSSProperties = {
   background: "transparent",
   border: "none",
-  color: "rgba(244, 234, 213, 0.5)",
+  color: "rgba(244, 234, 213, 0.7)",
   fontFamily: "var(--font-ui)",
   fontStyle: "italic",
   fontSize: 13,
   letterSpacing: "0.02em",
   cursor: "pointer",
   padding: "4px 8px",
+  textShadow: "0 1px 2px rgba(0, 0, 0, 0.4)",
   transition: "color var(--motion-fast) var(--ease-standard)",
 };
 
 const separator: CSSProperties = {
-  color: "rgba(244, 234, 213, 0.5)",
+  color: "rgba(244, 234, 213, 0.7)",
   fontSize: 13,
+  textShadow: "0 1px 2px rgba(0, 0, 0, 0.4)",
 };
