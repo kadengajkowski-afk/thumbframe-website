@@ -282,7 +282,18 @@ const visuallyHidden: CSSProperties = {
   border: 0,
 };
 
+/* Day 64a — explicit position:relative so the link row stacks
+ * INSIDE the wrap div's z-index:1 stacking context at the same
+ * level as the EmptyStateScene Canvas wrapper (which is
+ * position:fixed z-index:0). Without this, secondaryRow defaults
+ * to position:static and ends up BELOW the Canvas in paint order,
+ * which causes the lazy-loaded scene to obscure the links once
+ * its chunk resolves. The upload card already worked because
+ * uploadTarget carries position:relative; secondaryRow needed
+ * the same. */
 const secondaryRow: CSSProperties = {
+  position: "relative",
+  zIndex: 1,
   display: "flex",
   alignItems: "center",
   gap: 6,
