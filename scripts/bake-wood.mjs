@@ -120,16 +120,18 @@ function bakeWoodSvg(seed) {
       svg += `\n  <circle cx="${k.cx.toFixed(0)}" cy="${k.cy.toFixed(0)}" r="${k.r.toFixed(1)}" fill="url(#k${seed}_${p.idx})" />`;
     }
   }
-  // Plank seams
+  // Plank seams — Day 64a-tone softened. Seam darkness 0.55 → 0.25
+  // and height 2 → 1 so plank divisions read as subtle joins, not
+  // sharp horizontal stripes. Brass nails fill-opacity 1 → 0.4 so
+  // they recede into background detail.
   for (let i = 0; i < planks.length - 1; i++) {
     const seamY = planks[i].y + planks[i].h;
-    svg += `\n  <rect x="0" y="${seamY - 1}" width="1024" height="2" fill="rgba(20, 14, 8, 0.55)" />`;
-    // Brass nails along the seam
+    svg += `\n  <rect x="0" y="${seamY - 0.5}" width="1024" height="1" fill="rgba(20, 14, 8, 0.25)" />`;
     const nailCount = 4 + Math.floor(rng(seed + i * 31)() * 3);
     for (let n = 0; n < nailCount; n++) {
       const x = (1024 / (nailCount + 1)) * (n + 1);
-      svg += `\n  <circle cx="${x.toFixed(0)}" cy="${seamY.toFixed(0)}" r="2" fill="#D4A55C" />`;
-      svg += `\n  <circle cx="${x.toFixed(0)}" cy="${seamY.toFixed(0)}" r="2" fill="none" stroke="#8B6633" stroke-width="0.6" />`;
+      svg += `\n  <circle cx="${x.toFixed(0)}" cy="${seamY.toFixed(0)}" r="2" fill="#D4A55C" fill-opacity="0.4" />`;
+      svg += `\n  <circle cx="${x.toFixed(0)}" cy="${seamY.toFixed(0)}" r="2" fill="none" stroke="#8B6633" stroke-width="0.6" stroke-opacity="0.4" />`;
     }
   }
   svg += `\n</svg>`;
