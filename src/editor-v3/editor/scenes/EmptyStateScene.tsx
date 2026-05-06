@@ -1,6 +1,10 @@
-import { Canvas, useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { EffectComposer } from "@react-three/postprocessing";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { KuwaharaEffect } from "@/atmosphere/painterly/KuwaharaEffect";
+import { PaperGrainEffect } from "@/atmosphere/painterly/PaperGrainEffect";
+import { ColorGradeEffect } from "@/atmosphere/painterly/ColorGradeEffect";
 
 /** Day 67 (Part 18) — empty-state cosmic scene.
  *
@@ -346,6 +350,52 @@ function ShootingStreak({
   );
 }
 
+// ── Painterly post-processing ────────────────────────────────
+//
+// Mirrors the landing PainterlyPost pipeline (src/landing/shaders/
+// painterly/PainterlyPost.jsx) MINUS the outline pass — the empty
+// state's loose paint dabs already read as painted; an extra ink
+// wash over them muddies the constellation read. Kuwahara kernelFar
+// 6 + PaperGrain strength 0.28 / scale 600 + ColorGrade strength
+// 0.7 match the landing intensity exactly.
+
+const IS_MOBILE =
+  typeof window !== "undefined" && window.innerWidth < 768;
+const KUWAHARA_SCALE = IS_MOBILE ? 0.25 : 0.40;
+
+function KuwaharaPass() {
+  const { size, viewport } = useThree();
+  const effect = useMemo(
+    () =>
+      new KuwaharaEffect({
+        kernelNear: 2.0,
+        kernelFar: IS_MOBILE ? 5.0 : 6.0,
+      }),
+    [],
+  );
+  useEffect(() => {
+    const dpr = viewport.dpr || 1;
+    effect.setSize(
+      size.width * dpr * KUWAHARA_SCALE,
+      size.height * dpr * KUWAHARA_SCALE,
+    );
+  }, [size, viewport, effect]);
+  return <primitive object={effect} dispose={null} />;
+}
+
+function PaperGrainPass() {
+  const effect = useMemo(
+    () => new PaperGrainEffect({ strength: 0.28, scale: 600 }),
+    [],
+  );
+  return <primitive object={effect} dispose={null} />;
+}
+
+function ColorGradePass() {
+  const effect = useMemo(() => new ColorGradeEffect({ strength: 0.7 }), []);
+  return <primitive object={effect} dispose={null} />;
+}
+
 // ── Composed scene ────────────────────────────────────────────
 
 export function EmptyStateScene() {
@@ -372,6 +422,11 @@ export function EmptyStateScene() {
         <StarField />
         <Constellations />
         <ShootingStars />
+        <EffectComposer multisampling={0} resolutionScale={0.5} depthBuffer>
+          <KuwaharaPass />
+          <PaperGrainPass />
+          <ColorGradePass />
+        </EffectComposer>
       </Canvas>
     </div>
   );

@@ -11,9 +11,9 @@ import { CommandPalette } from "@/editor/CommandPalette";
 // today, populated 64b-64c.
 import { EditorShell } from "@/editor/EditorShell";
 // Day 66 — BodyAtmosphere lazy-loaded so three.js + r3f (~245 KB
-// gzipped) doesn't block first paint. The static cosmic-scene-v2.jpg
-// body bg is the floor; live atmosphere drops in after the chunk
-// resolves.
+// gzipped) doesn't block first paint. Body bg is flat
+// var(--bg-space-0); live atmosphere drops in after the chunk
+// resolves and does the cosmic work on top.
 const BodyAtmosphere = lazy(() =>
   import("@/editor/BodyAtmosphere").then((m) => ({ default: m.BodyAtmosphere })),
 );
@@ -169,9 +169,9 @@ export function App() {
           jumps focus past the toolbar to the canvas main element. */}
       <a href="#tf-canvas" className="tf-skip-link">Skip to editor</a>
       {/* Day 66 — live cosmic atmosphere via three.js, lazy-loaded.
-          Layers a moving star field + nebula fog over the static
-          cosmic-scene-v2.jpg body bake. Static bake is the floor —
-          if r3f fails to load, atmosphere never disappears. */}
+          Layers a moving star field + nebula fog on top of the flat
+          var(--bg-space-0) body. If r3f fails to load, the editor
+          stays usable on the flat backdrop. */}
       <Suspense fallback={null}>
         <BodyAtmosphere />
       </Suspense>
