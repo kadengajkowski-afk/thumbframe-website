@@ -263,6 +263,11 @@ function Logo() {
 }
 
 const bar: CSSProperties = {
+  // Day 64d — width:100% was missing. Without it, the bar shrinks
+  // to its content (~540px) inside the WoodWall flex container,
+  // pinning the right group near the middle of the topbar instead
+  // of at the right edge.
+  width: "100%",
   display: "flex", alignItems: "center", gap: 12, padding: "0 16px",
   height: 48,
   // Day 64b — wood now owned by parent WoodWall. TopBar is just a

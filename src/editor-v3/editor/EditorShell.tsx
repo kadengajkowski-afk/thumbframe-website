@@ -61,9 +61,12 @@ export function EditorShell() {
         <MenuBar />
       </div>
 
-      {/* LEFT WALL — porthole lower third (below toolbar) */}
+      {/* LEFT WALL — small porthole below toolbar. Day 64d shrank
+          from 140 (clipped horizontally inside the 64px rail) to
+          48 with ringPadding 8 — fits cleanly with 4px gaps each
+          side, reads as a subtle wall detail. */}
       <div style={{ gridArea: "leftwall", position: "relative", zIndex: 1 }}>
-        <WoodWall side="left" porthole={{ diameter: 140, position: "lower" }}>
+        <WoodWall side="left" porthole={{ diameter: 48, position: "lower", ringPadding: 8 }}>
           <ToolPalette />
         </WoodWall>
       </div>
@@ -82,11 +85,13 @@ export function EditorShell() {
         <ZoomIndicator />
       </main>
 
-      {/* RIGHT WALL — locked at 64px. Wood + porthole only; the
+      {/* RIGHT WALL — locked at 64px. Wood + small porthole; the
           Layers tab brass plaque lives outside the grid as a
-          fixed-position sibling. */}
+          fixed-position sibling. Day 64d shrank porthole from 140
+          (which dominated the narrow rail and clipped horizontally)
+          to a 48px subtle detail. */}
       <div style={{ gridArea: "rightwall", position: "relative", zIndex: 1 }}>
-        <WoodWall side="right" porthole={{ diameter: 140, position: "center" }} />
+        <WoodWall side="right" porthole={{ diameter: 48, position: "center", ringPadding: 8 }} />
       </div>
 
       {/* BOTTOM WALL — 38px high. Status (left) + zoom (right). */}

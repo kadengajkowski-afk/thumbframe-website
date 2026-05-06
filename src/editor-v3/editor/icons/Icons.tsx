@@ -1,28 +1,23 @@
-/** Day 63 — Captain's Quarters icon set.
+/** Day 64d — Captain's Quarters icon set, refined pass.
  *
- * 12 hand-authored 24x24 SVG icons. Painterly imperfections via
- * non-perfect curves, varied stroke weights, brass amber accents.
- * NOT Lucide — every icon has a chosen metaphor (quill nib for
- * select, painted hand for pan, inkwell+quill for text, etc.).
+ *  Vibe: brass nautical instrument engravings (sextant, compass,
+ *  divider calipers, ship's wheel) crossed with photo-editor tool
+ *  icons (Photoshop / Photopea). Formal, geometric, professional —
+ *  NOT cartoon. Drops the Day 63 painterly-imperfection rule in
+ *  favor of uniform stroke weights for a clean engraved feel.
  *
- * Authoring rules (research plan):
- *   - 24x24 viewBox
- *   - stroke-width 1.5-2.0px, NON-UNIFORM
- *   - stroke-linecap round, stroke-linejoin round
- *   - currentColor for stroke (CSS-recolorable)
- *   - Active state via wrapping <IconPlate active>: brass tint +
- *     drop-shadow(0 0 6px var(--brass-glow))
- *   - Each icon optionally sits inside a 32x32 brass-rimmed plate
- *     (small SVG ring with painted texture) — see <IconPlate>.
+ *  Authoring rules:
+ *    - 24x24 viewBox
+ *    - stroke-width: 1.5 UNIFORM
+ *    - stroke-linecap: round
+ *    - stroke-linejoin: round
+ *    - stroke="currentColor" (recolorable via CSS)
+ *    - fill="none" by default; "currentColor" only where the icon
+ *      reads better as a solid silhouette
+ *    - Brass amber (var(--brass)) for accent dots / rivets only
  *
- * Tools (geometric, simplified): SelectIcon, HandIcon, RectIcon,
- * EllipseIcon, TextIcon, UploadIcon.
- *
- * AI tools (illustrative): ThumbFriendIcon, GenerateIcon, BrandKitIcon,
- * BgRemoveIcon.
- *
- * Utility: AnchorIcon (saved indicator), HourglassIcon (saving,
- * animates rotation via CSS keyframe `tf-quarters-spin`). */
+ *  The brass-rimmed <IconPlate> wrapper around each icon stays —
+ *  it's the active state mechanism the toolbar relies on. */
 
 import { type CSSProperties, type ReactNode } from "react";
 
@@ -38,6 +33,7 @@ function svg(children: ReactNode) {
       aria-hidden="true"
       fill="none"
       stroke="currentColor"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -49,105 +45,92 @@ function svg(children: ReactNode) {
 // ── Tool icons ───────────────────────────────────────────────────
 
 export function SelectIcon() {
-  // Refined cursor — quill nib body. Painterly imperfection via
-  // quadratic curves where straight lines would feel digital.
+  // Sharp arrow cursor — refined, slim, NOT chunky. The body is a
+  // filled silhouette; a thin stroke outlines it at uniform weight.
   return svg(
     <>
       <path
-        d="M5 4 Q5.4 3.8 6 4 L17 16 Q17.5 16.4 17 17 L14 18.2 Q13.5 18.3 13 17.7 L11 14.5 Q9.5 12.5 8 10 Q6.2 7.6 5 4 Z"
+        d="M5 3.5 L5 18.5 L9.4 14.6 L11.7 19.4 L13.4 18.6 L11.1 13.8 L17 13.8 Z"
         fill="currentColor"
         stroke="none"
       />
-      <circle cx="6" cy="5" r="1.1" fill={BRASS} stroke="none" />
+      <path d="M5 3.5 L5 18.5 L9.4 14.6 L11.7 19.4 L13.4 18.6 L11.1 13.8 L17 13.8 Z" />
     </>
   );
 }
 
 export function HandIcon() {
-  // Painted palm + 4 fingers. Stroke widths vary 1.5-2.0px.
+  // Anatomical hand silhouette in the manner of an 18th-century
+  // engraving: four fingers + thumb + palm with a single uniform
+  // stroke. Fingers slightly fanned, palm rounded.
   return svg(
     <>
-      <path
-        d="M6 12 Q6.2 7 7.5 7 Q8.5 7 8.5 12
-           M9.5 12 Q9.7 5 11 5 Q12 5 12 12
-           M13 12 Q13.2 6 14.5 6 Q15.5 6 15.5 12
-           M16.5 12 Q16.7 8 17.5 8 Q18.3 8 18.3 12"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M5.5 11 Q5.5 16 8 18 Q11 20 14 20 Q18 20 18.3 16 V11"
-        strokeWidth="1.7"
-      />
-      <circle cx="12" cy="22" r="1.1" fill={BRASS} stroke="none" />
+      {/* Pinky → ring → middle → index, ascending tip heights */}
+      <path d="M7 14 V9.5" />
+      <path d="M9.5 14 V7" />
+      <path d="M12 14 V5.5" />
+      <path d="M14.5 14 V7.5" />
+      {/* Thumb arches off the palm to the right */}
+      <path d="M14.5 12.5 Q17.2 11.8 17.5 14" />
+      {/* Palm + wrist arch */}
+      <path d="M5.5 14 Q5.5 19.5 10.5 20.5 Q15.5 20.5 17.5 18 V14" />
+      <path d="M5.5 14 V11.5 Q5.5 10 7 10" />
     </>
   );
 }
 
 export function RectIcon() {
-  // Non-perfect square corners — slightly irregular.
+  // Clean rectangle outline + four corner crop-tick marks.
   return svg(
     <>
-      <path
-        d="M5 6 Q5 5.5 5.5 5.5 H18.5 Q19 5.5 19 6 V18 Q19 18.5 18.5 18.5 H5.5 Q5 18.5 5 18 Z"
-        strokeWidth="1.7"
-      />
-      <circle cx="6" cy="7" r="0.8" fill={BRASS} stroke="none" />
-      <circle cx="18" cy="7" r="0.8" fill={BRASS} stroke="none" />
-      <circle cx="6" cy="17" r="0.8" fill={BRASS} stroke="none" />
-      <circle cx="18" cy="17" r="0.8" fill={BRASS} stroke="none" />
+      <rect x="5" y="6" width="14" height="12" rx="0.5" />
+      {/* Crop ticks at each corner */}
+      <path d="M3.5 6 H4.5  M5 4.5 V5.5" />
+      <path d="M19.5 4.5 V5.5  M19.5 6 H20.5" />
+      <path d="M3.5 18 H4.5  M5 18.5 V19.5" />
+      <path d="M19.5 18.5 V19.5  M19.5 18 H20.5" />
     </>
   );
 }
 
 export function EllipseIcon() {
-  // Organic <path> not <circle>. Slight quadratic wobble.
+  // Clean ellipse outline + four compass-point tick marks. NOT
+  // wobbly — uniform strokeWidth, geometric.
   return svg(
     <>
-      <path
-        d="M12 4 Q19 4.5 20 12 Q19 19.5 12 20 Q5 19.5 4 12 Q5 4.5 12 4 Z"
-        strokeWidth="1.7"
-      />
-      <circle cx="12" cy="3.6" r="0.8" fill={BRASS} stroke="none" />
-      <circle cx="20.4" cy="12" r="0.8" fill={BRASS} stroke="none" />
-      <circle cx="12" cy="20.4" r="0.8" fill={BRASS} stroke="none" />
-      <circle cx="3.6" cy="12" r="0.8" fill={BRASS} stroke="none" />
+      <ellipse cx="12" cy="12" rx="7.5" ry="6" />
+      {/* Compass-point ticks */}
+      <path d="M12 4.5 V5.5" />
+      <path d="M12 18.5 V19.5" />
+      <path d="M3.5 12 H4.5" />
+      <path d="M19.5 12 H20.5" />
     </>
   );
 }
 
 export function TextIcon() {
-  // Inkwell + quill rising out. More illustrative than a "T".
+  // Formal serif "T" — uppercase glyph with serifs at the top
+  // crossbar and the baseline. Clean lines, no inkwell.
   return svg(
     <>
-      <path
-        d="M7 16 Q7 19 9 20 H15 Q17 19 17 16 V14 H7 Z"
-        fill="currentColor"
-        opacity="0.85"
-        stroke="none"
-      />
-      <ellipse cx="12" cy="13.6" rx="5" ry="0.8" fill={BRASS} stroke="none" />
-      <path
-        d="M16 4 Q14 6 12 8 Q10 10 8.5 12 Q8 13 9 13.5 Q10.5 13 12 11 Q14 9 16 7 Q18 5 16 4 Z"
-        fill="currentColor"
-        opacity="0.55"
-        stroke="none"
-      />
-      <path d="M16 4 Q12 8 9 13" strokeWidth="0.9" opacity="0.5" />
-      <circle cx="9" cy="13.5" r="0.9" fill={BRASS} stroke="none" />
+      {/* Top crossbar with end serifs */}
+      <path d="M5 5.5 H19" />
+      <path d="M5 5.5 V7.5  M19 5.5 V7.5" />
+      {/* Vertical stem */}
+      <path d="M12 5.5 V18.5" />
+      {/* Baseline serif (small horizontal foot) */}
+      <path d="M9 18.5 H15" />
     </>
   );
 }
 
 export function UploadIcon() {
-  // Arrow into a frame. Simple, non-Lucide via slight curves.
+  // Refined arrow rising into a frame.
   return svg(
     <>
-      <path
-        d="M5 14 V18 Q5 19 6 19 H18 Q19 19 19 18 V14"
-        strokeWidth="1.6"
-      />
-      <path d="M12 15 V5 M8 9 L12 5 L16 9" strokeWidth="1.8" />
-      <circle cx="12" cy="3.6" r="0.9" fill={BRASS} stroke="none" />
+      <path d="M5 14 V18 Q5 19 6 19 H18 Q19 19 19 18 V14" />
+      <path d="M12 16 V5" />
+      <path d="M8 9 L12 5 L16 9" />
     </>
   );
 }
@@ -155,64 +138,64 @@ export function UploadIcon() {
 // ── AI tool icons (illustrative) ──────────────────────────────────
 
 export function ThumbFriendIcon() {
-  // Small painted ship inside a chat bubble.
+  // Refined ship in profile — hull below the waterline, single mast
+  // with a triangular sail. Formal naval engraving silhouette.
   return svg(
     <>
-      <path
-        d="M3 6 Q3 4 5 4 H19 Q21 4 21 6 V14 Q21 16 19 16 H10 L7 19 V16 H5 Q3 16 3 14 Z"
-        strokeWidth="1.6"
-      />
-      <path d="M8 12 Q9 13 12 13 Q15 13 16 12 L14.5 10.5 H9.5 Z" fill="currentColor" stroke="none" />
-      <path d="M12 6 V10 L9.5 10 Q10.5 8 12 6 Z" fill="rgba(245, 230, 200, 0.7)" stroke="none" />
-      <path d="M12 6 V10 L14.5 10 Q13.5 8 12 6 Z" fill="rgba(245, 230, 200, 0.4)" stroke="none" />
-      <line x1="12" y1="6" x2="12" y2="10" strokeWidth="0.9" opacity="0.7" />
+      {/* Waterline */}
+      <path d="M3 17.5 H21" />
+      {/* Hull — broad U-shape with chamfered ends */}
+      <path d="M5 17.5 L6 15 H18 L19 17.5" />
+      {/* Mast */}
+      <path d="M12 15 V5" />
+      {/* Triangular sail */}
+      <path d="M12 5.5 L17 13.5 H12 Z" fill="currentColor" stroke="none" />
+      <path d="M12 5.5 L17 13.5 H12 Z" />
+      {/* Pennant flag */}
+      <path d="M12 5 L14 4 L12 3.5" />
     </>
   );
 }
 
 export function GenerateIcon() {
-  // 4-pointed creation spark. Painted, not symmetric — stroke
-  // width varies subtly per arm.
+  // 4-point sparkle star — slim arms, NOT the chunky 8-point flower
+  // of Day 63. Formal celestial-chart star.
   return svg(
     <>
-      <path
-        d="M12 3 L13 10 L20 12 L13 14 L12 21 L11 14 L4 12 L11 10 Z"
-        fill="currentColor"
-        stroke="none"
-      />
-      <circle cx="12" cy="12" r="1.3" fill={BRASS} stroke="none" />
-      <circle cx="18" cy="6" r="0.7" fill="currentColor" opacity="0.65" stroke="none" />
-      <circle cx="6" cy="18" r="0.7" fill="currentColor" opacity="0.65" stroke="none" />
+      <path d="M12 3.5 L13 11 L20.5 12 L13 13 L12 20.5 L11 13 L3.5 12 L11 11 Z" />
+      <circle cx="12" cy="12" r="0.7" fill={BRASS} stroke="none" />
     </>
   );
 }
 
 export function BrandKitIcon() {
-  // Furled flag on a flagpole.
+  // Refined heraldic banner on a pole. Pole is straight; banner has
+  // a swallow-tail end, formal flag-of-state silhouette.
   return svg(
     <>
-      <line x1="6" y1="3" x2="6" y2="21" strokeWidth="1.7" stroke={BRASS} />
-      <path
-        d="M6 5 Q14 4 18 7 Q14 9 10 9 Q14 11 18 13 Q14 14 6 13 Z"
-        fill="currentColor"
-        opacity="0.85"
-        stroke="none"
-      />
-      <path d="M6 5 Q12 6 14 8" strokeWidth="0.8" stroke={BRASS} opacity="0.7" />
-      <circle cx="6" cy="3" r="1.2" fill={BRASS} stroke="none" />
+      {/* Pole */}
+      <path d="M5 3.5 V20.5" stroke={BRASS} />
+      <circle cx="5" cy="3.5" r="0.9" fill={BRASS} stroke="none" />
+      {/* Banner — rectangle with swallow-tail right edge */}
+      <path d="M5 5.5 H17 L19.5 7.75 L17 10 H5 Z" />
+      {/* Single horizontal stripe (heraldic detail) */}
+      <path d="M5 7.75 H17" stroke={BRASS} />
     </>
   );
 }
 
 export function BgRemoveIcon() {
-  // Painted shears.
+  // Formal scissors — slim handles with gentle curl, crossed blades.
   return svg(
     <>
-      <path d="M7 7 L17 17" strokeWidth="2" />
-      <path d="M7 17 L17 7" strokeWidth="2" />
-      <circle cx="6" cy="7" r="2.4" stroke={BRASS} strokeWidth="1.6" />
-      <circle cx="6" cy="17" r="2.4" stroke={BRASS} strokeWidth="1.6" />
-      <circle cx="12" cy="12" r="1.1" fill={BRASS} stroke="none" />
+      {/* Crossed blades */}
+      <path d="M7.5 9 L17 19" />
+      <path d="M16.5 9 L7 19" />
+      {/* Handle loops, slimmer than Day 63 */}
+      <ellipse cx="6" cy="7.5" rx="2" ry="1.6" stroke={BRASS} />
+      <ellipse cx="18" cy="7.5" rx="2" ry="1.6" stroke={BRASS} />
+      {/* Pivot */}
+      <circle cx="12" cy="14" r="0.7" fill={BRASS} stroke="none" />
     </>
   );
 }
@@ -220,29 +203,44 @@ export function BgRemoveIcon() {
 // ── Utility icons ─────────────────────────────────────────────────
 
 export function AnchorIcon() {
-  // Painted anchor — saved indicator.
+  // Admiralty-pattern anchor: shank + ring at top, crossbar (stock),
+  // and curved arms with palm flukes. Formal naval silhouette.
   return svg(
     <>
-      <circle cx="12" cy="5" r="2" strokeWidth="1.6" stroke={BRASS} />
-      <line x1="12" y1="7" x2="12" y2="18" strokeWidth="1.8" stroke={BRASS} />
-      <line x1="8" y1="9" x2="16" y2="9" strokeWidth="1.8" stroke={BRASS} />
-      <path d="M5 14 Q5 19 12 19 Q19 19 19 14" strokeWidth="1.8" stroke={BRASS} />
+      {/* Ring at top */}
+      <circle cx="12" cy="4.5" r="1.6" stroke={BRASS} />
+      {/* Shank */}
+      <path d="M12 6.1 V18" stroke={BRASS} />
+      {/* Stock (crossbar) */}
+      <path d="M8.5 8 H15.5" stroke={BRASS} />
+      {/* Crown + curved arms */}
+      <path
+        d="M5 13 Q5 19 12 19 Q19 19 19 13"
+        stroke={BRASS}
+      />
+      {/* Fluke palms — small inward ticks at arm ends */}
+      <path d="M5 13 L7 13.5" stroke={BRASS} />
+      <path d="M19 13 L17 13.5" stroke={BRASS} />
     </>
   );
 }
 
 export function HourglassIcon() {
-  // Hourglass — saving indicator. Wrap with <span class="tf-quarters-spin">
-  // to rotate.
+  // Clean geometric hourglass — slim 1.5px frame, two triangular
+  // chambers, top + bottom caps. Wrap with .tf-quarters-spin to
+  // rotate while saving.
   return svg(
     <>
-      <path d="M6 4 H18 L13 11 L11 11 Z" fill={BRASS} stroke="none" opacity="0.85" />
-      <path d="M6 20 H18 L13 13 L11 13 Z" fill={BRASS} stroke="none" opacity="0.85" />
-      <line x1="6" y1="4" x2="6" y2="4.5" strokeWidth="1.5" stroke={BRASS} />
-      <line x1="18" y1="4" x2="18" y2="4.5" strokeWidth="1.5" stroke={BRASS} />
-      <circle cx="12" cy="9" r="0.55" fill="currentColor" opacity="0.85" stroke="none" />
-      <circle cx="12" cy="15" r="0.55" fill="currentColor" opacity="0.85" stroke="none" />
-      <circle cx="12" cy="17" r="0.55" fill="currentColor" opacity="0.85" stroke="none" />
+      {/* Top + bottom caps */}
+      <path d="M6.5 4.5 H17.5" stroke={BRASS} />
+      <path d="M6.5 19.5 H17.5" stroke={BRASS} />
+      {/* Top chamber */}
+      <path d="M6.5 4.5 L17.5 4.5 L12 11.5 Z" stroke={BRASS} />
+      {/* Bottom chamber */}
+      <path d="M6.5 19.5 L17.5 19.5 L12 12.5 Z" stroke={BRASS} />
+      {/* Two grains of sand mid-flow */}
+      <circle cx="12" cy="13.5" r="0.45" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="15" r="0.45" fill="currentColor" stroke="none" />
     </>
   );
 }
