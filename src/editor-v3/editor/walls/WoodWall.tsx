@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode } from "react";
+import { useUiStore } from "@/state/uiStore";
 
 /** Day 64b — wood-wall with optional porthole.
  *
@@ -84,9 +85,16 @@ export function WoodWall({
   children?: ReactNode;
   style?: CSSProperties;
 }) {
+  const theme = useUiStore((s) => s.theme);
   const woodUrl = WOOD_BY_SIDE[side];
   const mask = maskFor(porthole, side);
   const ringUrl = porthole ? pickRing(porthole.diameter) : null;
+  // Day 64e — light-mode wood: brighter + slightly desaturated for
+  // a sun-bleached deck feel, no cool hue-rotate.
+  const woodFilter =
+    theme === "light"
+      ? "brightness(1.15) saturate(0.92)"
+      : "brightness(0.75) saturate(0.55) hue-rotate(-8deg)";
 
   // Anchor coords for ring overlay (matches the mask cutout).
   const anchorTop =
@@ -104,10 +112,11 @@ export function WoodWall({
     backgroundSize: "512px 512px",
     backgroundRepeat: "repeat",
     // Day 64a-tone — dim + desaturate + slight cool shift so wood
-    // reads as weathered grey-brown driftwood in shadow, not
-    // saturated caramel-cartoon. Filter applies BEFORE the porthole
-    // mask, so the cut-out circle is unaffected.
-    filter: "brightness(0.75) saturate(0.55) hue-rotate(-8deg)",
+    // reads as weathered grey-brown driftwood in shadow. Day 64e —
+    // bright + lightly desaturated in light mode for sun-bleached
+    // deck feel. Filter applies BEFORE the porthole mask so the
+    // cut-out circle is unaffected.
+    filter: woodFilter,
     zIndex: 1,
     ...(mask
       ? {
