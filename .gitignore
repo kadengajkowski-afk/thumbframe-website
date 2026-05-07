@@ -24,3 +24,9 @@ wormhole-sceneIdx-*.png
 
 # Unused midjourney texture source (wrong-location spillover)
 public/assets/videos/textures/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
