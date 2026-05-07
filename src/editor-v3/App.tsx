@@ -73,6 +73,18 @@ export function App() {
     return installHotkeys();
   }, [isMobile]);
 
+  // Day 64e — mirror uiStore.theme onto the html data-mode attr so
+  // the [data-mode="light"] CSS overrides in tokens.css apply. The
+  // default html background-color is dark; flipping the attr swaps
+  // every dependent token. BodyAtmosphere + EmptyStateScene also
+  // read the store directly to swap their three.js scenes.
+  const theme = useUiStore((s) => s.theme);
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "light") root.setAttribute("data-mode", "light");
+    else root.removeAttribute("data-mode");
+  }, [theme]);
+
   // Day 44 — ThumbFriend Nudge watcher. Fires Haiku-backed nudge
   // requests after 8s of layer idle. Costs only when signed-in users
   // are actively editing; cheap (~$0.001/call, 20/day free cap).

@@ -67,12 +67,22 @@
   --z-modal:          100;
 }
 
-/* Day 63 light-mode override — coral copper + brighter brass.
- * Light mode (ocean sunset deck) lands Day 64-65 per plan. */
+/* Day 64e — light-mode (ocean) palette. Brass shifts to a brighter
+ * brass-bright hue; copper becomes coral. Body floor swaps from
+ * deep space (#050510) to twilight ocean teal so the BodyAtmosphere's
+ * ocean scene paints onto a matching backdrop. Wood walls rely on
+ * the [data-mode="light"] selector in WoodWall to flip their
+ * dim-cool filter to a brighter sun-bleached one. */
 [data-mode="light"] {
   --charcoal: #2A2620;
   --brass:    #D4A55C;
   --copper:   #D9886B;
+
+  /* Sun-bleached body floor — twilight ocean teal showing through
+     the editor grid gaps + behind the live ocean canvas. */
+  --bg-space-0: #1F3A4A;
+  --bg-space-1: #2B4858;
+  --bg-space-2: #38566A;
 
   /* Day 61-fix — real wood-grain texture as a data-URL SVG noise
    * pattern. Used as a layered background-image on every wood

@@ -38,6 +38,7 @@ const LAST_FONT_FAMILY_KEY = "thumbframe:last-font-family";
 const LAST_FONT_SIZE_KEY = "thumbframe:last-font-size";
 const LAST_FONT_WEIGHT_KEY = "thumbframe:last-font-weight";
 const SMART_GUIDES_KEY = "thumbframe:smart-guides-enabled";
+const THEME_KEY = "thumbframe:theme";
 const MAX_RECENT = 8, MAX_RECENT_FONTS = 6;
 const DEFAULT_FONT_FAMILY = "Inter";
 const DEFAULT_FONT_SIZE = 96, DEFAULT_FONT_WEIGHT = 700;
@@ -107,6 +108,15 @@ type UiState = {
    * persisted to localStorage. Cmd+\ flips it. */
   smartGuidesEnabled: boolean;
   setSmartGuidesEnabled: (v: boolean) => void;
+
+  /** Day 64e: theme — "dark" (cosmic nebula) or "light" (ocean
+   * horizon). Persisted to localStorage. App.tsx mirrors this onto
+   * `document.documentElement.dataset.mode` so CSS [data-mode="light"]
+   * overrides apply. BodyAtmosphere + EmptyStateScene read the value
+   * to swap their three.js scenes between cosmic + ocean. */
+  theme: "dark" | "light";
+  setTheme: (theme: "dark" | "light") => void;
+  toggleTheme: () => void;
 
   /** Day 16: true while a resize-handle drag is in progress. SelectTool
    * sets it on handle pointerdown and clears it on pointerup / abort.
@@ -357,6 +367,20 @@ export const useUiStore = create<UiState>()((set) => ({
     persistString(SMART_GUIDES_KEY, v ? "1" : "0");
     set({ smartGuidesEnabled: v });
   },
+
+  // Day 64e — theme. Default "dark" (cosmic). Toggling persists +
+  // updates the html data-mode attr via the App-level effect.
+  theme: (loadString(THEME_KEY, "dark") === "light" ? "light" : "dark") as "dark" | "light",
+  setTheme: (theme) => {
+    persistString(THEME_KEY, theme);
+    set({ theme });
+  },
+  toggleTheme: () =>
+    set((s) => {
+      const next: "dark" | "light" = s.theme === "dark" ? "light" : "dark";
+      persistString(THEME_KEY, next);
+      return { theme: next };
+    }),
 
   isResizing: false,
   setIsResizing: (isResizing) => set({ isResizing }),

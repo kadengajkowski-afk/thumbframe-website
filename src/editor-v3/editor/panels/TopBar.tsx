@@ -71,6 +71,7 @@ export function TopBar() {
             </button>
           </Tooltip>
         )}
+        <ThemeToggleButton />
         <Tooltip label="Ship it" shortcut="⌘E" position="below">
           <button
             type="button"
@@ -169,6 +170,50 @@ function UserBadge(props: { email: string | null; avatarUrl: string | null }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Day 64e — Theme toggle button. Sits between the K avatar /
+ * Sign-in slot and Ship It. Sun glyph in dark mode (click to switch
+ * to light/ocean); moon glyph in light mode (click to switch back
+ * to dark/cosmic). Reads + writes uiStore.theme; the App-level
+ * effect mirrors that onto document.documentElement.dataset.mode. */
+function ThemeToggleButton() {
+  const theme = useUiStore((s) => s.theme);
+  const toggle = useUiStore((s) => s.toggleTheme);
+  const isLight = theme === "light";
+  return (
+    <Tooltip
+      label={isLight ? "Switch to space (dark)" : "Switch to ocean (light)"}
+      position="below"
+    >
+      <button
+        type="button"
+        style={themeToggleBtn}
+        onClick={toggle}
+        aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
+        data-testid="topbar-theme-toggle"
+      >
+        {isLight ? <MoonGlyph /> : <SunGlyph />}
+      </button>
+    </Tooltip>
+  );
+}
+
+function SunGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <circle cx="7" cy="7" r="2.5" />
+      <path d="M7 1.5 V3  M7 11 V12.5  M1.5 7 H3  M11 7 H12.5  M3 3 L4 4  M10 10 L11 11  M3 11 L4 10  M10 4 L11 3" />
+    </svg>
+  );
+}
+
+function MoonGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="currentColor">
+      <path d="M11 8.5 A4.5 4.5 0 1 1 5.5 3 A3.6 3.6 0 0 0 11 8.5 Z" />
+    </svg>
   );
 }
 
@@ -399,6 +444,19 @@ const aiUsage: CSSProperties = {
   padding: "2px 6px", border: "1px solid var(--border-ghost)",
   borderRadius: 10, cursor: "help", letterSpacing: "0.04em",
 };
+// Day 64e — Theme toggle button. Same compact 24px circular shape
+// as the help button, sits between K avatar and Ship It.
+const themeToggleBtn: CSSProperties = {
+  width: 24, height: 24, padding: 0,
+  display: "inline-flex", alignItems: "center", justifyContent: "center",
+  background: "transparent",
+  border: "1px solid var(--border-ghost)",
+  borderRadius: "50%",
+  color: "var(--text-secondary)",
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
 // Day 55 — Help & support trigger. Sits between AI usage badge and
 // the Sign-in / avatar button. Compact 24px circular ?.
 const helpBtn: CSSProperties = {

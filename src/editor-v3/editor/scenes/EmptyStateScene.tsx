@@ -6,6 +6,8 @@ import { KuwaharaEffect } from "@/atmosphere/painterly/KuwaharaEffect";
 import { PaperGrainEffect } from "@/atmosphere/painterly/PaperGrainEffect";
 import { ColorGradeEffect } from "@/atmosphere/painterly/ColorGradeEffect";
 import Nebula from "@/atmosphere/Nebula";
+import { useUiStore } from "@/state/uiStore";
+import { OceanScene } from "@/editor/scenes/OceanContent";
 
 /** Day 67 (Part 18) — empty-state cosmic scene.
  *
@@ -409,10 +411,13 @@ function ColorGradePass() {
 // ── Composed scene ────────────────────────────────────────────
 
 export function EmptyStateScene() {
+  const theme = useUiStore((s) => s.theme);
+  const isLight = theme === "light";
   return (
     <div
       aria-hidden="true"
       data-alive="empty-state-scene"
+      data-theme={theme}
       style={{
         // Fill the viewport behind the upload card. The card has
         // its own wrap with z-index:1; this scene is z-index:0 and
@@ -428,13 +433,22 @@ export function EmptyStateScene() {
         dpr={0.6}
         camera={{ position: [0, 0, 12], fov: 50, near: 0.1, far: 100 }}
       >
-        <Nebula
-          palette={EMPTY_STATE_PALETTE}
-          driftSpeed={EMPTY_STATE_DRIFT}
-        />
-        <StarField />
-        <Constellations />
-        <ShootingStars />
+        {isLight ? (
+          // Day 64e — ocean horizon for light mode. Same painterly
+          // pipeline (Kuwahara + paper grain + color grade) so the
+          // watercolor character matches the cosmic mode.
+          <OceanScene />
+        ) : (
+          <>
+            <Nebula
+              palette={EMPTY_STATE_PALETTE}
+              driftSpeed={EMPTY_STATE_DRIFT}
+            />
+            <StarField />
+            <Constellations />
+            <ShootingStars />
+          </>
+        )}
         <EffectComposer multisampling={0} resolutionScale={0.5} depthBuffer>
           <KuwaharaPass />
           <PaperGrainPass />
